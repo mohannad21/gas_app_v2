@@ -6,6 +6,8 @@ import {
   CustomerSchema,
   DailyReportRow,
   DailyReportRowSchema,
+  InventorySnapshot,
+  InventorySnapshotSchema,
   Order,
   OrderSchema,
   PriceSetting,
@@ -107,6 +109,29 @@ export async function listActivities(): Promise<Activity[]> {
 export async function listDailyReports(): Promise<DailyReportRow[]> {
   const { data } = await api.get("/reports/daily");
   return parseArray(DailyReportRowSchema, data);
+}
+
+// Inventory
+export async function getInventoryLatest(): Promise<InventorySnapshot | null> {
+  try {
+    const { data } = await api.get("/inventory/latest");
+    if (!data) return null;
+    return parse(InventorySnapshotSchema, data);
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function initInventory(payload: {
+  full12: number;
+  empty12: number;
+  full48: number;
+  empty48: number;
+  reason?: string;
+}): Promise<InventorySnapshot> {
+  const { data } = await api.post("/inventory/init", payload);
+  return parse(InventorySnapshotSchema, data);
 }
 
 // Prices

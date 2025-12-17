@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,7 @@ import {
 
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateOrder } from "@/hooks/useOrders";
+import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { CustomerType, GasType } from "@/types/domain";
@@ -58,9 +60,11 @@ export default function NewOrderScreen() {
   const selectedGas = watch("gas_type");
 
   const customersQuery = useCustomers();
+  const inventoryLatest = useInventoryLatest();
   const systemsQuery = useSystems(selectedCustomer);
   const pricesQuery = usePriceSettings();
   const createOrder = useCreateOrder();
+  const initInventory = useInitInventory();
 
   const [submitting, setSubmitting] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -69,6 +73,15 @@ export default function NewOrderScreen() {
   const inputRefs = useRef<Record<string, TextInput | null>>({});
 
   const installed = Number(watch("cylinders_installed")) || 0;
+  const inventoryInitBlocked = inventoryLatest.data === null;
+  const inventoryPromptedRef = useRef(false);
+  const [initModalVisible, setInitModalVisible] = useState(false);
+  const [initCounts, setInitCounts] = useState({
+    full12: "",
+    empty12: "",
+    full48: "",
+    empty48: "",
+  });
 
   /* -------------------- derived -------------------- */
 
@@ -166,6 +179,15 @@ export default function NewOrderScreen() {
     }
   }, [customerId, selectedCustomer, setValue]);
 
+  useEffect(() => {
+    if (inventoryPromptedRef.current) return;
+    if (customersQuery.isLoading || inventoryLatest.isLoading) return;
+    if (inventoryInitBlocked) {
+      inventoryPromptedRef.current = true;
+      setInitModalVisible(true);
+    }
+  }, [customersQuery.isLoading, inventoryLatest.isLoading, inventoryInitBlocked]);
+
   // System selection sets defaults ONCE
   useEffect(() => {
     if (!selectedSystem) return;
@@ -195,6 +217,19 @@ export default function NewOrderScreen() {
   const onSubmit = handleSubmit(
     async (values) => {
       try {
+        if (inventoryInitBlocked) {
+          Alert.alert(
+            "Initialize inventory",
+            "Please add your initial inventory before creating the first order.",
+            [
+              {
+                text: "Open inventory setup",
+                onPress: () => setInitModalVisible(true),
+              },
+            ]
+          );
+          return;
+        }
         setSubmitting(true);
 
         await createOrder.mutateAsync({
@@ -230,6 +265,14 @@ export default function NewOrderScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} ref={scrollRef}>
       <Text style={styles.title}>Add Order</Text>
+      {inventoryInitBlocked && (
+        <View style={styles.notice}>
+          <Text style={styles.noticeText}>Inventory not initialized. Set starting counts to add your first order.</Text>
+          <Pressable onPress={() => setInitModalVisible(true)} style={styles.noticeButton}>
+            <Text style={styles.noticeButtonText}>Initialize inventory</Text>
+          </Pressable>
+        </View>
+      )}
 
       <FieldLabel>Customer</FieldLabel>
       <TextInput
@@ -494,6 +537,87 @@ export default function NewOrderScreen() {
           {submitting ? "Saving..." : "Save Order"}
         </Text>
       </Pressable>
+
+      <Modal visible={initModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Initialize inventory</Text>
+            <Text style={styles.orderMeta}>Enter starting counts for each cylinder size.</Text>
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <FieldLabel>12kg Full</FieldLabel>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  value={initCounts.full12}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full12: t }))}
+                />
+              </View>
+              <View style={styles.half}>
+                <FieldLabel>12kg Empty</FieldLabel>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  value={initCounts.empty12}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty12: t }))}
+                />
+              </View>
+            </View>
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <FieldLabel>48kg Full</FieldLabel>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  value={initCounts.full48}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full48: t }))}
+                />
+              </View>
+              <View style={styles.half}>
+                <FieldLabel>48kg Empty</FieldLabel>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  value={initCounts.empty48}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty48: t }))}
+                />
+              </View>
+            </View>
+            <View style={styles.row}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={() => setInitModalVisible(false)}
+                disabled={initInventory.isPending}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primary, { flex: 1, marginTop: 0 }]}
+                disabled={initInventory.isPending}
+                onPress={async () => {
+                  const payload = {
+                    full12: Number(initCounts.full12) || 0,
+                    empty12: Number(initCounts.empty12) || 0,
+                    full48: Number(initCounts.full48) || 0,
+                    empty48: Number(initCounts.empty48) || 0,
+                    reason: "initial",
+                  };
+                  await initInventory.mutateAsync(payload);
+                  setInitModalVisible(false);
+                }}
+              >
+                <Text style={styles.primaryText}>
+                  {initInventory.isPending ? "Saving..." : "Save inventory"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -542,4 +666,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700" },
+  notice: {
+    backgroundColor: "#fff7e6",
+    borderColor: "#f0c36d",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 10,
+  },
+  noticeText: { color: "#8a5b00" },
+  noticeButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#0a7ea4",
+    borderRadius: 8,
+  },
+  noticeButtonText: { color: "#fff", fontWeight: "700" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  secondaryButton: {
+    borderColor: "#ccc",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 16,
+    alignItems: "center",
+  },
+  secondaryButtonText: { fontWeight: "700", color: "#333" },
 });

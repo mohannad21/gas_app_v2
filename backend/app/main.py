@@ -5,7 +5,7 @@ from .auth import get_current_user
 from .config import get_settings
 from .db import init_db
 from .logging_config import configure_logging
-from .routers import activities, customers, health, orders, prices, reports, systems
+from .routers import activities, customers, health, inventory, orders, prices, reports, systems
 
 
 def create_app() -> FastAPI:
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
   app.include_router(customers.router)
   app.include_router(systems.router)
   app.include_router(orders.router)
+  app.include_router(inventory.router)
   app.include_router(prices.router)
   app.include_router(reports.router)
   app.include_router(activities.router)

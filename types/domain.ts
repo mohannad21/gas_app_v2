@@ -86,6 +86,18 @@ export const ActivitySchema = ActivityApiSchema.transform((activity) => ({
 }));
 export type Activity = z.infer<typeof ActivitySchema>;
 
+export const InventorySnapshotSchema = z.object({
+  as_of: z.string(),
+  full12: z.number(),
+  empty12: z.number(),
+  total12: z.number(),
+  full48: z.number(),
+  empty48: z.number(),
+  total48: z.number(),
+  reason: z.string().nullish(),
+});
+export type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;
+
 export const DailyReportRowSchema = z.object({
   date: z.string(),
   display: z.string(),
@@ -95,6 +107,8 @@ export const DailyReportRowSchema = z.object({
   received48: z.number(),
   expected: z.number(),
   received: z.number(),
+  inventory_start: InventorySnapshotSchema.nullish(),
+  inventory_end: InventorySnapshotSchema.nullish(),
   orders: z
     .array(
       z.object({

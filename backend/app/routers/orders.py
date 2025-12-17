@@ -8,12 +8,21 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.events import add_activity
-from app.models import Customer, Order, PriceSetting, System
+from app.models import Customer, InventoryVersion, Order, PriceSetting, System
 from app.schemas import OrderCreate, OrderUpdate, new_id
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def latest_inventory(session: Session, gas_type: str) -> InventoryVersion | None:
+  stmt = (
+    select(InventoryVersion)
+    .where(InventoryVersion.gas_type == gas_type)
+    .order_by(InventoryVersion.effective_at.desc())
+  )
+  return session.exec(stmt).first()
 
 
 @router.get("")
@@ -60,8 +69,9 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
 
   price_setting = resolve_price_setting()
 
+  order_id = new_id("o")
   order = Order(
-    id=new_id("o"),
+    id=order_id,
     customer_id=payload.customer_id,
     system_id=payload.system_id,
     delivered_at=delivered_at,
@@ -77,7 +87,26 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     created_at=datetime.utcnow(),
     is_deleted=False,
   )
+
+  # Inventory adjustment for the order gas type
+  prev_inv = latest_inventory(session, payload.gas_type)
+  if not prev_inv:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="inventory_not_initialized")
+  new_full = prev_inv.full_count - payload.cylinders_installed
+  new_empty = prev_inv.empty_count + payload.cylinders_received
+  inv_version = InventoryVersion(
+    gas_type=payload.gas_type,
+    full_count=new_full,
+    empty_count=new_empty,
+    reason="order",
+    event_type="order",
+    event_id=order_id,
+    effective_at=delivered_at,
+    created_at=datetime.utcnow(),
+  )
+
   session.add(order)
+  session.add(inv_version)
   balance_delta = payload.price_total - payload.paid_amount
   customer.money_balance += balance_delta
   customer.number_of_orders += payload.cylinders_installed

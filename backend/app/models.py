@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 from typing import Optional
 
 import sqlalchemy as sa
@@ -108,3 +109,18 @@ class Activity(SQLModel, table=True):
   )
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   created_by: Optional[str] = Field(default=None, nullable=True)
+
+
+class InventoryVersion(SQLModel, table=True):
+  __tablename__ = "inventory_versions"
+
+  id: str = Field(default_factory=lambda: f"inv_{uuid4()}", primary_key=True, index=True)
+  gas_type: str = Field(index=True)
+  full_count: int = 0
+  empty_count: int = 0
+  reason: Optional[str] = Field(default=None, nullable=True)
+  event_type: Optional[str] = Field(default=None, index=True, nullable=True)
+  event_id: Optional[str] = Field(default=None, index=True, nullable=True)
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_by: Optional[str] = Field(default=None, nullable=True, index=True)

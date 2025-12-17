@@ -94,6 +94,25 @@ class PriceCreate(SQLModel):
   effective_from: Optional[datetime] = None
 
 
+class InventorySnapshot(SQLModel):
+  as_of: datetime
+  full12: int
+  empty12: int
+  total12: int
+  full48: int
+  empty48: int
+  total48: int
+  reason: Optional[str] = None
+
+
+class InventoryInit(SQLModel):
+  full12: int
+  empty12: int
+  full48: int
+  empty48: int
+  reason: Optional[str] = "initial"
+
+
 class DailyReportOrder(SQLModel):
   id: str
   customer: str
@@ -116,3 +135,5 @@ class DailyReportRow(SQLModel):
   expected: float
   received: float
   orders: Optional[list[DailyReportOrder]] = None
+  inventory_start: Optional[InventorySnapshot] = None
+  inventory_end: Optional[InventorySnapshot] = None
