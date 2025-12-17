@@ -1,0 +1,35 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+
+_DEFAULT_DB_PATH = (Path(__file__).resolve().parent.parent / "gas_app.db").as_posix()
+_DEFAULT_DATABASE_URL = f"sqlite:///{_DEFAULT_DB_PATH}"
+
+
+class Settings(BaseSettings):
+  # FastAPI
+  app_name: str = "Gas Delivery API"
+  environment: str = "development"
+  debug: bool = True
+
+  # Database
+  database_url: str = _DEFAULT_DATABASE_URL
+
+  # Auth
+  jwt_secret: str = "dev-secret"
+  jwt_algorithm: str = "HS256"
+  access_token_expires_minutes: int = 60
+
+  # CORS
+  cors_origins: list[str] = ["*"]
+
+  class Config:
+    env_file = ".env"
+    env_file_encoding = "utf-8"
+
+
+@lru_cache
+def get_settings() -> Settings:
+  return Settings()

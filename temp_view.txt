@@ -1,0 +1,260 @@
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { Controller, useForm } from "react-hook-form";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import { useCustomers } from "@/hooks/useCustomers";
+import { useCreateOrder } from "@/hooks/useOrders";
+import { usePriceSettings } from "@/hooks/usePrices";
+import { useSystems } from "@/hooks/useSystems";
+import { CustomerType, GasType } from "@/types/domain";
+
+type OrderFormValues = {
+  customer_id: string;
+  system_id: string;
+  delivered_at: string;
+  gas_type: GasType | "";
+  cylinders_installed: string;
+  cylinders_received: string;
+  price_total: string;
+  paid_amount: string;
+  note?: string;
+};
+
+export default function NewOrderScreen() {
+  const { customerId } = useLocalSearchParams<{ customerId?: string }>();
+
+  const {
+    control,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<OrderFormValues>({
+    defaultValues: {
+      gas_type: "",
+      delivered_at: new Date().toISOString().slice(0, 10),
+      cylinders_installed: "",
+      cylinders_received: "",
+      price_total: "",
+      paid_amount: "",
+      customer_id: "",
+      system_id: "",
+      note: "",
+    },
+  });
+
+  const selectedCustomer = watch("customer_id");
+  const selectedSystemId = watch("system_id");
+  const selectedGas = watch("gas_type");
+
+  const customersQuery = useCustomers();
+  const systemsQuery = useSystems(selectedCustomer);
+  const pricesQuery = usePriceSettings();
+  const createOrder = useCreateOrder();
+
+  const [submitting, setSubmitting] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [manualPrice, setManualPrice] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+
+  const installed = Number(watch("cylinders_installed")) || 0;
+
+  /* -------------------- derived -------------------- */
+
+  const customerOptions = useMemo(() => {
+    const term = customerSearch.trim().toLowerCase();
+    const list = customersQuery.data ?? [];
+    if (!term) return list;
+    return list.filter(
+      (c) =>
+        c.name.toLowerCase().includes(term) ||
+        (c.notes ?? "").toLowerCase().includes(term)
+    );
+  }, [customersQuery.data, customerSearch]);
+
+  const systemOptions = useMemo(
+    () => systemsQuery.data ?? [],
+    [systemsQuery.data]
+  );
+
+  const selectedSystem = useMemo(
+    () => systemOptions.find((s) => s.id === selectedSystemId),
+    [systemOptions, selectedSystemId]
+  );
+  const previousCustomerRef = useRef<string | undefined>();
+
+  useEffect(() => {
+    if (previousCustomerRef.current === selectedCustomer) {
+      return;
+    }
+    previousCustomerRef.current = selectedCustomer;
+    setValue("system_id", "");
+    setValue("gas_type", "");
+    setValue("cylinders_installed", "");
+    setValue("cylinders_received", "");
+    setValue("price_total", "");
+    setValue("paid_amount", "");
+    setManualPrice(false);
+  }, [selectedCustomer, setValue]);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      return;
+    }
+    if (systemOptions.length === 1 && !selectedSystemId) {
+      setValue("system_id", systemOptions[0].id);
+    }
+  }, [selectedCustomer, systemOptions, selectedSystemId, setValue]);
+
+  /* -------------------- pricing -------------------- */
+
+  const unitPrice = useMemo(() => {
+    const customer = customersQuery.data?.find(
+      (c) => c.id === selectedCustomer
+    );
+
+    const systemCustomerType = selectedSystem?.system_customer_type;
+    let resolvedType: CustomerType | undefined;
+    if (systemCustomerType === "private") {
+      resolvedType = "private";
+    } else if (
+      systemCustomerType === "industrial" ||
+      systemCustomerType === "commercial"
+    ) {
+      resolvedType = "industrial";
+    } else {
+      resolvedType = undefined;
+    }
+
+    const customerType = resolvedType ?? customer?.customer_type ?? "any";
+
+    const prices = pricesQuery.data ?? [];
+
+    const match = prices
+      .filter(
+        (p) =>
+          p.gas_type === selectedGas &&
+          (p.customer_type === "any" || p.customer_type === customerType)
+      )
+      .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1))[0];
+
+    return match?.selling_price ?? 0;
+  }, [
+    customersQuery.data,
+    pricesQuery.data,
+    selectedCustomer,
+    selectedGas,
+    selectedSystem?.system_customer_type,
+  ]);
+
+  /* -------------------- effects -------------------- */
+
+  useEffect(() => {
+    if (customerId && !selectedCustomer) {
+      setValue("customer_id", customerId);
+    }
+  }, [customerId, selectedCustomer, setValue]);
+
+  // System selection sets defaults ONCE
+  useEffect(() => {
+    if (!selectedSystem) return;
+
+    setValue("gas_type", selectedSystem.gas_type ?? "12kg");
+    setValue("cylinders_installed", "1");
+    setValue("cylinders_received", "1");
+
+    const total = unitPrice;
+    setValue("price_total", String(total));
+    setValue("paid_amount", String(total));
+    setManualPrice(false);
+  }, [selectedSystem, unitPrice, setValue]);
+
+  // Installed drives total + paid (unless manually overridden)
+  useEffect(() => {
+    if (manualPrice) return;
+    if (installed <= 0) return;
+
+    const total = installed * unitPrice;
+    setValue("price_total", String(total));
+    setValue("paid_amount", String(total));
+  }, [installed, unitPrice, manualPrice, setValue]);
+
+  /* -------------------- submit -------------------- */
+
+  const onSubmit = handleSubmit(
+    async (values) => {
+      try {
+        setSubmitting(true);
+
+        await createOrder.mutateAsync({
+          customer_id: values.customer_id,
+          system_id: values.system_id,
+          delivered_at: values.delivered_at,
+          gas_type: values.gas_type,
+          cylinders_installed: Number(values.cylinders_installed) || 0,
+          cylinders_received: Number(values.cylinders_received) || 0,
+          price_total: Number(values.price_total) || 0,
+          paid_amount: Number(values.paid_amount) || 0,
+          note: values.note,
+        });
+
+        router.replace({ pathname: "/(tabs)/index", params: { flash: "order-created" } });
+      } catch {
+        Alert.alert("Error", "Failed to create order.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    (formErrors) => {
+      const first = Object.keys(formErrors)[0];
+      if (first) {
+        inputRefs.current[first]?.focus?.();
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+    }
+  );
+
+  /* -------------------- UI -------------------- */
+
+  return (
+    <ScrollView contentContainerStyle={styles.container} ref={scrollRef}>
+      <Text style={styles.title}>Add Order</Text>
+
+      <FieldLabel>Customer</FieldLabel>
+      <TextInput
+        style={styles.input}
+        placeholder="Search customer"
+        value={customerSearch}
+        onChangeText={setCustomerSearch}
+      />
+
+      <Controller
+        control={control}
+        name="customer_id"
+        rules={{ required: "Select a customer" }}
+        render={({ field: { onChange, value } }) => (
+          <View style={styles.chipRow}>
+            {customerOptions.map((c) => (
+              <Pressable
+                key={c.id}
+                onPress={() => onChange(c.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: value === c.id }}
+                accessibilityLabel={`Customer ${c.name}`}
+                accessibilityHint="Select customer"
+                ref={(node) => {
+                  if (node && value === c.id) inputRefs.current.customer_id = node as unknown as TextInput;
+                }}
+                style={[styles.chip, value === c.id && styles.chipActive]}
+              >
