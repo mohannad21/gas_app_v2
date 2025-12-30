@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import logging
@@ -28,7 +28,7 @@ def list_systems(customerId: Optional[str] = Query(default=None), session: Sessi
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_system(payload: SystemCreate, session: Session = Depends(get_session)) -> System:
-  logger.info("create_system payload=%s", payload.dict())
+  logger.info("create_system payload=%s", payload.model_dump())
   customer = session.get(Customer, payload.customer_id)
   if not customer or customer.is_deleted:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
@@ -40,11 +40,7 @@ def create_system(payload: SystemCreate, session: Session = Depends(get_session)
     system_type=payload.system_type or "other",
     gas_type=payload.gas_type,
     system_customer_type=payload.system_customer_type,
-    security_required=payload.security_required,
-    last_security_check_at=payload.last_security_check_at,
-    next_security_due_at=payload.next_security_due_at,
-    security_status=payload.security_status,
-    created_at=datetime.utcnow(),
+    created_at=datetime.now(timezone.utc),
     is_deleted=False,
     is_active=payload.is_active,
     require_security_check=payload.require_security_check,
@@ -67,11 +63,11 @@ def create_system(payload: SystemCreate, session: Session = Depends(get_session)
 
 @router.put("/{system_id}")
 def update_system(system_id: str, payload: SystemUpdate, session: Session = Depends(get_session)) -> System:
-  logger.info("update_system id=%s payload=%s", system_id, payload.dict(exclude_unset=True))
+  logger.info("update_system id=%s payload=%s", system_id, payload.model_dump(exclude_unset=True))
   system = session.get(System, system_id)
   if not system or system.is_deleted:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System not found")
-  payload_data = payload.dict(exclude_unset=True)
+  payload_data = payload.model_dump(exclude_unset=True)
   changes: list[str] = []
   if payload_data.get("customer_id"):
     customer = session.get(Customer, payload_data["customer_id"])
@@ -88,7 +84,7 @@ def update_system(system_id: str, payload: SystemUpdate, session: Session = Depe
       continue
     changes.append(f"{field}: '{old}' -> '{value}'")
     setattr(system, field, value)
-  system.updated_at = datetime.utcnow()
+  system.updated_at = datetime.now(timezone.utc)
   description = (
     f"System '{system.name}' updated: {', '.join(changes)}"
     if changes
@@ -115,7 +111,7 @@ def delete_system(system_id: str, session: Session = Depends(get_session)) -> No
   if not system or system.is_deleted:
     return
   system.is_deleted = True
-  system.deleted_at = datetime.utcnow()
+  system.deleted_at = datetime.now(timezone.utc)
   session.add(system)
   add_activity(
     session,

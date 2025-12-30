@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-nati
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
+import { gasColor } from "@/constants/gas";
 
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
@@ -36,7 +37,7 @@ const formatCylinder = (value: number) => {
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customersQuery = useCustomers();
-  const systemsQuery = useSystems(id);
+  const systemsQuery = useSystems(id, { enabled: !!id });
   const ordersQuery = useOrders();
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
@@ -152,28 +153,46 @@ export default function CustomerDetailsScreen() {
       <View style={styles.box}>
         <Text style={styles.boxTitle}>Missing units</Text>
         <View style={styles.boxRow}>
-          {missingStats.map((stat) => (
+          {missingStats.map((stat) => {
+            const labelColor = stat.label.includes("12kg")
+              ? gasColor("12kg")
+              : stat.label.includes("48kg")
+                ? gasColor("48kg")
+                : undefined;
+            return (
             <View key={stat.label} style={styles.boxItem}>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                {stat.label}
+              </Text>
               <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
                 {stat.value}
               </Text>
             </View>
-          ))}
+          );
+          })}
         </View>
       </View>
 
       <View style={styles.box}>
         <Text style={styles.boxTitle}>Orders</Text>
         <View style={styles.boxRow}>
-          {orderStats.map((stat) => (
+          {orderStats.map((stat) => {
+            const labelColor = stat.label.includes("12kg")
+              ? gasColor("12kg")
+              : stat.label.includes("48kg")
+                ? gasColor("48kg")
+                : undefined;
+            return (
             <View key={stat.label} style={styles.boxItem}>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                {stat.label}
+              </Text>
               <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
                 {stat.value}
               </Text>
             </View>
-          ))}
+          );
+          })}
         </View>
       </View>
       <View style={styles.actions}>
@@ -214,7 +233,12 @@ export default function CustomerDetailsScreen() {
         <View key={sys.id} style={styles.systemCard}>
           <Text style={styles.systemTitle}>{sys.name}</Text>
           <Text style={styles.metaLine}>Type: {sys.system_type}</Text>
-          <Text style={styles.metaLine}>Gas: {sys.gas_type ?? "12kg"}</Text>
+          <Text style={styles.metaLine}>
+            Gas:{" "}
+            <Text style={[styles.metaLine, { color: gasColor(sys.gas_type ?? "12kg"), fontWeight: "700" }]}>
+              {sys.gas_type ?? "12kg"}
+            </Text>
+          </Text>
           <Text style={styles.metaLine}>Customer Type: {sys.system_customer_type ?? "private"}</Text>
           <Text style={styles.metaLine}>Active: {(sys.is_active ?? true) ? "Yes" : "No"}</Text>
           {(sys.is_active ?? true) && (

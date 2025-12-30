@@ -7,10 +7,11 @@ import { useCustomers, useUpdateCustomer } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useCreateSystem, useDeleteSystem, useSystems, useUpdateSystem } from "@/hooks/useSystems";
 import { CustomerType, GasType, SystemType } from "@/types/domain";
+import { gasColor } from "@/constants/gas";
 
 type CustomerFormValues = {
   name: string;
-  phone: string;
+  phone?: string;
   notes?: string;
   systems: Array<{
     id: string;
@@ -29,7 +30,7 @@ export default function EditCustomerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customersQuery = useCustomers();
   const customer = useMemo(() => (customersQuery.data ?? []).find((c) => c.id === id), [customersQuery.data, id]);
-  const systemsQuery = useSystems(id?.trim() || undefined);
+  const systemsQuery = useSystems(id?.trim() || undefined, { enabled: !!id });
   const ordersQuery = useOrders();
 
   const { control, handleSubmit, reset } = useForm<CustomerFormValues>({
@@ -109,7 +110,7 @@ export default function EditCustomerScreen() {
       // Initial form fill
       reset({
         name: customer.name,
-        phone: customer.phone,
+        phone: customer.phone ?? "",
         notes: customer.notes ?? "",
         systems,
       });
@@ -122,7 +123,7 @@ export default function EditCustomerScreen() {
     if (customer && !systemsQuery.isLoading && (systemsQuery.data ?? []).length === 0) {
       reset({
         name: customer.name,
-        phone: customer.phone,
+        phone: customer.phone ?? "",
         notes: customer.notes ?? "",
         systems: [],
       });
@@ -139,14 +140,16 @@ export default function EditCustomerScreen() {
         id: customer.id,
         payload: {
           name: values.name,
-          phone: values.phone,
+          phone: values.phone?.trim() ? values.phone.trim() : undefined,
           notes: values.notes,
           // avoid logging an activity for unchanged customer_type
           customer_type: customer.customer_type,
         },
       });
       for (const sys of values.systems) {
-        const sanitizedSecurityDate = sys.security_check_date?.trim();
+        const normalizedSecurityDate =
+          sys.security_check_exists && sys.security_check_date ? sys.security_check_date.trim() : null;
+        const securityDate = normalizedSecurityDate && normalizedSecurityDate.length > 0 ? normalizedSecurityDate : null;
         const payload = {
           name: sys.name || presetLabel(sys.system_type),
           system_type: sys.system_type,
@@ -156,7 +159,7 @@ export default function EditCustomerScreen() {
           is_active: sys.is_active ?? true,
           require_security_check: sys.require_security_check ?? false,
           security_check_exists: sys.security_check_exists ?? false,
-          security_check_date: sanitizedSecurityDate ? sanitizedSecurityDate : undefined,
+          security_check_date: securityDate,
         };
         if (sys.id.startsWith("s-temp")) {
           console.log("[edit] createSystem mutate", sys.id, sys.is_active, sys);
@@ -273,9 +276,14 @@ export default function EditCustomerScreen() {
                       onChange(g);
                       update(index, { ...fields[index], gas_type: g });
                     }}
-                    style={[styles.chip, value === g && styles.chipActive]}
+                    style={[
+                      styles.chip,
+                      value === g && { backgroundColor: gasColor(g), borderColor: gasColor(g) },
+                    ]}
                   >
-                    <Text style={[styles.chipText, value === g && styles.chipTextActive]}>{g}</Text>
+                    <Text style={[styles.chipText, value === g ? styles.chipTextActive : { color: gasColor(g) }]}>
+                      {g}
+                    </Text>
                   </Pressable>
                 ))}
               </View>

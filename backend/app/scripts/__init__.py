@@ -1,0 +1,1 @@
+"""Application scripts entry points."""

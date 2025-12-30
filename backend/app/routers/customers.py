@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import logging
 
@@ -7,7 +7,8 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.events import add_activity
-from app.models import Customer
+from app.models import Customer, CustomerAdjustment
+from app.services.customers import sync_customer_totals
 from app.schemas import CustomerCreate, CustomerUpdate, new_id
 
 
@@ -36,19 +37,46 @@ def get_customer(customer_id: str, session: Session = Depends(get_session)) -> C
   return customer
 
 
+@router.get("/{customer_id}/adjustments")
+def list_customer_adjustments(customer_id: str, session: Session = Depends(get_session)) -> list[CustomerAdjustment]:
+  customer = session.get(Customer, customer_id)
+  if not customer or customer.is_deleted:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+  stmt = select(CustomerAdjustment).where(CustomerAdjustment.customer_id == customer_id)
+  return session.exec(stmt).all()
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, session: Session = Depends(get_session)) -> Customer:
-  logger.info("create_customer payload=%s", payload.dict())
+  print("[CREATE CUSTOMER] entered")
+  print("[CREATE CUSTOMER] payload:", payload.model_dump())
+  logger.info("create_customer payload=%s", payload.model_dump())
   customer = Customer(
     id=new_id("c"),
     name=payload.name,
     phone=payload.phone,
     customer_type=payload.customer_type or "other",
     notes=payload.notes,
-    created_at=datetime.utcnow(),
+    created_at=datetime.now(timezone.utc),
     is_deleted=False,
   )
   session.add(customer)
+  starting_money = payload.starting_money if payload.starting_money is not None else 0.0
+  starting_12kg = payload.starting_12kg if payload.starting_12kg is not None else 0
+  starting_48kg = payload.starting_48kg if payload.starting_48kg is not None else 0
+  has_adjustment = any(value != 0 for value in (starting_money, starting_12kg, starting_48kg))
+  if has_adjustment:
+    adjustment = CustomerAdjustment(
+      id=new_id("adj"),
+      customer_id=customer.id,
+      amount_money=starting_money,
+      count_12kg=starting_12kg,
+      count_48kg=starting_48kg,
+      reason=payload.starting_reason or "onboarding",
+      created_at=datetime.now(timezone.utc),
+    )
+    session.add(adjustment)
+  sync_customer_totals(session, customer.id)
   add_activity(
     session,
     "customer",
@@ -59,6 +87,7 @@ def create_customer(payload: CustomerCreate, session: Session = Depends(get_sess
   )
   session.commit()
   session.refresh(customer)
+  print("[CREATE CUSTOMER] exiting")
   return customer
 
 
@@ -67,8 +96,8 @@ def update_customer(customer_id: str, payload: CustomerUpdate, session: Session 
   customer = session.get(Customer, customer_id)
   if not customer or customer.is_deleted:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
-  logger.info("update_customer id=%s payload=%s", customer_id, payload.dict(exclude_unset=True))
-  payload_data = payload.dict(exclude_unset=True)
+  logger.info("update_customer id=%s payload=%s", customer_id, payload.model_dump(exclude_unset=True))
+  payload_data = payload.model_dump(exclude_unset=True)
   changes: list[str] = []
   for field, value in payload_data.items():
     old = getattr(customer, field)
@@ -76,7 +105,7 @@ def update_customer(customer_id: str, payload: CustomerUpdate, session: Session 
       continue
     changes.append(f"{field}: '{old}' -> '{value}'")
     setattr(customer, field, value)
-  customer.updated_at = datetime.utcnow()
+  customer.updated_at = datetime.now(timezone.utc)
   description = (
     f"Customer '{customer.name}' updated: {', '.join(changes)}"
     if changes
@@ -103,7 +132,7 @@ def delete_customer(customer_id: str, session: Session = Depends(get_session)) -
     return
   logger.info("delete_customer id=%s", customer_id)
   customer.is_deleted = True
-  customer.deleted_at = datetime.utcnow()
+  customer.deleted_at = datetime.now(timezone.utc)
   session.add(customer)
   add_activity(
     session,

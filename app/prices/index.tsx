@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { GasType, PriceSetting } from "@/types/domain";
 import { gasTypes } from "@/components/PriceMatrix";
+import { gasColor } from "@/constants/gas";
 
 export default function PricesScreen() {
   const { data, isLoading, error } = usePriceSettings();
@@ -24,7 +25,7 @@ export default function PricesScreen() {
       <Text style={[styles.label, { marginTop: 18 }]}>Current prices</Text>
       {gasTypes.map((gas) => (
         <View key={`group-${gas}`} style={styles.priceGroup}>
-          <Text style={styles.sectionHeader}>{gas}</Text>
+          <Text style={[styles.sectionHeader, { color: gasColor(gas) }]}>{gas}</Text>
           {(groupedPrices[gas] ?? []).map((p) => (
             <View key={p.id} style={styles.priceRow}>
               <Text style={styles.meta}>{p.customer_type}</Text>

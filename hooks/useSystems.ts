@@ -1,6 +1,6 @@
 import { createSystem, deleteSystem, listSystems, updateSystem } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { System } from "@/types/domain";
+import { System, SystemCreateInput, SystemUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -17,12 +17,14 @@ function extractErrorMessage(err: AxiosError) {
   return "Unknown error";
 }
 
-export function useSystems(customerId?: string) {
+export function useSystems(customerId?: string, options?: { enabled?: boolean }) {
   const keyId = normalizeCustomerId(customerId);
   const queryKey = ["systems", keyId ?? "all"];
+  const enabled = options?.enabled ?? true;
 
   return useQuery<System[]>({
     queryKey,
+    enabled,
     queryFn: async () => {
       console.log("[listSystems CALL]", { customerId });
       const data = await listSystems(customerId);
@@ -43,7 +45,7 @@ export function useCreateSystem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: Partial<System>) => {
+    mutationFn: (payload: SystemCreateInput) => {
       console.log("[createSystem CALL]", payload);
       return createSystem(payload);
     },
@@ -68,7 +70,7 @@ export function useUpdateSystem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<System> }) => {
+    mutationFn: ({ id, payload }: { id: string; payload: SystemUpdateInput }) => {
       console.log("[updateSystem CALL]", { id, payload });
       return updateSystem(id, payload);
     },

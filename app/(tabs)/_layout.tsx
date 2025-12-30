@@ -22,9 +22,10 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Activity", tabBarIcon: ({ color }) => <Ionicons name="list-outline" size={20} color={color} /> }} />
+      <Tabs.Screen name="dashboard" options={{ title: "Dashboard", tabBarIcon: ({ color }) => <Ionicons name="speedometer-outline" size={20} color={color} /> }} />
       <Tabs.Screen name="customers" options={{ title: "Customers", tabBarIcon: ({ color }) => <Ionicons name="people-outline" size={20} color={color} /> }} />
       <Tabs.Screen name="add/index" options={{ title: "Add", tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} /> }} />
-      <Tabs.Screen name="reports/index" options={{ title: "Reports", tabBarIcon: ({ color }) => <Ionicons name="bar-chart-outline" size={20} color={color} /> }} />
+      <Tabs.Screen name="reports/index" options={{ title: "Daily", tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={20} color={color} /> }} />
     </Tabs>
   );
 }

@@ -1,14 +1,17 @@
 import { FlatList, View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
+import { gasColor } from "@/constants/gas";
 import { useMemo, useState } from "react";
 
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
+import { useSystems } from "@/hooks/useSystems";
 
 export default function CustomersListScreen() {
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const { data, isLoading, isFetching, error, refetch } = useCustomers();
   const ordersQuery = useOrders();
+  const systemsQuery = useSystems();
 
   const customers = useMemo(
     () =>
@@ -18,19 +21,52 @@ export default function CustomersListScreen() {
     [data, unpaidOnly]
   );
 
+  const latestOrdersByCustomer = useMemo(() => {
+    const map: Record<string, Date> = {};
+    (ordersQuery.data ?? []).forEach((o) => {
+      const orderDate = new Date(o.delivered_at);
+      if (Number.isNaN(orderDate.getTime())) return;
+      const existing = map[o.customer_id];
+      if (!existing || orderDate > existing) {
+        map[o.customer_id] = orderDate;
+      }
+    });
+    return map;
+  }, [ordersQuery.data]);
+
+  const systemStatsByCustomer = useMemo(() => {
+    const map: Record<string, { activeCount: number }> = {};
+    (systemsQuery.data ?? []).forEach((sys) => {
+      const entry = map[sys.customer_id] ?? { activeCount: 0 };
+      if (sys.is_active !== false) {
+        entry.activeCount += 1;
+      }
+      map[sys.customer_id] = entry;
+    });
+    return map;
+  }, [systemsQuery.data]);
+
+  const defaultSystemByCustomer = useMemo(() => {
+    const map: Record<string, string> = {};
+    (systemsQuery.data ?? []).forEach((sys) => {
+      const isActive = sys.is_active !== false;
+      if (isActive) {
+        map[sys.customer_id] = sys.id;
+      } else if (!map[sys.customer_id]) {
+        map[sys.customer_id] = sys.id;
+      }
+    });
+    return map;
+  }, [systemsQuery.data]);
+
   const dashboard = useMemo(() => {
     const totalDebt = customers.reduce((sum, c) => sum + Math.max(0, c.money_balance), 0);
     const unpaidCount = customers.filter((c) => c.money_balance > 0).length;
 
-    const ordersByCustomer: Record<string, string> = {};
-    (ordersQuery.data ?? []).forEach((o) => {
-      ordersByCustomer[o.customer_id] = o.delivered_at;
-    });
-
     const overdue = customers
       .map((c) => {
-        const last = ordersByCustomer[c.id];
-        const lastDate = last ? new Date(last) : null;
+        const last = latestOrdersByCustomer[c.id];
+        const lastDate = last ?? null;
         const daysSince =
           lastDate != null ? Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
         return { customer: c, daysSince };
@@ -39,17 +75,17 @@ export default function CustomersListScreen() {
       .sort((a, b) => (b.daysSince ?? 99999) - (a.daysSince ?? 99999));
 
     return { totalDebt, unpaidCount, overdue };
-  }, [customers, ordersQuery.data]);
+  }, [customers, latestOrdersByCustomer]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Customers</Text>
       <View style={styles.dashboard}>
-        <View style={styles.card}>
+        <View style={styles.dashboardCard}>
           <Text style={styles.cardLabel}>Total Debt</Text>
           <Text style={styles.cardValue}>${dashboard.totalDebt.toFixed(2)}</Text>
         </View>
-        <View style={styles.card}>
+        <View style={styles.dashboardCard}>
           <Text style={styles.cardLabel}>Unpaid Customers</Text>
           <Text style={styles.cardValue}>{dashboard.unpaidCount}</Text>
         </View>
@@ -111,15 +147,40 @@ export default function CustomersListScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Customer ${item.name}, unpaid ${item.money_balance}`}
             accessibilityHint="Open customer details"
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            style={({ pressed }) => [styles.customerCard, pressed && styles.cardPressed]}
           >
             <View style={styles.rowBetween}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.type}>{item.customer_type}</Text>
             </View>
             <Text style={styles.phone}>{item.phone}</Text>
+            <View style={styles.detailBlock}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Balances</Text>
+                <Text style={styles.detailValue}>
+                  ${item.money_balance.toFixed(2)} |{" "}
+                  <Text style={[styles.detailValue, { color: gasColor("12kg"), fontWeight: "700" }]}>
+                    12kg {item.cylinder_balance_12kg}
+                  </Text>{" "}
+                  |{" "}
+                  <Text style={[styles.detailValue, { color: gasColor("48kg"), fontWeight: "700" }]}>
+                    48kg {item.cylinder_balance_48kg}
+                  </Text>
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Last order</Text>
+                <Text style={styles.detailValue}>
+                  {latestOrdersByCustomer[item.id]?.toLocaleDateString() ?? "-"}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Active systems</Text>
+                <Text style={styles.detailValue}>{systemStatsByCustomer[item.id]?.activeCount ?? 0}</Text>
+              </View>
+            </View>
             <View style={styles.rowBetween}>
-              <Text style={styles.meta}>{item.number_of_orders} orders</Text>
+              <Text style={styles.meta}>{item.order_count} orders</Text>
               <Text style={[styles.meta, item.money_balance > 0 && styles.unpaid]}>Unpaid: ${item.money_balance}</Text>
             </View>
             <View style={styles.actions}>
@@ -132,12 +193,17 @@ export default function CustomersListScreen() {
                 <Text style={styles.linkText}>Update</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
+                onPress={() => {
+                  const systemId = defaultSystemByCustomer[item.id];
+                  const params = [`customerId=${encodeURIComponent(item.id)}`];
+                  if (systemId) params.push(`systemId=${encodeURIComponent(systemId)}`);
+                  router.push(`/orders/new?${params.join("&")}`);
+                }}
                 accessibilityRole="button"
-                accessibilityLabel={`Add order for ${item.name}`}
+                accessibilityLabel={`Quick order for ${item.name}`}
                 style={styles.linkBtn}
               >
-                <Text style={styles.linkText}>Add Order</Text>
+                <Text style={styles.linkText}>Quick Order</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -163,7 +229,7 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 8,
   },
-  card: {
+  dashboardCard: {
     flex: 1,
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -231,7 +297,11 @@ const styles = StyleSheet.create({
     borderColor: "#f5c6cb",
     gap: 6,
   },
-  card: {
+  error: {
+    color: "#b00020",
+    fontWeight: "700",
+  },
+  customerCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 14,
@@ -270,6 +340,28 @@ const styles = StyleSheet.create({
   unpaid: {
     color: "#b00020",
     fontWeight: "700",
+  },
+  detailBlock: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+    marginBottom: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  detailLabel: {
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  detailValue: {
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "600",
   },
   retryBtn: {
     alignSelf: "flex-start",

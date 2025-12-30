@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session, select
@@ -26,8 +26,8 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     customer_type=payload.customer_type,
     selling_price=payload.selling_price,
     buying_price=payload.buying_price,
-    effective_from=payload.effective_from or datetime.utcnow(),
-    created_at=datetime.utcnow(),
+    effective_from=payload.effective_from or datetime.now(timezone.utc),
+    created_at=datetime.now(timezone.utc),
   )
   session.add(setting)
   add_activity(
@@ -37,7 +37,7 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     f"Price {payload.gas_type} {payload.customer_type} set to sell {payload.selling_price}"
     + (f" buy {payload.buying_price}" if payload.buying_price else ""),
     setting.id,
-    metadata=f"selling={payload.selling_price};buying={payload.buying_price or 0};effective={payload.effective_from or datetime.utcnow().isoformat()}",
+    metadata=f"selling={payload.selling_price};buying={payload.buying_price or 0};effective={payload.effective_from or datetime.now(timezone.utc).isoformat()}",
   )
   session.commit()
   session.refresh(setting)

@@ -1,10 +1,20 @@
-from datetime import datetime
-from uuid import uuid4
+from datetime import date, datetime, timezone
 from typing import Optional
-
 import sqlalchemy as sa
-
 from sqlmodel import Field, SQLModel
+from uuid import uuid4
+
+class CustomerAdjustment(SQLModel, table=True):
+    __tablename__ = "customer_adjustments"
+    id: str = Field(primary_key=True, index=True)
+    customer_id: str = Field(foreign_key="customers.id", index=True)
+    amount_money: float = 0
+    count_12kg: int = 0
+    count_48kg: int = 0
+    reason: str = Field(default="onboarding") 
+    # Logic: if True, this is legacy debt/stock and doesn't affect the truck
+    is_inventory_neutral: bool = Field(default=True) 
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Customer(SQLModel, table=True):
@@ -12,11 +22,12 @@ class Customer(SQLModel, table=True):
 
   id: str = Field(primary_key=True, index=True)
   name: str
-  phone: str
+  phone: Optional[str] = Field(default=None, nullable=True)
   notes: Optional[str] = None
   customer_type: str = Field(default="other", index=True)
   money_balance: float = 0
-  number_of_orders: int = 0
+  total_cylinders_delivered_lifetime: int = 0
+  order_count: int = 0
   cylinder_balance_12kg: int = 0
   cylinder_balance_48kg: int = 0
   created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -38,10 +49,6 @@ class System(SQLModel, table=True):
   system_type: str = Field(default="other", index=True)
   gas_type: Optional[str] = Field(default="12kg", index=True)
   system_customer_type: Optional[str] = Field(default="private", index=True)
-  security_required: bool = Field(default=False)
-  last_security_check_at: Optional[datetime] = Field(default=None, nullable=True)
-  next_security_due_at: Optional[datetime] = Field(default=None, nullable=True)
-  security_status: Optional[str] = Field(default=None, nullable=True)
   is_deleted: bool = Field(default=False, index=True)
   deleted_at: Optional[datetime] = Field(default=None, nullable=True)
   deletion_reason: Optional[str] = Field(default=None, nullable=True)
@@ -72,6 +79,10 @@ class Order(SQLModel, table=True):
   price_total: float
   paid_amount: float
   note: Optional[str] = None
+  client_request_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+  )
   created_at: datetime = Field(default_factory=datetime.utcnow)
   updated_at: Optional[datetime] = Field(default=None, nullable=True)
   created_by: Optional[str] = Field(default=None, nullable=True)
@@ -111,6 +122,19 @@ class Activity(SQLModel, table=True):
   created_by: Optional[str] = Field(default=None, nullable=True)
 
 
+class Expense(SQLModel, table=True):
+  __tablename__ = "expenses"
+  __table_args__ = (sa.UniqueConstraint("date", "expense_type", name="uq_expense_date_type"),)
+
+  id: str = Field(primary_key=True, index=True)
+  date: str = Field(index=True)
+  expense_type: str = Field(index=True)
+  amount: float
+  note: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+
+
 class InventoryVersion(SQLModel, table=True):
   __tablename__ = "inventory_versions"
 
@@ -124,3 +148,105 @@ class InventoryVersion(SQLModel, table=True):
   effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   created_by: Optional[str] = Field(default=None, nullable=True, index=True)
+
+
+class InventoryDelta(SQLModel, table=True):
+  __tablename__ = "inventory_deltas"
+
+  id: str = Field(default_factory=lambda: f"invd_{uuid4()}", primary_key=True, index=True)
+  gas_type: str = Field(index=True)
+  delta_full: int = 0
+  delta_empty: int = 0
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  source_type: str = Field(index=True)
+  source_id: Optional[str] = Field(default=None, index=True, nullable=True)
+  reason: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_by: Optional[str] = Field(default=None, nullable=True, index=True)
+
+
+class InventoryDailySummary(SQLModel, table=True):
+  __tablename__ = "inventory_daily_summary"
+
+  business_date: date = Field(sa_column=sa.Column(sa.Date, primary_key=True))
+  gas_type: str = Field(primary_key=True, index=True)
+  day_start_full: int = 0
+  day_start_empty: int = 0
+  day_delta_full: int = 0
+  day_delta_empty: int = 0
+  day_end_full: int = 0
+  day_end_empty: int = 0
+  computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RefillEvent(SQLModel, table=True):
+  __tablename__ = "refill_events"
+
+  id: str = Field(primary_key=True, index=True)
+  business_date: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  unit_price_buy_12: Optional[float] = Field(default=None)
+  unit_price_buy_48: Optional[float] = Field(default=None)
+  total_cost: float = 0
+  paid_now: float = 0
+  reason: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_by: Optional[str] = Field(default=None, nullable=True, index=True)
+
+
+class CompanyDelta(SQLModel, table=True):
+  __tablename__ = "company_deltas"
+
+  id: str = Field(default_factory=lambda: f"compd_{uuid4()}", primary_key=True, index=True)
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  source_type: str = Field(index=True)
+  source_id: Optional[str] = Field(default=None, index=True, nullable=True)
+  delta_payable: float
+  reason: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_by: Optional[str] = Field(default=None, nullable=True, index=True)
+
+
+class CompanyDailySummary(SQLModel, table=True):
+  __tablename__ = "company_daily_summary"
+
+  business_date: date = Field(sa_column=sa.Column(sa.Date, primary_key=True))
+  payable_start: float = 0
+  payable_delta: float = 0
+  payable_end: float = 0
+  computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CashDelta(SQLModel, table=True):
+  __tablename__ = "cash_deltas"
+
+  id: str = Field(default_factory=lambda: f"cashd_{uuid4()}", primary_key=True, index=True)
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  source_type: str = Field(index=True)
+  source_id: Optional[str] = Field(default=None, index=True, nullable=True)
+  delta_cash: float
+  reason: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_by: Optional[str] = Field(default=None, nullable=True, index=True)
+
+
+class CashDailySummary(SQLModel, table=True):
+  __tablename__ = "cash_daily_summary"
+
+  business_date: date = Field(sa_column=sa.Column(sa.Date, primary_key=True))
+  cash_start: float = 0
+  cash_delta: float = 0
+  cash_end: float = 0
+  computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InventoryRecalcQueue(SQLModel, table=True):
+  __tablename__ = "inventory_recalc_queue"
+
+  id: str = Field(default_factory=lambda: f"invq_{uuid4()}", primary_key=True, index=True)
+  gas_type: str = Field(index=True)
+  start_business_date: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  status: str = Field(default="pending", index=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow)
+  updated_at: datetime = Field(default_factory=datetime.utcnow)
+  last_error: Optional[str] = Field(default=None, nullable=True)

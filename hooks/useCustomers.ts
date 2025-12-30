@@ -1,7 +1,17 @@
 import { createCustomer, deleteCustomer, listCustomers, updateCustomer } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { Customer } from "@/types/domain";
+import { Customer, CustomerUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+function extractErrorMessage(err: AxiosError) {
+  const data = err.response?.data;
+  if (data && typeof data === "object") {
+    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
+    if (typeof detail === "string") return detail;
+  }
+  return err.message || "Unknown error";
+}
 
 export function useCustomers() {
   return useQuery<Customer[]>({
@@ -19,6 +29,12 @@ export function useCreateCustomer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createCustomer,
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to create customer: ${message}`);
+      console.error("[createCustomer ERROR]", axiosError.response?.status, message);
+    },
     onSuccess: () => {
       showToast("Customer created");
       queryClient.invalidateQueries({ queryKey: ["customers"] });
@@ -31,7 +47,7 @@ export function useCreateCustomer() {
 export function useUpdateCustomer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<Customer> }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: CustomerUpdateInput }) =>
       updateCustomer(id, payload),
 
     onSuccess: (_, variables) => {

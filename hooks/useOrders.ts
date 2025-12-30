@@ -1,6 +1,6 @@
 import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { Order } from "@/types/domain";
+import { Order, OrderUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -48,6 +48,9 @@ export function useCreateOrder() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
     },
   });
 }
@@ -55,7 +58,7 @@ export function useCreateOrder() {
 export function useUpdateOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<Order> }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: OrderUpdateInput }) =>
       updateOrder(id, payload),
     onError: (err) => {
       const axiosError = err as AxiosError;
@@ -70,6 +73,9 @@ export function useUpdateOrder() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
     },
   });
 }
@@ -89,6 +95,9 @@ export function useDeleteOrder() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
     },
   });
 }

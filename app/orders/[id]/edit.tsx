@@ -16,6 +16,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders, useUpdateOrder } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
 import { GasType } from "@/types/domain";
+import { gasColor } from "@/constants/gas";
 
 /**
  * 🔴 BACKEND CONTRACT (IMPORTANT)
@@ -311,7 +312,10 @@ export default function EditOrderScreen() {
       <FieldError message={errors.cylinders_received?.message} />
 
       <Text style={styles.meta}>
-        Diff: {diff} {selectedGas}
+        Diff: {diff}{" "}
+        <Text style={[styles.meta, { color: gasColor(selectedGas), fontWeight: "700" }]}>
+          {selectedGas}
+        </Text>
       </Text>
 
       {/* TOTAL / PAID */}

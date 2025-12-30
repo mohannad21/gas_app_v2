@@ -5,6 +5,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useOrders, useDeleteOrder } from "@/hooks/useOrders";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useSystems } from "@/hooks/useSystems";
+import { gasColor } from "@/constants/gas";
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,7 +48,10 @@ export default function OrderDetailsScreen() {
       <Text style={styles.meta}>Customer: {customer?.name ?? order.customer_id}</Text>
       <Text style={styles.meta}>System: {system?.name ?? order.system_id}</Text>
       <Text style={styles.meta}>
-        System Type: {system?.system_type ?? "n/a"} • Gas {system?.gas_type ?? order.gas_type}
+        System Type: {system?.system_type ?? "n/a"} • Gas{" "}
+        <Text style={[styles.meta, { color: gasColor(system?.gas_type ?? order.gas_type), fontWeight: "700" }]}>
+          {system?.gas_type ?? order.gas_type}
+        </Text>
       </Text>
       <Text style={styles.meta}>Delivered: {order.delivered_at}</Text>
       <Text style={styles.meta}>

@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
-import { ScrollView, View, Text, TextInput, Pressable, StyleSheet, Alert, Switch } from "react-native";
+import { ScrollView, View, Text, TextInput, Pressable, StyleSheet, Alert, Switch, Keyboard } from "react-native";
 import { router } from "expo-router";
+import { AxiosError } from "axios";
 
 import { useCreateCustomer } from "@/hooks/useCustomers";
 import { useCreateSystem } from "@/hooks/useSystems";
 import { CustomerType, GasType, SystemType } from "@/types/domain";
+import { gasColor } from "@/constants/gas";
 
 type CustomerFormValues = {
   name: string;
-  phone: string;
+  phone?: string;
   notes?: string;
   systems: Array<{
     type: SystemType;
@@ -22,8 +24,24 @@ type CustomerFormValues = {
   }>;
 };
 
+function extractErrorMessage(err: unknown) {
+  if (!err || typeof err !== "object") return "Unknown error";
+  const axiosError = err as AxiosError;
+  const data = axiosError.response?.data;
+  if (data && typeof data === "object") {
+    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
+    if (typeof detail === "string") return detail;
+  }
+  if (typeof axiosError.message === "string" && axiosError.message) return axiosError.message;
+  return "Unknown error";
+}
+
 export default function NewCustomerScreen() {
-  const { control, handleSubmit } = useForm<CustomerFormValues>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CustomerFormValues>({
     defaultValues: {
       name: "",
       phone: "",
@@ -69,13 +87,15 @@ export default function NewCustomerScreen() {
       console.log("[new customer submit] systems length", values.systems.length, values.systems);
       const created = await createCustomer.mutateAsync({
         name: values.name,
-        phone: values.phone,
+        phone: values.phone?.trim() ? values.phone.trim() : undefined,
         notes: values.notes,
         customer_type: values.systems[0]?.system_customer_type ?? "private",
       });
       // create systems in sequence
       for (const sys of values.systems) {
-        const sanitizedSecurityDate = sys.security_check_date?.trim();
+        const normalizedSecurityDate =
+          sys.security_check_exists && sys.security_check_date ? sys.security_check_date.trim() : null;
+        const securityDate = normalizedSecurityDate && normalizedSecurityDate.length > 0 ? normalizedSecurityDate : null;
         await createSystem.mutateAsync({
           customer_id: created.id,
           name: presetLabel(sys.type),
@@ -86,12 +106,14 @@ export default function NewCustomerScreen() {
           is_active: sys.is_active,
           require_security_check: sys.require_security_check,
           security_check_exists: sys.security_check_exists,
-          security_check_date: sanitizedSecurityDate ? sanitizedSecurityDate : undefined,
+          security_check_date: securityDate,
         });
       }
       router.replace({ pathname: "/", params: { flash: "customer-created" } });
     } catch (err) {
-      Alert.alert("Error", "Failed to create customer.");
+      const message = extractErrorMessage(err);
+      console.error("[new customer submit] error", message);
+      Alert.alert("Error", `Failed to create customer. ${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -105,11 +127,12 @@ export default function NewCustomerScreen() {
       <Controller
         control={control}
         name="name"
-        rules={{ required: true }}
+        rules={{ required: "Name is required" }}
         render={({ field: { onChange, value } }) => (
           <TextInput style={styles.input} placeholder="Customer name" value={value} onChangeText={onChange} />
         )}
       />
+      {errors.name?.message ? <Text style={styles.errorText}>{errors.name.message}</Text> : null}
 
       <FieldLabel>Phone</FieldLabel>
       <Controller
@@ -119,6 +142,7 @@ export default function NewCustomerScreen() {
           <TextInput style={styles.input} placeholder="Phone" value={value} onChangeText={onChange} keyboardType="phone-pad" />
         )}
       />
+      {errors.phone?.message ? <Text style={styles.errorText}>{errors.phone.message}</Text> : null}
 
       <FieldLabel>Notes</FieldLabel>
       <Controller
@@ -131,6 +155,9 @@ export default function NewCustomerScreen() {
             value={value}
             onChangeText={onChange}
             multiline
+            blurOnSubmit
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         )}
       />
@@ -173,9 +200,14 @@ export default function NewCustomerScreen() {
                     <Pressable
                       key={g}
                       onPress={() => onChange(g)}
-                      style={[styles.chip, value === g && styles.chipActive]}
+                      style={[
+                        styles.chip,
+                        value === g && { backgroundColor: gasColor(g), borderColor: gasColor(g) },
+                      ]}
                     >
-                      <Text style={[styles.chipText, value === g && styles.chipTextActive]}>{g}</Text>
+                      <Text style={[styles.chipText, value === g ? styles.chipTextActive : { color: gasColor(g) }]}>
+                        {g}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>
@@ -448,5 +480,10 @@ const styles = StyleSheet.create({
   secondaryText: {
     color: "#0a7ea4",
     fontWeight: "700",
+  },
+  errorText: {
+    color: "#b00020",
+    marginTop: 4,
+    fontSize: 12,
   },
 });

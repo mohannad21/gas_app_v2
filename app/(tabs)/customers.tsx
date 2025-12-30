@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
+import { gasColor } from "@/constants/gas";
 
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
@@ -74,6 +75,19 @@ export default function CustomersDashboardTab() {
     return counts;
   }, [systemsQuery.data]);
 
+  const defaultSystemByCustomer = useMemo(() => {
+    const map: Record<string, string> = {};
+    (systemsQuery.data ?? []).forEach((system) => {
+      const isActive = system.is_active !== false;
+      if (isActive) {
+        map[system.customer_id] = system.id;
+      } else if (!map[system.customer_id]) {
+        map[system.customer_id] = system.id;
+      }
+    });
+    return map;
+  }, [systemsQuery.data]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return customers
@@ -120,11 +134,11 @@ export default function CustomersDashboardTab() {
           <Text style={styles.metricValue}>${metrics.outstanding.toFixed(2)}</Text>
         </View>
         <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>Missing 12kg</Text>
+          <Text style={[styles.metricLabel, { color: gasColor("12kg") }]}>Missing 12kg</Text>
           <Text style={styles.metricValue}>{metrics.missing12}</Text>
         </View>
         <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>Missing 48kg</Text>
+          <Text style={[styles.metricLabel, { color: gasColor("48kg") }]}>Missing 48kg</Text>
           <Text style={styles.metricValue}>{metrics.missing48}</Text>
         </View>
       </View>
@@ -194,7 +208,7 @@ export default function CustomersDashboardTab() {
               ) : null}
               <View style={styles.rowBetween}>
                 <Text style={styles.meta}>
-                  {item.number_of_orders} orders • {systemCount} systems
+                  {item.order_count} orders • {systemCount} systems
                 </Text>
                 <Text
                   style={[
@@ -227,10 +241,15 @@ export default function CustomersDashboardTab() {
                   <Text style={styles.linkText}>Details</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
+                  onPress={() => {
+                    const systemId = defaultSystemByCustomer[item.id];
+                    const params = [`customerId=${encodeURIComponent(item.id)}`];
+                    if (systemId) params.push(`systemId=${encodeURIComponent(systemId)}`);
+                    router.push(`/orders/new?${params.join("&")}`);
+                  }}
                   style={styles.linkBtn}
                 >
-                  <Text style={styles.linkText}>New Order</Text>
+                  <Text style={styles.linkText}>Quick Order</Text>
                 </Pressable>
               </View>
             </Pressable>

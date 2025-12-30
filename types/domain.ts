@@ -16,17 +16,38 @@ export const CustomerSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    phone: z.string(),
+    phone: z.string().nullish(),
     notes: z.string().nullish(),
     customer_type: CustomerTypeSchema,
     money_balance: z.number(),
-    number_of_orders: z.number(),
+    total_cylinders_delivered_lifetime: z.number(),
+    order_count: z.number(),
     cylinder_balance_12kg: z.number(),
     cylinder_balance_48kg: z.number(),
     created_at: z.string(),
   })
   .passthrough();
 export type Customer = z.infer<typeof CustomerSchema>;
+
+export const CustomerCreateInputSchema = z.object({
+  name: z.string(),
+  phone: z.string().nullish().optional(),
+  customer_type: CustomerTypeSchema.optional(),
+  notes: z.string().nullish().optional(),
+  starting_money: z.number().optional(),
+  starting_12kg: z.number().optional(),
+  starting_48kg: z.number().optional(),
+  starting_reason: z.string().optional(),
+});
+export type CustomerCreateInput = z.infer<typeof CustomerCreateInputSchema>;
+
+export const CustomerUpdateInputSchema = z.object({
+  name: z.string().optional(),
+  phone: z.string().nullish().optional(),
+  customer_type: CustomerTypeSchema.optional(),
+  notes: z.string().nullish().optional(),
+});
+export type CustomerUpdateInput = z.infer<typeof CustomerUpdateInputSchema>;
 
 export const SystemSchema = z
   .object({
@@ -45,12 +66,31 @@ export const SystemSchema = z
   .passthrough();
 export type System = z.infer<typeof SystemSchema>;
 
+export const SystemCreateInputSchema = z.object({
+  customer_id: z.string(),
+  name: z.string(),
+  location: z.string().nullish().optional(),
+  system_type: SystemTypeSchema.optional(),
+  gas_type: GasTypeSchema.optional(),
+  system_customer_type: CustomerTypeSchema.optional(),
+  is_active: z.boolean().optional(),
+  require_security_check: z.boolean().optional(),
+  security_check_exists: z.boolean().optional(),
+  security_check_date: z.string().nullish().optional(),
+});
+export type SystemCreateInput = z.infer<typeof SystemCreateInputSchema>;
+
+export const SystemUpdateInputSchema = SystemCreateInputSchema.partial();
+export type SystemUpdateInput = z.infer<typeof SystemUpdateInputSchema>;
+
 export const OrderSchema = z
   .object({
     id: z.string(),
     customer_id: z.string(),
     system_id: z.string(),
     delivered_at: z.string(),
+    created_at: z.string(),
+    updated_at: z.string().nullish(),
     gas_type: GasTypeSchema,
     cylinders_installed: z.number(),
     cylinders_received: z.number(),
@@ -60,6 +100,23 @@ export const OrderSchema = z
   })
   .passthrough();
 export type Order = z.infer<typeof OrderSchema>;
+
+export const OrderCreateInputSchema = z.object({
+  customer_id: z.string(),
+  system_id: z.string(),
+  delivered_at: z.string().optional(),
+  gas_type: GasTypeSchema,
+  cylinders_installed: z.number(),
+  cylinders_received: z.number(),
+  price_total: z.number(),
+  paid_amount: z.number(),
+  note: z.string().nullish().optional(),
+  client_request_id: z.string().optional(),
+});
+export type OrderCreateInput = z.infer<typeof OrderCreateInputSchema>;
+
+export const OrderUpdateInputSchema = OrderCreateInputSchema.partial();
+export type OrderUpdateInput = z.infer<typeof OrderUpdateInputSchema>;
 
 export const ActivityApiSchema = z
   .object({
@@ -79,7 +136,8 @@ export const ActivitySchema = ActivityApiSchema.transform((activity) => ({
   type: activity.entity_type,
   action: activity.action,
   description: activity.description,
-  customer_id: activity.entity_id ?? undefined,
+  entity_id: activity.entity_id ?? undefined,
+  customer_id: activity.entity_type === "customer" ? activity.entity_id ?? undefined : undefined,
   metadata: activity.metadata ?? undefined,
   created_at: activity.created_at,
   created_by: activity.created_by ?? undefined,
@@ -97,6 +155,41 @@ export const InventorySnapshotSchema = z.object({
   reason: z.string().nullish(),
 });
 export type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;
+
+export const InventoryDayGasSummarySchema = z.object({
+  gas_type: GasTypeSchema,
+  business_date: z.string(),
+  day_start_full: z.number(),
+  day_start_empty: z.number(),
+  day_end_full: z.number(),
+  day_end_empty: z.number(),
+});
+export type InventoryDayGasSummary = z.infer<typeof InventoryDayGasSummarySchema>;
+
+export const InventoryDayEventSchema = z.object({
+  id: z.string(),
+  gas_type: GasTypeSchema,
+  effective_at: z.string(),
+  created_at: z.string(),
+  source_type: z.string(),
+  source_id: z.string().nullish(),
+  reason: z.string().nullish(),
+  delta_full: z.number(),
+  delta_empty: z.number(),
+  before_full: z.number(),
+  before_empty: z.number(),
+  after_full: z.number(),
+  after_empty: z.number(),
+});
+export type InventoryDayEvent = z.infer<typeof InventoryDayEventSchema>;
+
+export const InventoryDayResponseSchema = z.object({
+  business_date: z.string(),
+  business_tz: z.string(),
+  summaries: z.array(InventoryDayGasSummarySchema),
+  events: z.array(InventoryDayEventSchema),
+});
+export type InventoryDayResponse = z.infer<typeof InventoryDayResponseSchema>;
 
 export const DailyReportRowSchema = z.object({
   date: z.string(),
@@ -127,6 +220,101 @@ export const DailyReportRowSchema = z.object({
 });
 export type DailyReportRow = z.infer<typeof DailyReportRowSchema>;
 
+export const ReportInventoryTotalsSchema = z.object({
+  full12: z.number(),
+  empty12: z.number(),
+  full48: z.number(),
+  empty48: z.number(),
+});
+export type ReportInventoryTotals = z.infer<typeof ReportInventoryTotalsSchema>;
+
+export const ReportInventoryStateSchema = z.object({
+  full12: z.number().nullish(),
+  empty12: z.number().nullish(),
+  full48: z.number().nullish(),
+  empty48: z.number().nullish(),
+});
+export type ReportInventoryState = z.infer<typeof ReportInventoryStateSchema>;
+
+export const DailyReportV2CardSchema = z.object({
+  date: z.string(),
+  cash_start: z.number(),
+  cash_end: z.number(),
+  company_start: z.number().optional(),
+  company_end: z.number().optional(),
+  inventory_start: ReportInventoryTotalsSchema,
+  inventory_end: ReportInventoryTotalsSchema,
+  problems: z.array(z.string()).nullish(),
+  recalculated: z.boolean().optional(),
+});
+export type DailyReportV2Card = z.infer<typeof DailyReportV2CardSchema>;
+
+export const DailyReportV2EventSchema = z.object({
+  event_type: z.string(),
+  effective_at: z.string(),
+  created_at: z.string(),
+  source_id: z.string().nullish(),
+  label: z.string().nullish(),
+  gas_type: GasTypeSchema.nullish(),
+  customer_id: z.string().nullish(),
+  customer_name: z.string().nullish(),
+  system_name: z.string().nullish(),
+  expense_type: z.string().nullish(),
+  reason: z.string().nullish(),
+  buy12: z.number().nullish(),
+  return12: z.number().nullish(),
+  buy48: z.number().nullish(),
+  return48: z.number().nullish(),
+  total_cost: z.number().nullish(),
+  paid_now: z.number().nullish(),
+  unit_price_buy_12: z.number().nullish(),
+  unit_price_buy_48: z.number().nullish(),
+  cash_before: z.number(),
+  cash_after: z.number(),
+  company_before: z.number().nullish(),
+  company_after: z.number().nullish(),
+  inventory_before: ReportInventoryStateSchema.nullish(),
+  inventory_after: ReportInventoryStateSchema.nullish(),
+});
+export type DailyReportV2Event = z.infer<typeof DailyReportV2EventSchema>;
+
+export const DailyReportV2DaySchema = z.object({
+  date: z.string(),
+  cash_start: z.number(),
+  cash_end: z.number(),
+  company_start: z.number().optional(),
+  company_end: z.number().optional(),
+  inventory_start: ReportInventoryTotalsSchema,
+  inventory_end: ReportInventoryTotalsSchema,
+  recalculated: z.boolean().optional(),
+  events: z.array(DailyReportV2EventSchema),
+});
+export type DailyReportV2Day = z.infer<typeof DailyReportV2DaySchema>;
+
+export const InventoryRefillDetailsSchema = z.object({
+  refill_id: z.string(),
+  business_date: z.string(),
+  time_of_day: z.enum(["morning", "evening"]).optional(),
+  effective_at: z.string(),
+  buy12: z.number(),
+  return12: z.number(),
+  buy48: z.number(),
+  return48: z.number(),
+  total_cost: z.number(),
+  paid_now: z.number(),
+  unit_price_buy_12: z.number().nullish(),
+  unit_price_buy_48: z.number().nullish(),
+  before_full_12: z.number(),
+  before_empty_12: z.number(),
+  after_full_12: z.number(),
+  after_empty_12: z.number(),
+  before_full_48: z.number(),
+  before_empty_48: z.number(),
+  after_full_48: z.number(),
+  after_empty_48: z.number(),
+});
+export type InventoryRefillDetails = z.infer<typeof InventoryRefillDetailsSchema>;
+
 export const PriceSettingSchema = z
   .object({
     id: z.string(),
@@ -140,3 +328,35 @@ export const PriceSettingSchema = z
   })
   .passthrough();
 export type PriceSetting = z.infer<typeof PriceSettingSchema>;
+
+export const ExpenseSchema = z
+  .object({
+    id: z.string(),
+    date: z.string(),
+    expense_type: z.string(),
+    amount: z.number(),
+    note: z.string().nullish(),
+    created_at: z.string().optional(),
+    created_by: z.string().nullish(),
+  })
+  .passthrough();
+export type Expense = z.infer<typeof ExpenseSchema>;
+
+export const ExpenseCreateInputSchema = z.object({
+  date: z.string(),
+  expense_type: z.string(),
+  amount: z.number(),
+  note: z.string().nullish().optional(),
+  created_by: z.string().nullish().optional(),
+});
+export type ExpenseCreateInput = z.infer<typeof ExpenseCreateInputSchema>;
+
+export const BankDepositSchema = z.object({
+  id: z.string(),
+  effective_at: z.string(),
+  created_at: z.string().optional(),
+  amount: z.number(),
+  note: z.string().nullish(),
+  date: z.string(),
+});
+export type BankDeposit = z.infer<typeof BankDepositSchema>;
