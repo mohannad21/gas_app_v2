@@ -269,17 +269,17 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
   ).all()
   order_ids = {row.source_id for row in inv_rows if row.source_type == "order" and row.source_id}
-  order_map: dict[str, tuple[Order, str, str]] = {}
+  order_map: dict[str, tuple[Order, str, Optional[str], str, Optional[str]]] = {}
   if order_ids:
     customer_alias = aliased(Customer)
     system_alias = aliased(System)
     rows = session.exec(
-      select(Order, customer_alias.name, system_alias.name)
+      select(Order, customer_alias.name, customer_alias.notes, system_alias.name, system_alias.system_type)
       .join(customer_alias, customer_alias.id == Order.customer_id)
       .join(system_alias, system_alias.id == Order.system_id)
       .where(Order.id.in_(list(order_ids)))
     ).all()
-    order_map = {row[0].id: (row[0], row[1], row[2]) for row in rows if not row[0].is_deleted}
+    order_map = {row[0].id: (row[0], row[1], row[2], row[3], row[4]) for row in rows if not row[0].is_deleted}
 
   filtered_inv_rows: list[InventoryDelta] = []
   for row in inv_rows:
@@ -346,7 +346,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "gas_type": None,
         "customer_id": None,
         "customer_name": None,
+        "customer_description": None,
         "system_name": None,
+        "system_type": None,
         "expense_type": None,
         "reason": None,
       }
@@ -359,12 +361,14 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["label"] = "Inventory Init"
         entry["gas_type"] = row.gas_type
       elif event_type == "order" and row.source_id and row.source_id in order_map:
-        order, customer_name, system_name = order_map[row.source_id]
+        order, customer_name, customer_description, system_name, system_type = order_map[row.source_id]
         entry["label"] = f"Order - {customer_name}"
         entry["gas_type"] = order.gas_type
         entry["customer_id"] = order.customer_id
         entry["customer_name"] = customer_name
+        entry["customer_description"] = customer_description
         entry["system_name"] = system_name
+        entry["system_type"] = system_type
       entry["reason"] = row.reason
       event_map[key] = entry
     else:
@@ -394,7 +398,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "gas_type": None,
         "customer_id": None,
         "customer_name": None,
+        "customer_description": None,
         "system_name": None,
+        "system_type": None,
         "expense_type": None,
         "reason": None,
       }
@@ -418,12 +424,14 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["label"] = "Cash Init"
         entry["reason"] = row.reason
       elif event_type == "order" and row.source_id and row.source_id in order_map:
-        order, customer_name, system_name = order_map[row.source_id]
+        order, customer_name, customer_description, system_name, system_type = order_map[row.source_id]
         entry["label"] = f"Order - {customer_name}"
         entry["gas_type"] = order.gas_type
         entry["customer_id"] = order.customer_id
         entry["customer_name"] = customer_name
+        entry["customer_description"] = customer_description
         entry["system_name"] = system_name
+        entry["system_type"] = system_type
       event_map[key] = entry
     else:
       if row.created_at < entry["created_at"]:
@@ -447,7 +455,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "gas_type": None,
         "customer_id": None,
         "customer_name": None,
+        "customer_description": None,
         "system_name": None,
+        "system_type": None,
         "expense_type": None,
         "reason": None,
       }
@@ -592,7 +602,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         gas_type=entry["gas_type"],
         customer_id=entry["customer_id"],
         customer_name=entry["customer_name"],
+        customer_description=entry["customer_description"],
         system_name=entry["system_name"],
+        system_type=entry["system_type"],
         expense_type=entry["expense_type"],
         reason=entry["reason"],
         buy12=buy12,

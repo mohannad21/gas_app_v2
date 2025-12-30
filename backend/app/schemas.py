@@ -339,7 +339,9 @@ class DailyReportV2Event(SQLModel):
   gas_type: Optional[GasType] = None
   customer_id: Optional[str] = None
   customer_name: Optional[str] = None
+  customer_description: Optional[str] = None
   system_name: Optional[str] = None
+  system_type: Optional[str] = None
   expense_type: Optional[str] = None
   reason: Optional[str] = None
   buy12: Optional[int] = None

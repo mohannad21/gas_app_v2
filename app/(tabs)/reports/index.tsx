@@ -154,6 +154,10 @@ export default function ReportsScreen() {
   const v2To = today;
   const v2Query = useDailyReportsV2(v2From, v2To);
   const refetchV2 = v2Query.refetch;
+  const v2Rows = useMemo(() => {
+    const rows = (v2Query.data ?? []) as any[];
+    return [...rows].sort((a, b) => String(b?.date ?? "").localeCompare(String(a?.date ?? "")));
+  }, [v2Query.data]);
 
   const resolveBuyingPrice = useCallback(
     (gas: "12kg" | "48kg", date: string, timeOfDay?: "morning" | "evening", effectiveAt?: string) => {
@@ -435,7 +439,7 @@ export default function ReportsScreen() {
         {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
 
         <FlatList
-          data={(v2Query.data ?? []) as any[]}
+          data={v2Rows}
           keyExtractor={(item) => item.date}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={!v2Query.isLoading ? <Text style={styles.meta}>No reports yet.</Text> : null}
@@ -1564,38 +1568,233 @@ function V2Timeline({
   formatMoney: (v: number) => string;
   formatCount: (v: number) => string;
 }) {
-  return (
-    <View style={styles.subCard}>
-      <Text style={styles.subCardTitle}>Events ({events.length})</Text>
-      {events.map((ev, idx) => (
-        <View key={`${date}-ev-${idx}`} style={{ marginBottom: 6 }}>
-          <Text style={styles.subCardRow}>
-            {(ev?.type ?? ev?.source_type ?? "event").toUpperCase()} · {ev?.effective_at ?? ev?.created_at ?? ""}
-          </Text>
-          {/* Minimal “result snapshot” */}
-          {"cash_after" in (ev ?? {}) ? (
-            <Text style={styles.meta}>Cash: {formatMoney(ev.cash_before ?? 0)} → {formatMoney(ev.cash_after ?? 0)}</Text>
+  const sortedEvents = useMemo(() => {
+    const getTime = (value?: string) => {
+      if (!value) return 0;
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+    return [...events].sort((a, b) => {
+      const aTime = getTime(a?.effective_at ?? a?.created_at);
+      const bTime = getTime(b?.effective_at ?? b?.created_at);
+      return bTime - aTime;
+    });
+  }, [events]);
+
+  const getOrderQtyLabel = (ev: any) => {
+    const gasType = ev?.gas_type;
+    if (!gasType) return null;
+    const before =
+      gasType === "12kg" ? ev?.inventory_before?.full12 : gasType === "48kg" ? ev?.inventory_before?.full48 : null;
+    const after =
+      gasType === "12kg" ? ev?.inventory_after?.full12 : gasType === "48kg" ? ev?.inventory_after?.full48 : null;
+    if (typeof before !== "number" || typeof after !== "number") return null;
+    const qty = Math.abs(after - before);
+    if (!qty) return null;
+    return `${qty} x ${gasType}`;
+  };
+
+  const renderInventorySection = (
+    label: string,
+    accent: string,
+    before: { full?: number | null; empty?: number | null },
+    after: { full?: number | null; empty?: number | null }
+  ) => {
+    const showFull = typeof before.full === "number" && typeof after.full === "number";
+    const showEmpty = typeof before.empty === "number" && typeof after.empty === "number";
+    if (!showFull && !showEmpty) return null;
+    return (
+      <View style={styles.eventSection}>
+        <View style={styles.eventSectionHeader}>
+          <View style={[styles.eventSectionDot, { backgroundColor: accent }]} />
+          <Text style={styles.eventSectionTitle}>{label}</Text>
+        </View>
+        <View style={styles.deltaGrid}>
+          {showFull ? (
+            <DeltaBox
+              label="Full"
+              before={before.full ?? 0}
+              after={after.full ?? 0}
+              format={formatCount}
+              accent={accent}
+            />
           ) : null}
-          {"company_after" in (ev ?? {}) ? (
-            <Text style={styles.meta}>Company: {formatMoney(ev.company_before ?? 0)} → {formatMoney(ev.company_after ?? 0)}</Text>
-          ) : null}
-          {ev?.inventory_after ? (
-            <Text style={styles.meta}>
-              Stock after: 12 {formatCount(ev.inventory_after.full12 ?? 0)}/{formatCount(ev.inventory_after.empty12 ?? 0)} · 48{" "}
-              {formatCount(ev.inventory_after.full48 ?? 0)}/{formatCount(ev.inventory_after.empty48 ?? 0)}
-            </Text>
+          {showEmpty ? (
+            <DeltaBox
+              label="Empty"
+              before={before.empty ?? 0}
+              after={after.empty ?? 0}
+              format={formatCount}
+              accent={accent}
+            />
           ) : null}
         </View>
-      ))}
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.subCard}>
+      <Text style={styles.subCardTitle}>Events ({sortedEvents.length})</Text>
+      {sortedEvents.map((ev, idx) => {
+        const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+        const eventTitle = formatEventType(eventType);
+        const eventTime = ev?.effective_at ?? ev?.created_at ?? "";
+
+        const invBefore = ev?.inventory_before ?? {};
+        const invAfter = ev?.inventory_after ?? {};
+        const showInv12 =
+          invBefore.full12 != null ||
+          invBefore.empty12 != null ||
+          invAfter.full12 != null ||
+          invAfter.empty12 != null;
+        const showInv48 =
+          invBefore.full48 != null ||
+          invBefore.empty48 != null ||
+          invAfter.full48 != null ||
+          invAfter.empty48 != null;
+
+        return (
+          <View key={`${date}-ev-${idx}`} style={styles.eventCard}>
+            <View style={styles.eventHeader}>
+              <View style={styles.eventHeaderTitleRow}>
+                <Text style={styles.eventTypeText}>{eventTitle}</Text>
+                {ev?.label && String(ev.label).toLowerCase() !== eventTitle.toLowerCase() ? (
+                  <Text style={styles.eventLabelText}>{ev.label}</Text>
+                ) : null}
+              </View>
+              <Text style={styles.eventTimeText}>{eventTime}</Text>
+            </View>
+
+            {eventType === "order" ? (
+              <View style={styles.eventMetaBlock}>
+                <Text style={styles.eventMetaText}>
+                  Customer: {ev?.customer_name ?? "Unknown"}
+                  {ev?.customer_description ? ` - ${ev.customer_description}` : " - No description"}
+                </Text>
+                <Text style={styles.eventMetaText}>
+                  System: {ev?.system_name ?? "Unknown"}
+                  {ev?.system_type ? ` (${ev.system_type})` : ""}
+                </Text>
+                <Text style={styles.eventMetaText}>Order: {getOrderQtyLabel(ev) ?? ev?.gas_type ?? "N/A"}</Text>
+              </View>
+            ) : null}
+
+            {eventType === "refill" ? (
+              <View style={styles.eventMetaBlock}>
+                <Text style={styles.eventMetaText}>
+                  12kg buy/return: {formatCount(ev?.buy12 ?? 0)} / {formatCount(ev?.return12 ?? 0)}
+                </Text>
+                <Text style={styles.eventMetaText}>
+                  48kg buy/return: {formatCount(ev?.buy48 ?? 0)} / {formatCount(ev?.return48 ?? 0)}
+                </Text>
+              </View>
+            ) : null}
+
+            {ev?.reason ? (
+              <View style={styles.eventMetaBlock}>
+                <Text style={styles.eventMetaText}>Note: {ev.reason}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.eventSection}>
+              <View style={styles.eventSectionHeader}>
+                <View style={styles.eventSectionDot} />
+                <Text style={styles.eventSectionTitle}>Money</Text>
+              </View>
+              <View style={styles.deltaGrid}>
+                <DeltaBox
+                  label="Cash"
+                  before={ev?.cash_before ?? 0}
+                  after={ev?.cash_after ?? 0}
+                  format={formatMoney}
+                  smallDelta
+                />
+                {ev?.company_before != null && ev?.company_after != null ? (
+                  <DeltaBox
+                    label="Company"
+                    before={ev.company_before ?? 0}
+                    after={ev.company_after ?? 0}
+                    format={formatMoney}
+                    smallDelta
+                  />
+                ) : null}
+              </View>
+            </View>
+
+            {showInv12
+              ? renderInventorySection(
+                  "Inventory 12kg",
+                  gasColor("12kg"),
+                  { full: invBefore.full12, empty: invBefore.empty12 },
+                  { full: invAfter.full12, empty: invAfter.empty12 }
+                )
+              : null}
+            {showInv48
+              ? renderInventorySection(
+                  "Inventory 48kg",
+                  gasColor("48kg"),
+                  { full: invBefore.full48, empty: invBefore.empty48 },
+                  { full: invAfter.full48, empty: invAfter.empty48 }
+                )
+              : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
 
+function formatEventType(type: string) {
+  return type
+    .replace(/_/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function DeltaBox({
+  label,
+  before,
+  after,
+  format,
+  accent,
+  smallDelta,
+}: {
+  label: string;
+  before: number;
+  after: number;
+  format: (v: number) => string;
+  accent?: string;
+  smallDelta?: boolean;
+}) {
+  const delta = (after ?? 0) - (before ?? 0);
+  return (
+    <View style={[styles.deltaBox, accent ? { borderColor: accent } : null]}>
+      <Text style={styles.deltaBoxLabel}>{label}</Text>
+      <View
+        style={[
+          styles.deltaBadge,
+          delta >= 0 ? styles.deltaBadgePositive : styles.deltaBadgeNegative,
+          smallDelta && styles.deltaBadgeSmall,
+        ]}
+      >
+        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>{formatSigned(delta)}</Text>
+      </View>
+      <View style={styles.deltaBoxRow}>
+        <Text style={styles.deltaBoxValue}>{format(before ?? 0)}</Text>
+        <Text style={styles.deltaBoxArrow}>{"->"}</Text>
+        <Text style={styles.deltaBoxValue}>{format(after ?? 0)}</Text>
+      </View>
+    </View>
+  );
+}
 function summarizeEventTypes(events: any[]) {
   // Minimal: count by type/source_type
   const map = new Map<string, number>();
   events.forEach((ev) => {
-    const t = String(ev?.type ?? ev?.source_type ?? "event");
+    const t = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
     map.set(t, (map.get(t) ?? 0) + 1);
   });
 
@@ -1714,6 +1913,57 @@ const styles = StyleSheet.create({
   subCard: { marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" },
   subCardTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", marginBottom: 6 },
   subCardRow: { fontSize: 12, fontWeight: "800", color: "#334155" },
+
+  eventCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  eventHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  eventHeaderTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  eventTypeText: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  eventLabelText: { fontSize: 11, fontWeight: "800", color: "#64748b" },
+  eventTimeText: { fontSize: 11, fontWeight: "700", color: "#64748b" },
+  eventMetaBlock: { marginTop: 8 },
+  eventMetaText: { fontSize: 12, fontWeight: "700", color: "#334155" },
+
+  eventSection: { marginTop: 10 },
+  eventSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  eventSectionDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: "#0a7ea4" },
+  eventSectionTitle: { fontSize: 11, fontWeight: "900", color: "#0f172a" },
+
+  deltaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  deltaBox: {
+    position: "relative",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#cbd5f5",
+    backgroundColor: "#f8fafc",
+    minWidth: 140,
+    flexGrow: 1,
+  },
+  deltaBoxLabel: { fontSize: 11, fontWeight: "800", color: "#0f172a" },
+  deltaBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#0f172a",
+  },
+  deltaBadgePositive: { backgroundColor: "#16a34a" },
+  deltaBadgeNegative: { backgroundColor: "#b91c1c" },
+  deltaBadgeSmall: { paddingHorizontal: 5, paddingVertical: 1 },
+  deltaBadgeText: { fontSize: 11, fontWeight: "900", color: "white" },
+  deltaBadgeTextSmall: { fontSize: 10 },
+  deltaBoxRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  deltaBoxValue: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  deltaBoxArrow: { fontSize: 11, fontWeight: "900", color: "#0a7ea4" },
 
   dayActions: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 10 },
   dayIconBtn: { padding: 6, borderRadius: 10, backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0" },
