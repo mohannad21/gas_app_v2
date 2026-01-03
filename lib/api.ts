@@ -20,10 +20,14 @@ import {
   InventorySnapshotSchema,
   Order,
   OrderCreateInput,
+  OrderImpact,
+  OrderImpactSchema,
   OrderSchema,
   OrderUpdateInput,
   PriceSetting,
   PriceSettingSchema,
+  WhatsappLink,
+  WhatsappLinkSchema,
   Expense,
   ExpenseCreateInput,
   ExpenseSchema,
@@ -116,6 +120,26 @@ export async function updateOrder(id: string, payload: OrderUpdateInput): Promis
 
 export async function deleteOrder(id: string): Promise<void> {
   await api.delete(`/orders/${id}`);
+}
+
+export async function validateOrderImpact(params: {
+  customer_id: string;
+  system_id: string;
+  gas_type: "12kg" | "48kg";
+  cylinders_installed: number;
+  cylinders_received: number;
+  price_total: number;
+  money_received: number;
+  money_given: number;
+  delivered_at?: string;
+}): Promise<OrderImpact> {
+  const { data } = await api.get("/orders/validate_order_impact", { params });
+  return parse(OrderImpactSchema, data);
+}
+
+export async function getOrderWhatsappLink(orderId: string): Promise<WhatsappLink> {
+  const { data } = await api.get(`/orders/whatsapp_link/${orderId}`);
+  return parse(WhatsappLinkSchema, data);
 }
 
 // Activities

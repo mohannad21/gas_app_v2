@@ -7,6 +7,7 @@ import {
   InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -24,6 +25,7 @@ import { useCreateOrder } from "@/hooks/useOrders";
 import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
+import { getOrderWhatsappLink } from "@/lib/api";
 import { CustomerType, GasType, OrderCreateInput } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
 
@@ -35,7 +37,8 @@ type OrderFormValues = {
   cylinders_installed: string;
   cylinders_received: string;
   price_total: string;
-  paid_amount: string;
+  money_received: string;
+  money_given: string;
   note?: string;
 };
 
@@ -60,7 +63,8 @@ export default function NewOrderScreen() {
       cylinders_installed: "",
       cylinders_received: "",
       price_total: "",
-      paid_amount: "",
+      money_received: "",
+      money_given: "",
       customer_id: "",
       system_id: "",
       note: "",
@@ -70,6 +74,7 @@ export default function NewOrderScreen() {
   const selectedCustomer = watch("customer_id");
   const selectedSystemId = watch("system_id");
   const selectedGas = watch("gas_type");
+  const deliveredAtValue = watch("delivered_at");
 
   const customersQuery = useCustomers();
   const inventoryLatest = useInventoryLatest();
@@ -82,6 +87,9 @@ export default function NewOrderScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [manualPrice, setManualPrice] = useState(false);
+  const [whatsappOrderId, setWhatsappOrderId] = useState<string | null>(null);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [whatsappBusy, setWhatsappBusy] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -109,9 +117,11 @@ export default function NewOrderScreen() {
   const installed = Number(watch("cylinders_installed")) || 0;
   const received = Number(watch("cylinders_received")) || 0;
   const totalAmount = Number(watch("price_total")) || 0;
-  const paidAmount = Number(watch("paid_amount")) || 0;
+  const moneyReceived = Number(watch("money_received")) || 0;
+  const moneyGiven = 0;
+  const grossPaid = moneyReceived - moneyGiven;
   const missing = Math.max(0, installed - received);
-  const unpaid = Math.max(0, totalAmount - paidAmount);
+  const unpaid = totalAmount - grossPaid;
   const inventoryInitBlocked = inventoryLatest.data === null;
   const inventoryPromptedRef = useRef(false);
   const [initModalVisible, setInitModalVisible] = useState(false);
@@ -153,6 +163,12 @@ export default function NewOrderScreen() {
     () => systemOptions.find((s) => s.id === selectedSystemId),
     [systemOptions, selectedSystemId]
   );
+  const selectedCustomerEntry = useMemo(
+    () => (customersQuery.data ?? []).find((c) => c.id === selectedCustomer),
+    [customersQuery.data, selectedCustomer]
+  );
+  const balanceBefore = selectedCustomerEntry?.money_balance ?? 0;
+  const balanceAfter = balanceBefore + unpaid;
   const previousCustomerRef = useRef<string | undefined>();
 
   useEffect(() => {
@@ -165,7 +181,8 @@ export default function NewOrderScreen() {
     setValue("cylinders_installed", "");
     setValue("cylinders_received", "");
     setValue("price_total", "");
-    setValue("paid_amount", "");
+    setValue("money_received", "");
+    setValue("money_given", "");
     setManualPrice(false);
   }, [selectedCustomer, setValue]);
 
@@ -254,18 +271,20 @@ export default function NewOrderScreen() {
 
     const total = unitPrice;
     setValue("price_total", String(total));
-    setValue("paid_amount", String(total));
+    setValue("money_received", String(total));
+    setValue("money_given", "0");
     setManualPrice(false);
   }, [selectedSystem, unitPrice, setValue]);
 
-  // Installed drives total + paid (unless manually overridden)
+  // Installed drives total + payment (unless manually overridden)
   useEffect(() => {
     if (manualPrice) return;
     if (installed <= 0) return;
 
     const total = installed * unitPrice;
     setValue("price_total", String(total));
-    setValue("paid_amount", String(total));
+    setValue("money_received", String(total));
+    setValue("money_given", "0");
   }, [installed, unitPrice, manualPrice, setValue]);
 
   useEffect(() => {
@@ -275,6 +294,11 @@ export default function NewOrderScreen() {
     const next = new Date(year, month - 1, day, hour || 0, minute || 0);
     setValue("delivered_at", next.toISOString());
   }, [deliveryDate, deliveryTime, setValue]);
+
+  useEffect(() => {
+    if (!selectedCustomer || !selectedSystemId || !selectedGas) return;
+    setValue("money_given", "0");
+  }, [selectedCustomer, selectedSystemId, selectedGas, setValue]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
@@ -314,7 +338,6 @@ export default function NewOrderScreen() {
           );
           return;
         }
-        setSubmitting(true);
 
         if (!pricesConfigured) {
           Alert.alert(
@@ -331,23 +354,87 @@ export default function NewOrderScreen() {
           return;
         }
 
+        if (!values.gas_type) {
+          Alert.alert("Missing gas type", "Please select a gas type.");
+          return;
+        }
+        const gasType = values.gas_type as GasType;
+        const total = Number(values.price_total) || 0;
+        const paid = Number(values.money_received) || 0;
+        const result = total - paid;
+        const balanceBeforeValue = selectedCustomerEntry?.money_balance ?? 0;
+        const balanceAfterValue = balanceBeforeValue + result;
+        const balanceStatus = balanceAfterValue < 0 ? "Credit" : balanceAfterValue > 0 ? "Debt" : "Settled";
+        const cylDelta = (Number(values.cylinders_installed) || 0) - (Number(values.cylinders_received) || 0);
+        const balanceBeforeCyl =
+          gasType === "12kg"
+            ? selectedCustomerEntry?.cylinder_balance_12kg ?? 0
+            : selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
+        const balanceAfterCyl = balanceBeforeCyl + cylDelta;
+        const alertLines: string[] = [];
+        if (balanceAfterValue !== 0) {
+          if (balanceAfterValue > 0) {
+            alertLines.push(`Money: Customer must pay ${Math.abs(balanceAfterValue).toFixed(0)}`);
+          } else {
+            alertLines.push(`Money: Customer must get ${Math.abs(balanceAfterValue).toFixed(0)}`);
+          }
+        }
+        if (balanceAfterCyl !== 0) {
+          if (balanceAfterCyl > 0) {
+            alertLines.push(`Cylinders: Customer must return ${Math.abs(balanceAfterCyl)} empty`);
+          } else {
+            alertLines.push(`Cylinders: Customer must get ${Math.abs(balanceAfterCyl)} empty`);
+          }
+        }
+        const alertMessage = alertLines.length > 0 ? alertLines.join("\n") : "All settled.";
+
         const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const orderPayload: OrderCreateInput = {
           customer_id: values.customer_id,
           system_id: values.system_id,
           delivered_at: values.delivered_at,
-          gas_type: values.gas_type,
+          gas_type: gasType,
           cylinders_installed: Number(values.cylinders_installed) || 0,
           cylinders_received: Number(values.cylinders_received) || 0,
-          price_total: Number(values.price_total) || 0,
-          paid_amount: Number(values.paid_amount) || 0,
+          price_total: total,
+          money_received: paid,
+          money_given: 0,
           note: values.note,
           client_request_id: requestId,
         };
 
-        await createOrder.mutateAsync(orderPayload);
+        const finalizeCreate = async () => {
+          setSubmitting(true);
+          try {
+            const created = await createOrder.mutateAsync(orderPayload);
+            setWhatsappOrderId(created.id);
+            setWhatsappOpen(true);
+          } finally {
+            setSubmitting(false);
+          }
+        };
 
-        router.replace({ pathname: "/", params: { flash: "order-created" } });
+        if (balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
+          const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
+            0
+          )} + ${result.toFixed(0)} = ${balanceAfterValue.toFixed(0)}`;
+          const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
+            0
+          )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
+          Alert.alert(
+            "🔴 Confirm settlement",
+            `${alertMessage}\n\n${moneyLine}\n${cylLine}\n\nResulting ${balanceStatus}: ${Math.abs(
+              balanceAfterValue
+            ).toFixed(0)}`,
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Confirm", onPress: () => void finalizeCreate() },
+            ]
+          );
+          return;
+        }
+
+        await finalizeCreate();
       } catch (err) {
         const axiosError = err as AxiosError;
         const detail = (axiosError.response?.data as { detail?: string } | undefined)?.detail;
@@ -392,6 +479,26 @@ export default function NewOrderScreen() {
     const current = Number(watch("cylinders_received")) || 0;
     const next = Math.max(0, current + delta);
     setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const exitAfterWhatsApp = () => {
+    setWhatsappOpen(false);
+    setWhatsappOrderId(null);
+    router.replace({ pathname: "/", params: { flash: "order-created" } });
+  };
+
+  const openWhatsAppConfirmation = async () => {
+    if (!whatsappOrderId) return;
+    try {
+      setWhatsappBusy(true);
+      const { url } = await getOrderWhatsappLink(whatsappOrderId);
+      await Linking.openURL(url);
+      exitAfterWhatsApp();
+    } catch {
+      Alert.alert("WhatsApp not available", "Could not open WhatsApp on this device.");
+    } finally {
+      setWhatsappBusy(false);
+    }
   };
 
   return (
@@ -721,7 +828,8 @@ export default function NewOrderScreen() {
                     onChangeText={(t) => {
                       setManualPrice(true);
                       field.onChange(t);
-                      setValue("paid_amount", t);
+                      setValue("money_received", t);
+                      setValue("money_given", "0");
                     }}
                   />
                 )}
@@ -732,7 +840,7 @@ export default function NewOrderScreen() {
               <Text style={styles.fieldName}>Paid</Text>
               <Controller
                 control={control}
-                name="paid_amount"
+                name="money_received"
                 rules={{
                   required: "Enter paid amount",
                   validate: (val) =>
@@ -742,7 +850,7 @@ export default function NewOrderScreen() {
                   <TextInput
                     style={[
                       styles.input,
-                      errors.paid_amount && styles.inputError,
+                      errors.money_received && styles.inputError,
                     ]}
                     accessibilityLabel="Paid amount"
                     accessibilityHint="Enter amount paid"
@@ -750,13 +858,12 @@ export default function NewOrderScreen() {
                     inputMode="numeric"
                     placeholder="0"
                     value={field.value}
-                    ref={(node) => (inputRefs.current.paid_amount = node)}
+                    ref={(node) => (inputRefs.current.money_received = node)}
                     onFocus={() => {
                       setFocusTarget("payments");
                     }}
                     onBlur={() => setFocusTarget(null)}
                     onChangeText={(t) => {
-                      setManualPrice(true);
                       field.onChange(t);
                     }}
                   />
@@ -765,7 +872,7 @@ export default function NewOrderScreen() {
             </View>
 
             <View style={styles.amountCell}>
-              <Text style={styles.fieldName}>Unpaid</Text>
+              <Text style={styles.fieldName}>Result</Text>
               <TextInput
                 style={[styles.input, styles.inputReadOnly]}
                 value={unpaid.toString()}
@@ -774,11 +881,14 @@ export default function NewOrderScreen() {
               />
             </View>
           </View>
+          <Text style={styles.balanceHint}>
+            Balance: {balanceBefore.toFixed(0)} {"->"} {balanceAfter.toFixed(0)}
+          </Text>
         </View>
         <FieldError message={errors.cylinders_installed?.message} />
         <FieldError message={errors.cylinders_received?.message} />
         <FieldError message={errors.price_total?.message} />
-        <FieldError message={errors.paid_amount?.message} />
+        <FieldError message={errors.money_received?.message} />
       </View>
 
       <Pressable
@@ -790,6 +900,27 @@ export default function NewOrderScreen() {
           {submitting ? "Saving..." : "Save Order"}
         </Text>
       </Pressable>
+
+      <Modal visible={whatsappOpen} transparent animationType="fade" onRequestClose={exitAfterWhatsApp}>
+        <Pressable style={styles.modalOverlay} onPress={exitAfterWhatsApp}>
+          <Pressable style={[styles.modalCard, styles.whatsappCard]} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Order saved</Text>
+            <Text style={styles.modalSubtitle}>Send the confirmation to the customer?</Text>
+            <Pressable
+              style={[styles.whatsappButton, whatsappBusy && styles.whatsappButtonDisabled]}
+              onPress={openWhatsAppConfirmation}
+              disabled={whatsappBusy || !whatsappOrderId}
+            >
+              <Text style={styles.whatsappButtonText}>
+                {whatsappBusy ? "Opening..." : "Send WhatsApp Confirmation"}
+              </Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={exitAfterWhatsApp}>
+              <Text style={styles.secondaryButtonText}>Skip</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={initModalVisible} animationType="slide" transparent onRequestClose={() => setInitModalVisible(false)}>
         <KeyboardAvoidingView
@@ -969,14 +1100,15 @@ export default function NewOrderScreen() {
                   onChangeText={(t) => {
                     setManualPrice(true);
                     field.onChange(t);
-                    setValue("paid_amount", t);
+                    setValue("money_received", t);
+                    setValue("money_given", "0");
                   }}
                 />
               )}
             />
             <Controller
               control={control}
-              name="paid_amount"
+              name="money_received"
               rules={{
                 required: "Enter paid amount",
                 validate: (val) =>
@@ -987,15 +1119,14 @@ export default function NewOrderScreen() {
                   style={[
                     styles.input,
                     styles.half,
-                    errors.paid_amount && styles.inputError,
+                    errors.money_received && styles.inputError,
                   ]}
                   keyboardType="numeric"
                   inputMode="numeric"
-                  placeholder="Pai"
+                  placeholder="Paid"
                   value={field.value}
                   editable={false}
                   onChangeText={(t) => {
-                    setManualPrice(true);
                     field.onChange(t);
                   }}
                 />
@@ -1301,6 +1432,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
   },
+  balanceHint: {
+    marginTop: 6,
+    color: "#475569",
+    fontWeight: "600",
+  },
   primary: {
     backgroundColor: "#0a7ea4",
     padding: 14,
@@ -1341,6 +1477,22 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     maxHeight: "90%",
+  },
+  whatsappCard: {
+    gap: 12,
+  },
+  whatsappButton: {
+    backgroundColor: "#16a34a",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  whatsappButtonDisabled: {
+    opacity: 0.6,
+  },
+  whatsappButtonText: {
+    color: "#fff",
+    fontWeight: "700",
   },
   modalActionRow: {
     flexDirection: "row",

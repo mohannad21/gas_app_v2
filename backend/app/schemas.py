@@ -84,7 +84,9 @@ class OrderCreate(SQLModel):
   cylinders_installed: int
   cylinders_received: int
   price_total: float
-  paid_amount: float
+  paid_amount: Optional[float] = None
+  money_received: Optional[float] = None
+  money_given: Optional[float] = None
   note: Optional[str] = None
   client_request_id: Optional[str] = None
 
@@ -98,6 +100,8 @@ class OrderUpdate(SQLModel):
   cylinders_received: Optional[int] = None
   price_total: Optional[float] = None
   paid_amount: Optional[float] = None
+  money_received: Optional[float] = None
+  money_given: Optional[float] = None
   note: Optional[str] = None
 
 
@@ -350,6 +354,10 @@ class DailyReportV2Event(SQLModel):
   return48: Optional[int] = None
   total_cost: Optional[float] = None
   paid_now: Optional[float] = None
+  order_total: Optional[float] = None
+  order_paid: Optional[float] = None
+  order_installed: Optional[int] = None
+  order_received: Optional[int] = None
   unit_price_buy_12: Optional[float] = None
   unit_price_buy_48: Optional[float] = None
   cash_before: float

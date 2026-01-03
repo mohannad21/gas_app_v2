@@ -78,6 +78,19 @@ class Order(SQLModel, table=True):
   cylinders_received: int
   price_total: float
   paid_amount: float
+  money_received: float = 0
+  money_given: float = 0
+  applied_credit: float = 0
+  money_balance_before: float = 0
+  money_balance_after: float = 0
+  cyl_balance_before: Optional[dict] = Field(
+    default=None,
+    sa_column=sa.Column(sa.JSON, nullable=True),
+  )
+  cyl_balance_after: Optional[dict] = Field(
+    default=None,
+    sa_column=sa.Column(sa.JSON, nullable=True),
+  )
   note: Optional[str] = None
   client_request_id: Optional[str] = Field(
     default=None,

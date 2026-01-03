@@ -94,9 +94,16 @@ export const OrderSchema = z
     gas_type: GasTypeSchema,
     cylinders_installed: z.number(),
     cylinders_received: z.number(),
-    price_total: z.number(),
-    paid_amount: z.number(),
-    note: z.string().nullish(),
+  price_total: z.number(),
+  paid_amount: z.number().optional(),
+  money_received: z.number().optional(),
+  money_given: z.number().optional(),
+  applied_credit: z.number().optional(),
+  money_balance_before: z.number().optional(),
+  money_balance_after: z.number().optional(),
+  cyl_balance_before: z.record(z.string(), z.number()).optional(),
+  cyl_balance_after: z.record(z.string(), z.number()).optional(),
+  note: z.string().nullish(),
   })
   .passthrough();
 export type Order = z.infer<typeof OrderSchema>;
@@ -109,7 +116,9 @@ export const OrderCreateInputSchema = z.object({
   cylinders_installed: z.number(),
   cylinders_received: z.number(),
   price_total: z.number(),
-  paid_amount: z.number(),
+  paid_amount: z.number().optional(),
+  money_received: z.number().optional(),
+  money_given: z.number().optional(),
   note: z.string().nullish().optional(),
   client_request_id: z.string().optional(),
 });
@@ -117,6 +126,21 @@ export type OrderCreateInput = z.infer<typeof OrderCreateInputSchema>;
 
 export const OrderUpdateInputSchema = OrderCreateInputSchema.partial();
 export type OrderUpdateInput = z.infer<typeof OrderUpdateInputSchema>;
+
+export const OrderImpactSchema = z.object({
+  gross_paid: z.number(),
+  applied_credit: z.number(),
+  unpaid: z.number(),
+  new_balance: z.number(),
+  cyl_balance_before: z.record(z.string(), z.number()).optional(),
+  cyl_balance_after: z.record(z.string(), z.number()).optional(),
+});
+export type OrderImpact = z.infer<typeof OrderImpactSchema>;
+
+export const WhatsappLinkSchema = z.object({
+  url: z.string(),
+});
+export type WhatsappLink = z.infer<typeof WhatsappLinkSchema>;
 
 export const ActivityApiSchema = z
   .object({
@@ -269,6 +293,10 @@ export const DailyReportV2EventSchema = z.object({
   return48: z.number().nullish(),
   total_cost: z.number().nullish(),
   paid_now: z.number().nullish(),
+  order_total: z.number().nullish(),
+  order_paid: z.number().nullish(),
+  order_installed: z.number().nullish(),
+  order_received: z.number().nullish(),
   unit_price_buy_12: z.number().nullish(),
   unit_price_buy_48: z.number().nullish(),
   cash_before: z.number(),

@@ -40,7 +40,16 @@ export default function OrderDetailsScreen() {
     );
   }
 
-  const remaining = order.price_total - order.paid_amount;
+  const netPaid = (order.money_received ?? order.paid_amount ?? 0) - (order.money_given ?? 0);
+  const remaining = order.price_total - netPaid;
+  const formatBalance = (value?: number) => {
+    const amount = value ?? 0;
+    if (amount < 0) return `Credit ${Math.abs(amount).toFixed(0)}`;
+    if (amount > 0) return `Debt ${amount.toFixed(0)}`;
+    return "Settled";
+  };
+  const cylBefore = order.cyl_balance_before ?? {};
+  const cylAfter = order.cyl_balance_after ?? {};
 
   return (
     <View style={styles.container}>
@@ -57,7 +66,23 @@ export default function OrderDetailsScreen() {
       <Text style={styles.meta}>
         Cylinders: Installed {order.cylinders_installed} / Received {order.cylinders_received}
       </Text>
-      <Text style={styles.meta}>Total: ${order.price_total} | Paid: ${order.paid_amount}</Text>
+      <Text style={styles.meta}>Total: ${order.price_total}</Text>
+      <Text style={styles.meta}>
+        Received: ${order.money_received ?? order.paid_amount ?? 0} | Given: ${order.money_given ?? 0} | Net: $
+        {netPaid}
+      </Text>
+      {typeof order.applied_credit === "number" ? (
+        <Text style={styles.meta}>Applied credit: ${order.applied_credit.toFixed(0)}</Text>
+      ) : null}
+      <Text style={styles.meta}>
+        Balance: {formatBalance(order.money_balance_before)} → {formatBalance(order.money_balance_after)}
+      </Text>
+      <Text style={styles.meta}>
+        Cyl 12: {cylBefore["12kg"] ?? 0} → {cylAfter["12kg"] ?? 0}
+      </Text>
+      <Text style={styles.meta}>
+        Cyl 48: {cylBefore["48kg"] ?? 0} → {cylAfter["48kg"] ?? 0}
+      </Text>
       <Text style={[styles.meta, remaining > 0 ? styles.unpaid : styles.paid]}>
         {remaining > 0 ? `Unpaid $${remaining}` : "Paid"}
       </Text>

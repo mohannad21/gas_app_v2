@@ -3,6 +3,7 @@ from typing import Optional
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from urllib.parse import quote
 from sqlalchemy import Date
 from sqlmodel import Session, select
 
@@ -24,6 +25,123 @@ from app.schemas import OrderCreate, OrderUpdate, new_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+def _compute_bilateral_impact(*, customer_balance: float, total_price: float, money_received: float, money_given: float) -> dict:
+  gross_paid = money_received - money_given
+  available_credit = max(-customer_balance, 0)
+  applied_credit = min(available_credit, max(total_price - gross_paid, 0))
+  unpaid = total_price - gross_paid - applied_credit
+  new_balance = customer_balance + (total_price - gross_paid)
+  return {
+    "gross_paid": gross_paid,
+    "available_credit": available_credit,
+    "applied_credit": applied_credit,
+    "unpaid": unpaid,
+    "new_balance": new_balance,
+  }
+
+@router.get("/validate_order_impact")
+def validate_order_impact(
+  customer_id: str = Query(...),
+  system_id: str = Query(...),
+  gas_type: str = Query(...),
+  cylinders_installed: int = Query(...),
+  cylinders_received: int = Query(...),
+  price_total: float = Query(...),
+  money_received: float = Query(0),
+  money_given: float = Query(0),
+  delivered_at: Optional[str] = Query(default=None),
+  session: Session = Depends(get_session),
+) -> dict:
+  customer = session.get(Customer, customer_id)
+  if not customer or customer.is_deleted:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+  system = session.get(System, system_id)
+  if not system or system.is_deleted:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+  if not system.is_active:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System is inactive")
+
+  impact = _compute_bilateral_impact(
+    customer_balance=customer.money_balance,
+    total_price=price_total,
+    money_received=money_received,
+    money_given=money_given,
+  )
+  cyl_delta = cylinders_installed - cylinders_received
+  cyl_before = {
+    "12kg": customer.cylinder_balance_12kg,
+    "48kg": customer.cylinder_balance_48kg,
+  }
+  cyl_after = {
+    "12kg": customer.cylinder_balance_12kg + (cyl_delta if gas_type == "12kg" else 0),
+    "48kg": customer.cylinder_balance_48kg + (cyl_delta if gas_type == "48kg" else 0),
+  }
+  return {
+    "gross_paid": impact["gross_paid"],
+    "applied_credit": impact["applied_credit"],
+    "unpaid": impact["unpaid"],
+    "new_balance": impact["new_balance"],
+    "cyl_balance_before": cyl_before,
+    "cyl_balance_after": cyl_after,
+  }
+
+@router.get("/whatsapp_link/{order_id}")
+def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dict:
+  order = session.get(Order, order_id)
+  if not order or order.is_deleted:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+  customer = session.get(Customer, order.customer_id)
+  if not customer or customer.is_deleted:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+  if not customer.phone:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer phone missing")
+
+  def format_money(value: float | None) -> str:
+    if value is None:
+      return "0"
+    return f"{value:.0f}"
+
+  def format_status(balance: float | None) -> tuple[str, str]:
+    amount = balance or 0
+    if amount < 0:
+      value = format_money(abs(amount))
+      return (f"رصيد: {value}₪", f"זיכוי: {value}₪")
+    if amount > 0:
+      value = format_money(amount)
+      return (f"دين: {value}₪", f"חוב: {value}₪")
+    return ("مسدد بالكامل", "סולק במלואו")
+
+  money_status_ar, money_status_he = format_status(order.money_balance_after)
+
+  cyl_balance = None
+  if order.cyl_balance_after and order.gas_type in order.cyl_balance_after:
+    cyl_balance = order.cyl_balance_after[order.gas_type]
+  elif order.gas_type == "12kg":
+    cyl_balance = customer.cylinder_balance_12kg
+  elif order.gas_type == "48kg":
+    cyl_balance = customer.cylinder_balance_48kg
+  cyl_status_ar, cyl_status_he = format_status(cyl_balance)
+
+  message = (
+    "Gas Delivery / אישור אספקת גז 🚚\n"
+    "----------------------------------\n"
+    f"Customer / לקוח: {customer.name}\n"
+    f"Order / طلب: #{order.id}\n"
+    "Exchanged / تفاصيل التبادل / פרטי ההחלפה: "
+    f"⬅️ OUT: {order.cylinders_installed}x {order.gas_type} "
+    f"➡️ IN: {format_money(order.money_received)}₪ | {order.cylinders_received}x Empty\n\n"
+    f"Credit Used / رصيد مستخدم / זיכוי שמומש: {format_money(order.applied_credit)}₪\n"
+    "Account Status / حالة الحساب / מצב החשבון: 💰 Money / نقדי / כסף:\n\n"
+    f"{money_status_ar}\n\n"
+    f"{money_status_he}\n\n"
+    "🛢 Cylinders / جرة / בלונים:\n\n"
+    f"{cyl_status_ar}\n\n"
+    f"{cyl_status_he}\n\n"
+    "Thank you! / شكراً لك! / תודה רבה!"
+  )
+  url = f"https://wa.me/{customer.phone}?text={quote(message)}"
+  return {"url": url}
 
 
 @router.get("")
@@ -77,6 +195,23 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
   price_setting = resolve_price_setting()
 
   order_id = new_id("o")
+  money_received = payload.money_received if payload.money_received is not None else (payload.paid_amount or 0)
+  money_given = payload.money_given if payload.money_given is not None else 0
+  impact = _compute_bilateral_impact(
+    customer_balance=customer.money_balance,
+    total_price=payload.price_total,
+    money_received=money_received,
+    money_given=money_given,
+  )
+  cyl_before = {
+    "12kg": customer.cylinder_balance_12kg,
+    "48kg": customer.cylinder_balance_48kg,
+  }
+  cyl_delta = payload.cylinders_installed - payload.cylinders_received
+  cyl_after = {
+    "12kg": customer.cylinder_balance_12kg + (cyl_delta if payload.gas_type == "12kg" else 0),
+    "48kg": customer.cylinder_balance_48kg + (cyl_delta if payload.gas_type == "48kg" else 0),
+  }
   order = Order(
     id=order_id,
     customer_id=payload.customer_id,
@@ -89,7 +224,14 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     cylinders_installed=payload.cylinders_installed,
     cylinders_received=payload.cylinders_received,
     price_total=payload.price_total,
-    paid_amount=payload.paid_amount,
+    paid_amount=impact["gross_paid"],
+    money_received=money_received,
+    money_given=money_given,
+    applied_credit=impact["applied_credit"],
+    money_balance_before=customer.money_balance,
+    money_balance_after=impact["new_balance"],
+    cyl_balance_before=cyl_before,
+    cyl_balance_after=cyl_after,
     note=payload.note,
     client_request_id=payload.client_request_id,
     created_at=datetime.now(timezone.utc),
@@ -108,15 +250,20 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     source_id=order_id,
     reason="order",
   )
-  if payload.paid_amount:
+  if impact["gross_paid"]:
     add_cash_delta(
       session,
       effective_at=delivered_at,
       source_type="order",
       source_id=order_id,
-      delta_cash=payload.paid_amount,
+      delta_cash=impact["gross_paid"],
       reason="order",
     )
+  start_date = business_date_from_utc(delivered_at)
+  end_date = business_date_from_utc(datetime.now(timezone.utc))
+  recompute_daily_summaries(session, payload.gas_type, start_date, end_date, allow_negative=False)
+  if payload.paid_amount:
+    recompute_cash_summaries(session, start_date, end_date)
   new_full = prev_full - payload.cylinders_installed
   new_empty = prev_empty + payload.cylinders_received
 
@@ -198,6 +345,45 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   order.updated_at = datetime.now(timezone.utc)
   updated_customer = session.get(Customer, order.customer_id)
   customer_label = updated_customer.name if updated_customer else order.customer_id
+
+  if order.money_received is None and order.money_given is None:
+    order.money_received = order.paid_amount or 0
+    order.money_given = 0
+  if order.money_received is None:
+    order.money_received = order.paid_amount or 0
+  if order.money_given is None:
+    order.money_given = 0
+  order.paid_amount = (order.money_received or 0) - (order.money_given or 0)
+  if updated_customer:
+    prev_net_paid = prev_paid_amount or 0
+    base_money_balance = updated_customer.money_balance - (prev_price_total - prev_net_paid)
+    base_cyl_12 = updated_customer.cylinder_balance_12kg
+    base_cyl_48 = updated_customer.cylinder_balance_48kg
+    prev_cyl_delta = prev_cyl_installed - prev_cyl_received
+    if prev_gas_type == "12kg":
+      base_cyl_12 -= prev_cyl_delta
+    elif prev_gas_type == "48kg":
+      base_cyl_48 -= prev_cyl_delta
+    impact = _compute_bilateral_impact(
+      customer_balance=base_money_balance,
+      total_price=order.price_total,
+      money_received=order.money_received or 0,
+      money_given=order.money_given or 0,
+    )
+    cyl_before = {
+      "12kg": base_cyl_12,
+      "48kg": base_cyl_48,
+    }
+    cyl_delta = order.cylinders_installed - order.cylinders_received
+    cyl_after = {
+      "12kg": base_cyl_12 + (cyl_delta if order.gas_type == "12kg" else 0),
+      "48kg": base_cyl_48 + (cyl_delta if order.gas_type == "48kg" else 0),
+    }
+    order.applied_credit = impact["applied_credit"]
+    order.money_balance_before = base_money_balance
+    order.money_balance_after = impact["new_balance"]
+    order.cyl_balance_before = cyl_before
+    order.cyl_balance_after = cyl_after
   description = (
     f"Order for '{customer_label}' updated: {', '.join(changes)}"
     if changes

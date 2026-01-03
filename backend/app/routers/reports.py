@@ -351,6 +351,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "system_type": None,
         "expense_type": None,
         "reason": None,
+        "order_total": None,
+        "order_paid": None,
+        "order_installed": None,
+        "order_received": None,
       }
       if event_type == "refill":
         entry["label"] = "Refill"
@@ -369,6 +373,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["customer_description"] = customer_description
         entry["system_name"] = system_name
         entry["system_type"] = system_type
+        entry["order_total"] = order.price_total
+        entry["order_paid"] = order.paid_amount
+        entry["order_installed"] = order.cylinders_installed
+        entry["order_received"] = order.cylinders_received
       entry["reason"] = row.reason
       event_map[key] = entry
     else:
@@ -403,6 +411,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "system_type": None,
         "expense_type": None,
         "reason": None,
+        "order_total": None,
+        "order_paid": None,
+        "order_installed": None,
+        "order_received": None,
       }
       if event_type == "expense":
         expense = expense_map.get(row.source_id) if row.source_id else None
@@ -432,6 +444,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["customer_description"] = customer_description
         entry["system_name"] = system_name
         entry["system_type"] = system_type
+        entry["order_total"] = order.price_total
+        entry["order_paid"] = order.paid_amount
+        entry["order_installed"] = order.cylinders_installed
+        entry["order_received"] = order.cylinders_received
       event_map[key] = entry
     else:
       if row.created_at < entry["created_at"]:
@@ -460,6 +476,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "system_type": None,
         "expense_type": None,
         "reason": None,
+        "order_total": None,
+        "order_paid": None,
+        "order_installed": None,
+        "order_received": None,
       }
       if event_type == "refill":
         entry["label"] = "Refill"
@@ -613,6 +633,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         return48=return48,
         total_cost=refill_event.total_cost if refill_event else None,
         paid_now=refill_event.paid_now if refill_event else None,
+        order_total=entry["order_total"],
+        order_paid=entry["order_paid"],
+        order_installed=entry["order_installed"],
+        order_received=entry["order_received"],
         unit_price_buy_12=refill_event.unit_price_buy_12 if refill_event else None,
         unit_price_buy_48=refill_event.unit_price_buy_48 if refill_event else None,
         cash_before=cash_before,

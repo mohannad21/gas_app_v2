@@ -17,7 +17,15 @@ def sync_customer_totals(session: Session, customer_id: str) -> None:
     select(CustomerAdjustment).where(CustomerAdjustment.customer_id == customer_id)
   ).all()
 
-  order_money = sum(order.price_total - order.paid_amount for order in orders)
+  def order_net_paid(order: Order) -> float:
+    if order.money_received is not None or order.money_given is not None:
+      return (order.money_received or 0) - (order.money_given or 0)
+    return order.paid_amount or 0
+
+  order_money = sum(
+    order.price_total - order_net_paid(order)
+    for order in orders
+  )
   adjust_money = sum(adj.amount_money for adj in adjustments)
   money_balance = order_money + adjust_money
 
