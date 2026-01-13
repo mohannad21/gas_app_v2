@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.db import get_session
+from app.models import CompanyPayment
 from app.schemas import CompanyPaymentCreate, new_id
 from app.services.cash import add_cash_delta
 from app.services.company import add_company_delta
@@ -30,6 +31,16 @@ def create_company_payment(payload: CompanyPaymentCreate, session: Session = Dep
     effective_at = base + timedelta(hours=12)
 
   payment_id = new_id("compay_")
+  payment = CompanyPayment(
+    id=payment_id,
+    business_date=day,
+    time_of_day=payload.time_of_day,
+    effective_at=effective_at,
+    amount=payload.amount,
+    note=payload.note,
+    created_at=datetime.utcnow(),
+    is_deleted=False,
+  )
   add_cash_delta(
     session,
     effective_at=effective_at,
@@ -46,6 +57,7 @@ def create_company_payment(payload: CompanyPaymentCreate, session: Session = Dep
     delta_payable=-payload.amount,
     reason=payload.note,
   )
+  session.add(payment)
   session.commit()
   # TODO: if payment edits/deletes are introduced, delete cash/company deltas and recompute forward.
   return {"id": payment_id, "effective_at": effective_at, "amount": payload.amount}

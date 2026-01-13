@@ -11,7 +11,7 @@ from app.db import get_session
 from app.events import add_activity
 from app.models import Customer, Order, PriceSetting, System
 from app.services.cash import add_cash_delta, delete_cash_deltas_for_source, recompute_cash_summaries
-from app.services.customers import sync_customer_totals
+from app.services.customers import rebuild_customer_ledger, sync_customer_totals
 from app.services.inventory import (
   add_inventory_delta,
   delete_inventory_deltas_for_source,
@@ -96,51 +96,40 @@ def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dic
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
   if not customer.phone:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer phone missing")
+  phone = "".join(ch for ch in customer.phone if ch.isdigit())
+  if phone.startswith("00"):
+    phone = phone[2:]
+  if not phone:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer phone missing")
 
   def format_money(value: float | None) -> str:
     if value is None:
       return "0"
     return f"{value:.0f}"
 
-  def format_status(balance: float | None) -> tuple[str, str]:
-    amount = balance or 0
-    if amount < 0:
-      value = format_money(abs(amount))
-      return (f"رصيد: {value}₪", f"זיכוי: {value}₪")
-    if amount > 0:
-      value = format_money(amount)
-      return (f"دين: {value}₪", f"חוב: {value}₪")
-    return ("مسدد بالكامل", "סולק במלואו")
-
-  money_status_ar, money_status_he = format_status(order.money_balance_after)
-
-  cyl_balance = None
-  if order.cyl_balance_after and order.gas_type in order.cyl_balance_after:
-    cyl_balance = order.cyl_balance_after[order.gas_type]
-  elif order.gas_type == "12kg":
-    cyl_balance = customer.cylinder_balance_12kg
-  elif order.gas_type == "48kg":
-    cyl_balance = customer.cylinder_balance_48kg
-  cyl_status_ar, cyl_status_he = format_status(cyl_balance)
+  AR_GREETING = "\u0627\u0644\u0633\u0644\u0627\u0645 \u0639\u0644\u064a\u0643\u0645"
+  AR_INSTALLED = "\u062a\u0645 \u062a\u0631\u0643\u064a\u0628"
+  AR_CYLINDER = "\u0627\u0633\u0637\u0648\u0627\u0646\u0629"
+  AR_OF_TYPE = "\u0645\u0646 \u0646\u0648\u0639"
+  AR_AT = "\u0641\u064a"
+  AR_RETURNED = "\u0648\u0627\u0633\u062a\u0644\u0645\u0646\u0627"
+  AR_EMPTY = "\u0627\u0644\u0627\u0633\u0637\u0648\u0627\u0646\u0627\u062a \u0627\u0644\u0641\u0627\u0631\u063a\u0629"
+  AR_PAID = "\u062f\u0641\u0639\u062a"
+  AR_OUT_OF = "\u0645\u0646"
+  AR_BEST = "\u0645\u0639 \u062a\u062d\u064a\u0627\u062a\u0646\u0627"
+  AR_COMPANY = "\u0628\u0627\u0632\u063a\u0627\u0632 \u0625\u0643\u0633\u0627\u0644"
 
   message = (
-    "Gas Delivery / אישור אספקת גז 🚚\n"
-    "----------------------------------\n"
-    f"Customer / לקוח: {customer.name}\n"
-    f"Order / طلب: #{order.id}\n"
-    "Exchanged / تفاصيل التبادل / פרטי ההחלפה: "
-    f"⬅️ OUT: {order.cylinders_installed}x {order.gas_type} "
-    f"➡️ IN: {format_money(order.money_received)}₪ | {order.cylinders_received}x Empty\n\n"
-    f"Credit Used / رصيد مستخدم / זיכוי שמומש: {format_money(order.applied_credit)}₪\n"
-    "Account Status / حالة الحساب / מצב החשבון: 💰 Money / نقדי / כסף:\n\n"
-    f"{money_status_ar}\n\n"
-    f"{money_status_he}\n\n"
-    "🛢 Cylinders / جرة / בלונים:\n\n"
-    f"{cyl_status_ar}\n\n"
-    f"{cyl_status_he}\n\n"
-    "Thank you! / شكراً لك! / תודה רבה!"
+    f"{AR_GREETING}, "
+    f"{AR_INSTALLED} {order.cylinders_installed} {AR_CYLINDER} {AR_OF_TYPE} {order.gas_type} "
+    f"{AR_AT} {order.delivered_at}. "
+    f"{AR_RETURNED} {order.cylinders_received} {AR_EMPTY}. "
+    f"{AR_PAID} {format_money(order.money_received)} {AR_OUT_OF} {format_money(order.price_total)}.\n\n"
+    f"{AR_BEST},\n"
+    f"{AR_COMPANY}"
   )
-  url = f"https://wa.me/{customer.phone}?text={quote(message)}"
+  url = f"https://wa.me/{phone}?text={quote(message, safe='')}"
+  logger.info("whatsapp_link url=%s phone=%s", url, phone)
   return {"url": url}
 
 
@@ -250,19 +239,19 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     source_id=order_id,
     reason="order",
   )
-  if impact["gross_paid"]:
+  if money_received:
     add_cash_delta(
       session,
       effective_at=delivered_at,
       source_type="order",
       source_id=order_id,
-      delta_cash=impact["gross_paid"],
+      delta_cash=money_received,
       reason="order",
     )
   start_date = business_date_from_utc(delivered_at)
   end_date = business_date_from_utc(datetime.now(timezone.utc))
-  recompute_daily_summaries(session, payload.gas_type, start_date, end_date, allow_negative=False)
-  if payload.paid_amount:
+  recompute_daily_summaries(session, payload.gas_type, start_date, end_date, allow_negative=True)
+  if money_received:
     recompute_cash_summaries(session, start_date, end_date)
   new_full = prev_full - payload.cylinders_installed
   new_empty = prev_empty + payload.cylinders_received
@@ -346,6 +335,10 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   updated_customer = session.get(Customer, order.customer_id)
   customer_label = updated_customer.name if updated_customer else order.customer_id
 
+  if "paid_amount" in payload_data and "money_received" not in payload_data and "money_given" not in payload_data:
+    order.money_received = order.paid_amount or 0
+    order.money_given = 0
+
   if order.money_received is None and order.money_given is None:
     order.money_received = order.paid_amount or 0
     order.money_given = 0
@@ -411,13 +404,13 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     source_id=order.id,
     reason="order",
   )
-  if order.paid_amount:
+  if order.money_received:
     add_cash_delta(
       session,
       effective_at=order.delivered_at,
       source_type="order",
       source_id=order.id,
-      delta_cash=order.paid_amount,
+      delta_cash=order.money_received,
       reason="order",
     )
   end_date = business_date_from_utc(datetime.now(timezone.utc))
@@ -429,10 +422,10 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
       start_date = min(start_date, new_date) if start_date else new_date
     if start_date:
       enqueue_recalc_job(session, gas, start_date)
-      recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=False)
-  if deleted_cash_date:
-    start_cash = deleted_cash_date
-    new_cash_date = business_date_from_utc(order.delivered_at) if order.paid_amount else None
+      recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=True)
+  if deleted_cash_date or order.money_received:
+    start_cash = deleted_cash_date or business_date_from_utc(order.delivered_at)
+    new_cash_date = business_date_from_utc(order.delivered_at) if order.money_received else None
     if new_cash_date:
       start_cash = min(start_cash, new_cash_date)
     recompute_cash_summaries(session, start_cash, end_date)
@@ -441,6 +434,17 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   if order.customer_id != prev_customer_id:
     sync_customer_totals(session, prev_customer_id)
   sync_customer_totals(session, order.customer_id)
+  rebuild_customer_ledger(
+    session,
+    customer_id=order.customer_id,
+    start_date=min(prev_delivered_at, order.delivered_at),
+  )
+  if order.customer_id != prev_customer_id:
+    rebuild_customer_ledger(
+      session,
+      customer_id=prev_customer_id,
+      start_date=prev_delivered_at,
+    )
   session.commit()
   session.refresh(order)
   return order
@@ -458,12 +462,13 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
   session.add(order)
   if customer and not customer.is_deleted:
     sync_customer_totals(session, customer.id)
+    rebuild_customer_ledger(session, customer_id=customer.id, start_date=order.delivered_at)
   deleted_inventory_dates = delete_inventory_deltas_for_source(session, source_id=order.id)
   deleted_cash_date = delete_cash_deltas_for_source(session, source_id=order.id)
   end_date = business_date_from_utc(datetime.now(timezone.utc))
   for gas, start_date in deleted_inventory_dates.items():
     enqueue_recalc_job(session, gas, start_date)
-    recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=False)
+    recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=True)
   if deleted_cash_date:
     recompute_cash_summaries(session, deleted_cash_date, end_date)
   add_activity(

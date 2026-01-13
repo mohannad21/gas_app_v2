@@ -4,6 +4,9 @@ import {
   ActivitySchema,
   Customer,
   CustomerCreateInput,
+  CustomerAdjustment,
+  CustomerAdjustmentCreateInput,
+  CustomerAdjustmentSchema,
   CustomerSchema,
   CustomerUpdateInput,
   DailyReportRow,
@@ -12,12 +15,25 @@ import {
   DailyReportV2CardSchema,
   DailyReportV2Day,
   DailyReportV2DaySchema,
+  CashAdjustment,
+  CashAdjustmentCreate,
+  CashAdjustmentSchema,
+  CashAdjustmentUpdate,
   InventoryDayResponse,
   InventoryDayResponseSchema,
+  InventoryRefillSummary,
+  InventoryRefillSummarySchema,
   InventoryRefillDetails,
   InventoryRefillDetailsSchema,
   InventorySnapshot,
   InventorySnapshotSchema,
+  InventoryAdjustment,
+  InventoryAdjustmentSchema,
+  InventoryAdjustmentUpdate,
+  CollectionCreateInput,
+  CollectionUpdateInput,
+  CollectionEvent,
+  CollectionEventSchema,
   Order,
   OrderCreateInput,
   OrderImpact,
@@ -36,16 +52,67 @@ import {
   System,
   SystemCreateInput,
   SystemSchema,
+  SystemSettings,
+  SystemSettingsSchema,
+  SystemInitializeInput,
   SystemUpdateInput,
 } from "@/types/domain";
 import { z } from "zod";
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+console.log("[api] baseURL", BASE_URL);
 
 export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 8000,
 });
+
+const healthClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 2000,
+});
+
+let lastHealthCheckAt = 0;
+let lastHealthOk = true;
+
+async function ensureBackendHealthy() {
+  const now = Date.now();
+  if (lastHealthOk && now - lastHealthCheckAt < 5000) {
+    return;
+  }
+  lastHealthCheckAt = now;
+  try {
+    await healthClient.get("/health");
+    lastHealthOk = true;
+  } catch {
+    lastHealthOk = false;
+    throw new Error("Backend unavailable");
+  }
+}
+
+api.interceptors.request.use(async (config) => {
+  (config as any).metadata = { start: Date.now() };
+  await ensureBackendHealthy();
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => {
+    const meta = (response.config as any).metadata;
+    if (meta?.start) {
+      const ms = Date.now() - meta.start;
+      console.log("[api] ok", response.config.url, ms + "ms");
+    }
+    return response;
+  },
+  (error) => {
+    const cfg = error?.config;
+    const meta = cfg?.metadata;
+    const ms = meta?.start ? Date.now() - meta.start : null;
+    console.log("[api] error", cfg?.url, ms ? ms + "ms" : "", error?.message);
+    return Promise.reject(error);
+  }
+);
 
 function parse<T>(schema: z.ZodType<T>, data: unknown): T {
   return schema.parse(data);
@@ -66,6 +133,13 @@ export async function createCustomer(payload: CustomerCreateInput): Promise<Cust
   return parse(CustomerSchema, data);
 }
 
+export async function createCustomerAdjustment(
+  payload: CustomerAdjustmentCreateInput
+): Promise<CustomerAdjustment> {
+  const { data } = await api.post("/customer-adjustments", payload);
+  return parse(CustomerAdjustmentSchema, data);
+}
+
 export async function updateCustomer(id: string, payload: CustomerUpdateInput): Promise<Customer> {
   const { data } = await api.put(`/customers/${id}`, payload);
   return parse(CustomerSchema, data);
@@ -73,6 +147,17 @@ export async function updateCustomer(id: string, payload: CustomerUpdateInput): 
 
 export async function deleteCustomer(id: string): Promise<void> {
   await api.delete(`/customers/${id}`);
+}
+
+// System
+export async function getSystemSettings(): Promise<SystemSettings> {
+  const { data } = await api.get("/system/settings");
+  return parse(SystemSettingsSchema, data);
+}
+
+export async function initializeSystem(payload: SystemInitializeInput): Promise<SystemSettings> {
+  const { data } = await api.post("/system/initialize", payload);
+  return parse(SystemSettingsSchema, data);
 }
 
 // Systems
@@ -95,6 +180,57 @@ export async function updateSystem(id: string, payload: SystemUpdateInput): Prom
 
 export async function deleteSystem(id: string): Promise<void> {
   await api.delete(`/systems/${id}`);
+}
+
+// Inventory adjustments
+export async function listInventoryAdjustments(
+  date: string,
+  includeDeleted?: boolean
+): Promise<InventoryAdjustment[]> {
+  const { data } = await api.get("/inventory/adjustments", {
+    params: { date, include_deleted: includeDeleted ?? false },
+  });
+  return parseArray(InventoryAdjustmentSchema, data);
+}
+
+export async function updateInventoryAdjustment(
+  deltaId: string,
+  payload: InventoryAdjustmentUpdate
+): Promise<InventoryAdjustment> {
+  const { data } = await api.put(`/inventory/adjust/${deltaId}`, payload);
+  return parse(InventoryAdjustmentSchema, data);
+}
+
+export async function deleteInventoryAdjustment(deltaId: string): Promise<void> {
+  await api.delete(`/inventory/adjust/${deltaId}`);
+}
+
+// Cash adjustments
+export async function listCashAdjustments(
+  date: string,
+  includeDeleted?: boolean
+): Promise<CashAdjustment[]> {
+  const { data } = await api.get("/cash/adjustments", {
+    params: { date, include_deleted: includeDeleted ?? false },
+  });
+  return parseArray(CashAdjustmentSchema, data);
+}
+
+export async function createCashAdjustment(payload: CashAdjustmentCreate): Promise<CashAdjustment> {
+  const { data } = await api.post("/cash/adjust", payload);
+  return parse(CashAdjustmentSchema, data);
+}
+
+export async function updateCashAdjustment(
+  deltaId: string,
+  payload: CashAdjustmentUpdate
+): Promise<CashAdjustment> {
+  const { data } = await api.put(`/cash/adjust/${deltaId}`, payload);
+  return parse(CashAdjustmentSchema, data);
+}
+
+export async function deleteCashAdjustment(deltaId: string): Promise<void> {
+  await api.delete(`/cash/adjust/${deltaId}`);
 }
 
 // Orders
@@ -120,6 +256,26 @@ export async function updateOrder(id: string, payload: OrderUpdateInput): Promis
 
 export async function deleteOrder(id: string): Promise<void> {
   await api.delete(`/orders/${id}`);
+}
+
+// Collections
+export async function createCollection(payload: CollectionCreateInput): Promise<any> {
+  const { data } = await api.post("/collections", payload);
+  return data;
+}
+
+export async function listCollections(): Promise<CollectionEvent[]> {
+  const { data } = await api.get("/collections");
+  return parseArray(CollectionEventSchema, data);
+}
+
+export async function updateCollection(id: string, payload: CollectionUpdateInput): Promise<CollectionEvent> {
+  const { data } = await api.put(`/collections/${id}`, payload);
+  return parse(CollectionEventSchema, data);
+}
+
+export async function deleteCollection(id: string): Promise<void> {
+  await api.delete(`/collections/${id}`);
 }
 
 export async function validateOrderImpact(params: {
@@ -210,20 +366,11 @@ export async function createInventoryRefill(payload: {
   return parse(InventorySnapshotSchema, data);
 }
 
-export async function listInventoryRefills(): Promise<
-  Array<{
-    refill_id: string;
-    date: string;
-    time_of_day?: "morning" | "evening";
-    effective_at?: string;
-    buy12: number;
-    return12: number;
-    buy48: number;
-    return48: number;
-  }>
-> {
-  const { data } = await api.get("/inventory/refills");
-  return data;
+export async function listInventoryRefills(includeDeleted?: boolean): Promise<InventoryRefillSummary[]> {
+  const { data } = await api.get("/inventory/refills", {
+    params: { include_deleted: includeDeleted ?? false },
+  });
+  return parseArray(InventoryRefillSummarySchema, data);
 }
 
 export async function getInventorySnapshot(payload: {
@@ -265,6 +412,7 @@ export async function deleteInventoryRefill(refillId: string): Promise<void> {
 
 export async function createInventoryAdjust(payload: {
   date?: string;
+  time?: string;
   gas_type: "12kg" | "48kg";
   delta_full: number;
   delta_empty: number;

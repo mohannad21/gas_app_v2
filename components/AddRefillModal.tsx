@@ -100,13 +100,17 @@ function formatCount(value: number | null | undefined) {
   return value.toString();
 }
 
-export default function AddRefillModal({
+export function RefillForm({
   visible,
   onClose,
   onSaved,
   accessoryId,
   editEntry,
-}: AddRefillModalProps) {
+  showHeader = true,
+  useCard = true,
+  containerStyle,
+  scrollStyle,
+}: AddRefillModalProps & { showHeader?: boolean; useCard?: boolean; containerStyle?: any; scrollStyle?: any }) {
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
   const initInventory = useInitInventory();
@@ -345,24 +349,22 @@ export default function AddRefillModal({
   };
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+    <>
+      <View style={[useCard ? styles.modalCard : styles.modalInner, containerStyle]}>
+        {showHeader ? (
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>{editEntry ? "Update Inventory" : "Add Inventory"}</Text>
+            <Pressable onPress={onClose}>
+              <Ionicons name="close" size={20} color="#0f172a" />
+            </Pressable>
+          </View>
+        ) : null}
+        <ScrollView
+          style={scrollStyle}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <View style={styles.modalCard}>
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>{editEntry ? "Update Inventory" : "Add Inventory"}</Text>
-              <Pressable onPress={onClose}>
-                <Ionicons name="close" size={20} color="#0f172a" />
-              </Pressable>
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.content}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
               <View style={styles.section}>
                 <Text style={styles.label}>Date & time</Text>
                 <View style={styles.row}>
@@ -569,9 +571,7 @@ export default function AddRefillModal({
                   <Text style={styles.primaryText}>{createRefill.isPending ? "Saving..." : "Save"}</Text>
                 </Pressable>
               </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+        </ScrollView>
       </View>
 
       <CalendarModal
@@ -612,6 +612,34 @@ export default function AddRefillModal({
         }}
         accessoryId={accessoryId}
       />
+    </>
+  );
+}
+
+export default function AddRefillModal({
+  visible,
+  onClose,
+  onSaved,
+  accessoryId,
+  editEntry,
+}: AddRefillModalProps) {
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        >
+          <RefillForm
+            visible={visible}
+            onClose={onClose}
+            onSaved={onSaved}
+            accessoryId={accessoryId}
+            editEntry={editEntry}
+            showHeader
+          />
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -890,6 +918,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 16,
+    gap: 12,
+  },
+  modalInner: {
     gap: 12,
   },
   modalScrollContent: {

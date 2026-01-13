@@ -1,12 +1,15 @@
 import {
   createInventoryAdjust,
   createInventoryRefill,
+  deleteInventoryAdjustment,
   deleteInventoryRefill,
   getInventoryLatest,
   getInventoryRefillDetails,
   getInventorySnapshot,
   initInventory,
+  listInventoryAdjustments,
   listInventoryRefills,
+  updateInventoryAdjustment,
   updateInventoryRefill,
 } from "@/lib/api";
 import { InventorySnapshot } from "@/types/domain";
@@ -85,10 +88,49 @@ export function useAdjustInventory() {
   });
 }
 
-export function useInventoryRefills() {
+export function useInventoryAdjustments(date?: string, includeDeleted?: boolean) {
   return useQuery({
-    queryKey: ["inventory", "refills"],
-    queryFn: () => listInventoryRefills(),
+    queryKey: ["inventory", "adjustments", date, includeDeleted ?? false],
+    queryFn: () => listInventoryAdjustments(date as string, includeDeleted),
+    enabled: !!date,
+  });
+}
+
+export function useUpdateInventoryAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateInventoryAdjustment>[1] }) =>
+      updateInventoryAdjustment(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteInventoryAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteInventoryAdjustment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useInventoryRefills(includeDeleted?: boolean) {
+  return useQuery({
+    queryKey: ["inventory", "refills", includeDeleted ?? false],
+    queryFn: () => listInventoryRefills(includeDeleted),
   });
 }
 

@@ -9,8 +9,14 @@ class CustomerAdjustment(SQLModel, table=True):
     id: str = Field(primary_key=True, index=True)
     customer_id: str = Field(foreign_key="customers.id", index=True)
     amount_money: float = 0
+    amount_money_to_receive: float = 0
+    amount_money_to_give: float = 0
     count_12kg: int = 0
+    count_12kg_to_receive: int = 0
+    count_12kg_to_give: int = 0
     count_48kg: int = 0
+    count_48kg_to_receive: int = 0
+    count_48kg_to_give: int = 0
     reason: str = Field(default="onboarding") 
     # Logic: if True, this is legacy debt/stock and doesn't affect the truck
     is_inventory_neutral: bool = Field(default=True) 
@@ -26,10 +32,16 @@ class Customer(SQLModel, table=True):
   notes: Optional[str] = None
   customer_type: str = Field(default="other", index=True)
   money_balance: float = 0
+  money_to_receive: float = 0
+  money_to_give: float = 0
   total_cylinders_delivered_lifetime: int = 0
   order_count: int = 0
   cylinder_balance_12kg: int = 0
+  cylinder_to_receive_12kg: int = 0
+  cylinder_to_give_12kg: int = 0
   cylinder_balance_48kg: int = 0
+  cylinder_to_receive_48kg: int = 0
+  cylinder_to_give_48kg: int = 0
   created_at: datetime = Field(default_factory=datetime.utcnow)
   updated_at: Optional[datetime] = Field(default=None, nullable=True)
   created_by: Optional[str] = Field(default=None, nullable=True)
@@ -61,6 +73,15 @@ class System(SQLModel, table=True):
   require_security_check: bool = Field(default=False, index=True)
   security_check_exists: bool = Field(default=False, index=True)
   security_check_date: Optional[datetime] = Field(default=None, nullable=True, index=True)
+
+
+class SystemSettings(SQLModel, table=True):
+  __tablename__ = "system_settings"
+
+  id: str = Field(default="system", primary_key=True)
+  is_initialized: bool = Field(default=False)
+  created_at: datetime = Field(default_factory=datetime.utcnow)
+  updated_at: Optional[datetime] = Field(default=None, nullable=True)
 
 
 class Order(SQLModel, table=True):
@@ -97,6 +118,47 @@ class Order(SQLModel, table=True):
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
   created_at: datetime = Field(default_factory=datetime.utcnow)
+  updated_at: Optional[datetime] = Field(default=None, nullable=True)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  is_deleted: bool = Field(default=False, index=True)
+  deleted_at: Optional[datetime] = Field(default=None, nullable=True)
+  deletion_reason: Optional[str] = Field(default=None, nullable=True)
+
+
+class CollectionEvent(SQLModel, table=True):
+  __tablename__ = "collection_events"
+
+  id: str = Field(default_factory=lambda: f"coll_{uuid4()}", primary_key=True, index=True)
+  customer_id: str = Field(foreign_key="customers.id", index=True)
+  system_id: Optional[str] = Field(default=None, foreign_key="systems.id", index=True, nullable=True)
+  action_type: str = Field(index=True)  # "payment" | "return"
+  amount_money: float = 0
+  qty_12kg: int = 0
+  qty_48kg: int = 0
+  cash_before: Optional[float] = Field(default=None, nullable=True)
+  cash_after: Optional[float] = Field(default=None, nullable=True)
+  inv12_full_before: Optional[int] = Field(default=None, nullable=True)
+  inv12_full_after: Optional[int] = Field(default=None, nullable=True)
+  inv12_empty_before: Optional[int] = Field(default=None, nullable=True)
+  inv12_empty_after: Optional[int] = Field(default=None, nullable=True)
+  inv48_full_before: Optional[int] = Field(default=None, nullable=True)
+  inv48_full_after: Optional[int] = Field(default=None, nullable=True)
+  inv48_empty_before: Optional[int] = Field(default=None, nullable=True)
+  inv48_empty_after: Optional[int] = Field(default=None, nullable=True)
+  money_balance_before: float = 0
+  money_balance_after: float = 0
+  cyl_balance_before: Optional[dict] = Field(
+    default=None,
+    sa_column=sa.Column(sa.JSON, nullable=True),
+  )
+  cyl_balance_after: Optional[dict] = Field(
+    default=None,
+    sa_column=sa.Column(sa.JSON, nullable=True),
+  )
+  note: Optional[str] = Field(default=None, nullable=True)
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   updated_at: Optional[datetime] = Field(default=None, nullable=True)
   created_by: Optional[str] = Field(default=None, nullable=True)
   updated_by: Optional[str] = Field(default=None, nullable=True)
@@ -174,7 +236,11 @@ class InventoryDelta(SQLModel, table=True):
   source_type: str = Field(index=True)
   source_id: Optional[str] = Field(default=None, index=True, nullable=True)
   reason: Optional[str] = Field(default=None, nullable=True)
+  is_manual: bool = Field(default=False, index=True)
+  is_deleted: bool = Field(default=False, index=True)
+  deleted_at: Optional[datetime] = Field(default=None, nullable=True)
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  updated_at: Optional[datetime] = Field(default=None, nullable=True)
   created_by: Optional[str] = Field(default=None, nullable=True, index=True)
 
 
@@ -203,6 +269,8 @@ class RefillEvent(SQLModel, table=True):
   total_cost: float = 0
   paid_now: float = 0
   reason: Optional[str] = Field(default=None, nullable=True)
+  is_deleted: bool = Field(default=False, index=True)
+  deleted_at: Optional[datetime] = Field(default=None, nullable=True)
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   created_by: Optional[str] = Field(default=None, nullable=True, index=True)
 
@@ -215,6 +283,8 @@ class CompanyDelta(SQLModel, table=True):
   source_type: str = Field(index=True)
   source_id: Optional[str] = Field(default=None, index=True, nullable=True)
   delta_payable: float
+  delta_12kg: int = 0
+  delta_48kg: int = 0
   reason: Optional[str] = Field(default=None, nullable=True)
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
   created_by: Optional[str] = Field(default=None, nullable=True, index=True)
@@ -227,7 +297,49 @@ class CompanyDailySummary(SQLModel, table=True):
   payable_start: float = 0
   payable_delta: float = 0
   payable_end: float = 0
+  payable_12kg_start: int = 0
+  payable_12kg_delta: int = 0
+  payable_12kg_end: int = 0
+  payable_48kg_start: int = 0
+  payable_48kg_delta: int = 0
+  payable_48kg_end: int = 0
+  payable_give_start: float = 0
+  payable_give_delta: float = 0
+  payable_give_end: float = 0
+  payable_receive_start: float = 0
+  payable_receive_delta: float = 0
+  payable_receive_end: float = 0
+  payable_12kg_give_start: int = 0
+  payable_12kg_give_delta: int = 0
+  payable_12kg_give_end: int = 0
+  payable_12kg_receive_start: int = 0
+  payable_12kg_receive_delta: int = 0
+  payable_12kg_receive_end: int = 0
+  payable_48kg_give_start: int = 0
+  payable_48kg_give_delta: int = 0
+  payable_48kg_give_end: int = 0
+  payable_48kg_receive_start: int = 0
+  payable_48kg_receive_delta: int = 0
+  payable_48kg_receive_end: int = 0
   computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CompanyPayment(SQLModel, table=True):
+  __tablename__ = "company_payments"
+
+  id: str = Field(primary_key=True, index=True)
+  business_date: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  time_of_day: Optional[str] = Field(default=None, nullable=True)
+  effective_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  amount: float
+  note: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  updated_at: Optional[datetime] = Field(default=None, nullable=True)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  is_deleted: bool = Field(default=False, index=True)
+  deleted_at: Optional[datetime] = Field(default=None, nullable=True)
+  deletion_reason: Optional[str] = Field(default=None, nullable=True)
 
 
 class CashDelta(SQLModel, table=True):
@@ -239,7 +351,11 @@ class CashDelta(SQLModel, table=True):
   source_id: Optional[str] = Field(default=None, index=True, nullable=True)
   delta_cash: float
   reason: Optional[str] = Field(default=None, nullable=True)
+  is_manual: bool = Field(default=False, index=True)
+  is_deleted: bool = Field(default=False, index=True)
+  deleted_at: Optional[datetime] = Field(default=None, nullable=True)
   created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+  updated_at: Optional[datetime] = Field(default=None, nullable=True)
   created_by: Optional[str] = Field(default=None, nullable=True, index=True)
 
 

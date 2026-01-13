@@ -22,6 +22,7 @@ import { AxiosError } from "axios";
 
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateOrder } from "@/hooks/useOrders";
+import { useCreateCollection } from "@/hooks/useCollections";
 import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
@@ -82,22 +83,34 @@ export default function NewOrderScreen() {
   const pricesQuery = usePriceSettings();
   const pricesConfigured = (pricesQuery.data ?? []).length > 0;
   const createOrder = useCreateOrder();
+  const createCollection = useCreateCollection();
   const initInventory = useInitInventory();
 
   const [submitting, setSubmitting] = useState(false);
+  const [entryMode, setEntryMode] = useState<"order" | "payment" | "return">("order");
   const [customerSearch, setCustomerSearch] = useState("");
+  const searchInputRef = useRef<TextInput | null>(null);
   const [manualPrice, setManualPrice] = useState(false);
   const [whatsappOrderId, setWhatsappOrderId] = useState<string | null>(null);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [return12, setReturn12] = useState("");
+  const [return48, setReturn48] = useState("");
+  const [collectionNote, setCollectionNote] = useState("");
+  const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [avoidKeyboard, setAvoidKeyboard] = useState(false);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
   const [focusTarget, setFocusTarget] = useState<"amounts" | "payments" | null>(null);
   const [amountsLayoutY, setAmountsLayoutY] = useState<number | null>(null);
   const [totalsLayout, setTotalsLayout] = useState<{ y: number; height: number } | null>(null);
-  const showStickyPayment = focusTarget === "amounts" && keyboardHeight > 0;
+  const effectiveKeyboardHeight = avoidKeyboard ? keyboardHeight : 0;
+  const showStickyPayment = focusTarget === "amounts" && effectiveKeyboardHeight > 0;
+  const footerHeight = 96;
+  const contentBottomPadding = footerHeight + 32;
   const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
   const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -108,6 +121,21 @@ export default function NewOrderScreen() {
     return `${year}-${month}-${day}`;
   });
   const [deliveryTime, setDeliveryTime] = useState(() => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+  });
+  const [collectionDateOpen, setCollectionDateOpen] = useState(false);
+  const [collectionTimeOpen, setCollectionTimeOpen] = useState(false);
+  const [collectionDate, setCollectionDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
+  const [collectionTime, setCollectionTime] = useState(() => {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, "0");
     const minutes = String(now.getMinutes()).padStart(2, "0");
@@ -140,6 +168,13 @@ export default function NewOrderScreen() {
     return `${year}-${month}-${day}`;
   });
   const initAccessoryId = Platform.OS === "ios" ? "initInventoryAccessory" : undefined;
+  const orderAccessoryId = Platform.OS === "ios" ? "orderFormAccessory" : undefined;
+  const doneInputProps = {
+    returnKeyType: "done" as const,
+    blurOnSubmit: true,
+    onSubmitEditing: () => Keyboard.dismiss(),
+    ...(orderAccessoryId ? { inputAccessoryViewID: orderAccessoryId } : {}),
+  };
 
   /* -------------------- derived -------------------- */
 
@@ -150,9 +185,17 @@ export default function NewOrderScreen() {
     return list.filter(
       (c) =>
         c.name.toLowerCase().includes(term) ||
-        (c.notes ?? "").toLowerCase().includes(term)
+      (c.notes ?? "").toLowerCase().includes(term)
     );
   }, [customersQuery.data, customerSearch]);
+  const customerSearchTerm = customerSearch.trim();
+  const hasExactCustomerMatch = useMemo(() => {
+    if (!customerSearchTerm) return false;
+    const normalized = customerSearchTerm.toLowerCase();
+    return (customersQuery.data ?? []).some(
+      (c) => c.name.trim().toLowerCase() === normalized
+    );
+  }, [customersQuery.data, customerSearchTerm]);
 
   const systemOptions = useMemo(
     () => systemsQuery.data ?? [],
@@ -167,9 +210,115 @@ export default function NewOrderScreen() {
     () => (customersQuery.data ?? []).find((c) => c.id === selectedCustomer),
     [customersQuery.data, selectedCustomer]
   );
+  const hasCustomer = Boolean(selectedCustomerEntry);
   const balanceBefore = selectedCustomerEntry?.money_balance ?? 0;
   const balanceAfter = balanceBefore + unpaid;
+  const paymentAmountValue = Number(paymentAmount) || 0;
+  const paymentBalanceAfter = balanceBefore - paymentAmountValue;
+  const return12Value = Number(return12) || 0;
+  const return48Value = Number(return48) || 0;
+  const cylinder12Before = selectedCustomerEntry?.cylinder_balance_12kg ?? 0;
+  const cylinder48Before = selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
+  const orderCylinderDelta = installed - received;
+  const orderCylinderAfter12 =
+    selectedGas === "12kg" ? cylinder12Before + orderCylinderDelta : cylinder12Before;
+  const orderCylinderAfter48 =
+    selectedGas === "48kg" ? cylinder48Before + orderCylinderDelta : cylinder48Before;
+  const cylinder12After = cylinder12Before - return12Value;
+  const cylinder48After = cylinder48Before - return48Value;
+  const collectionBusy = createCollection.isPending;
   const previousCustomerRef = useRef<string | undefined>();
+  const formatMoneyAmount = (value: number) => Math.abs(value).toFixed(0);
+  const formatSignedMoney = (value: number) => {
+    if (value === 0) return `0₪`;
+    const sign = value > 0 ? "-" : "+";
+    return `${sign}${formatMoneyAmount(value)}₪`;
+  };
+  const formatSignedCylinder = (value: number, label: "12kg" | "48kg") => {
+    if (value === 0) return `0x ${label}`;
+    const sign = value > 0 ? "-" : "+";
+    return `${sign}${Math.abs(value)}x ${label}`;
+  };
+  const adjustReturn12 = (delta: number) => {
+    setReturn12((prev) => {
+      const next = Math.max(0, (Number(prev) || 0) + delta);
+      return next ? String(next) : "";
+    });
+  };
+  const adjustReturn48 = (delta: number) => {
+    setReturn48((prev) => {
+      const next = Math.max(0, (Number(prev) || 0) + delta);
+      return next ? String(next) : "";
+    });
+  };
+  const customerAlertLines = useMemo(() => {
+    if (!selectedCustomerEntry) return [];
+    const moneyLine =
+      balanceBefore > 0
+        ? `Customer must pay you ${formatMoneyAmount(balanceBefore)}₪`
+        : balanceBefore < 0
+          ? `You must pay the customer ${formatMoneyAmount(balanceBefore)}₪`
+          : null;
+    const cyl12Line =
+      cylinder12Before > 0
+        ? `Customer must return ${Math.abs(cylinder12Before)}x 12kg`
+        : cylinder12Before < 0
+          ? `You must give the customer ${Math.abs(cylinder12Before)}x 12kg`
+          : null;
+    const cyl48Line =
+      cylinder48Before > 0
+        ? `Customer must return ${Math.abs(cylinder48Before)}x 48kg`
+        : cylinder48Before < 0
+          ? `You must give the customer ${Math.abs(cylinder48Before)}x 48kg`
+          : null;
+    const lines =
+      entryMode === "payment"
+        ? [moneyLine]
+        : entryMode === "return"
+          ? [cyl12Line, cyl48Line]
+          : [moneyLine, cyl12Line, cyl48Line];
+    return lines.filter(Boolean) as string[];
+  }, [balanceBefore, cylinder12Before, cylinder48Before, entryMode, selectedCustomerEntry]);
+  const orderBalanceLines = useMemo(
+    () => [
+      `Money: ${formatSignedMoney(balanceBefore)} -> ${formatSignedMoney(balanceAfter)}`,
+      `12kg: ${formatSignedCylinder(cylinder12Before, "12kg")} -> ${formatSignedCylinder(
+        orderCylinderAfter12,
+        "12kg"
+      )}`,
+      `48kg: ${formatSignedCylinder(cylinder48Before, "48kg")} -> ${formatSignedCylinder(
+        orderCylinderAfter48,
+        "48kg"
+      )}`,
+    ],
+    [
+      balanceAfter,
+      balanceBefore,
+      cylinder12Before,
+      cylinder48Before,
+      orderCylinderAfter12,
+      orderCylinderAfter48,
+      formatSignedMoney,
+      formatSignedCylinder,
+    ]
+  );
+  const paymentBalanceLines = useMemo(
+    () => [`Money: ${formatSignedMoney(balanceBefore)} -> ${formatSignedMoney(paymentBalanceAfter)}`],
+    [balanceBefore, formatSignedMoney, paymentBalanceAfter]
+  );
+  const returnBalanceLines = useMemo(
+    () => [
+      `12kg: ${formatSignedCylinder(cylinder12Before, "12kg")} -> ${formatSignedCylinder(
+        cylinder12After,
+        "12kg"
+      )}`,
+      `48kg: ${formatSignedCylinder(cylinder48Before, "48kg")} -> ${formatSignedCylinder(
+        cylinder48After,
+        "48kg"
+      )}`,
+    ],
+    [cylinder12After, cylinder12Before, cylinder48After, cylinder48Before, formatSignedCylinder]
+  );
 
   useEffect(() => {
     if (previousCustomerRef.current === selectedCustomer) {
@@ -184,6 +333,10 @@ export default function NewOrderScreen() {
     setValue("money_received", "");
     setValue("money_given", "");
     setManualPrice(false);
+    setPaymentAmount("");
+    setReturn12("");
+    setReturn48("");
+    setCollectionNote("");
   }, [selectedCustomer, setValue]);
 
   useEffect(() => {
@@ -244,6 +397,17 @@ export default function NewOrderScreen() {
   }, [initialCustomerId, selectedCustomer, setValue]);
 
   useEffect(() => {
+    setIsCustomerSearchOpen(false);
+    setAvoidKeyboard(false);
+    Keyboard.dismiss();
+  }, [entryMode]);
+
+  useEffect(() => {
+    if (isCustomerSearchOpen) return;
+    setCustomerSearch(selectedCustomerEntry?.name ?? "");
+  }, [isCustomerSearchOpen, selectedCustomerEntry]);
+
+  useEffect(() => {
     if (!initialSystemId || !selectedCustomer) return;
     if (selectedSystemId) return;
     const exists = systemOptions.some((s) => s.id === initialSystemId);
@@ -295,6 +459,37 @@ export default function NewOrderScreen() {
     setValue("delivered_at", next.toISOString());
   }, [deliveryDate, deliveryTime, setValue]);
 
+  const buildEffectiveAt = (dateValue: string, timeValue: string) => {
+    const [year, month, day] = dateValue.split("-").map((part) => Number(part));
+    const [hour, minute] = timeValue.split(":").map((part) => Number(part));
+    if (!year || !month || !day) return undefined;
+    return new Date(year, month - 1, day, hour || 0, minute || 0).toISOString();
+  };
+
+  const activeDate = entryMode === "order" ? deliveryDate : collectionDate;
+  const activeTime = entryMode === "order" ? deliveryTime : collectionTime;
+  const openActiveDate = () =>
+    entryMode === "order" ? setDeliveryDateOpen(true) : setCollectionDateOpen(true);
+  const openActiveTime = () =>
+    entryMode === "order" ? setDeliveryTimeOpen(true) : setCollectionTimeOpen(true);
+  const setActiveNow = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const nextDate = `${year}-${month}-${day}`;
+    const nextTime = `${hours}:${minutes}`;
+    if (entryMode === "order") {
+      setDeliveryDate(nextDate);
+      setDeliveryTime(nextTime);
+    } else {
+      setCollectionDate(nextDate);
+      setCollectionTime(nextTime);
+    }
+  };
+
   useEffect(() => {
     if (!selectedCustomer || !selectedSystemId || !selectedGas) return;
     setValue("money_given", "0");
@@ -313,128 +508,149 @@ export default function NewOrderScreen() {
     };
   }, []);
   useEffect(() => {
-    if (focusTarget !== "amounts" || keyboardHeight <= 0) return;
+    if (!avoidKeyboard || focusTarget !== "amounts" || keyboardHeight <= 0) return;
     const timer = setTimeout(() => {
       scrollToAmountsAndTotals();
     }, 60);
     return () => clearTimeout(timer);
-  }, [focusTarget, keyboardHeight, scrollViewHeight, amountsLayoutY, totalsLayout]);
+  }, [avoidKeyboard, focusTarget, keyboardHeight, scrollViewHeight, amountsLayoutY, totalsLayout]);
 
   /* -------------------- submit -------------------- */
 
-  const onSubmit = handleSubmit(
-    async (values) => {
+  const resetOrderForm = () => {
+    setValue("customer_id", "");
+    setValue("system_id", "");
+    setValue("gas_type", "");
+    setValue("cylinders_installed", "");
+    setValue("cylinders_received", "");
+    setValue("price_total", "");
+    setValue("money_received", "");
+    setValue("money_given", "");
+    setValue("note", "");
+    setManualPrice(false);
+    setCustomerSearch("");
+    setPaymentAmount("");
+    setReturn12("");
+    setReturn48("");
+    setCollectionNote("");
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const nextDate = `${year}-${month}-${day}`;
+    const nextTime = `${hours}:${minutes}`;
+    setDeliveryDate(nextDate);
+    setDeliveryTime(nextTime);
+    setValue(
+      "delivered_at",
+      new Date(year, now.getMonth(), now.getDate(), now.getHours(), now.getMinutes()).toISOString()
+    );
+  };
+
+  const runOrderSubmit = async (
+    values: OrderFormValues,
+    options: { showWhatsapp: boolean; resetAfter: boolean }
+  ) => {
+    if (inventoryInitBlocked) {
+      Alert.alert(
+        "Initialize inventory",
+        "Please add your initial inventory before creating the first order.",
+        [
+          {
+            text: "Open inventory setup",
+            onPress: () => setInitModalVisible(true),
+          },
+        ]
+      );
+      return;
+    }
+
+    if (!pricesConfigured) {
+      Alert.alert(
+        "Set prices first",
+        "Selling prices are not configured yet. Please add prices before creating orders.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Set prices",
+            onPress: () => router.push("/add?prices=1"),
+          },
+        ]
+      );
+      return;
+    }
+
+    if (!values.gas_type) {
+      Alert.alert("Missing gas type", "Please select a gas type.");
+      return;
+    }
+    const gasType = values.gas_type as GasType;
+    const installedCount = Number(values.cylinders_installed) || 0;
+    if (installedCount <= 0) {
+      Alert.alert(
+        "Invalid installed count",
+        "Orders must have at least 1 installed cylinder. For money-only or return-only actions, use the Payment or Return tabs."
+      );
+      return;
+    }
+    const total = Number(values.price_total) || 0;
+    const paid = Number(values.money_received) || 0;
+    const result = total - paid;
+    const balanceBeforeValue = selectedCustomerEntry?.money_balance ?? 0;
+    const balanceAfterValue = balanceBeforeValue + result;
+    const balanceStatus =
+      balanceAfterValue < 0 ? "Credit" : balanceAfterValue > 0 ? "Debt" : "Settled";
+    const cylDelta = installedCount - (Number(values.cylinders_received) || 0);
+    const balanceBeforeCyl =
+      gasType === "12kg"
+        ? selectedCustomerEntry?.cylinder_balance_12kg ?? 0
+        : selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
+    const balanceAfterCyl = balanceBeforeCyl + cylDelta;
+    const alertLines: string[] = [];
+    if (balanceAfterValue !== 0) {
+      if (balanceAfterValue > 0) {
+        alertLines.push(`Money: Customer must pay ${formatMoneyAmount(balanceAfterValue)}₪`);
+      } else {
+        alertLines.push(`Money: You must pay the customer ${formatMoneyAmount(balanceAfterValue)}₪`);
+      }
+    }
+    if (balanceAfterCyl !== 0) {
+      if (balanceAfterCyl > 0) {
+        alertLines.push(`Cylinders: Customer must return ${Math.abs(balanceAfterCyl)} empty`);
+      } else {
+        alertLines.push(`Cylinders: You must give the customer ${Math.abs(balanceAfterCyl)} empty`);
+      }
+    }
+    const alertMessage = alertLines.length > 0 ? alertLines.join("\n") : "All settled.";
+
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const orderPayload: OrderCreateInput = {
+      customer_id: values.customer_id,
+      system_id: values.system_id,
+      delivered_at: values.delivered_at,
+      gas_type: gasType,
+      cylinders_installed: Number(values.cylinders_installed) || 0,
+      cylinders_received: Number(values.cylinders_received) || 0,
+      price_total: total,
+      money_received: paid,
+      money_given: 0,
+      note: values.note,
+      client_request_id: requestId,
+    };
+
+    const finalizeCreate = async () => {
+      setSubmitting(true);
       try {
-        if (inventoryInitBlocked) {
-          Alert.alert(
-            "Initialize inventory",
-            "Please add your initial inventory before creating the first order.",
-            [
-              {
-                text: "Open inventory setup",
-                onPress: () => setInitModalVisible(true),
-              },
-            ]
-          );
-          return;
+        const created = await createOrder.mutateAsync(orderPayload);
+        if (options.showWhatsapp) {
+          setWhatsappOrderId(created.id);
+          setWhatsappOpen(true);
         }
-
-        if (!pricesConfigured) {
-          Alert.alert(
-            "Set prices first",
-            "Selling prices are not configured yet. Please add prices before creating orders.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Set prices",
-                onPress: () => router.push("/add?prices=1"),
-              },
-            ]
-          );
-          return;
+        if (options.resetAfter) {
+          resetOrderForm();
         }
-
-        if (!values.gas_type) {
-          Alert.alert("Missing gas type", "Please select a gas type.");
-          return;
-        }
-        const gasType = values.gas_type as GasType;
-        const total = Number(values.price_total) || 0;
-        const paid = Number(values.money_received) || 0;
-        const result = total - paid;
-        const balanceBeforeValue = selectedCustomerEntry?.money_balance ?? 0;
-        const balanceAfterValue = balanceBeforeValue + result;
-        const balanceStatus = balanceAfterValue < 0 ? "Credit" : balanceAfterValue > 0 ? "Debt" : "Settled";
-        const cylDelta = (Number(values.cylinders_installed) || 0) - (Number(values.cylinders_received) || 0);
-        const balanceBeforeCyl =
-          gasType === "12kg"
-            ? selectedCustomerEntry?.cylinder_balance_12kg ?? 0
-            : selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
-        const balanceAfterCyl = balanceBeforeCyl + cylDelta;
-        const alertLines: string[] = [];
-        if (balanceAfterValue !== 0) {
-          if (balanceAfterValue > 0) {
-            alertLines.push(`Money: Customer must pay ${Math.abs(balanceAfterValue).toFixed(0)}`);
-          } else {
-            alertLines.push(`Money: Customer must get ${Math.abs(balanceAfterValue).toFixed(0)}`);
-          }
-        }
-        if (balanceAfterCyl !== 0) {
-          if (balanceAfterCyl > 0) {
-            alertLines.push(`Cylinders: Customer must return ${Math.abs(balanceAfterCyl)} empty`);
-          } else {
-            alertLines.push(`Cylinders: Customer must get ${Math.abs(balanceAfterCyl)} empty`);
-          }
-        }
-        const alertMessage = alertLines.length > 0 ? alertLines.join("\n") : "All settled.";
-
-        const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const orderPayload: OrderCreateInput = {
-          customer_id: values.customer_id,
-          system_id: values.system_id,
-          delivered_at: values.delivered_at,
-          gas_type: gasType,
-          cylinders_installed: Number(values.cylinders_installed) || 0,
-          cylinders_received: Number(values.cylinders_received) || 0,
-          price_total: total,
-          money_received: paid,
-          money_given: 0,
-          note: values.note,
-          client_request_id: requestId,
-        };
-
-        const finalizeCreate = async () => {
-          setSubmitting(true);
-          try {
-            const created = await createOrder.mutateAsync(orderPayload);
-            setWhatsappOrderId(created.id);
-            setWhatsappOpen(true);
-          } finally {
-            setSubmitting(false);
-          }
-        };
-
-        if (balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
-          const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
-            0
-          )} + ${result.toFixed(0)} = ${balanceAfterValue.toFixed(0)}`;
-          const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
-            0
-          )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
-          Alert.alert(
-            "🔴 Confirm settlement",
-            `${alertMessage}\n\n${moneyLine}\n${cylLine}\n\nResulting ${balanceStatus}: ${Math.abs(
-              balanceAfterValue
-            ).toFixed(0)}`,
-            [
-              { text: "Cancel", style: "cancel" },
-              { text: "Confirm", onPress: () => void finalizeCreate() },
-            ]
-          );
-          return;
-        }
-
-        await finalizeCreate();
       } catch (err) {
         const axiosError = err as AxiosError;
         const detail = (axiosError.response?.data as { detail?: string } | undefined)?.detail;
@@ -442,25 +658,137 @@ export default function NewOrderScreen() {
       } finally {
         setSubmitting(false);
       }
-    },
-    (formErrors) => {
-      const first = Object.keys(formErrors)[0];
-      if (first) {
-        inputRefs.current[first]?.focus?.();
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-      }
+    };
+
+    if (balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
+      const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
+        0
+      )} + ${result.toFixed(0)} = ${balanceAfterValue.toFixed(0)}`;
+      const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
+        0
+      )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
+      Alert.alert(
+        "Confirm settlement",
+        `${alertMessage}
+
+${moneyLine}
+${cylLine}
+
+Resulting ${balanceStatus}: ${Math.abs(
+          balanceAfterValue
+        ).toFixed(0)}`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: () => void finalizeCreate() },
+        ]
+      );
+      return;
     }
+
+    await finalizeCreate();
+  };
+
+  const handleInvalid = (formErrors: Record<string, unknown>) => {
+    if (formErrors.cylinders_installed) {
+      Alert.alert(
+        "Invalid installed count",
+        "Orders must have at least 1 installed cylinder. For money-only or return-only actions, use the Payment or Return tabs."
+      );
+    }
+    const first = Object.keys(formErrors)[0];
+    if (first) {
+      inputRefs.current[first]?.focus?.();
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  };
+
+  const handleSaveOrder = handleSubmit(
+    (values) => runOrderSubmit(values, { showWhatsapp: true, resetAfter: false }),
+    handleInvalid
   );
+
+  const handleSaveAndAddAnother = handleSubmit(
+    (values) => runOrderSubmit(values, { showWhatsapp: false, resetAfter: true }),
+    handleInvalid
+  );
+
+
+  const runSavePayment = async () => {
+    if (!selectedCustomer) {
+      Alert.alert("Missing customer", "Please select a customer.");
+      return;
+    }
+    if (paymentAmountValue <= 0) {
+      Alert.alert("Missing amount", "Enter a payment amount.");
+      return;
+    }
+    try {
+      const effectiveAt = buildEffectiveAt(collectionDate, collectionTime);
+      await createCollection.mutateAsync({
+        customer_id: selectedCustomer,
+        action_type: "payment",
+        amount_money: paymentAmountValue,
+        effective_at: effectiveAt,
+        note: collectionNote || undefined,
+      });
+      setPaymentAmount("");
+      setCollectionNote("");
+    } catch (err) {
+      const axiosError = err as AxiosError;
+      Alert.alert("Payment failed", axiosError.response?.data?.detail ?? axiosError.message);
+    }
+  };
+
+  const runSaveReturn = async () => {
+    if (!selectedCustomer) {
+      Alert.alert("Missing customer", "Please select a customer.");
+      return;
+    }
+    if (inventoryInitBlocked) {
+      Alert.alert(
+        "Initialize inventory",
+        "Please add your initial inventory before recording returns.",
+        [{ text: "Open inventory setup", onPress: () => setInitModalVisible(true) }]
+      );
+      return;
+    }
+    if (return12Value <= 0 && return48Value <= 0) {
+      Alert.alert("Missing counts", "Enter at least one cylinder count.");
+      return;
+    }
+    try {
+      const effectiveAt = buildEffectiveAt(collectionDate, collectionTime);
+      await createCollection.mutateAsync({
+        customer_id: selectedCustomer,
+        action_type: "return",
+        qty_12kg: return12Value > 0 ? return12Value : 0,
+        qty_48kg: return48Value > 0 ? return48Value : 0,
+        effective_at: effectiveAt,
+        note: collectionNote || undefined,
+      });
+      setReturn12("");
+      setReturn48("");
+      setCollectionNote("");
+    } catch (err) {
+      const axiosError = err as AxiosError;
+      Alert.alert("Return failed", axiosError.response?.data?.detail ?? axiosError.message);
+    }
+  };
+
+  const handleSavePayment = () => runSavePayment();
+  const handleSavePaymentAndAddAnother = () => runSavePayment();
+  const handleSaveReturn = () => runSaveReturn();
+  const handleSaveReturnAndAddAnother = () => runSaveReturn();
   /* -------------------- UI -------------------- */
 
   const scrollToAmountsAndTotals = () => {
     const scrollView = scrollRef.current;
     if (!scrollView || amountsLayoutY === null || !totalsLayout) return;
-    if (!scrollViewHeight || !keyboardHeight) {
+    if (!scrollViewHeight || !effectiveKeyboardHeight) {
       scrollView.scrollTo({ y: Math.max(amountsLayoutY - 24, 0), animated: true });
       return;
     }
-    const visibleHeight = scrollViewHeight - keyboardHeight - 16;
+    const visibleHeight = scrollViewHeight - effectiveKeyboardHeight - 16;
     const totalsBottom = totalsLayout.y + totalsLayout.height;
     const targetForTotals = Math.max(totalsBottom - visibleHeight, 0);
     scrollView.scrollTo({ y: targetForTotals, animated: true });
@@ -492,7 +820,18 @@ export default function NewOrderScreen() {
     try {
       setWhatsappBusy(true);
       const { url } = await getOrderWhatsappLink(whatsappOrderId);
-      await Linking.openURL(url);
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        const query = url.split("?")[1];
+        const fallback = query ? `https://api.whatsapp.com/send?${query}` : url;
+        const canOpenFallback = await Linking.canOpenURL(fallback);
+        if (!canOpenFallback) {
+          throw new Error("Cannot open WhatsApp link");
+        }
+        await Linking.openURL(fallback);
+      } else {
+        await Linking.openURL(url);
+      }
       exitAfterWhatsApp();
     } catch {
       Alert.alert("WhatsApp not available", "Could not open WhatsApp on this device.");
@@ -504,24 +843,37 @@ export default function NewOrderScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.keyboardAvoider}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? (avoidKeyboard ? "padding" : undefined) : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 0}
     >
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          keyboardHeight ? { paddingBottom: keyboardHeight + 16 } : null,
+          { paddingBottom: contentBottomPadding },
         ]}
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentInset={{ bottom: keyboardHeight }}
-        scrollIndicatorInsets={{ bottom: keyboardHeight }}
+        contentInset={{ bottom: contentBottomPadding }}
+        scrollIndicatorInsets={{ bottom: contentBottomPadding }}
         alwaysBounceVertical
         onLayout={(event) => setScrollViewHeight(event.nativeEvent.layout.height)}
       >
         <Text style={styles.title}>Add Order</Text>
-      {!pricesConfigured && (
+        <View style={styles.modeRow}>
+          {(["order", "payment", "return"] as const).map((mode) => (
+            <Pressable
+              key={mode}
+              onPress={() => setEntryMode(mode)}
+              style={[styles.modeButton, entryMode === mode && styles.modeButtonActive]}
+            >
+              <Text style={[styles.modeText, entryMode === mode && styles.modeTextActive]}>
+                {mode === "order" ? "Order" : mode === "payment" ? "Payment" : "Return"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      {entryMode === "order" && !pricesConfigured && (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>Selling prices are not configured yet.</Text>
           <Pressable onPress={() => router.push("/add?prices=1")} style={styles.noticeButton}>
@@ -529,7 +881,7 @@ export default function NewOrderScreen() {
           </Pressable>
         </View>
       )}
-      {inventoryInitBlocked && (
+      {entryMode !== "payment" && inventoryInitBlocked && (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>Inventory not initialized. Set starting counts to add your first order.</Text>
           <Pressable onPress={() => setInitModalVisible(true)} style={styles.noticeButton}>
@@ -539,51 +891,182 @@ export default function NewOrderScreen() {
       )}
 
       <View style={styles.sectionCard}>
+        <FieldLabel>Date & time</FieldLabel>
+        {entryMode === "order" ? (
+          <Controller
+            control={control}
+            name="delivered_at"
+            rules={{ required: "Enter delivery date & time" }}
+            render={() => (
+              <View style={styles.row}>
+                <Pressable
+                  style={[
+                    styles.input,
+                    styles.half,
+                    errors.delivered_at && styles.inputError,
+                  ]}
+                  onPress={openActiveDate}
+                >
+                  <Text style={styles.dateText}>{activeDate}</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.input,
+                    styles.half,
+                    errors.delivered_at && styles.inputError,
+                  ]}
+                  onPress={openActiveTime}
+                >
+                  <Text style={styles.dateText}>{activeTime}</Text>
+                </Pressable>
+                <Pressable style={styles.nowButton} onPress={setActiveNow}>
+                  <Text style={styles.nowButtonText}>Now</Text>
+                </Pressable>
+              </View>
+            )}
+          />
+        ) : (
+          <View style={styles.row}>
+            <Pressable style={[styles.input, styles.half]} onPress={openActiveDate}>
+              <Text style={styles.dateText}>{activeDate}</Text>
+            </Pressable>
+            <Pressable style={[styles.input, styles.half]} onPress={openActiveTime}>
+              <Text style={styles.dateText}>{activeTime}</Text>
+            </Pressable>
+            <Pressable style={styles.nowButton} onPress={setActiveNow}>
+              <Text style={styles.nowButtonText}>Now</Text>
+            </Pressable>
+          </View>
+        )}
+        {entryMode === "order" ? (
+          <FieldError message={errors.delivered_at?.message} />
+        ) : null}
+      </View>
+
+      <View style={styles.sectionCard}>
         <FieldLabel>Customer</FieldLabel>
-        <TextInput
-          style={styles.input}
-          placeholder="Search customer"
-          value={customerSearch}
-          onChangeText={setCustomerSearch}
-        />
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, styles.inputFlex]}
+            placeholder="Search customer"
+            value={customerSearch}
+            onChangeText={setCustomerSearch}
+            ref={searchInputRef}
+            onFocus={() => {
+              setAvoidKeyboard(false);
+              setIsCustomerSearchOpen(true);
+            }}
+            onBlur={() => {
+              setTimeout(() => setIsCustomerSearchOpen(false), 150);
+            }}
+            {...doneInputProps}
+          />
+          {selectedCustomerEntry ? (
+            <Pressable
+              style={styles.clearButton}
+              onPress={() => {
+                setValue("customer_id", "");
+                setCustomerSearch("");
+                setIsCustomerSearchOpen(false);
+                Keyboard.dismiss();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear customer"
+            >
+              <Ionicons name="close" size={16} color="#0f172a" />
+            </Pressable>
+          ) : null}
+        </View>
 
         <Controller
           control={control}
           name="customer_id"
           rules={{ required: "Select a customer" }}
           render={({ field: { onChange, value } }) => (
-            <View style={styles.chipRow}>
-              {customerOptions.map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => onChange(c.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: value === c.id }}
-                  accessibilityLabel={`Customer ${c.name}`}
-                  accessibilityHint="Select customer"
-                  ref={(node) => {
-                    if (node && value === c.id) inputRefs.current.customer_id = node as unknown as TextInput;
-                  }}
-                  style={[styles.chip, value === c.id && styles.chipActive]}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      value === c.id && styles.chipTextActive,
-                    ]}
+            isCustomerSearchOpen ? (
+              <View style={styles.customerList}>
+                {customerSearchTerm && !hasExactCustomerMatch ? (
+                  <Pressable
+                    style={styles.addCustomerButton}
+                    onPress={() => {
+                      setIsCustomerSearchOpen(false);
+                      Keyboard.dismiss();
+                      router.push("/customers/new");
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a new customer"
                   >
-                    {c.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+                    <Text style={styles.addCustomerButtonText}>+ Add a new customer</Text>
+                  </Pressable>
+                ) : null}
+                {customerOptions.map((c) => {
+                  const selected = value === c.id;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => {
+                        onChange(c.id);
+                        setCustomerSearch(c.name);
+                        setIsCustomerSearchOpen(false);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`Customer ${c.name}`}
+                      accessibilityHint="Select customer"
+                      ref={(node) => {
+                        if (node && selected) inputRefs.current.customer_id = node as unknown as TextInput;
+                      }}
+                      style={[styles.customerOption, selected && styles.customerOptionActive]}
+                    >
+                      <View style={styles.customerOptionRow}>
+                        <Text style={[styles.customerOptionName, selected && styles.customerOptionNameActive]}>
+                          {c.name}
+                        </Text>
+                        {c.notes ? (
+                          <Text
+                            style={[styles.customerOptionNote, selected && styles.customerOptionNoteActive]}
+                            numberOfLines={1}
+                          >
+                            {c.notes}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null
           )}
         />
         <FieldError message={errors.customer_id?.message} />
       </View>
+      {hasCustomer && customerAlertLines.length > 0 ? (
+        <View style={styles.alertBox}>
+          {customerAlertLines.map((line) => (
+            <Text key={line} style={styles.alertText}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
+      {entryMode === "order" && hasCustomer ? (
+        <>
       <View style={styles.sectionCard}>
-        <FieldLabel>System</FieldLabel>
+        <View style={styles.sectionHeaderRow}>
+          <FieldLabel>System</FieldLabel>
+          <Pressable
+            style={styles.sectionHeaderButton}
+            onPress={() => {
+              if (!selectedCustomer) return;
+              router.push(`/customers/${selectedCustomer}/edit`);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Update systems"
+          >
+            <Text style={styles.sectionHeaderButtonText}>Update</Text>
+          </Pressable>
+        </View>
         <Controller
           control={control}
           name="system_id"
@@ -657,32 +1140,6 @@ export default function NewOrderScreen() {
         <FieldError message={errors.gas_type?.message} />
       </View>
 
-      <View style={styles.sectionCard}>
-        <FieldLabel>Delivery (date & time)</FieldLabel>
-        <Controller
-          control={control}
-          name="delivered_at"
-          rules={{ required: "Enter delivery date & time" }}
-          render={() => (
-            <View style={styles.row}>
-              <Pressable
-                style={[styles.input, styles.half, errors.delivered_at && styles.inputError]}
-                onPress={() => setDeliveryDateOpen(true)}
-              >
-                <Text style={styles.dateText}>{deliveryDate}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.input, styles.half, errors.delivered_at && styles.inputError]}
-                onPress={() => setDeliveryTimeOpen(true)}
-              >
-                <Text style={styles.dateText}>{deliveryTime}</Text>
-              </Pressable>
-            </View>
-          )}
-        />
-        <FieldError message={errors.delivered_at?.message} />
-      </View>
-
       <View
         onLayout={(event) => {
           setAmountsLayoutY(event.nativeEvent.layout.y);
@@ -701,8 +1158,11 @@ export default function NewOrderScreen() {
                   name="cylinders_installed"
                   rules={{
                     required: "Enter installed cylinders",
-                    validate: (val) =>
-                      (Number(val) || 0) >= 0 || "Installed cannot be negative",
+                    validate: (val) => {
+                      const count = Number(val) || 0;
+                      if (count <= 0) return "Installed must be greater than 0";
+                      return true;
+                    },
                   }}
                   render={({ field }) => (
                     <TextInput
@@ -717,8 +1177,10 @@ export default function NewOrderScreen() {
                       inputMode="numeric"
                       placeholder="0"
                       value={field.value}
+                      {...doneInputProps}
                       ref={(node) => (inputRefs.current.cylinders_installed = node)}
                       onFocus={() => {
+                        setAvoidKeyboard(true);
                         setFocusTarget("amounts");
                         scrollToAmountsAndTotals();
                       }}
@@ -764,8 +1226,10 @@ export default function NewOrderScreen() {
                       inputMode="numeric"
                       placeholder="0"
                       value={field.value}
+                      {...doneInputProps}
                       ref={(node) => (inputRefs.current.cylinders_received = node)}
                       onFocus={() => {
+                        setAvoidKeyboard(true);
                         setFocusTarget("amounts");
                         scrollToAmountsAndTotals();
                       }}
@@ -820,8 +1284,10 @@ export default function NewOrderScreen() {
                     inputMode="numeric"
                     placeholder="0"
                     value={field.value}
+                    {...doneInputProps}
                     ref={(node) => (inputRefs.current.price_total = node)}
                     onFocus={() => {
+                      setAvoidKeyboard(true);
                       setFocusTarget("payments");
                     }}
                     onBlur={() => setFocusTarget(null)}
@@ -858,8 +1324,10 @@ export default function NewOrderScreen() {
                     inputMode="numeric"
                     placeholder="0"
                     value={field.value}
+                    {...doneInputProps}
                     ref={(node) => (inputRefs.current.money_received = node)}
                     onFocus={() => {
+                      setAvoidKeyboard(true);
                       setFocusTarget("payments");
                     }}
                     onBlur={() => setFocusTarget(null)}
@@ -881,9 +1349,7 @@ export default function NewOrderScreen() {
               />
             </View>
           </View>
-          <Text style={styles.balanceHint}>
-            Balance: {balanceBefore.toFixed(0)} {"->"} {balanceAfter.toFixed(0)}
-          </Text>
+          {selectedCustomerEntry ? <BalancePreviewCard lines={orderBalanceLines} /> : null}
         </View>
         <FieldError message={errors.cylinders_installed?.message} />
         <FieldError message={errors.cylinders_received?.message} />
@@ -891,18 +1357,29 @@ export default function NewOrderScreen() {
         <FieldError message={errors.money_received?.message} />
       </View>
 
-      <Pressable
-        onPress={onSubmit}
-        disabled={submitting}
-        style={styles.primary}
-      >
-        <Text style={styles.primaryText}>
-          {submitting ? "Saving..." : "Save Order"}
-        </Text>
-      </Pressable>
+      <View style={styles.sectionCard}>
+        <FieldLabel>Note (optional)</FieldLabel>
+        <Controller
+          control={control}
+          name="note"
+          render={({ field }) => (
+            <TextInput
+              style={styles.input}
+              placeholder="Optional note"
+              value={field.value}
+              onChangeText={field.onChange}
+              onFocus={() => {
+                setAvoidKeyboard(true);
+                setFocusTarget(null);
+              }}
+              {...doneInputProps}
+            />
+          )}
+        />
+      </View>
 
       <Modal visible={whatsappOpen} transparent animationType="fade" onRequestClose={exitAfterWhatsApp}>
-        <Pressable style={styles.modalOverlay} onPress={exitAfterWhatsApp}>
+        <Pressable style={styles.whatsappOverlay} onPress={exitAfterWhatsApp}>
           <Pressable style={[styles.modalCard, styles.whatsappCard]} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Order saved</Text>
             <Text style={styles.modalSubtitle}>Send the confirmation to the customer?</Text>
@@ -921,6 +1398,114 @@ export default function NewOrderScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+        </>
+      ) : null}
+
+      {entryMode === "payment" && hasCustomer ? (
+        <>
+          <View style={styles.sectionCard}>
+            <FieldLabel>Payment amount</FieldLabel>
+            
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              inputMode="numeric"
+              placeholder="0"
+              value={paymentAmount}
+              onChangeText={setPaymentAmount}
+              onFocus={() => {
+                setAvoidKeyboard(true);
+                setFocusTarget(null);
+              }}
+              {...doneInputProps}
+            />
+          </View>
+
+          {selectedCustomerEntry ? <BalancePreviewCard lines={paymentBalanceLines} /> : null}
+          <View style={styles.sectionCard}>
+            <FieldLabel>Note (optional)</FieldLabel>
+            <TextInput
+              style={styles.input}
+              placeholder="Optional note"
+              value={collectionNote}
+              onChangeText={setCollectionNote}
+              onFocus={() => {
+                setAvoidKeyboard(true);
+                setFocusTarget(null);
+              }}
+              {...doneInputProps}
+            />
+          </View>
+
+          
+        </>
+      ) : null}
+
+      {entryMode === "return" && hasCustomer ? (
+        <>
+          <View style={styles.sectionCard}>
+            <FieldLabel>Return empties</FieldLabel>
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <FieldLabel>12kg</FieldLabel>
+                <View style={styles.amountGroup}>
+                  <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(-1)}>
+                    <Ionicons name="remove" size={10} color="#0a7ea4" />
+                  </Pressable>
+                  <TextInput
+                    style={[styles.input, styles.amountInput]}
+                    keyboardType="numeric"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={return12}
+                    onChangeText={setReturn12}
+                    onFocus={() => setAvoidKeyboard(true)}
+                    {...doneInputProps}
+                  />
+                  <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(1)}>
+                    <Ionicons name="add" size={10} color="#0a7ea4" />
+                  </Pressable>
+                </View>
+              </View>
+              <View style={styles.half}>
+                <FieldLabel>48kg</FieldLabel>
+                <View style={styles.amountGroup}>
+                  <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(-1)}>
+                    <Ionicons name="remove" size={10} color="#0a7ea4" />
+                  </Pressable>
+                  <TextInput
+                    style={[styles.input, styles.amountInput]}
+                    keyboardType="numeric"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={return48}
+                    onChangeText={setReturn48}
+                    onFocus={() => setAvoidKeyboard(true)}
+                    {...doneInputProps}
+                  />
+                  <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(1)}>
+                    <Ionicons name="add" size={10} color="#0a7ea4" />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {selectedCustomerEntry ? <BalancePreviewCard lines={returnBalanceLines} /> : null}
+
+          <View style={styles.sectionCard}>
+            <FieldLabel>Note (optional)</FieldLabel>
+            <TextInput
+              style={styles.input}
+              placeholder="Optional note"
+              value={collectionNote}
+              onChangeText={setCollectionNote}
+              onFocus={() => setAvoidKeyboard(true)}
+              {...doneInputProps}
+            />
+          </View>
+        </>
+      ) : null}
 
       <Modal visible={initModalVisible} animationType="slide" transparent onRequestClose={() => setInitModalVisible(false)}>
         <KeyboardAvoidingView
@@ -1060,6 +1645,13 @@ export default function NewOrderScreen() {
         onClose={() => setDeliveryDateOpen(false)}
       />
       <CalendarModal
+        visible={collectionDateOpen}
+        value={collectionDate}
+        maxDate={new Date()}
+        onSelect={(next) => setCollectionDate(next)}
+        onClose={() => setCollectionDateOpen(false)}
+      />
+      <CalendarModal
         visible={initDateOpen}
         value={initDate}
         maxDate={new Date()}
@@ -1072,75 +1664,156 @@ export default function NewOrderScreen() {
         onSelect={(next) => setDeliveryTime(next)}
         onClose={() => setDeliveryTimeOpen(false)}
       />
+      <TimePickerModal
+        visible={collectionTimeOpen}
+        value={collectionTime}
+        onSelect={(next) => setCollectionTime(next)}
+        onClose={() => setCollectionTimeOpen(false)}
+      />
       </ScrollView>
-      {showStickyPayment && (
-        <View style={[styles.stickyPayment, { bottom: keyboardHeight }]}>
-          <Text style={styles.stickyLabel}>Total / Paid</Text>
-          <View style={[styles.row, styles.fieldBox]}>
-            <Controller
-              control={control}
-              name="price_total"
-              rules={{
-                required: "Enter total price",
-                validate: (val) =>
-                  (Number(val) || 0) >= 0 || "Total cannot be negative",
-              }}
-              render={({ field }) => (
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.half,
-                    errors.price_total && styles.inputError,
-                  ]}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  placeholder="Tot"
-                  value={field.value}
-                  editable={false}
-                  onChangeText={(t) => {
-                    setManualPrice(true);
-                    field.onChange(t);
-                    setValue("money_received", t);
-                    setValue("money_given", "0");
-                  }}
-                />
-              )}
-            />
-            <Controller
-              control={control}
-              name="money_received"
-              rules={{
-                required: "Enter paid amount",
-                validate: (val) =>
-                  (Number(val) || 0) >= 0 || "Paid cannot be negative",
-              }}
-              render={({ field }) => (
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.half,
-                    errors.money_received && styles.inputError,
-                  ]}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  placeholder="Paid"
-                  value={field.value}
-                  editable={false}
-                  onChangeText={(t) => {
-                    field.onChange(t);
-                  }}
-                />
-              )}
-            />
-            <TextInput
-              style={[styles.input, styles.half, styles.inputReadOnly]}
-              value={unpaid.toString()}
-              editable={false}
-              placeholder="Unp"
-            />
+      {hasCustomer ? (
+        <>
+      <View style={[styles.stickyFooter, { bottom: 0 }]}>
+            {entryMode === "order" ? (
+              <View style={styles.footerRow}>
+                <Pressable
+                  onPress={handleSaveAndAddAnother}
+                  disabled={submitting}
+                  style={[styles.footerSecondary, submitting && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerSecondaryText}>Save & Add Another</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSaveOrder}
+                  disabled={submitting}
+                  style={[styles.footerPrimary, submitting && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerPrimaryText}>
+                    {submitting ? "Saving..." : "Save Order"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : entryMode === "payment" ? (
+              <View style={styles.footerRow}>
+                <Pressable
+                  onPress={handleSavePaymentAndAddAnother}
+                  disabled={collectionBusy}
+                  style={[styles.footerSecondary, collectionBusy && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerSecondaryText}>Save & Add Another</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSavePayment}
+                  disabled={collectionBusy}
+                  style={[styles.footerPrimary, collectionBusy && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerPrimaryText}>
+                    {collectionBusy ? "Saving..." : "Save Payment"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.footerRow}>
+                <Pressable
+                  onPress={handleSaveReturnAndAddAnother}
+                  disabled={collectionBusy}
+                  style={[styles.footerSecondary, collectionBusy && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerSecondaryText}>Save & Add Another</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSaveReturn}
+                  disabled={collectionBusy}
+                  style={[styles.footerPrimary, collectionBusy && styles.footerButtonDisabled]}
+                >
+                  <Text style={styles.footerPrimaryText}>
+                    {collectionBusy ? "Saving..." : "Save Return"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
           </View>
-        </View>
-      )}
+          {showStickyPayment && (
+            <View
+              style={[styles.stickyPayment, { bottom: footerHeight + 8 }]}
+            >
+              <Text style={styles.stickyLabel}>Total / Paid</Text>
+              <View style={[styles.row, styles.fieldBox]}>
+                <Controller
+                  control={control}
+                  name="price_total"
+                  rules={{
+                    required: "Enter total price",
+                    validate: (val) =>
+                      (Number(val) || 0) >= 0 || "Total cannot be negative",
+                  }}
+                  render={({ field }) => (
+                    <TextInput
+                      style={[
+                        styles.input,
+                        styles.half,
+                        errors.price_total && styles.inputError,
+                      ]}
+                      keyboardType="numeric"
+                      inputMode="numeric"
+                      placeholder="Tot"
+                      value={field.value}
+                      editable={false}
+                      onChangeText={(t) => {
+                        setManualPrice(true);
+                        field.onChange(t);
+                        setValue("money_received", t);
+                        setValue("money_given", "0");
+                      }}
+                    />
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="money_received"
+                  rules={{
+                    required: "Enter paid amount",
+                    validate: (val) =>
+                      (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                  }}
+                  render={({ field }) => (
+                    <TextInput
+                      style={[
+                        styles.input,
+                        styles.half,
+                        errors.money_received && styles.inputError,
+                      ]}
+                      keyboardType="numeric"
+                      inputMode="numeric"
+                      placeholder="Paid"
+                      value={field.value}
+                      editable={false}
+                      onChangeText={(t) => {
+                        field.onChange(t);
+                      }}
+                    />
+                  )}
+                />
+                <TextInput
+                  style={[styles.input, styles.half, styles.inputReadOnly]}
+                  value={unpaid.toString()}
+                  editable={false}
+                  placeholder="Unp"
+                />
+              </View>
+            </View>
+          )}
+        </>
+      ) : null}
+      {Platform.OS === "ios" && orderAccessoryId ? (
+        <InputAccessoryView nativeID={orderAccessoryId}>
+          <View style={styles.accessoryRow}>
+            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
+              <Text style={styles.accessoryText}>Done</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -1152,6 +1825,19 @@ function FieldLabel({ children }: { children: ReactNode }) {
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <Text style={styles.errorText}>{message}</Text>;
+}
+
+function BalancePreviewCard({ lines }: { lines: string[] }) {
+  return (
+    <View style={styles.balancePreviewCard}>
+      <Text style={styles.balancePreviewTitle}>New Balance</Text>
+      {lines.map((line) => (
+        <Text key={line} style={styles.balancePreviewLine}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
 }
 
 function CalendarModal({
@@ -1333,6 +2019,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f5f7",
   },
   title: { fontSize: 26, fontWeight: "800", color: "#0f172a" },
+  modeRow: { flexDirection: "row", gap: 8, marginTop: 6, marginBottom: 2 },
+  modeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#e2e8f0",
+  },
+  modeButtonActive: { backgroundColor: "#0a7ea4" },
+  modeText: { fontWeight: "700", color: "#1f2937" },
+  modeTextActive: { color: "#fff" },
   label: { fontWeight: "700", marginTop: 6, color: "#0f172a" },
   sectionCard: {
     backgroundColor: "#fff",
@@ -1342,12 +2038,44 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
   },
+  balancePreviewCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 10,
+    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+  },
+  balancePreviewTitle: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
+  balancePreviewLine: { fontSize: 12, fontWeight: "700", color: "#0f172a" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { padding: 10, borderRadius: 12, backgroundColor: "#eef2f6" },
   chipActive: { backgroundColor: "#0a7ea4" },
   chipInactive: { opacity: 0.4 },
   chipText: { fontWeight: "600", color: "#1f2937" },
   chipTextActive: { color: "#fff" },
+  customerList: { gap: 8 },
+  addCustomerButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#0a7ea4",
+    backgroundColor: "#e6f3f8",
+  },
+  addCustomerButtonText: { color: "#0a7ea4", fontWeight: "700" },
+  customerOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: "#eef2f6",
+  },
+  customerOptionActive: { backgroundColor: "#0a7ea4" },
+  customerOptionRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  customerOptionName: { fontWeight: "700", color: "#1f2937" },
+  customerOptionNameActive: { color: "#fff" },
+  customerOptionNote: { fontSize: 12, color: "#64748b", flexShrink: 1 },
+  customerOptionNoteActive: { color: "#dbeafe" },
   input: {
     backgroundColor: "#fff",
     borderRadius: 10,
@@ -1358,6 +2086,24 @@ const styles = StyleSheet.create({
   inputReadOnly: {
     backgroundColor: "#eef2f6",
     color: "#8a8a8a",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inputFlex: {
+    flex: 1,
+  },
+  clearButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
   },
   hidden: {
     display: "none",
@@ -1391,6 +2137,15 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   quarter: { flex: 1 },
+  nowButton: {
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#0a7ea4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nowButtonText: { color: "#fff", fontWeight: "700" },
   amountGroup: {
     flex: 1,
     flexDirection: "row",
@@ -1425,6 +2180,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#475569",
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionHeaderButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#e2e8f0",
+  },
+  sectionHeaderButtonText: {
+    fontWeight: "700",
+    color: "#0a7ea4",
+  },
   fieldBox: {
     backgroundColor: "#f9fafb",
     borderRadius: 12,
@@ -1437,6 +2207,15 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "600",
   },
+  alertBox: {
+    backgroundColor: "#fdecea",
+    borderColor: "#f5c6cb",
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 10,
+    gap: 4,
+  },
+  alertText: { color: "#b00020", fontWeight: "700", fontSize: 12 },
   primary: {
     backgroundColor: "#0a7ea4",
     padding: 14,
@@ -1445,6 +2224,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700" },
+  stickyFooter: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+  },
+  footerRow: { flexDirection: "row", gap: 10 },
+  footerPrimary: {
+    flex: 1,
+    backgroundColor: "#0a7ea4",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  footerPrimaryText: { color: "#fff", fontWeight: "700" },
+  footerSecondary: {
+    flex: 1,
+    borderColor: "#cbd5e1",
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  footerSecondaryText: { color: "#0a7ea4", fontWeight: "700" },
+  footerButtonDisabled: { opacity: 0.6 },
   notice: {
     backgroundColor: "#fff7e6",
     borderColor: "#f0c36d",
@@ -1466,6 +2270,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     padding: 20,
+  },
+  whatsappOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalScrollContent: {
     flexGrow: 1,

@@ -11,6 +11,8 @@ from app.events import add_activity
 from app.models import InventoryDailySummary, InventoryDelta, PriceSetting, RefillEvent
 from app.schemas import (
   InventoryAdjustCreate,
+  InventoryAdjustUpdate,
+  InventoryAdjustmentRow,
   InventoryDeltaListResponse,
   InventoryDeltaRow,
   InventoryDayEvent,
@@ -32,6 +34,7 @@ from app.services.inventory import (
   inventory_totals_at,
   inventory_totals_before_source,
   latest_inventory_snapshot,
+  soft_delete_inventory_deltas_for_source,
   recompute_daily_summaries,
 )
 from app.utils.time import (
@@ -172,6 +175,7 @@ def get_inventory_day(date: str, session: Session = Depends(get_session)) -> Inv
     select(InventoryDelta)
     .where(InventoryDelta.effective_at >= start_utc)
     .where(InventoryDelta.effective_at < end_utc)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
   ).all()
 
@@ -237,6 +241,7 @@ def list_inventory_deltas(
   from_: str = Query(..., alias="from"),
   to: Optional[str] = None,
   gas_type: Optional[str] = None,
+  include_deleted: bool = False,
   session: Session = Depends(get_session),
 ) -> InventoryDeltaListResponse:
   try:
@@ -259,6 +264,8 @@ def list_inventory_deltas(
     .where(InventoryDelta.effective_at < end_utc)
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
   )
+  if not include_deleted:
+    stmt = stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
   if gas_type:
     stmt = stmt.where(InventoryDelta.gas_type == gas_type)
   rows = session.exec(stmt).all()
@@ -272,6 +279,8 @@ def list_inventory_deltas(
       source_type=row.source_type,
       source_id=row.source_id,
       reason=row.reason,
+      is_manual=row.is_manual,
+      is_deleted=row.is_deleted,
       delta_full=row.delta_full,
       delta_empty=row.delta_empty,
       business_date=business_date_from_utc(row.effective_at).isoformat(),
@@ -287,17 +296,26 @@ def list_inventory_deltas(
 
 
 @router.get("/refills", response_model=list[InventoryRefillSummary])
-def list_refills(session: Session = Depends(get_session)) -> list[InventoryRefillSummary]:
-  events = session.exec(select(RefillEvent).order_by(RefillEvent.effective_at.desc())).all()
+def list_refills(
+  include_deleted: bool = Query(False, alias="include_deleted"),
+  session: Session = Depends(get_session),
+) -> list[InventoryRefillSummary]:
+  stmt = select(RefillEvent)
+  if not include_deleted:
+    stmt = stmt.where(RefillEvent.is_deleted == False)  # noqa: E712
+  events = session.exec(stmt.order_by(RefillEvent.effective_at.desc())).all()
   if not events:
     return []
 
   refill_ids = [event.id for event in events]
-  deltas = session.exec(
+  deltas_stmt = (
     select(InventoryDelta)
     .where(InventoryDelta.source_type == "refill")
     .where(InventoryDelta.source_id.in_(refill_ids))
-  ).all()
+  )
+  if not include_deleted:
+    deltas_stmt = deltas_stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
+  deltas = session.exec(deltas_stmt).all()
 
   totals: dict[str, dict[str, int]] = {}
   for row in deltas:
@@ -322,31 +340,40 @@ def list_refills(session: Session = Depends(get_session)) -> list[InventoryRefil
     local_dt = business_local_datetime_from_utc(event.effective_at)
     time_of_day = "evening" if local_dt.hour >= 12 else "morning"
     result.append(
-      InventoryRefillSummary(
-        refill_id=event.id,
-        date=event.business_date.isoformat(),
-        time_of_day=time_of_day,
-        effective_at=_as_utc(event.effective_at),
-        buy12=int(summary["buy12"]),
-        return12=int(summary["return12"]),
-        buy48=int(summary["buy48"]),
-        return48=int(summary["return48"]),
+        InventoryRefillSummary(
+          refill_id=event.id,
+          date=event.business_date.isoformat(),
+          time_of_day=time_of_day,
+          effective_at=_as_utc(event.effective_at),
+          buy12=int(summary["buy12"]),
+          return12=int(summary["return12"]),
+          buy48=int(summary["buy48"]),
+          return48=int(summary["return48"]),
+          is_deleted=event.is_deleted,
+          deleted_at=_as_utc(event.deleted_at) if event.deleted_at else None,
+        )
       )
-    )
-  return result
+    return result
 
 
 @router.get("/refills/{refill_id}", response_model=InventoryRefillDetails)
-def get_refill_details(refill_id: str, session: Session = Depends(get_session)) -> InventoryRefillDetails:
+def get_refill_details(
+  refill_id: str,
+  include_deleted: bool = Query(False, alias="include_deleted"),
+  session: Session = Depends(get_session),
+) -> InventoryRefillDetails:
   refill_event = session.get(RefillEvent, refill_id)
-  if not refill_event:
+  if not refill_event or (refill_event.is_deleted and not include_deleted):
     raise HTTPException(status_code=404, detail="refill_not_found")
 
-  deltas = session.exec(
+  deltas_stmt = (
     select(InventoryDelta)
     .where(InventoryDelta.source_type == "refill")
     .where(InventoryDelta.source_id == refill_id)
-  ).all()
+  )
+  if not include_deleted:
+    deltas_stmt = deltas_stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
+  deltas = session.exec(deltas_stmt).all()
   if not deltas:
     raise HTTPException(status_code=404, detail="refill_not_found")
 
@@ -402,6 +429,8 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
     before_empty_48=before_empty_48,
     after_full_48=after_full_48,
     after_empty_48=after_empty_48,
+    is_deleted=refill_event.is_deleted,
+    deleted_at=_as_utc(refill_event.deleted_at) if refill_event.deleted_at else None,
   )
 
 
@@ -413,7 +442,7 @@ def update_refill(
   user_id: Optional[str] = Depends(get_optional_user),
 ) -> InventoryRefillDetails:
   refill_event = session.get(RefillEvent, refill_id)
-  if not refill_event:
+  if not refill_event or refill_event.is_deleted:
     raise HTTPException(status_code=404, detail="refill_not_found")
 
   boundary = refill_event.effective_at
@@ -529,13 +558,17 @@ def update_refill(
     actor_id=user_id,
   )
   owed = refill_event.total_cost - paid_now
-  if owed > 0:
+  cyl_delta_12 = payload.buy12 - payload.return12
+  cyl_delta_48 = payload.buy48 - payload.return48
+  if owed > 0 or cyl_delta_12 or cyl_delta_48:
     add_company_delta(
       session,
       effective_at=boundary,
       source_type="refill",
       source_id=refill_id,
-      delta_payable=owed,
+      delta_payable=owed if owed > 0 else 0,
+      delta_12kg=cyl_delta_12,
+      delta_48kg=cyl_delta_48,
       reason=payload.reason,
       actor_id=user_id,
     )
@@ -561,10 +594,10 @@ def delete_refill(
   session: Session = Depends(get_session),
 ) -> None:
   refill_event = session.get(RefillEvent, refill_id)
-  if not refill_event:
+  if not refill_event or refill_event.is_deleted:
     return
 
-  deleted_inventory_dates = delete_inventory_deltas_for_source(
+  deleted_inventory_dates = soft_delete_inventory_deltas_for_source(
     session,
     source_id=refill_id,
     source_types=["refill"],
@@ -579,12 +612,14 @@ def delete_refill(
     source_id=refill_id,
     source_types=["refill"],
   )
-  session.delete(refill_event)
+  refill_event.is_deleted = True
+  refill_event.deleted_at = datetime.now(timezone.utc)
+  session.add(refill_event)
 
   end_date = business_date_from_utc(datetime.now(timezone.utc))
   for gas, start_date in deleted_inventory_dates.items():
     enqueue_recalc_job(session, gas, start_date)
-    recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=False)
+    recompute_daily_summaries(session, gas, start_date, end_date, allow_negative=True)
   if deleted_cash_date:
     recompute_cash_summaries(session, deleted_cash_date, end_date)
   if deleted_company_date:
@@ -749,13 +784,17 @@ def create_refill(
     actor_id=user_id,
   )
   owed = total_cost - paid_now
-  if owed > 0:
+  cyl_delta_12 = payload.buy12 - payload.return12
+  cyl_delta_48 = payload.buy48 - payload.return48
+  if owed > 0 or cyl_delta_12 or cyl_delta_48:
     add_company_delta(
       session,
       effective_at=boundary,
       source_type="refill",
       source_id=refill_id,
-      delta_payable=owed,
+      delta_payable=owed if owed > 0 else 0,
+      delta_12kg=cyl_delta_12,
+      delta_48kg=cyl_delta_48,
       reason=payload.reason,
       actor_id=user_id,
     )
@@ -814,7 +853,15 @@ def adjust_inventory(
       day = datetime.fromisoformat(payload.date).date()
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
-    boundary = datetime.combine(day, datetime.min.time()) + timedelta(hours=12)
+    boundary = business_date_start_utc(day) + timedelta(hours=12)
+    if payload.time:
+      try:
+        parts = payload.time.split(":")
+        hours = int(parts[0])
+        minutes = int(parts[1]) if len(parts) > 1 else 0
+      except (ValueError, IndexError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid time format") from exc
+      boundary = business_date_start_utc(day) + timedelta(hours=hours, minutes=minutes)
   else:
     boundary = datetime.now(timezone.utc)
   event_id = f"adjust_{boundary.timestamp()}"
@@ -838,6 +885,7 @@ def adjust_inventory(
     source_id=event_id,
     reason=reason_text,
     allow_negative=allow_negative,
+    is_manual=True,
   )
   add_activity(
     session,
@@ -850,7 +898,6 @@ def adjust_inventory(
     event_id,
     metadata=f"gas={payload.gas_type};delta_full={payload.delta_full};delta_empty={payload.delta_empty};reason={reason_text}",
   )
-
   add_activity(
     session,
     "inventory",
@@ -867,7 +914,116 @@ def adjust_inventory(
   )
 
   session.commit()
+  start_date = business_date_from_utc(boundary)
+  end_date = business_date_from_utc(datetime.now(timezone.utc))
+  recompute_daily_summaries(session, payload.gas_type, start_date, end_date, allow_negative=True)
+  session.commit()
   snapshot = snapshot_at(session, boundary + timedelta(seconds=1))
   if not snapshot:
     raise HTTPException(status_code=500, detail="Failed to create inventory snapshot")
   return snapshot
+
+
+@router.get("/adjustments", response_model=list[InventoryAdjustmentRow])
+def list_inventory_adjustments(
+  date: str = Query(...),
+  include_deleted: bool = Query(False),
+  session: Session = Depends(get_session),
+) -> list[InventoryAdjustmentRow]:
+  try:
+    day = datetime.fromisoformat(date).date()
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail="Invalid date format") from exc
+  start = business_date_start_utc(day)
+  end = business_date_start_utc(day + timedelta(days=1))
+  stmt = (
+    select(InventoryDelta)
+    .where(InventoryDelta.source_type == "adjust")
+    .where(InventoryDelta.is_manual == True)  # noqa: E712
+    .where(InventoryDelta.effective_at >= start)
+    .where(InventoryDelta.effective_at < end)
+    .order_by(InventoryDelta.effective_at.desc(), InventoryDelta.created_at.desc())
+  )
+  if not include_deleted:
+    stmt = stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
+  rows = session.exec(stmt).all()
+  return [
+    InventoryAdjustmentRow(
+      id=row.id,
+      gas_type=row.gas_type,
+      delta_full=row.delta_full,
+      delta_empty=row.delta_empty,
+      reason=row.reason,
+      effective_at=row.effective_at,
+      created_at=row.created_at,
+      is_deleted=row.is_deleted,
+    )
+    for row in rows
+  ]
+
+
+@router.put("/adjust/{delta_id}", response_model=InventoryAdjustmentRow)
+def update_inventory_adjustment(
+  delta_id: str,
+  payload: InventoryAdjustUpdate,
+  session: Session = Depends(get_session),
+  user_id: Optional[str] = Depends(get_optional_user),
+) -> InventoryAdjustmentRow:
+  delta = session.get(InventoryDelta, delta_id)
+  if not delta or delta.is_deleted:
+    raise HTTPException(status_code=404, detail="inventory_adjustment_not_found")
+  if delta.source_type != "adjust" or not delta.is_manual:
+    raise HTTPException(status_code=400, detail="inventory_adjustment_not_editable")
+
+  allow_negative = payload.allow_negative or False
+  if allow_negative and not _allow_negative_for_user(user_id):
+    raise HTTPException(status_code=403, detail="allow_negative_not_permitted")
+
+  delta_full = payload.delta_full if payload.delta_full is not None else delta.delta_full
+  delta_empty = payload.delta_empty if payload.delta_empty is not None else delta.delta_empty
+  reason_text = payload.reason if payload.reason is not None else delta.reason
+  if payload.note:
+    reason_text = f"{reason_text}: {payload.note}"
+
+  delta.delta_full = delta_full
+  delta.delta_empty = delta_empty
+  delta.reason = reason_text
+  delta.updated_at = datetime.now(timezone.utc)
+  session.add(delta)
+
+  start_date = business_date_from_utc(delta.effective_at)
+  end_date = business_date_from_utc(datetime.now(timezone.utc))
+  recompute_daily_summaries(session, delta.gas_type, start_date, end_date, allow_negative=allow_negative)
+  session.commit()
+  return InventoryAdjustmentRow(
+    id=delta.id,
+    gas_type=delta.gas_type,
+    delta_full=delta.delta_full,
+    delta_empty=delta.delta_empty,
+    reason=delta.reason,
+    effective_at=delta.effective_at,
+    created_at=delta.created_at,
+    is_deleted=delta.is_deleted,
+  )
+
+
+@router.delete("/adjust/{delta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_inventory_adjustment(
+  delta_id: str,
+  session: Session = Depends(get_session),
+) -> None:
+  delta = session.get(InventoryDelta, delta_id)
+  if not delta or delta.is_deleted:
+    raise HTTPException(status_code=404, detail="inventory_adjustment_not_found")
+  if delta.source_type != "adjust" or not delta.is_manual:
+    raise HTTPException(status_code=400, detail="inventory_adjustment_not_editable")
+
+  delta.is_deleted = True
+  delta.deleted_at = datetime.now(timezone.utc)
+  delta.updated_at = delta.deleted_at
+  session.add(delta)
+
+  start_date = business_date_from_utc(delta.effective_at)
+  end_date = business_date_from_utc(datetime.now(timezone.utc))
+  recompute_daily_summaries(session, delta.gas_type, start_date, end_date, allow_negative=True)
+  session.commit()

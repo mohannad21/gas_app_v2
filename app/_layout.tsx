@@ -1,8 +1,10 @@
-import { Stack } from "expo-router";
+import { useEffect } from "react";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InputAccessoryView, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Toast } from "@/components/Toast";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
 
 const queryClient = new QueryClient();
 const GLOBAL_ACCESSORY_ID = "globalDoneAccessory";
@@ -19,6 +21,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+          <InitializationGuard />
           <Stack screenOptions={{ headerShown: false }} />
           <Toast />
           {Platform.OS === "ios" && (
@@ -34,6 +37,26 @@ export default function RootLayout() {
       </QueryClientProvider>
     </SafeAreaProvider>
   );
+}
+
+function InitializationGuard() {
+  const router = useRouter();
+  const segments = useSegments();
+  const { data, isLoading } = useSystemSettings();
+
+  useEffect(() => {
+    if (isLoading || !data) return;
+    const inWelcome = segments[0] === "welcome";
+    if (!data.is_initialized && !inWelcome) {
+      router.replace("/welcome");
+      return;
+    }
+    if (data.is_initialized && inWelcome) {
+      router.replace("/(tabs)/reports");
+    }
+  }, [data, isLoading, router, segments]);
+
+  return null;
 }
 
 const styles = StyleSheet.create({

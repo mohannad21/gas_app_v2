@@ -1,6 +1,6 @@
-import { createCustomer, deleteCustomer, listCustomers, updateCustomer } from "@/lib/api";
+import { createCustomer, createCustomerAdjustment, deleteCustomer, listCustomers, updateCustomer } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { Customer, CustomerUpdateInput } from "@/types/domain";
+import { Customer, CustomerAdjustmentCreateInput, CustomerUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -25,8 +25,9 @@ export function useCustomers() {
   });
 }
 
-export function useCreateCustomer() {
+export function useCreateCustomer(options?: { showToast?: boolean }) {
   const queryClient = useQueryClient();
+  const showSuccessToast = options?.showToast ?? true;
   return useMutation({
     mutationFn: createCustomer,
     onError: (err) => {
@@ -36,10 +37,35 @@ export function useCreateCustomer() {
       console.error("[createCustomer ERROR]", axiosError.response?.status, message);
     },
     onSuccess: () => {
-      showToast("Customer created");
+      if (showSuccessToast) {
+        showToast("Customer created");
+      }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       queryClient.invalidateQueries({ queryKey: ["activities"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+  });
+}
+
+export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
+  const queryClient = useQueryClient();
+  const showSuccessToast = options?.showToast ?? true;
+  return useMutation({
+    mutationFn: (payload: CustomerAdjustmentCreateInput) => createCustomerAdjustment(payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to create adjustment: ${message}`);
+      console.error("[createCustomerAdjustment ERROR]", axiosError.response?.status, message);
+    },
+    onSuccess: () => {
+      if (showSuccessToast) {
+        showToast("Adjustment added");
+      }
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
     },
   });
 }
@@ -69,6 +95,12 @@ export function useDeleteCustomer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteCustomer,
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to delete customer: ${message}`);
+      console.error("[deleteCustomer ERROR]", axiosError.response?.status, message);
+    },
     onSuccess: (_, id) => {
       showToast("Customer removed");
       queryClient.setQueryData<Customer[]>(["customers"], (prev) =>

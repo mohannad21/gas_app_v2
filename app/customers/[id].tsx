@@ -126,6 +126,39 @@ export default function CustomerDetailsScreen() {
     });
   };
 
+  const handleDeleteCustomer = () => {
+    const hasOrders = orders.length > 0 || (customer.order_count ?? 0) > 0;
+    if (hasOrders) {
+      Alert.alert(
+        "Cannot delete customer",
+        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
+      );
+      return;
+    }
+    Alert.alert("Delete customer?", "This will remove the customer from the list.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteCustomer.mutateAsync(customer.id);
+          } catch (error: any) {
+            const detail = error?.response?.data?.detail;
+            if (error?.response?.status === 409 || detail === "customer_has_orders") {
+              Alert.alert(
+                "Cannot delete customer",
+                "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
+              );
+            } else {
+              Alert.alert("Delete failed", "Could not delete this customer. Please try again.");
+            }
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{customer.name}</Text>
@@ -219,7 +252,7 @@ export default function CustomerDetailsScreen() {
         </Pressable>
         <Pressable
           accessibilityLabel="Remove customer"
-          onPress={() => deleteCustomer.mutate(customer.id)}
+          onPress={handleDeleteCustomer}
           style={styles.iconBtn}
         >
           <Ionicons name="trash" size={18} color="#b00020" />

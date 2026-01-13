@@ -76,6 +76,36 @@ class SystemUpdate(SQLModel):
   security_check_date: Optional[datetime] = None
 
 
+class SystemSettingsOut(SQLModel):
+  id: str
+  is_initialized: bool
+  created_at: datetime
+  updated_at: Optional[datetime] = None
+
+
+class SystemInitialize(SQLModel):
+  sell_price_12: float
+  sell_price_48: float
+  buy_price_12: float = 0
+  buy_price_48: float = 0
+  full_12: int
+  empty_12: int
+  full_48: int
+  empty_48: int
+  cash_start: float
+  company_payable_money: float = 0
+  company_full_12kg: int = 0
+  company_full_48kg: int = 0
+  company_empty_12kg: int = 0
+  company_empty_48kg: int = 0
+  customer_owe_money: float = 0
+  customer_credit_money: float = 0
+  customer_owe_12kg: int = 0
+  customer_owe_48kg: int = 0
+  customer_credit_12kg: int = 0
+  customer_credit_48kg: int = 0
+
+
 class OrderCreate(SQLModel):
   customer_id: str
   system_id: str
@@ -102,6 +132,27 @@ class OrderUpdate(SQLModel):
   paid_amount: Optional[float] = None
   money_received: Optional[float] = None
   money_given: Optional[float] = None
+  note: Optional[str] = None
+
+
+class CollectionCreate(SQLModel):
+  customer_id: str
+  action_type: Literal["payment", "return"]
+  amount_money: Optional[float] = None
+  qty_12kg: Optional[int] = None
+  qty_48kg: Optional[int] = None
+  system_id: Optional[str] = None
+  effective_at: Optional[datetime] = None
+  note: Optional[str] = None
+
+
+class CollectionUpdate(SQLModel):
+  action_type: Optional[Literal["payment", "return"]] = None
+  amount_money: Optional[float] = None
+  qty_12kg: Optional[int] = None
+  qty_48kg: Optional[int] = None
+  system_id: Optional[str] = None
+  effective_at: Optional[datetime] = None
   note: Optional[str] = None
 
 
@@ -165,6 +216,8 @@ class InventoryRefillSummary(SQLModel):
   return12: int
   buy48: int
   return48: int
+  is_deleted: bool = False
+  deleted_at: Optional[datetime] = None
 
 
 class InventoryRefillUpdate(SQLModel):
@@ -199,16 +252,27 @@ class InventoryRefillDetails(SQLModel):
   before_empty_48: int
   after_full_48: int
   after_empty_48: int
+  is_deleted: bool = False
+  deleted_at: Optional[datetime] = None
 
 
 class InventoryAdjustCreate(SQLModel):
   date: Optional[str] = None
+  time: Optional[str] = None
   gas_type: Literal["12kg", "48kg"]
   delta_full: int = 0
   delta_empty: int = 0
   reason: str
   note: Optional[str] = None
   allow_negative: bool = False
+
+
+class InventoryAdjustUpdate(SQLModel):
+  delta_full: Optional[int] = None
+  delta_empty: Optional[int] = None
+  reason: Optional[str] = None
+  note: Optional[str] = None
+  allow_negative: Optional[bool] = None
 
 
 class InventoryDayGasSummary(SQLModel):
@@ -251,6 +315,8 @@ class InventoryDeltaRow(SQLModel):
   source_type: str
   source_id: Optional[str] = None
   reason: Optional[str] = None
+  is_manual: bool = False
+  is_deleted: bool = False
   delta_full: int
   delta_empty: int
   business_date: str
@@ -261,6 +327,17 @@ class InventoryDeltaListResponse(SQLModel):
   to_date: str
   gas_type: Optional[GasType] = None
   items: list[InventoryDeltaRow]
+
+
+class InventoryAdjustmentRow(SQLModel):
+  id: str
+  gas_type: GasType
+  delta_full: int
+  delta_empty: int
+  reason: Optional[str] = None
+  effective_at: datetime
+  created_at: datetime
+  is_deleted: bool = False
 
 
 class DailyReportOrder(SQLModel):
@@ -297,8 +374,23 @@ class CashInitCreate(SQLModel):
 
 class CashAdjustCreate(SQLModel):
   date: Optional[str] = None
+  time: Optional[str] = None
   delta_cash: float
   reason: Optional[str] = None
+
+
+class CashAdjustUpdate(SQLModel):
+  delta_cash: Optional[float] = None
+  reason: Optional[str] = None
+
+
+class CashAdjustmentRow(SQLModel):
+  id: str
+  delta_cash: float
+  reason: Optional[str] = None
+  effective_at: datetime
+  created_at: datetime
+  is_deleted: bool = False
 
 
 class BankDepositCreate(SQLModel):
@@ -322,12 +414,41 @@ class ReportInventoryState(SQLModel):
   empty48: Optional[int] = None
 
 
+class DailyAuditSummary(SQLModel):
+  cash_in: float
+  new_debt: float
+  inv_delta_12: int
+  inv_delta_48: int
+
+
 class DailyReportV2Card(SQLModel):
   date: str
   cash_start: float
   cash_end: float
   company_start: float = 0
   company_end: float = 0
+  company_12kg_start: int = 0
+  company_12kg_end: int = 0
+  company_48kg_start: int = 0
+  company_48kg_end: int = 0
+  company_give_start: float = 0
+  company_give_end: float = 0
+  company_receive_start: float = 0
+  company_receive_end: float = 0
+  company_12kg_give_start: int = 0
+  company_12kg_give_end: int = 0
+  company_12kg_receive_start: int = 0
+  company_12kg_receive_end: int = 0
+  company_48kg_give_start: int = 0
+  company_48kg_give_end: int = 0
+  company_48kg_receive_start: int = 0
+  company_48kg_receive_end: int = 0
+  customer_money_receivable: float = 0
+  customer_money_payable: float = 0
+  customer_12kg_receivable: int = 0
+  customer_12kg_payable: int = 0
+  customer_48kg_receivable: int = 0
+  customer_48kg_payable: int = 0
   inventory_start: ReportInventoryTotals
   inventory_end: ReportInventoryTotals
   problems: Optional[list[str]] = None
@@ -360,10 +481,18 @@ class DailyReportV2Event(SQLModel):
   order_received: Optional[int] = None
   unit_price_buy_12: Optional[float] = None
   unit_price_buy_48: Optional[float] = None
+  collection_action: Optional[str] = None
+  collection_amount: Optional[float] = None
+  collection_qty_12kg: Optional[int] = None
+  collection_qty_48kg: Optional[int] = None
   cash_before: float
   cash_after: float
   company_before: Optional[float] = None
   company_after: Optional[float] = None
+  company_12kg_before: Optional[int] = None
+  company_12kg_after: Optional[int] = None
+  company_48kg_before: Optional[int] = None
+  company_48kg_after: Optional[int] = None
   inventory_before: Optional[ReportInventoryState] = None
   inventory_after: Optional[ReportInventoryState] = None
 
@@ -374,8 +503,31 @@ class DailyReportV2Day(SQLModel):
   cash_end: float
   company_start: float = 0
   company_end: float = 0
+  company_12kg_start: int = 0
+  company_12kg_end: int = 0
+  company_48kg_start: int = 0
+  company_48kg_end: int = 0
+  company_give_start: float = 0
+  company_give_end: float = 0
+  company_receive_start: float = 0
+  company_receive_end: float = 0
+  company_12kg_give_start: int = 0
+  company_12kg_give_end: int = 0
+  company_12kg_receive_start: int = 0
+  company_12kg_receive_end: int = 0
+  company_48kg_give_start: int = 0
+  company_48kg_give_end: int = 0
+  company_48kg_receive_start: int = 0
+  company_48kg_receive_end: int = 0
+  customer_money_receivable: float = 0
+  customer_money_payable: float = 0
+  customer_12kg_receivable: int = 0
+  customer_12kg_payable: int = 0
+  customer_48kg_receivable: int = 0
+  customer_48kg_payable: int = 0
   inventory_start: ReportInventoryTotals
   inventory_end: ReportInventoryTotals
+  audit_summary: DailyAuditSummary
   events: list[DailyReportV2Event]
 
 

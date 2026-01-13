@@ -213,16 +213,31 @@ def inventory_totals_at(session: Session, gas_type: str, effective_at: datetime)
   has_any = session.exec(
     select(InventoryDelta.id)
     .where(InventoryDelta.gas_type == gas_type)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .limit(1)
   ).first()
   if not has_any and not previous:
     raise HTTPException(status_code=400, detail="inventory_not_initialized")
+
+  if previous is None:
+    deltas = session.exec(
+      select(InventoryDelta)
+      .where(InventoryDelta.gas_type == gas_type)
+      .where(InventoryDelta.is_deleted == False)  # noqa: E712
+      .where(InventoryDelta.effective_at <= effective_at_norm)
+      .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
+    ).all()
+    for delta in deltas:
+      full += delta.delta_full
+      empty += delta.delta_empty
+    return full, empty
 
   day_start = business_date_start_utc(business_date)
   next_day = business_date_start_utc(business_date + timedelta(days=1))
   deltas = session.exec(
     select(InventoryDelta)
     .where(InventoryDelta.gas_type == gas_type)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .where(InventoryDelta.effective_at >= day_start)
     .where(InventoryDelta.effective_at < next_day)
     .where(InventoryDelta.effective_at <= effective_at_norm)
@@ -244,6 +259,7 @@ def inventory_totals_before_source(
   has_any = session.exec(
     select(InventoryDelta.id)
     .where(InventoryDelta.gas_type == gas_type)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .limit(1)
   ).first()
   if not has_any:
@@ -254,6 +270,7 @@ def inventory_totals_before_source(
   deltas = session.exec(
     select(InventoryDelta)
     .where(InventoryDelta.gas_type == gas_type)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
   ).all()
   for delta in deltas:
@@ -297,6 +314,7 @@ def delete_inventory_deltas_for_source(
   source_types: Optional[list[str]] = None,
 ) -> dict[str, date]:
   stmt = select(InventoryDelta).where(InventoryDelta.source_id == source_id)
+  stmt = stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
   if source_types:
     stmt = stmt.where(InventoryDelta.source_type.in_(source_types))
   rows = session.exec(stmt).all()
@@ -307,6 +325,31 @@ def delete_inventory_deltas_for_source(
     if existing is None or day < existing:
       earliest[row.gas_type] = day
     session.delete(row)
+  return earliest
+
+
+def soft_delete_inventory_deltas_for_source(
+  session: Session,
+  *,
+  source_id: str,
+  source_types: Optional[list[str]] = None,
+) -> dict[str, date]:
+  stmt = select(InventoryDelta).where(InventoryDelta.source_id == source_id)
+  stmt = stmt.where(InventoryDelta.is_deleted == False)  # noqa: E712
+  if source_types:
+    stmt = stmt.where(InventoryDelta.source_type.in_(source_types))
+  rows = session.exec(stmt).all()
+  earliest: dict[str, date] = {}
+  deleted_at = datetime.now(timezone.utc)
+  for row in rows:
+    day = business_date_from_utc(row.effective_at)
+    existing = earliest.get(row.gas_type)
+    if existing is None or day < existing:
+      earliest[row.gas_type] = day
+    row.is_deleted = True
+    row.deleted_at = deleted_at
+    row.updated_at = deleted_at
+    session.add(row)
   return earliest
 
 
@@ -335,6 +378,7 @@ def recompute_daily_summaries(
   deltas = session.exec(
     select(InventoryDelta)
     .where(InventoryDelta.gas_type == gas_type)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
     .where(InventoryDelta.effective_at >= range_start)
     .where(InventoryDelta.effective_at < range_end)
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
@@ -406,6 +450,7 @@ def _insert_inventory_delta(
   source_id: Optional[str] = None,
   reason: Optional[str] = None,
   actor_id: Optional[str] = None,
+  is_manual: bool = False,
 ) -> InventoryDelta:
   effective_at_norm = _to_utc_naive(effective_at)
   now = datetime.now(timezone.utc)
@@ -417,6 +462,7 @@ def _insert_inventory_delta(
     source_type=source_type,
     source_id=source_id,
     reason=reason,
+    is_manual=is_manual,
     created_at=now,
     created_by=actor_id,
   )
@@ -436,12 +482,14 @@ def add_inventory_delta(
   reason: Optional[str] = None,
   actor_id: Optional[str] = None,
   allow_negative: bool = False,
+  is_manual: bool = False,
 ) -> InventoryDelta:
   effective_at_norm = _to_utc_naive(effective_at)
   if source_type != "init":
     has_any = session.exec(
       select(InventoryDelta.id)
       .where(InventoryDelta.gas_type == gas_type)
+      .where(InventoryDelta.is_deleted == False)  # noqa: E712
       .limit(1)
     ).first()
     if not has_any:
@@ -458,6 +506,7 @@ def add_inventory_delta(
     source_id=source_id,
     reason=reason,
     actor_id=actor_id,
+    is_manual=is_manual,
   )
 
   start_business_date = business_date_from_utc(effective_at_norm)

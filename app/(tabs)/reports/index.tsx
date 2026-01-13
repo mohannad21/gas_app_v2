@@ -13,13 +13,18 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 
 import { gasColor } from "@/constants/gas";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateExpense } from "@/hooks/useExpenses";
-import { useAdjustInventory, useDeleteRefill, useInventoryRefills } from "@/hooks/useInventory";
+import {
+  useAdjustInventory,
+  useDeleteRefill,
+  useInventoryRefills,
+} from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useDailyReports, useDailyReportsV2 } from "@/hooks/useReports";
 import { setAddShortcut } from "@/lib/addShortcut";
@@ -113,6 +118,8 @@ export default function ReportsScreen() {
   // V2
   const [v2Expanded, setV2Expanded] = useState<string[]>([]);
   const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
+  const [topSummaryOpen, setTopSummaryOpen] = useState(true);
+  const [v2SummaryOpen, setV2SummaryOpen] = useState<string | null>(null);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -131,35 +138,6 @@ export default function ReportsScreen() {
     const sign = delta > 0 ? "+" : "";
     return `${sign}${delta}`;
   };
-  const balanceSummary = useMemo(() => {
-    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
-    let debt = 0;
-    let credit = 0;
-    let cylDebt12 = 0;
-    let cylDebt48 = 0;
-    let cylCredit12 = 0;
-    let cylCredit48 = 0;
-    customers.forEach((customer) => {
-      const balance = Number(customer.money_balance || 0);
-      if (balance > 0) debt += balance;
-      if (balance < 0) credit += Math.abs(balance);
-      const cyl12 = Number(customer.cylinder_balance_12kg || 0);
-      const cyl48 = Number(customer.cylinder_balance_48kg || 0);
-      if (cyl12 > 0) cylDebt12 += cyl12;
-      if (cyl12 < 0) cylCredit12 += Math.abs(cyl12);
-      if (cyl48 > 0) cylDebt48 += cyl48;
-      if (cyl48 < 0) cylCredit48 += Math.abs(cyl48);
-    });
-    return {
-      debt,
-      credit,
-      cylDebt12,
-      cylDebt48,
-      cylCredit12,
-      cylCredit48,
-    };
-  }, [customersQuery.data]);
-
   const getLocalDateString = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -167,6 +145,7 @@ export default function ReportsScreen() {
     const day = String(now.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
+  const todayDate = getLocalDateString();
   const isToday = (date: string) => date === getLocalDateString();
 
   const formatSnapshot = useCallback((snap?: InventorySnapshot | null): NormalizedSnapshot | null => {
@@ -201,26 +180,93 @@ export default function ReportsScreen() {
     return [...rows].sort((a, b) => String(b?.date ?? "").localeCompare(String(a?.date ?? "")));
   }, [v2Query.data]);
 
-  const companySummary = useMemo(() => {
-    const latestWithPayable = (v2Rows ?? []).find((row) => Number(row?.company_end ?? 0) > 0);
-    const payable = Number(latestWithPayable?.company_end ?? 0);
-    let cylCredit12 = 0;
-    let cylCredit48 = 0;
+  const balanceSummary = useMemo(() => {
+    const latest = v2Rows[0];
+    const hasServerTotals =
+      latest &&
+      (typeof latest.customer_money_receivable === "number" ||
+        typeof latest.customer_money_payable === "number" ||
+        typeof latest.customer_12kg_receivable === "number" ||
+        typeof latest.customer_12kg_payable === "number" ||
+        typeof latest.customer_48kg_receivable === "number" ||
+        typeof latest.customer_48kg_payable === "number");
+
+    if (hasServerTotals) {
+      return {
+        debt: Number(latest?.customer_money_receivable ?? 0),
+        credit: Number(latest?.customer_money_payable ?? 0),
+        cylDebt12: Number(latest?.customer_12kg_receivable ?? 0),
+        cylDebt48: Number(latest?.customer_48kg_receivable ?? 0),
+        cylCredit12: Number(latest?.customer_12kg_payable ?? 0),
+        cylCredit48: Number(latest?.customer_48kg_payable ?? 0),
+      };
+    }
+
+    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+    let debt = 0;
+    let credit = 0;
     let cylDebt12 = 0;
     let cylDebt48 = 0;
-    const refills = Array.isArray(refillsQuery.data) ? refillsQuery.data : [];
-    refills.forEach((entry: any) => {
-      const buy12 = Number(entry?.buy12 ?? 0);
-      const ret12 = Number(entry?.return12 ?? entry?.ret12 ?? 0);
-      const buy48 = Number(entry?.buy48 ?? 0);
-      const ret48 = Number(entry?.return48 ?? entry?.ret48 ?? 0);
-      if (ret12 > buy12) cylCredit12 += ret12 - buy12;
-      if (ret48 > buy48) cylCredit48 += ret48 - buy48;
-      if (buy12 > ret12) cylDebt12 += buy12 - ret12;
-      if (buy48 > ret48) cylDebt48 += buy48 - ret48;
+    let cylCredit12 = 0;
+    let cylCredit48 = 0;
+    customers.forEach((customer) => {
+      const balance = Number(customer.money_balance || 0);
+      const moneyReceive = Number(customer.money_to_receive ?? 0);
+      const moneyGive = Number(customer.money_to_give ?? 0);
+      if (moneyReceive > 0 || moneyGive > 0) {
+        if (moneyReceive > 0) debt += moneyReceive;
+        if (moneyGive > 0) credit += moneyGive;
+      } else {
+        if (balance > 0) debt += balance;
+        if (balance < 0) credit += Math.abs(balance);
+      }
+      const cyl12 = Number(customer.cylinder_balance_12kg || 0);
+      const cyl48 = Number(customer.cylinder_balance_48kg || 0);
+      const cylReceive12 = Number(customer.cylinder_to_receive_12kg ?? 0);
+      const cylGive12 = Number(customer.cylinder_to_give_12kg ?? 0);
+      const cylReceive48 = Number(customer.cylinder_to_receive_48kg ?? 0);
+      const cylGive48 = Number(customer.cylinder_to_give_48kg ?? 0);
+      if (cylReceive12 > 0 || cylGive12 > 0 || cylReceive48 > 0 || cylGive48 > 0) {
+        if (cylReceive12 > 0) cylDebt12 += cylReceive12;
+        if (cylGive12 > 0) cylCredit12 += cylGive12;
+        if (cylReceive48 > 0) cylDebt48 += cylReceive48;
+        if (cylGive48 > 0) cylCredit48 += cylGive48;
+      } else {
+        if (cyl12 > 0) cylDebt12 += cyl12;
+        if (cyl12 < 0) cylCredit12 += Math.abs(cyl12);
+        if (cyl48 > 0) cylDebt48 += cyl48;
+        if (cyl48 < 0) cylCredit48 += Math.abs(cyl48);
+      }
     });
-    return { payable, cylCredit12, cylCredit48, cylDebt12, cylDebt48 };
-  }, [v2Rows, refillsQuery.data]);
+    return {
+      debt,
+      credit,
+      cylDebt12,
+      cylDebt48,
+      cylCredit12,
+      cylCredit48,
+    };
+  }, [customersQuery.data, v2Rows]);
+
+  const companySummary = useMemo(() => {
+    const latest = v2Rows[0];
+    const payable = Number(latest?.company_end ?? 0);
+    const moneyGive = Number(latest?.company_give_end ?? 0);
+    const moneyReceive = Number(latest?.company_receive_end ?? 0);
+    const cylGive12 = Number(latest?.company_12kg_give_end ?? 0);
+    const cylReceive12 = Number(latest?.company_12kg_receive_end ?? 0);
+    const cylGive48 = Number(latest?.company_48kg_give_end ?? 0);
+    const cylReceive48 = Number(latest?.company_48kg_receive_end ?? 0);
+    return {
+      payable,
+      moneyGive,
+      moneyReceive,
+      cylDebt12: cylGive12,
+      cylCredit12: cylReceive12,
+      cylDebt48: cylGive48,
+      cylCredit48: cylReceive48,
+    };
+  }, [v2Rows]);
 
   const resolveBuyingPrice = useCallback(
     (gas: "12kg" | "48kg", date: string, timeOfDay?: "morning" | "evening", effectiveAt?: string) => {
@@ -333,6 +379,11 @@ export default function ReportsScreen() {
       cancelled = true;
     };
   }, [v2Expanded, v2DayByDate, v2Query.data]);
+
+  useEffect(() => {
+    if (!v2Query.data) return;
+    setV2DayByDate({});
+  }, [v2Query.data]);
 
   const openInventoryShortcut = useCallback((date: string) => {
     setAddShortcut({ mode: "inventory", date });
@@ -500,86 +551,186 @@ export default function ReportsScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Daily Reports</Text>
-        <Text style={styles.meta}>Today: {getLocalDateString()}</Text>
+        
 
         {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
         {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
 
-        <View style={styles.topSummaryCard}>
-          <Text style={styles.topSummaryTitle}>Relationship Notes</Text>
-          <View style={styles.relationshipRow}>
-            <View style={styles.relationshipColumn}>
-              {balanceSummary.debt > 0 ? (
-                <Text style={styles.relationshipLine}>cstmr pay you {formatMoney(balanceSummary.debt)}₪</Text>
-              ) : null}
-              {balanceSummary.credit > 0 ? (
-                <Text style={styles.relationshipLine}>you pay cstmr {formatMoney(balanceSummary.credit)}₪</Text>
-              ) : null}
-              {balanceSummary.cylDebt12 > 0 ? (
-                <Text style={styles.relationshipLine}>cstmr give you {balanceSummary.cylDebt12}x 12kg</Text>
-              ) : null}
-              {balanceSummary.cylDebt48 > 0 ? (
-                <Text style={styles.relationshipLine}>cstmr give you {balanceSummary.cylDebt48}x 48kg</Text>
-              ) : null}
-              {balanceSummary.cylCredit12 > 0 ? (
-                <Text style={styles.relationshipLine}>you give cstmr {balanceSummary.cylCredit12}x 12kg</Text>
-              ) : null}
-              {balanceSummary.cylCredit48 > 0 ? (
-                <Text style={styles.relationshipLine}>you give cstmr {balanceSummary.cylCredit48}x 48kg</Text>
-              ) : null}
-            </View>
-            <View style={styles.relationshipColumn}>
-              {companySummary.payable > 0 ? (
-                <Text style={styles.relationshipLine}>you pay cmpy {formatMoney(companySummary.payable)}₪</Text>
-              ) : null}
-              {companySummary.cylCredit12 > 0 ? (
-                <Text style={styles.relationshipLine}>cmpy give you {companySummary.cylCredit12}x 12kg</Text>
-              ) : null}
-              {companySummary.cylCredit48 > 0 ? (
-                <Text style={styles.relationshipLine}>cmpy give you {companySummary.cylCredit48}x 48kg</Text>
-              ) : null}
-              {companySummary.cylDebt12 > 0 ? (
-                <Text style={styles.relationshipLine}>you give cmpy {companySummary.cylDebt12}x 12kg</Text>
-              ) : null}
-              {companySummary.cylDebt48 > 0 ? (
-                <Text style={styles.relationshipLine}>you give cmpy {companySummary.cylDebt48}x 48kg</Text>
-              ) : null}
-            </View>
-          </View>
-        </View>
+        <Pressable
+          onPress={() => setTopSummaryOpen((prev) => !prev)}
+          style={[styles.topSummaryCard, styles.topSummaryToggle]}
+        >
+          <Text style={[styles.topSummaryTitle, styles.topSummaryTitleTight]}>Dashboard</Text>
+          <Ionicons name={topSummaryOpen ? "chevron-up" : "chevron-down"} size={16} color="#0a7ea4" />
+        </Pressable>
 
-        <View style={styles.topSummaryCard}>
-          <Text style={styles.topSummaryTitle}>Current Inventory</Text>
-          {(() => {
-            const latest = v2Rows[0];
-            const inventory = latest?.inventory_end;
-            return (
-              <View style={styles.topSummaryRow}>
-                <SummaryPill
-                  label="12 F"
-                  value={formatCount(inventory?.full12 ?? 0)}
-                  accent={gasColor("12kg")}
-                />
-                <SummaryPill
-                  label="12 E"
-                  value={formatCount(inventory?.empty12 ?? 0)}
-                  accent={gasColor("12kg")}
-                />
-                <SummaryPill
-                  label="48 F"
-                  value={formatCount(inventory?.full48 ?? 0)}
-                  accent={gasColor("48kg")}
-                />
-                <SummaryPill
-                  label="48 E"
-                  value={formatCount(inventory?.empty48 ?? 0)}
-                  accent={gasColor("48kg")}
-                />
-                <SummaryPill label="Cash" value={formatMoney(latest?.cash_end ?? 0)} />
+        {topSummaryOpen ? (
+          <>
+            <View style={[styles.topSummaryCard, styles.balancesCard]}>
+              <Text style={styles.topSummaryTitle}>Balances</Text>
+              {(() => {
+                const hasCustomerBalance =
+                  balanceSummary.debt > 0 ||
+                  balanceSummary.credit > 0 ||
+                  balanceSummary.cylDebt12 > 0 ||
+                  balanceSummary.cylDebt48 > 0 ||
+                  balanceSummary.cylCredit12 > 0 ||
+                  balanceSummary.cylCredit48 > 0;
+                const hasCompanyBalance =
+                  companySummary.moneyGive > 0 ||
+                  companySummary.moneyReceive > 0 ||
+                  companySummary.cylCredit12 > 0 ||
+                  companySummary.cylCredit48 > 0 ||
+                  companySummary.cylDebt12 > 0 ||
+                  companySummary.cylDebt48 > 0;
+
+                return (
+                  <View style={styles.balanceSplitRow}>
+                    <View style={styles.balanceColumn}>
+                      <Text style={styles.balancePanelTitle}>Customers</Text>
+                      {!hasCustomerBalance ? (
+                        <Text style={styles.balanceEmpty}>No balances</Text>
+                      ) : (
+                        <>
+                          {balanceSummary.debt > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Customers pay you {formatMoney(balanceSummary.debt)} ?
+                            </Text>
+                          ) : null}
+                          {balanceSummary.credit > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You pay customers {formatMoney(balanceSummary.credit)} ?
+                            </Text>
+                          ) : null}
+                          {balanceSummary.cylDebt12 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Customers give you {balanceSummary.cylDebt12}x{' '}
+                              <Text style={{ color: gasColor('12kg') }}>12kg</Text>
+                            </Text>
+                          ) : null}
+                          {balanceSummary.cylDebt48 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Customers give you {balanceSummary.cylDebt48}x{' '}
+                              <Text style={{ color: gasColor('48kg') }}>48kg</Text>
+                            </Text>
+                          ) : null}
+                          {balanceSummary.cylCredit12 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You give customers {balanceSummary.cylCredit12}x{' '}
+                              <Text style={{ color: gasColor('12kg') }}>12kg</Text>
+                            </Text>
+                          ) : null}
+                          {balanceSummary.cylCredit48 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You give customers {balanceSummary.cylCredit48}x{' '}
+                              <Text style={{ color: gasColor('48kg') }}>48kg</Text>
+                            </Text>
+                          ) : null}
+                        </>
+                      )}
+                    </View>
+                    <View style={styles.balanceColumn}>
+                      <Text style={styles.balancePanelTitle}>Company</Text>
+                      {!hasCompanyBalance ? (
+                        <Text style={styles.balanceEmpty}>No balances</Text>
+                      ) : (
+                        <>
+                          {companySummary.moneyGive > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You pay company {formatMoney(companySummary.moneyGive)} ?
+                            </Text>
+                          ) : null}
+                          {companySummary.moneyReceive > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Company gives you {formatMoney(companySummary.moneyReceive)} ?
+                            </Text>
+                          ) : null}
+                          {companySummary.cylCredit12 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Company gives you {companySummary.cylCredit12}x{' '}
+                              <Text style={{ color: gasColor('12kg') }}>12kg</Text>
+                            </Text>
+                          ) : null}
+                          {companySummary.cylCredit48 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              Company gives you {companySummary.cylCredit48}x{' '}
+                              <Text style={{ color: gasColor('48kg') }}>48kg</Text>
+                            </Text>
+                          ) : null}
+                          {companySummary.cylDebt12 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You give company {companySummary.cylDebt12}x{' '}
+                              <Text style={{ color: gasColor('12kg') }}>12kg</Text>
+                            </Text>
+                          ) : null}
+                          {companySummary.cylDebt48 > 0 ? (
+                            <Text style={styles.relationshipLine}>
+                              You give company {companySummary.cylDebt48}x{' '}
+                              <Text style={{ color: gasColor('48kg') }}>48kg</Text>
+                            </Text>
+                          ) : null}
+                        </>
+                      )}
+                    </View>
+                  </View>
+                );
+              })()}
+            </View>
+
+<View style={styles.topSummaryCard}>
+              <Text style={styles.topSummaryTitle}>Current Inventory and Cash</Text>
+              {(() => {
+                const latest = v2Rows[0];
+                const inventory = latest?.inventory_end;
+                return (
+                  <View style={styles.topSummaryRow}>
+                    <SummaryPill
+                      label="12 F"
+                      value={formatCount(inventory?.full12 ?? 0)}
+                      accent={gasColor("12kg")}
+                    />
+                    <SummaryPill
+                      label="12 E"
+                      value={formatCount(inventory?.empty12 ?? 0)}
+                      accent={gasColor("12kg")}
+                    />
+                    <SummaryPill
+                      label="48 F"
+                      value={formatCount(inventory?.full48 ?? 0)}
+                      accent={gasColor("48kg")}
+                    />
+                    <SummaryPill
+                      label="48 E"
+                      value={formatCount(inventory?.empty48 ?? 0)}
+                      accent={gasColor("48kg")}
+                    />
+                    <SummaryPill label="Cash" value={formatMoney(latest?.cash_end ?? 0)} />
+                  </View>
+                );
+              })()}
+              <View style={styles.adjustButtonRow}>
+                <TouchableOpacity
+                  onPress={() => {
+                    router.push("/(tabs)/add?open=adjust-inventory");
+                  }}
+                  activeOpacity={0.85}
+                  style={styles.adjustButton}
+                >
+                  <Text style={styles.adjustButtonText}>Adjust Inventory</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    router.push("/(tabs)/add?open=adjust-cash");
+                  }}
+                  activeOpacity={0.85}
+                  style={styles.adjustButton}
+                >
+                  <Text style={styles.adjustButtonText}>Adjust Cash</Text>
+                </TouchableOpacity>
               </View>
-            );
-          })()}
-        </View>
+            </View>
+          </>
+        ) : null}
 
         <FlatList
           data={v2Rows}
@@ -632,20 +783,106 @@ export default function ReportsScreen() {
                     pressed && styles.cardPressed,
                   ]}
                 >
+                  <View>
+                    {(() => {
+                      const summary = dayInfo ? summarizeOrderEvents(events) : null;
+                      const dayScan = dayInfo ? scanDaySummary(events) : null;
+                      const alertLines = dayScan ? buildDaySummaryLines(dayScan, formatMoney, formatCount) : [];
+                      const cashEnd = dayInfo?.cash_end ?? item.cash_end ?? 0;
+                      return (
+                        <View style={styles.collapsedHeaderRow}>
+                          <View style={styles.collapsedLeft}>
+                            <Text style={styles.v2Date}>
+                              {weekday}, {item.date}
+                            </Text>
+
+                            <View style={styles.collapsedList}>
+                              <Text style={styles.collapsedListItem}>
+                                <Text style={[styles.collapsedListItem, { color: gasColor("12kg") }]}>
+                                  {formatCount(summary?.sold12 ?? 0)}x 12kg
+                                </Text>
+                                <Text style={styles.collapsedListItem}> | </Text>
+                                <Text style={[styles.collapsedListItem, { color: gasColor("48kg") }]}>
+                                  {formatCount(summary?.sold48 ?? 0)}x 48kg
+                                </Text>
+                              </Text>
+                              <Text style={styles.collapsedListItem}>
+                                total {formatMoney(summary?.total ?? 0)} | paid {formatMoney(summary?.paid ?? 0)}
+                              </Text>
+                              <Text style={styles.collapsedListItem}>
+                                cash end {formatMoney(cashEnd)}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.collapsedRight}>
+                            {alertLines.length > 0 ? (
+                              <View style={styles.missingInlineBox}>
+                                {alertLines.map((line, index) => (
+                                  <Text
+                                    key={`${line.label}-${index}`}
+                                    style={[styles.auditValue, { color: line.color }]}
+                                  >
+                                    {line.label}
+                                  </Text>
+                                ))}
+                              </View>
+                            ) : null}
+                            {dayInfo ? (
+                              (() => {
+                                const entries = summarizeEventTypes(events);
+                                const rows: typeof entries[] = [];
+                                for (let i = 0; i < entries.length; i += 3) {
+                                  rows.push(entries.slice(i, i + 3));
+                                }
+                                return (
+                                  <View>
+                                    {rows.map((row, rowIndex) => (
+                                      <View
+                                        key={`event-row-${rowIndex}`}
+                                        style={[styles.v2EventSummaryRow, styles.collapsedEventRow]}
+                                      >
+                                        {row.map((entry) => (
+                                          <View
+                                            key={entry.type}
+                                            style={[
+                                              styles.v2EventSummaryChip,
+                                              styles.collapsedEventChip,
+                                              { backgroundColor: entry.color },
+                                            ]}
+                                          >
+                                            <Text style={styles.v2EventSummaryText}>{entry.label}</Text>
+                                          </View>
+                                        ))}
+                                      </View>
+                                    ))}
+                                  </View>
+                                );
+                              })()
+                            ) : null}
+                          </View>
+                        </View>
+                      );
+                    })()}
+                  </View>
+
                   {isOpen ? (
                     <>
+                      <View style={styles.expandedDivider} />
+                      {dayInfo ? (
+                        <V2Timeline
+                          date={item.date}
+                          events={events}
+                          inventoryStart={dayInfo.inventory_start as any}
+                          formatMoney={formatMoney}
+                          formatCount={formatCount}
+                        />
+                      ) : (
+                        <Text style={styles.meta}>Loading events...</Text>
+                      )}
+
                       <View style={styles.rowBetween}>
-                        <Text style={styles.v2Date}>
-                          {weekday}, {item.date}
-                        </Text>
-
+                        <View />
                         <View style={styles.badgeRow}>
-                          {isToday(item.date) ? (
-                            <View style={styles.pendingBadge}>
-                              <Text style={styles.pendingBadgeText}>Pending</Text>
-                            </View>
-                          ) : null}
-
                           {recalculated ? (
                             <Pressable style={styles.recalcBadge} onPress={() => setSyncInfoDate(item.date)}>
                               <Text style={styles.recalcBadgeText}>Sync Update</Text>
@@ -654,195 +891,180 @@ export default function ReportsScreen() {
                         </View>
                       </View>
 
-                      <View style={styles.summaryGrid}>
-                        {(() => {
-                          const summary = dayInfo ? summarizeOrderEvents(events) : null;
-                          const refillSummary = dayInfo ? summarizeRefillEvents(events) : null;
-                          const sold12 = summary?.sold12 ?? 0;
-                          const unreturned12 = summary?.unreturned12 ?? 0;
-                          const sold48 = summary?.sold48 ?? 0;
-                          const unreturned48 = summary?.unreturned48 ?? 0;
-                          const total = summary?.total ?? 0;
-                          const paid = summary?.paid ?? 0;
-                          const unpaid = summary?.unpaid ?? 0;
-                          const refillTotal = refillSummary?.total ?? 0;
-                          const refillPaid = refillSummary?.paid ?? 0;
-                          const refillUnpaid = refillSummary?.unpaid ?? 0;
-                          return (
-                            <>
-                              <View style={styles.summaryRow}>
-                                <SummaryChip labelLines={["Sold", "12kg"]} value={formatCount(sold12)} compact />
-                                <SummaryChip
-                                  labelLines={["Missing", "12kg"]}
-                                  value={unreturned12 ? formatCount(unreturned12) : "OK"}
-                                  bad={unreturned12 > 0}
-                                  compact
-                                />
-                                <SummaryChip labelLines={["Sold", "48kg"]} value={formatCount(sold48)} compact />
-                                <SummaryChip
-                                  labelLines={["Missing", "48kg"]}
-                                  value={unreturned48 ? formatCount(unreturned48) : "OK"}
-                                  bad={unreturned48 > 0}
-                                  compact
-                                />
-                              </View>
-                              <View style={styles.summaryRow}>
-                                <SummaryChip label="Total" value={formatMoney(total)} compact />
-                                <SummaryChip label="Paid" value={formatMoney(paid)} compact />
-                                <SummaryChip
-                                  label="cstmr pay you"
-                                  value={unpaid ? formatMoney(unpaid) : "OK"}
-                                  bad={unpaid > 0}
-                                  compact
-                                />
-                              </View>
-                              <View style={styles.summaryRow}>
-                                <SummaryChip label="cmpy total" value={formatMoney(refillTotal)} compact />
-                                <SummaryChip label="you paid cmpy" value={formatMoney(refillPaid)} compact />
-                                <SummaryChip
-                                  label="you pay cmpy"
-                                  value={refillUnpaid ? formatMoney(refillUnpaid) : "OK"}
-                                  bad={refillUnpaid > 0}
-                                  compact
-                                />
-                              </View>
-                            </>
-                          );
-                        })()}
-                      </View>
-
-                      <View style={styles.v2CashBlock}>
-                        <Text style={styles.v2CashLabel}>Cash Total</Text>
-                        <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="lg" />
-                      </View>
-
-                      <View style={styles.v2InvRow}>
-                        <View style={styles.v2InvBlockHalf}>
-                          <Text style={[styles.v2InvLabel, { color: gasColor("12kg") }]}>12kg</Text>
-                          <InventoryTwinPanels
-                            fullStart={displayInventoryStart.full12}
-                            fullEnd={item.inventory_end.full12}
-                            emptyStart={displayInventoryStart.empty12}
-                            emptyEnd={item.inventory_end.empty12}
-                            formatCount={formatCount}
-                          />
-                        </View>
-
-                        <View style={styles.v2InvBlockHalf}>
-                          <Text style={[styles.v2InvLabel, { color: gasColor("48kg") }]}>48kg</Text>
-                          <InventoryTwinPanels
-                            fullStart={displayInventoryStart.full48}
-                            fullEnd={item.inventory_end.full48}
-                            emptyStart={displayInventoryStart.empty48}
-                            emptyEnd={item.inventory_end.empty48}
-                            formatCount={formatCount}
-                          />
-                        </View>
-                      </View>
-
-                      {dayInfo ? (
-                        <View style={styles.v2EventSummaryRow}>
-                          {summarizeEventTypes(events).map((entry) => (
-                            <View key={entry.type} style={[styles.v2EventSummaryChip, { backgroundColor: entry.color }]}>
-                              <Text style={styles.v2EventSummaryText}>{entry.label}</Text>
+                      {(() => {
+                        const summary = dayInfo ? summarizeOrderEvents(events) : null;
+                        const refillSummary = dayInfo ? summarizeRefillEvents(events) : null;
+                        const sold12 = summary?.sold12 ?? 0;
+                        const missing12 = summary?.missing12 ?? 0;
+                        const credit12 = summary?.credit12 ?? 0;
+                        const sold48 = summary?.sold48 ?? 0;
+                        const missing48 = summary?.missing48 ?? 0;
+                        const credit48 = summary?.credit48 ?? 0;
+                        const total = summary?.total ?? 0;
+                        const paid = summary?.paid ?? 0;
+                        const moneyMissing = summary?.missingCash ?? 0;
+                        const moneyCredit = summary?.creditCash ?? 0;
+                        const fmtCount = (value: number) => (value === 0 ? "-" : formatCount(value));
+                        const fmtMoney = (value: number) => (value === 0 ? "-" : formatMoney(value));
+                        const refillBuy12 = refillSummary?.buy12 ?? 0;
+                        const refillRet12 = refillSummary?.ret12 ?? 0;
+                        const refillBuy48 = refillSummary?.buy48 ?? 0;
+                        const refillRet48 = refillSummary?.ret48 ?? 0;
+                        const refillDelta12 = refillBuy12 - refillRet12;
+                        const refillDelta48 = refillBuy48 - refillRet48;
+                        const refillMissing12 = Math.max(refillDelta12, 0);
+                        const refillCredit12 = Math.max(-refillDelta12, 0);
+                        const refillMissing48 = Math.max(refillDelta48, 0);
+                        const refillCredit48 = Math.max(-refillDelta48, 0);
+                        const refillTotal = refillSummary?.total ?? 0;
+                        const refillPaid = refillSummary?.paid ?? 0;
+                        const refillUnpaid = refillSummary?.unpaid ?? 0;
+                        const refillMissingCash = Math.max(refillUnpaid, 0);
+                        const refillCreditCash = Math.max(-refillUnpaid, 0);
+                        const summaryOpen = v2SummaryOpen === item.date;
+                        return (
+                          <Pressable
+                            style={styles.summaryToggleCard}
+                            onPress={() => {
+                              setV2SummaryOpen((prev) => (prev === item.date ? null : item.date));
+                            }}
+                          >
+                            <View style={styles.summaryToggleHeader}>
+                              <Text style={styles.summaryToggleTitle}>Summary</Text>
+                              <Ionicons
+                                name={summaryOpen ? "chevron-up" : "chevron-down"}
+                                size={16}
+                                color="#0a7ea4"
+                              />
                             </View>
-                          ))}
-                        </View>
-                      ) : null}
+                            {summaryOpen ? (
+                              <View style={styles.summaryToggleBody}>
+                                <View style={styles.summaryTable}>
+                                  <View style={[styles.summaryRowLine, styles.summaryHeaderRow]}>
+                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>type</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>inst/buy/ttl</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>recv/rtrn/paid</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>msg</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>crdt</Text>
+                                  </View>
+                                  <View style={styles.summaryRowLine}>
+                                    <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("12kg") }]}>
+                                      12kg
+                                    </Text>
+                                    <Text style={styles.summaryCell}>{fmtCount(sold12)}</Text>
+                                    <Text style={styles.summaryCell}>{fmtCount(sold12 - missing12 + credit12)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(missing12)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(credit12)}</Text>
+                                  </View>
+                                  <View style={styles.summaryRowLine}>
+                                    <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("48kg") }]}>
+                                      48kg
+                                    </Text>
+                                    <Text style={styles.summaryCell}>{fmtCount(sold48)}</Text>
+                                    <Text style={styles.summaryCell}>{fmtCount(sold48 - missing48 + credit48)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(missing48)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(credit48)}</Text>
+                                  </View>
+                                  <View style={styles.summaryRowLine}>
+                                    <Text style={[styles.summaryCell, styles.summaryLabelCell]}>money</Text>
+                                    <Text style={styles.summaryCell}>{fmtMoney(total)}</Text>
+                                    <Text style={styles.summaryCell}>{fmtMoney(paid)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtMoney(moneyMissing)}</Text>
+                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtMoney(moneyCredit)}</Text>
+                                  </View>
+                                  {(refillBuy12 > 0 || refillRet12 > 0 || refillBuy48 > 0 || refillRet48 > 0) ? (
+                                    <>
+                                      <View style={styles.summaryRowLine}>
+                                        <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("12kg") }]}>
+                                          rfl 12kg
+                                        </Text>
+                                        <Text style={styles.summaryCell}>{fmtCount(refillBuy12)}</Text>
+                                        <Text style={styles.summaryCell}>{fmtCount(refillRet12)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(refillMissing12)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(refillCredit12)}</Text>
+                                      </View>
+                                      <View style={styles.summaryRowLine}>
+                                        <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("48kg") }]}>
+                                          rfl 48kg
+                                        </Text>
+                                        <Text style={styles.summaryCell}>{fmtCount(refillBuy48)}</Text>
+                                        <Text style={styles.summaryCell}>{fmtCount(refillRet48)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(refillMissing48)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(refillCredit48)}</Text>
+                                      </View>
+                                      <View style={styles.summaryRowLine}>
+                                        <Text style={[styles.summaryCell, styles.summaryLabelCell]}>rfl money</Text>
+                                        <Text style={styles.summaryCell}>{fmtMoney(refillTotal)}</Text>
+                                        <Text style={styles.summaryCell}>{fmtMoney(refillPaid)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtMoney(refillMissingCash)}</Text>
+                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtMoney(refillCreditCash)}</Text>
+                                      </View>
+                                    </>
+                                  ) : null}
+                                </View>
 
-                      {problemSummary ? <Text style={styles.problemLine}>{problemSummary}</Text> : null}
+                                <View style={styles.v2InvCashRow}>
+                                  <View style={styles.v2InvCompactBox}>
+                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg F</Text>
+                                    <View style={styles.v2DeltaBlock}>
+                                      <DeltaArrowRow
+                                        start={displayInventoryStart.full12}
+                                        end={item.inventory_end.full12}
+                                        format={formatCount}
+                                        size="sm"
+                                      />
+                                    </View>
+                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg E</Text>
+                                    <View style={styles.v2DeltaBlock}>
+                                      <DeltaArrowRow
+                                        start={displayInventoryStart.empty12}
+                                        end={item.inventory_end.empty12}
+                                        format={formatCount}
+                                        size="sm"
+                                      />
+                                    </View>
+                                  </View>
+                                  <View style={styles.v2InvCompactBox}>
+                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg F</Text>
+                                    <View style={styles.v2DeltaBlock}>
+                                      <DeltaArrowRow
+                                        start={displayInventoryStart.full48}
+                                        end={item.inventory_end.full48}
+                                        format={formatCount}
+                                        size="sm"
+                                      />
+                                    </View>
+                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg E</Text>
+                                    <View style={styles.v2DeltaBlock}>
+                                      <DeltaArrowRow
+                                        start={displayInventoryStart.empty48}
+                                        end={item.inventory_end.empty48}
+                                        format={formatCount}
+                                        size="sm"
+                                      />
+                                    </View>
+                                  </View>
+                                  <View style={styles.v2InvCompactBox}>
+                                    <Text style={styles.v2InvCompactLabel}>Cash</Text>
+                                    <View style={styles.v2DeltaBlock}>
+                                      <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
+                                    </View>
+                                  </View>
+                                </View>
+                              </View>
+                            ) : null}
+                          </Pressable>
+                        );
+                      })()}
 
                       <View style={styles.v2DetailsRow}>
                         <Text style={styles.v2DetailsText}>Hide details</Text>
                         <Ionicons name="chevron-up" size={16} color="#0a7ea4" />
                       </View>
                     </>
-                  ) : (
-                    <View>
-                      {(() => {
-                        const summary = dayInfo ? summarizeOrderEvents(events) : null;
-                        const unreturned12 = summary?.unreturned12 ?? 0;
-                        const unreturned48 = summary?.unreturned48 ?? 0;
-                        const unpaid = summary?.unpaid ?? 0;
-                        return (
-                          <View style={styles.collapsedHeaderRow}>
-                            <View>
-                              <Text style={styles.v2Date}>
-                                {weekday}, {item.date}
-                              </Text>
-                              <Text style={styles.collapsedSubtext}>Daily Summary</Text>
-                              <View style={styles.collapsedList}>
-                                <Text style={styles.collapsedListItem}>
-                                  <Text style={[styles.collapsedListItem, { color: gasColor("12kg") }]}>
-                                    {formatCount(summary?.sold12 ?? 0)}x 12kg
-                                  </Text>
-                                  <Text style={styles.collapsedListItem}> | </Text>
-                                  <Text style={[styles.collapsedListItem, { color: gasColor("48kg") }]}>
-                                    {formatCount(summary?.sold48 ?? 0)}x 48kg
-                                  </Text>
-                                </Text>
-                                <Text style={styles.collapsedListItem}>
-                                  Cash Total: {formatMoney(summary?.paid ?? 0)} NIS
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.collapsedRight}>
-                              {(unpaid > 0 || unreturned12 > 0 || unreturned48 > 0) ? (
-                                <View style={styles.missingInlineBox}>
-                                  {unpaid > 0 ? (
-                                  <Text style={styles.missingMiniValue}>
-                                    Missing cash: {formatMoney(unpaid)} NIS
-                                  </Text>
-                                ) : null}
-                                {unreturned12 > 0 ? (
-                                  <Text style={[styles.missingMiniValue, { color: gasColor("12kg") }]}>
-                                    Missing 12kg: {formatCount(unreturned12)}
-                                  </Text>
-                                ) : null}
-                                {unreturned48 > 0 ? (
-                                  <Text style={[styles.missingMiniValue, { color: gasColor("48kg") }]}>
-                                    Missing 48kg: {formatCount(unreturned48)}
-                                  </Text>
-                                ) : null}
-                                </View>
-                              ) : null}
-                              {dayInfo ? (
-                                <View style={[styles.v2EventSummaryRow, styles.collapsedEventRow]}>
-                                  {summarizeEventTypes(events).map((entry) => (
-                                    <View
-                                      key={entry.type}
-                                      style={[styles.v2EventSummaryChip, styles.collapsedEventChip, { backgroundColor: entry.color }]}
-                                    >
-                                      <Text style={styles.v2EventSummaryText}>{entry.label}</Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                        );
-                      })()}
-                    </View>
-                  )}
+                  ) : null}
                 </Pressable>
 
-                {isOpen && (
-                  <View style={[styles.expanded, styles.v2Timeline, styles.expandedPanel]}>
-                    <Text style={styles.expandedTitle}>Timeline</Text>
-                    {recalculated ? <Text style={styles.meta}>This day was recalculated.</Text> : null}
-                    {!dayInfo && <Text style={styles.meta}>Loading timeline...</Text>}
-                    {dayInfo && events.length === 0 && <Text style={styles.meta}>No events.</Text>}
-                    {dayInfo ? (
-                      <V2Timeline
-                        date={item.date}
-                        events={events}
-                        inventoryStart={dayInfo.inventory_start as any}
-                        formatMoney={formatMoney}
-                        formatCount={formatCount}
-                      />
-                    ) : null}
-                  </View>
-                )}
               </View>
             );
           }}
@@ -1017,7 +1239,7 @@ export default function ReportsScreen() {
                   </View>
 
                   <Text style={[styles.statusText, unpaid > 0 ? styles.unpaid : styles.paid]}>
-                    Missing cash: {formatMoney(unpaid)} NIS
+                    Missing cash: {formatMoney(unpaid)} ?
                   </Text>
 
                   <Text style={[styles.statusText, missingTotal > 0 ? styles.unpaid : styles.paid]}>
@@ -1303,6 +1525,7 @@ export default function ReportsScreen() {
           setRefillEditEntry(null);
         }}
       />
+
     </View>
   );
 }
@@ -1328,12 +1551,14 @@ function DeltaArrowRow({
   return (
     <View style={styles.deltaRow}>
       <Text style={valueStyle}>{format(start)}</Text>
-      <Text style={styles.deltaArrow}>→</Text>
-      <Text style={valueStyle}>{format(end)}</Text>
-      <Text style={styles.deltaMeta}>
-        ({sign}
-        {delta})
-      </Text>
+      <Text style={styles.deltaArrow}>-></Text>
+      <View style={styles.deltaEndColumn}>
+        <Text style={valueStyle}>{format(end)}</Text>
+        <Text style={styles.deltaMeta}>
+          ({sign}
+          {delta})
+        </Text>
+      </View>
     </View>
   );
 }
@@ -1373,14 +1598,14 @@ function InventoryTwinPanels({
       <View style={styles.invTwinRow}>
         <Text style={styles.invTwinKey}>Full</Text>
         <Text style={styles.invTwinVal}>
-          {formatCount(fullStart)} → {formatCount(fullEnd)}
+          {formatCount(fullStart)} -> {formatCount(fullEnd)}
         </Text>
         <Text style={styles.invTwinDelta}>({formatSigned(fullEnd - fullStart)})</Text>
       </View>
       <View style={styles.invTwinRow}>
         <Text style={styles.invTwinKey}>Empty</Text>
         <Text style={styles.invTwinVal}>
-          {formatCount(emptyStart)} → {formatCount(emptyEnd)}
+          {formatCount(emptyStart)} -> {formatCount(emptyEnd)}
         </Text>
         <Text style={styles.invTwinDelta}>({formatSigned(emptyEnd - emptyStart)})</Text>
       </View>
@@ -1443,10 +1668,10 @@ function SalesTable(props: any) {
   return (
     <View style={[styles.table, variant === "expanded" && styles.tableExpanded]}>
       <Text style={styles.tableRow}>
-        12kg: {installed12} → {received12} | €{formatMoney(totals12?.paid ?? 0)}/{formatMoney(totals12?.total ?? 0)}
+        12kg: {installed12} -> {received12} | ? {formatMoney(totals12?.paid ?? 0)}/{formatMoney(totals12?.total ?? 0)}
       </Text>
       <Text style={styles.tableRow}>
-        48kg: {installed48} → {received48} | €{formatMoney(totals48?.paid ?? 0)}/{formatMoney(totals48?.total ?? 0)}
+        48kg: {installed48} -> {received48} | ? {formatMoney(totals48?.paid ?? 0)}/{formatMoney(totals48?.total ?? 0)}
       </Text>
       {showTotalsRow ? <Text style={styles.tableMeta}>Totals row enabled</Text> : null}
     </View>
@@ -1460,7 +1685,8 @@ function OrdersForDay({ date, orders }: { date: string; orders: any[] }) {
       {orders?.length ? (
         orders.map((o, idx) => (
           <Text key={`${date}-order-${idx}`} style={styles.subCardRow}>
-            {(o as any)?.customer_name ?? (o as any)?.customer ?? "Order"} — €{(o as any)?.paid_amount ?? (o as any)?.paid ?? 0}
+            {(o as any)?.customer_name ?? (o as any)?.customer ?? "Order"} - paid{" "}
+            {(o as any)?.paid_amount ?? (o as any)?.paid ?? 0}
           </Text>
         ))
       ) : (
@@ -1499,10 +1725,10 @@ function RefillTable({
         </View>
       </View>
       <Text style={styles.subCardRow}>
-        12kg buy/ret: {entry.buy12}/{entry.ret12} (buy €{buy12Price})
+        12kg buy/ret: {entry.buy12}/{entry.ret12} (buy ? {buy12Price})
       </Text>
       <Text style={styles.subCardRow}>
-        48kg buy/ret: {entry.buy48}/{entry.ret48} (buy €{buy48Price})
+        48kg buy/ret: {entry.buy48}/{entry.ret48} (buy ? {buy48Price})
       </Text>
       {entry.effective_at ? <Text style={styles.meta}>effective: {entry.effective_at}</Text> : null}
     </View>
@@ -1803,10 +2029,10 @@ function RefillEditModal({
           {entry ? (
             <>
               <Text style={styles.subCardRow}>
-                12kg buy/ret: {entry.buy12}/{entry.ret12} (buy €{prices.buy12})
+                12kg buy/ret: {entry.buy12}/{entry.ret12} (buy ? {prices.buy12})
               </Text>
               <Text style={styles.subCardRow}>
-                48kg buy/ret: {entry.buy48}/{entry.ret48} (buy €{prices.buy48})
+                48kg buy/ret: {entry.buy48}/{entry.ret48} (buy ? {prices.buy48})
               </Text>
               <View style={{ height: 10 }} />
               <Text style={styles.modalLabel}>Before</Text>
@@ -1850,6 +2076,21 @@ function V2Timeline({
   formatMoney: (v: number) => string;
   formatCount: (v: number) => string;
 }) {
+  const [openEvents, setOpenEvents] = useState<string[]>([]);
+
+  const getEventColor = (eventType: string) => {
+    const palette: Record<string, string> = {
+      order: "#0a7ea4",
+      refill: "#f97316",
+      expense: "#16a34a",
+      init: "#8b5cf6",
+      adjust: "#64748b",
+      collection_money: "#22c55e",
+      collection_empty: "#14b8a6",
+    };
+    return palette[eventType] ?? "#0a7ea4";
+  };
+
   const normalizedEvents = useMemo(() => {
     const merged: any[] = [];
     const initMap = new Map<string, any>();
@@ -1983,7 +2224,33 @@ function V2Timeline({
       {sortedEvents.map((ev, idx) => {
         const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
         const eventTitle = formatEventType(eventType);
-        const eventTime = ev?.effective_at ?? ev?.created_at ?? "";
+        const eventKey = `${date}-ev-${idx}-${ev?.source_id ?? ev?.id ?? ""}`;
+        const isOpenEvent = openEvents.includes(eventKey);
+        const formatEventDateTime = (value: string) => {
+          if (!value) return "";
+          const dt = new Date(value);
+          if (Number.isNaN(dt.getTime())) return value;
+          const year = dt.getFullYear();
+          const month = String(dt.getMonth() + 1).padStart(2, "0");
+          const day = String(dt.getDate()).padStart(2, "0");
+          const hours = String(dt.getHours()).padStart(2, "0");
+          const minutes = String(dt.getMinutes()).padStart(2, "0");
+          return `${year}-${month}-${day} ${hours}:${minutes}`;
+        };
+        const eventTimeRaw =
+          eventType === "order"
+            ? ev?.delivered_at ?? ev?.effective_at ?? ev?.created_at ?? ""
+            : eventType === "refill"
+              ? isOpenEvent
+                ? ev?.created_at ?? ev?.effective_at ?? ""
+                : ev?.effective_at ?? ev?.created_at ?? ""
+              : eventType === "expense"
+                ? ev?.created_at ?? ev?.effective_at ?? ""
+              : ev?.effective_at ?? ev?.created_at ?? "";
+        const eventTime = formatEventDateTime(eventTimeRaw);
+        const createdAtTime = formatEventDateTime(ev?.created_at ?? "");
+        const hasDescription =
+          typeof ev?.customer_description === "string" && ev.customer_description.trim().length > 0;
         const gasTypeLabel = ev?.gas_type ?? "";
         const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
         const orderPaid =
@@ -1992,6 +2259,15 @@ function V2Timeline({
             : typeof ev?.cash_before === "number" && typeof ev?.cash_after === "number"
               ? ev.cash_after - ev.cash_before
               : 0;
+        const collectionAmount = Number(
+          ev?.collection_amount ??
+            ev?.amount_money ??
+            ev?.amount ??
+            ev?.order_paid ??
+            0
+        );
+        const collectionQty12 = Number(ev?.collection_qty_12kg ?? ev?.qty_12kg ?? 0);
+        const collectionQty48 = Number(ev?.collection_qty_48kg ?? ev?.qty_48kg ?? 0);
         const orderUnpaid = Math.max(orderTotal - orderPaid, 0);
         const orderCredit = Math.max(orderPaid - orderTotal, 0);
         const orderMissingCyl =
@@ -2002,6 +2278,18 @@ function V2Timeline({
           typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
             ? Math.max(ev.order_received - ev.order_installed, 0)
             : 0;
+        const installed =
+          typeof ev?.order_installed === "number"
+            ? ev.order_installed
+            : typeof ev?.cylinders_installed === "number"
+              ? ev.cylinders_installed
+              : 0;
+        const received =
+          typeof ev?.order_received === "number"
+            ? ev.order_received
+            : typeof ev?.cylinders_received === "number"
+              ? ev.cylinders_received
+              : 0;
         const refillTotal = typeof ev?.total_cost === "number" ? ev.total_cost : 0;
         const refillPaid = typeof ev?.paid_now === "number" ? ev.paid_now : 0;
         const refillUnpaid = Math.max(refillTotal - refillPaid, 0);
@@ -2027,9 +2315,34 @@ function V2Timeline({
           invAfter.full48 != null ||
           invAfter.empty48 != null;
         const orderMissing = orderMissingCyl > 0 ? orderMissingCyl : null;
-        const cashDelta = typeof ev?.cash_before === "number" && typeof ev?.cash_after === "number"
-          ? ev.cash_after - ev.cash_before
-          : null;
+        const cashBeforeNum = Number(ev?.cash_before);
+        const cashAfterNum = Number(ev?.cash_after);
+        const cashDelta =
+          Number.isFinite(cashBeforeNum) && Number.isFinite(cashAfterNum)
+            ? cashAfterNum - cashBeforeNum
+            : null;
+        const invEmpty12Before =
+          typeof invBefore?.empty12 === "number"
+            ? invBefore.empty12
+            : Number(ev?.inv12_empty_before ?? 0);
+        const invEmpty12After =
+          typeof invAfter?.empty12 === "number"
+            ? invAfter.empty12
+            : Number(ev?.inv12_empty_after ?? 0);
+        const invEmpty48Before =
+          typeof invBefore?.empty48 === "number"
+            ? invBefore.empty48
+            : Number(ev?.inv48_empty_before ?? 0);
+        const invEmpty48After =
+          typeof invAfter?.empty48 === "number"
+            ? invAfter.empty48
+            : Number(ev?.inv48_empty_after ?? 0);
+        const hasInvEmpty12 = Number.isFinite(invEmpty12Before) && Number.isFinite(invEmpty12After);
+        const hasInvEmpty48 = Number.isFinite(invEmpty48Before) && Number.isFinite(invEmpty48After);
+        const collectionEmpty12Delta = hasInvEmpty12 ? invEmpty12After - invEmpty12Before : 0;
+        const collectionEmpty48Delta = hasInvEmpty48 ? invEmpty48After - invEmpty48Before : 0;
+        const collectionEmpty12Display = hasInvEmpty12 ? collectionEmpty12Delta : collectionQty12;
+        const collectionEmpty48Display = hasInvEmpty48 ? collectionEmpty48Delta : collectionQty48;
         const orderPaidForCash = typeof orderPaid === "number" ? orderPaid : cashDelta;
         const orderUnpaidForCash =
           typeof orderTotal === "number" && typeof orderPaidForCash === "number"
@@ -2056,204 +2369,265 @@ function V2Timeline({
             ? Math.max((ev?.buy48 ?? 0) - (ev?.return48 ?? 0), 0)
             : null;
 
+        const isOrderLike =
+          eventType === "order" || eventType === "collection_money" || eventType === "collection_empty";
+
         return (
-          <View key={`${date}-ev-${idx}`} style={styles.eventCard}>
+          <Pressable
+            key={`${date}-ev-${idx}`}
+            onPress={() => {
+              setOpenEvents((prev) =>
+                prev.includes(eventKey) ? prev.filter((key) => key !== eventKey) : [...prev, eventKey]
+              );
+            }}
+            style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}
+          >
             <View style={styles.eventHeader}>
-              <View style={styles.eventHeaderTitleRow}>
-                <Text style={styles.eventTypeText}>{eventTitle}</Text>
-                {ev?.label && String(ev.label).toLowerCase() !== eventTitle.toLowerCase() ? (
-                  <Text style={styles.eventLabelText}>{ev.label}</Text>
-                ) : null}
-              </View>
-              <View style={styles.eventHeaderRight}>
-                <View style={styles.eventBadgeRow}>
-                  {eventType === "order" && orderUnpaid > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeOrder]}>
-                      <Text style={styles.eventBadgeText}>cstmr pay you {formatMoney(orderUnpaid)}₪</Text>
+              {isOrderLike ? (
+                <>
+                  <View style={styles.eventHeaderLeft}>
+                    <Text style={[styles.eventCustomerName, styles.eventCustomerNameTight]}>
+                      {ev?.customer_name ?? "Unknown"}
+                    </Text>
+                    {hasDescription ? (
+                      <Text style={[styles.eventMetaSmall, styles.eventMetaSmallTight]}>
+                        {ev.customer_description}
+                      </Text>
+                    ) : null}
+                    {eventType === "order" ? (
+                      <Text style={[styles.eventMetaSmall, !hasDescription && styles.eventMetaSmallTight]}>
+                        {(ev?.system_type ?? ev?.system_name ?? "Unknown")} | {getOrderQtyLabel(ev) ?? ev?.gas_type ?? "N/A"}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.eventHeaderRightStack}>
+                    <View style={styles.eventTimePill}>
+                      <Text style={styles.eventTimeText}>{eventTime}</Text>
                     </View>
-                  ) : null}
-                  {eventType === "order" && orderCredit > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeOrder]}>
-                      <Text style={styles.eventBadgeText}>you pay cstmr {formatMoney(orderCredit)}₪</Text>
+                    <View style={[styles.eventTypePill, { backgroundColor: getEventColor(eventType) }]}>
+                      <Text style={styles.eventTypePillText}>{eventTitle}</Text>
                     </View>
-                  ) : null}
-                  {eventType === "order" && orderMissingCyl > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeOrder]}>
-                      <Text style={styles.eventBadgeText}>cstmr give you {orderMissingCyl}x {gasTypeLabel}</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "order" && orderCylCredit > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeOrder]}>
-                      <Text style={styles.eventBadgeText}>you give cstmr {orderCylCredit}x {gasTypeLabel}</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "refill" && refillUnpaid > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeRefill]}>
-                      <Text style={styles.eventBadgeText}>you pay cmpy {formatMoney(refillUnpaid)}₪</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "refill" && refillCredit12 > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeRefill]}>
-                      <Text style={styles.eventBadgeText}>cmpy give you {refillCredit12}x 12kg</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "refill" && refillCredit48 > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeRefill]}>
-                      <Text style={styles.eventBadgeText}>cmpy give you {refillCredit48}x 48kg</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "refill" && refillMissing12 > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeRefill]}>
-                      <Text style={styles.eventBadgeText}>you give cmpy {refillMissing12}x 12kg</Text>
-                    </View>
-                  ) : null}
-                  {eventType === "refill" && refillMissing48 > 0 ? (
-                    <View style={[styles.eventBadge, styles.eventBadgeRefill]}>
-                      <Text style={styles.eventBadgeText}>you give cmpy {refillMissing48}x 48kg</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.eventTimeText}>{eventTime}</Text>
-              </View>
-            </View>
-
-            {eventType === "order" ? (
-              <View style={styles.eventMetaBlock}>
-                <Text style={styles.eventMetaText}>
-                  cstmr: {ev?.customer_name ?? "Unknown"}
-                  {ev?.customer_description ? ` - ${ev.customer_description}` : " - No description"}
-                </Text>
-                <Text style={styles.eventMetaText}>
-                  System: {ev?.system_name ?? "Unknown"}
-                  {ev?.system_type ? ` (${ev.system_type})` : ""}
-                </Text>
-                <Text style={styles.eventMetaText}>Order: {getOrderQtyLabel(ev) ?? ev?.gas_type ?? "N/A"}</Text>
-              </View>
-            ) : null}
-
-            {eventType === "refill" ? (
-              <View style={styles.eventMetaBlock}>
-                <Text style={styles.eventMetaText}>
-                  12kg buy/return: {formatCount(ev?.buy12 ?? 0)} / {formatCount(ev?.return12 ?? 0)}
-                </Text>
-                <Text style={styles.eventMetaText}>
-                  48kg buy/return: {formatCount(ev?.buy48 ?? 0)} / {formatCount(ev?.return48 ?? 0)}
-                </Text>
-              </View>
-            ) : null}
-
-            {ev?.reason ? (
-              <View style={styles.eventMetaBlock}>
-                <Text style={styles.eventMetaText}>Note: {ev.reason}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.eventSection}>
-              <View style={styles.eventSectionHeader}>
-                <View style={styles.eventSectionDot} />
-                <Text style={styles.eventSectionTitle}>Money</Text>
-              </View>
-              {eventType === "order" ? (
-                <View style={styles.orderMoneyRow}>
-                  <ValueBox label="Total" value={formatMoney(orderTotal ?? 0)} compact />
-                  <DeltaBox
-                    label="Cash"
-                    before={ev?.cash_before ?? 0}
-                    after={ev?.cash_after ?? 0}
-                    format={formatMoney}
-                    smallDelta
-                    compact
-                    badgeTone={cashBadgeTone}
-                  />
-                  <ValueBox
-                    label="Missing"
-                    value={orderUnpaidForCash && orderUnpaidForCash > 0 ? formatMoney(orderUnpaidForCash) : "OK"}
-                    valueStyle={
-                      orderUnpaidForCash && orderUnpaidForCash > 0
-                        ? styles.valueBoxValueBad
-                        : styles.valueBoxValueOk
-                    }
-                    compact
-                  />
-                </View>
-              ) : eventType === "refill" ? (
-                <View style={styles.orderMoneyRow}>
-                  <ValueBox label="Total" value={formatMoney(ev?.total_cost ?? 0)} compact />
-                  <DeltaBox
-                    label="Cash"
-                    before={ev?.cash_before ?? 0}
-                    after={ev?.cash_after ?? 0}
-                    format={formatMoney}
-                    smallDelta
-                    compact
-                    badgeTone={refillCashBadgeTone}
-                  />
-                  <ValueBox
-                    label="Missing"
-                    value={
-                      ev?.total_cost != null && ev?.paid_now != null && ev.total_cost - ev.paid_now > 0
-                        ? formatMoney(ev.total_cost - ev.paid_now)
-                        : "OK"
-                    }
-                    valueStyle={
-                      ev?.total_cost != null && ev?.paid_now != null && ev.total_cost - ev.paid_now > 0
-                        ? styles.valueBoxValueBad
-                        : styles.valueBoxValueOk
-                    }
-                    compact
-                  />
-                </View>
+                  </View>
+                </>
               ) : (
-                <View style={styles.deltaGrid}>
-                  <DeltaBox
-                    label="Cash"
-                    before={ev?.cash_before ?? 0}
-                    after={ev?.cash_after ?? 0}
-                    format={formatMoney}
-                    smallDelta
-                  />
-                  {ev?.company_before != null && ev?.company_after != null ? (
-                    <DeltaBox
-                      label="cmpy"
-                      before={ev.company_before ?? 0}
-                      after={ev.company_after ?? 0}
-                      format={formatMoney}
-                      smallDelta
-                    />
-                  ) : null}
-                </View>
+                <>
+                  <View style={[styles.eventTypePill, { backgroundColor: getEventColor(eventType) }]}>
+                    <Text style={styles.eventTypePillText}>{eventTitle}</Text>
+                  </View>
+                  <View style={styles.eventHeaderRight}>
+                    <View style={styles.eventTimePill}>
+                      <Text style={styles.eventTimeText}>{eventTime}</Text>
+                    </View>
+                  </View>
+                </>
               )}
             </View>
 
-            {showInv12
-              ? renderInventorySection(
-                  "Inventory 12kg",
-                  gasColor("12kg"),
-                  { full: invBefore.full12, empty: invBefore.empty12 },
-                  { full: invAfter.full12, empty: invAfter.empty12 },
-                  eventType === "order" && ev?.gas_type === "12kg"
-                    ? orderMissing
-                    : eventType === "refill"
-                      ? refillMissing12
-                      : null,
-                  eventType === "init"
-                )
-              : null}
-            {showInv48
-              ? renderInventorySection(
-                  "Inventory 48kg",
-                  gasColor("48kg"),
-                  { full: invBefore.full48, empty: invBefore.empty48 },
-                  { full: invAfter.full48, empty: invAfter.empty48 },
-                  eventType === "order" && ev?.gas_type === "48kg"
-                    ? orderMissing
-                    : eventType === "refill"
-                      ? refillMissing48
-                      : null,
-                  eventType === "init"
-                )
-              : null}
-          </View>
+            {eventType === "refill" ? (
+              <View style={styles.eventMetaBlock}>
+                <Text style={styles.eventCustomerName}>Refill</Text>
+              </View>
+            ) : null}
+
+            {ev?.reason && (eventType !== "order" || String(ev.reason).toLowerCase() !== "order") ? (
+              <View style={styles.eventMetaBlock}>
+                <Text style={styles.eventMetaSmall}>{ev.reason}</Text>
+              </View>
+            ) : null}
+
+            {eventType === "order" ? (
+              <>
+                <View style={styles.eventSummaryRow}>
+                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                    installed {formatCount(installed)} | received {formatCount(received)}
+                  </Text>
+                  {(orderMissingCyl > 0 || orderCylCredit > 0) ? (
+                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
+                      {orderMissingCyl > 0 ? `missing ${formatCount(orderMissingCyl)}` : null}
+                      {orderMissingCyl > 0 && orderCylCredit > 0 ? " | " : null}
+                      {orderCylCredit > 0 ? `credit ${formatCount(orderCylCredit)}` : null}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={[styles.eventSummaryRow, styles.eventSummaryRowTight]}>
+                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                    total {formatMoney(orderTotal)} | paid {formatMoney(orderPaidForCash ?? 0)}
+                  </Text>
+                  {(orderUnpaid > 0 || orderCredit > 0) ? (
+                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
+                      {orderUnpaid > 0 ? `unpaid ${formatMoney(orderUnpaid)}` : null}
+                      {orderUnpaid > 0 && orderCredit > 0 ? " | " : null}
+                      {orderCredit > 0 ? `credit ${formatMoney(orderCredit)}` : null}
+                    </Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+
+            {eventType === "collection_money" ? (
+              <View style={styles.eventSummaryRow}>
+                <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                  paid {formatMoney(
+                    typeof cashDelta === "number" ? cashDelta : collectionAmount
+                  )}
+                </Text>
+              </View>
+            ) : null}
+
+            {eventType === "collection_empty" ? (
+              <View style={styles.eventSummaryRow}>
+                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                    <Text style={{ color: gasColor("12kg") }}>
+                    received {formatCount(collectionEmpty12Display)} x 12kg
+                    </Text>
+                    {" | "}
+                    <Text style={{ color: gasColor("48kg") }}>
+                    received {formatCount(collectionEmpty48Display)} x 48kg
+                    </Text>
+                  </Text>
+                </View>
+              ) : null}
+
+            {eventType === "refill" ? (
+              <>
+                <Text style={[styles.eventSummaryLine, { color: gasColor("12kg") }]}>
+                  12kg bought {formatCount(ev?.buy12 ?? 0)} | returned {formatCount(ev?.return12 ?? 0)} | missing {formatCount(refillMissing12 ?? 0)} | credit {formatCount(refillCredit12)}
+                </Text>
+                <Text style={[styles.eventSummaryLine, { color: gasColor("48kg") }]}>
+                  48kg bought {formatCount(ev?.buy48 ?? 0)} | returned {formatCount(ev?.return48 ?? 0)} | missing {formatCount(refillMissing48 ?? 0)} | credit {formatCount(refillCredit48)}
+                </Text>
+                <Text style={styles.eventSummaryLine}>
+                  total {formatMoney(refillTotal)} | paid {formatMoney(refillPaid)} | unpaid {formatMoney(refillUnpaid)} | credit {formatMoney(refillPaid > refillTotal ? refillPaid - refillTotal : 0)}
+                </Text>
+              </>
+            ) : null}
+
+            {eventType === "expense" ? (
+              <Text style={styles.eventSummaryLine}>
+                total {formatMoney(ev?.amount ?? 0)} | paid {formatMoney(ev?.amount ?? 0)} | unpaid 0 | credit 0
+              </Text>
+            ) : null}
+
+            {isOpenEvent ? (
+              <>
+                {eventType === "order" ? (
+                  <View style={styles.eventExpandedRow}>
+                    <DeltaBox
+                      label={`${ev?.gas_type ?? "12kg"} F`}
+                      before={ev?.gas_type === "48kg" ? invBefore.full48 ?? 0 : invBefore.full12 ?? 0}
+                      after={ev?.gas_type === "48kg" ? invAfter.full48 ?? 0 : invAfter.full12 ?? 0}
+                      format={formatCount}
+                      accent={gasColor(ev?.gas_type ?? "12kg")}
+                      compact
+                    />
+                    <DeltaBox
+                      label={`${ev?.gas_type ?? "12kg"} E`}
+                      before={ev?.gas_type === "48kg" ? invBefore.empty48 ?? 0 : invBefore.empty12 ?? 0}
+                      after={ev?.gas_type === "48kg" ? invAfter.empty48 ?? 0 : invAfter.empty12 ?? 0}
+                      format={formatCount}
+                      accent={gasColor(ev?.gas_type ?? "12kg")}
+                      compact
+                    />
+                    <DeltaBox
+                      label="Cash"
+                      before={ev?.cash_before ?? 0}
+                      after={ev?.cash_after ?? 0}
+                      format={formatMoney}
+                      smallDelta
+                      compact
+                      badgeTone={cashBadgeTone}
+                    />
+                  </View>
+                ) : null}
+
+                {eventType === "collection_money" || eventType === "collection_empty" ? (
+                  <View style={styles.eventExpandedRow}>
+                    <DeltaBox
+                      label="12kg E"
+                      before={invEmpty12Before}
+                      after={invEmpty12After}
+                      format={formatCount}
+                      accent={gasColor("12kg")}
+                      compact
+                    />
+                    <DeltaBox
+                      label="48kg E"
+                      before={invEmpty48Before}
+                      after={invEmpty48After}
+                      format={formatCount}
+                      accent={gasColor("48kg")}
+                      compact
+                    />
+                    <DeltaBox
+                      label="Cash"
+                      before={ev?.cash_before ?? 0}
+                      after={ev?.cash_after ?? 0}
+                      format={formatMoney}
+                      smallDelta
+                      compact
+                      badgeTone={cashBadgeTone}
+                    />
+                  </View>
+                ) : null}
+
+                {eventType === "refill" ? (
+                  <>
+                    <View style={styles.eventExpandedRow}>
+                      <DeltaBox
+                        label="12kg F"
+                        before={invBefore.full12 ?? 0}
+                        after={invAfter.full12 ?? 0}
+                        format={formatCount}
+                        accent={gasColor("12kg")}
+                        compact
+                      />
+                      <DeltaBox
+                        label="12kg E"
+                        before={invBefore.empty12 ?? 0}
+                        after={invAfter.empty12 ?? 0}
+                        format={formatCount}
+                        accent={gasColor("12kg")}
+                        compact
+                      />
+                    </View>
+                    <View style={styles.eventExpandedRow}>
+                      <DeltaBox
+                        label="48kg F"
+                        before={invBefore.full48 ?? 0}
+                        after={invAfter.full48 ?? 0}
+                        format={formatCount}
+                        accent={gasColor("48kg")}
+                        compact
+                      />
+                      <DeltaBox
+                        label="48kg E"
+                        before={invBefore.empty48 ?? 0}
+                        after={invAfter.empty48 ?? 0}
+                        format={formatCount}
+                        accent={gasColor("48kg")}
+                        compact
+                      />
+                    </View>
+                    <View style={styles.eventExpandedRow}>
+                      <DeltaBox
+                        label="Cash"
+                        before={ev?.cash_before ?? 0}
+                        after={ev?.cash_after ?? 0}
+                        format={formatMoney}
+                        smallDelta
+                        compact
+                        badgeTone={refillCashBadgeTone}
+                      />
+                    </View>
+                  </>
+                ) : null}
+
+                {createdAtTime ? (
+                  <Text style={styles.eventCreatedAtText}>created {createdAtTime}</Text>
+                ) : null}
+              </>
+            ) : null}
+          </Pressable>
         );
       })}
     </View>
@@ -2261,6 +2635,11 @@ function V2Timeline({
 }
 
 function formatEventType(type: string) {
+  if (type === "collection_money") return "Coll M";
+  if (type === "collection_empty") return "Coll C";
+  if (type === "init_balance") return "Init Co";
+  if (type === "init_credit") return "Init Cr";
+  if (type === "init_return") return "Init Ret";
   return type
     .replace(/_/g, " ")
     .split(" ")
@@ -2272,31 +2651,333 @@ function formatEventType(type: string) {
 function summarizeOrderEvents(events: any[]) {
   const summary = {
     sold12: 0,
-    unreturned12: 0,
+    missing12: 0,
+    credit12: 0,
     sold48: 0,
-    unreturned48: 0,
+    missing48: 0,
+    credit48: 0,
     total: 0,
     paid: 0,
-    unpaid: 0,
+    missingCash: 0,
+    creditCash: 0,
   };
+  const perCustomerCyl12 = new Map<string, number>();
+  const perCustomerCyl48 = new Map<string, number>();
+  const perCustomerMoney = new Map<string, number>();
   events.forEach((ev) => {
     if (String(ev?.event_type ?? ev?.type ?? ev?.source_type) !== "order") return;
     const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
     const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
-    const missing = Math.max(installed - received, 0);
+    const missing = installed - received;
+    const customerKey =
+      (typeof ev?.customer_id === "string" && ev.customer_id) ||
+      (typeof ev?.customer_name === "string" && ev.customer_name) ||
+      `unknown:${ev?.source_id ?? ""}`;
     if (ev?.gas_type === "12kg") {
       summary.sold12 += installed;
-      summary.unreturned12 += missing;
+      perCustomerCyl12.set(customerKey, (perCustomerCyl12.get(customerKey) ?? 0) + missing);
     }
     if (ev?.gas_type === "48kg") {
       summary.sold48 += installed;
-      summary.unreturned48 += missing;
+      perCustomerCyl48.set(customerKey, (perCustomerCyl48.get(customerKey) ?? 0) + missing);
     }
-    summary.total += typeof ev?.order_total === "number" ? ev.order_total : 0;
-    summary.paid += typeof ev?.order_paid === "number" ? ev.order_paid : 0;
+    const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
+    const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
+    summary.total += orderTotal;
+    summary.paid += orderPaid;
+    perCustomerMoney.set(customerKey, (perCustomerMoney.get(customerKey) ?? 0) + (orderTotal - orderPaid));
   });
-  summary.unpaid = Math.max(summary.total - summary.paid, 0);
+  perCustomerCyl12.forEach((net) => {
+    if (net > 0) summary.missing12 += net;
+    if (net < 0) summary.credit12 += Math.abs(net);
+  });
+  perCustomerCyl48.forEach((net) => {
+    if (net > 0) summary.missing48 += net;
+    if (net < 0) summary.credit48 += Math.abs(net);
+  });
+  perCustomerMoney.forEach((net) => {
+    if (net > 0) summary.missingCash += net;
+    if (net < 0) summary.creditCash += Math.abs(net);
+  });
   return summary;
+}
+
+function summarizeDayNet(events: any[]) {
+  const perCustomerMoney = new Map<string, number>();
+  const perCustomerCyl12 = new Map<string, number>();
+  const perCustomerCyl48 = new Map<string, number>();
+
+  const addNet = (map: Map<string, number>, key: string, delta: number) => {
+    map.set(key, (map.get(key) ?? 0) + delta);
+  };
+
+  events.forEach((ev) => {
+    const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type);
+    const customerKey =
+      (typeof ev?.customer_id === "string" && ev.customer_id) ||
+      (typeof ev?.customer_name === "string" && ev.customer_name) ||
+      `unknown:${ev?.source_id ?? ""}`;
+
+    if (eventType === "order") {
+      const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
+      const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
+      const missing = installed - received;
+      if (ev?.gas_type === "12kg") addNet(perCustomerCyl12, customerKey, missing);
+      if (ev?.gas_type === "48kg") addNet(perCustomerCyl48, customerKey, missing);
+
+      const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
+      const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
+      addNet(perCustomerMoney, customerKey, orderTotal - orderPaid);
+      return;
+    }
+
+    if (eventType === "collection_money") {
+      const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+      const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+      const delta =
+        cashBefore != null && cashAfter != null
+          ? cashAfter - cashBefore
+          : typeof ev?.collection_amount === "number"
+            ? ev.collection_amount
+            : typeof ev?.amount_money === "number"
+              ? ev.amount_money
+              : 0;
+      if (delta !== 0) addNet(perCustomerMoney, customerKey, -delta);
+      return;
+    }
+
+    if (eventType === "collection_empty") {
+      const invBefore = ev?.inventory_before ?? {};
+      const invAfter = ev?.inventory_after ?? {};
+      const empty12Before =
+        typeof invBefore?.empty12 === "number"
+          ? invBefore.empty12
+          : typeof ev?.inv12_empty_before === "number"
+            ? ev.inv12_empty_before
+            : null;
+      const empty12After =
+        typeof invAfter?.empty12 === "number"
+          ? invAfter.empty12
+          : typeof ev?.inv12_empty_after === "number"
+            ? ev.inv12_empty_after
+            : null;
+      const empty48Before =
+        typeof invBefore?.empty48 === "number"
+          ? invBefore.empty48
+          : typeof ev?.inv48_empty_before === "number"
+            ? ev.inv48_empty_before
+            : null;
+      const empty48After =
+        typeof invAfter?.empty48 === "number"
+          ? invAfter.empty48
+          : typeof ev?.inv48_empty_after === "number"
+            ? ev.inv48_empty_after
+            : null;
+      const delta12 =
+        empty12Before != null && empty12After != null
+          ? empty12After - empty12Before
+          : typeof ev?.collection_qty_12kg === "number"
+            ? ev.collection_qty_12kg
+            : typeof ev?.qty_12kg === "number"
+              ? ev.qty_12kg
+              : 0;
+      const delta48 =
+        empty48Before != null && empty48After != null
+          ? empty48After - empty48Before
+          : typeof ev?.collection_qty_48kg === "number"
+            ? ev.collection_qty_48kg
+            : typeof ev?.qty_48kg === "number"
+              ? ev.qty_48kg
+              : 0;
+      if (delta12 !== 0) addNet(perCustomerCyl12, customerKey, -delta12);
+      if (delta48 !== 0) addNet(perCustomerCyl48, customerKey, -delta48);
+    }
+  });
+
+  let newDebtCash = 0;
+  let newDebt12 = 0;
+  let newDebt48 = 0;
+  let collectedCash = 0;
+  let collected12 = 0;
+  let collected48 = 0;
+  perCustomerMoney.forEach((net) => {
+    if (net > 0) newDebtCash += net;
+    if (net < 0) collectedCash += Math.abs(net);
+  });
+  perCustomerCyl12.forEach((net) => {
+    if (net > 0) newDebt12 += net;
+    if (net < 0) collected12 += Math.abs(net);
+  });
+  perCustomerCyl48.forEach((net) => {
+    if (net > 0) newDebt48 += net;
+    if (net < 0) collected48 += Math.abs(net);
+  });
+
+  return {
+    collectedCash,
+    collected12,
+    collected48,
+    newDebtCash,
+    newDebt12,
+    newDebt48,
+  };
+}
+
+type DaySummaryTotals = {
+  newDebt: { cash: number; cyl12: number; cyl48: number };
+  collections: { cash: number; cyl12: number; cyl48: number };
+  business: { cash: number; cyl12: number; cyl48: number };
+};
+
+function scanDaySummary(events: any[]): DaySummaryTotals {
+  const summary: DaySummaryTotals = {
+    newDebt: { cash: 0, cyl12: 0, cyl48: 0 },
+    collections: { cash: 0, cyl12: 0, cyl48: 0 },
+    business: { cash: 0, cyl12: 0, cyl48: 0 },
+  };
+
+  events.forEach((ev) => {
+    const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type);
+
+    if (eventType === "order") {
+      const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
+      const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
+      const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
+      const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
+      const moneyDelta = orderTotal - orderPaid;
+      const cylDelta = installed - received;
+      if (moneyDelta === 0 && cylDelta === 0) return;
+      if (ev?.gas_type === "12kg") summary.newDebt.cyl12 += cylDelta;
+      if (ev?.gas_type === "48kg") summary.newDebt.cyl48 += cylDelta;
+      summary.newDebt.cash += moneyDelta;
+      return;
+    }
+
+    if (eventType === "collection_money") {
+      const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+      const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+      const delta =
+        cashBefore != null && cashAfter != null
+          ? cashAfter - cashBefore
+          : typeof ev?.collection_amount === "number"
+            ? ev.collection_amount
+            : typeof ev?.amount_money === "number"
+              ? ev.amount_money
+              : 0;
+      if (delta !== 0) summary.collections.cash += delta;
+      return;
+    }
+
+    if (eventType === "collection_empty") {
+      let qty12 = typeof ev?.collection_qty_12kg === "number" ? ev.collection_qty_12kg : 0;
+      let qty48 = typeof ev?.collection_qty_48kg === "number" ? ev.collection_qty_48kg : 0;
+      if (qty12 === 0) qty12 = typeof ev?.qty_12kg === "number" ? ev.qty_12kg : 0;
+      if (qty48 === 0) qty48 = typeof ev?.qty_48kg === "number" ? ev.qty_48kg : 0;
+
+      const invBefore = ev?.inventory_before ?? {};
+      const invAfter = ev?.inventory_after ?? {};
+      if (qty12 === 0 && typeof invBefore?.empty12 === "number" && typeof invAfter?.empty12 === "number") {
+        qty12 = invAfter.empty12 - invBefore.empty12;
+      }
+      if (qty48 === 0 && typeof invBefore?.empty48 === "number" && typeof invAfter?.empty48 === "number") {
+        qty48 = invAfter.empty48 - invBefore.empty48;
+      }
+
+      if (qty12 !== 0) summary.collections.cyl12 += qty12;
+      if (qty48 !== 0) summary.collections.cyl48 += qty48;
+      return;
+    }
+
+    if (eventType === "refill") {
+      const buy12 = typeof ev?.buy12 === "number" ? ev.buy12 : 0;
+      const ret12 = typeof ev?.return12 === "number" ? ev.return12 : 0;
+      const buy48 = typeof ev?.buy48 === "number" ? ev.buy48 : 0;
+      const ret48 = typeof ev?.return48 === "number" ? ev.return48 : 0;
+      if (buy12 || ret12) summary.business.cyl12 += buy12 - ret12;
+      if (buy48 || ret48) summary.business.cyl48 += buy48 - ret48;
+      return;
+    }
+
+    if (eventType === "expense") {
+      const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+      const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+      const delta = cashBefore != null && cashAfter != null ? cashAfter - cashBefore : 0;
+      if (delta !== 0) summary.business.cash += delta;
+      return;
+    }
+
+    if (eventType === "init_balance") {
+      const companyBefore = typeof ev?.company_before === "number" ? ev.company_before : null;
+      const companyAfter = typeof ev?.company_after === "number" ? ev.company_after : null;
+      const delta = companyBefore != null && companyAfter != null ? companyAfter - companyBefore : 0;
+      if (delta !== 0) summary.business.cash += delta;
+      return;
+    }
+
+    if (eventType === "init" || eventType === "init_credit" || eventType === "init_return") {
+      const gas = ev?.gas_type;
+      const invBefore = ev?.inventory_before ?? {};
+      const invAfter = ev?.inventory_after ?? {};
+      let fullDelta = 0;
+      let emptyDelta = 0;
+      if (gas === "12kg") {
+        const beforeFull = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
+        const afterFull = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
+        const beforeEmpty = typeof invBefore?.empty12 === "number" ? invBefore.empty12 : null;
+        const afterEmpty = typeof invAfter?.empty12 === "number" ? invAfter.empty12 : null;
+        if (beforeFull != null && afterFull != null) fullDelta = afterFull - beforeFull;
+        if (beforeEmpty != null && afterEmpty != null) emptyDelta = afterEmpty - beforeEmpty;
+        summary.business.cyl12 += fullDelta + emptyDelta;
+      }
+      if (gas === "48kg") {
+        const beforeFull = typeof invBefore?.full48 === "number" ? invBefore.full48 : null;
+        const afterFull = typeof invAfter?.full48 === "number" ? invAfter.full48 : null;
+        const beforeEmpty = typeof invBefore?.empty48 === "number" ? invBefore.empty48 : null;
+        const afterEmpty = typeof invAfter?.empty48 === "number" ? invAfter.empty48 : null;
+        if (beforeFull != null && afterFull != null) fullDelta = afterFull - beforeFull;
+        if (beforeEmpty != null && afterEmpty != null) emptyDelta = afterEmpty - beforeEmpty;
+        summary.business.cyl48 += fullDelta + emptyDelta;
+      }
+    }
+  });
+
+  return summary;
+}
+
+function buildDaySummaryLines(
+  summary: DaySummaryTotals,
+  formatMoney: (value: number) => string,
+  formatCount: (value: number) => string
+) {
+  const formatSignedCount = (value: number) => {
+    if (value === 0) return "";
+    const sign = value > 0 ? "+" : "-";
+    return `${sign}${formatCount(Math.abs(value))}`;
+  };
+  const formatSignedMoney = (value: number) => {
+    if (value === 0) return "";
+    const sign = value > 0 ? "+" : "-";
+    return `${sign}${formatMoney(Math.abs(value))}`;
+  };
+  const parts = (cash: number, cyl12: number, cyl48: number) => {
+    const out: string[] = [];
+    if (cyl12 !== 0) out.push(`${formatSignedCount(cyl12)}x 12kg`);
+    if (cyl48 !== 0) out.push(`${formatSignedCount(cyl48)}x 48kg`);
+    if (cash !== 0) out.push(`${formatSignedMoney(cash)}₪`);
+    return out.length > 0 ? out.join(" | ") : null;
+  };
+
+  const lines: { label: string; color: string }[] = [];
+  const debt = parts(summary.newDebt.cash, summary.newDebt.cyl12, summary.newDebt.cyl48);
+  if (debt) lines.push({ label: `🔴 New Debt: ${debt}`, color: "#b91c1c" });
+
+  const collections = parts(summary.collections.cash, summary.collections.cyl12, summary.collections.cyl48);
+  if (collections) lines.push({ label: `🟢 Collections: ${collections}`, color: "#16a34a" });
+
+  const business = parts(summary.business.cash, summary.business.cyl12, summary.business.cyl48);
+  if (business) lines.push({ label: `🔵 Business Flow: ${business}`, color: "#0a7ea4" });
+
+  return lines;
 }
 
 function DeltaBox({
@@ -2350,7 +3031,7 @@ function DeltaBox({
         ) : (
           <>
             <Text style={[styles.deltaBoxValue, valueStyle]}>{format(before ?? 0)}</Text>
-            <Text style={styles.deltaBoxArrow}>{"→"}</Text>
+            <Text style={styles.deltaBoxArrow}>{"->"}</Text>
             <Text style={[styles.deltaBoxValue, valueStyle]}>{format(after ?? 0)}</Text>
           </>
         )}
@@ -2382,6 +3063,10 @@ function ValueBox({
 
 function summarizeRefillEvents(events: any[]) {
   const summary = {
+    buy12: 0,
+    ret12: 0,
+    buy48: 0,
+    ret48: 0,
     total: 0,
     paid: 0,
     unpaid: 0,
@@ -2390,10 +3075,14 @@ function summarizeRefillEvents(events: any[]) {
     if (String(ev?.event_type ?? ev?.type ?? ev?.source_type) !== "refill") return;
     const totalCost = typeof ev?.total_cost === "number" ? ev.total_cost : 0;
     const paidNow = typeof ev?.paid_now === "number" ? ev.paid_now : 0;
+    summary.buy12 += typeof ev?.buy12 === "number" ? ev.buy12 : 0;
+    summary.ret12 += typeof ev?.return12 === "number" ? ev.return12 : 0;
+    summary.buy48 += typeof ev?.buy48 === "number" ? ev.buy48 : 0;
+    summary.ret48 += typeof ev?.return48 === "number" ? ev.return48 : 0;
     summary.total += totalCost;
     summary.paid += paidNow;
   });
-  summary.unpaid = Math.max(summary.total - summary.paid, 0);
+  summary.unpaid = summary.total - summary.paid;
   return summary;
 }
 
@@ -2440,7 +3129,9 @@ function SummaryPill({ label, value, accent }: { label: string; value: string; a
   return (
     <View style={[styles.topSummaryPill, accent ? { borderColor: accent } : null]}>
       <Text style={[styles.topSummaryLabel, accent ? { color: accent } : null]}>{label}</Text>
-      <Text style={styles.topSummaryValue}>{value}</Text>
+      <Text style={styles.topSummaryValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -2510,8 +3201,8 @@ const styles = StyleSheet.create({
 
   card: { backgroundColor: "white", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#e2e8f0" },
   cardPressed: { opacity: 0.92 },
-  cardCollapsed: { backgroundColor: "#f9fafb", borderColor: "#e5e7eb" },
-  cardExpanded: { backgroundColor: "#eef6ff", borderColor: "#bfdbfe" },
+  cardCollapsed: { backgroundColor: "white", borderColor: "#e2e8f0" },
+  cardExpanded: { backgroundColor: "white", borderColor: "#e2e8f0" },
 
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -2546,11 +3237,20 @@ const styles = StyleSheet.create({
   recalcBadge: { backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
   recalcBadgeText: { fontSize: 11, fontWeight: "800", color: "#1d4ed8" },
 
-  v2CashBlock: { marginTop: 10, padding: 10, borderRadius: 12, backgroundColor: "#f1f5f9" },
   v2CashLabel: { fontSize: 12, fontWeight: "800", color: "#0f172a", marginBottom: 6 },
-  v2InvBlock: { marginTop: 10, padding: 10, borderRadius: 12, backgroundColor: "#f8fafc" },
-  v2InvRow: { marginTop: 10, flexDirection: "row", gap: 10 },
-  v2InvBlockHalf: { flex: 1, padding: 10, borderRadius: 12, backgroundColor: "#f8fafc" },
+  v2InvCashRow: { marginTop: 10, flexDirection: "row", gap: 10, alignItems: "stretch" },
+  v2InvCompactBox: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    justifyContent: "flex-start",
+    minHeight: 120,
+  },
+  v2InvCompactLabel: { fontSize: 12, fontWeight: "900", marginBottom: 4 },
+  v2InvCompactValue: { fontSize: 12, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
+  v2DeltaBlock: { marginBottom: 6 },
+  v2CashBox: { flex: 1, padding: 10, borderRadius: 12, backgroundColor: "#f8fafc" },
   v2InvLabel: { fontSize: 12, fontWeight: "900", marginBottom: 6 },
   v2MetricLabelSmall: { fontSize: 12, fontWeight: "800" },
 
@@ -2558,11 +3258,17 @@ const styles = StyleSheet.create({
   v2EventSummaryChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   v2EventSummaryText: { fontSize: 11, fontWeight: "900", color: "white" },
   collapsedSummaryLine: { color: "#0f172a", fontWeight: "700", marginTop: 6 },
-  collapsedHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  collapsedHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  collapsedLeft: { flex: 1, minWidth: 0 },
   collapsedSubtext: { fontSize: 11, fontWeight: "800", color: "#64748b", marginTop: 2 },
-  collapsedRight: { alignItems: "flex-end", gap: 6 },
+  collapsedRight: { alignItems: "flex-end", gap: 6, maxWidth: "48%", flexShrink: 1 },
   collapsedList: { marginTop: 2, gap: 4 },
-  collapsedListItem: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
+  collapsedListItem: { fontSize: 12, fontWeight: "800", color: "#0f172a", flexWrap: "wrap" },
   missingInlineBox: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -2572,10 +3278,13 @@ const styles = StyleSheet.create({
     borderColor: "#fecdd3",
     alignItems: "flex-end",
     minWidth: 120,
+    maxWidth: "100%",
   },
-  missingMiniLabel: { fontSize: 10, fontWeight: "900", color: "#b91c1c" },
-  missingMiniValue: { marginTop: 2, fontSize: 11, fontWeight: "900", color: "#b91c1c" },
-  collapsedEventRow: { justifyContent: "flex-end", marginTop: 0 },
+  missingMiniLabel: { fontSize: 10, fontWeight: "900", color: "#b91c1c", textAlign: "right" },
+  missingMiniValue: { marginTop: 2, fontSize: 11, fontWeight: "900", color: "#b91c1c", textAlign: "right" },
+  auditValue: { marginTop: 2, fontSize: 11, fontWeight: "600", color: "#1f2937", textAlign: "right" },
+  auditAlert: { fontWeight: "900", color: "#b91c1c" },
+  collapsedEventRow: { justifyContent: "flex-end", marginTop: 0, flexWrap: "wrap" },
   collapsedEventChip: { paddingHorizontal: 8, paddingVertical: 4 },
 
   problemLine: { marginTop: 8, fontSize: 12, fontWeight: "700", color: "#b91c1c" },
@@ -2585,7 +3294,7 @@ const styles = StyleSheet.create({
   v2Timeline: { backgroundColor: "#ffffff" },
 
   topSummaryCard: {
-    marginTop: 12,
+    marginTop: 6,
     padding: 14,
     borderRadius: 16,
     backgroundColor: "white",
@@ -2596,11 +3305,77 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
+  balancesCard: {
+    backgroundColor: "white",
+    borderColor: "#e2e8f0",
+  },
+  balanceSplitRow: { flexDirection: "row", gap: 12 },
+  balanceColumn: { flex: 1, gap: 8 },
+  balancePanelTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    fontFamily: "AvenirNext-DemiBold",
+    color: "#0f172a",
+    marginBottom: 6,
+  },
+  balanceSectionLabel: {
+    marginTop: 6,
+    fontSize: 10,
+    fontWeight: "600",
+    fontFamily: "AvenirNext-Regular",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  balanceEmpty: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    fontFamily: "AvenirNext-Regular",
+    color: "#94a3b8",
+  },
   topSummaryTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", marginBottom: 10 },
+  topSummaryTitleTight: { marginBottom: 0 },
+  topSummaryToggle: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   topSummaryRow: { flexDirection: "row", gap: 8 },
+  adjustButtonRow: { marginTop: 10, flexDirection: "row", gap: 8 },
+  adjustButton: {
+    flex: 1,
+    marginTop: 0,
+    backgroundColor: "#0a7ea4",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  adjustButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  adjustmentRow: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  adjustmentInfo: { flex: 1, paddingRight: 8 },
+  adjustmentTitle: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
+  adjustmentReason: { marginTop: 2, fontSize: 11, color: "#64748b" },
+  adjustmentActions: { flexDirection: "row", gap: 12 },
   relationshipRow: { flexDirection: "row", gap: 16 },
   relationshipColumn: { flex: 1, gap: 6 },
-  relationshipLine: { color: "#0f172a", fontWeight: "700", fontSize: 12 },
+  relationshipLine: {
+    color: "#0f172a",
+    fontWeight: "600",
+    fontFamily: "AvenirNext-Regular",
+    fontSize: 12,
+  },
+  relationshipGood: { color: "#2563eb" },
+  relationshipBad: { color: "#b91c1c" },
   topSummaryPill: {
     flex: 1,
     paddingVertical: 8,
@@ -2632,8 +3407,60 @@ const styles = StyleSheet.create({
   summaryChipValueOk: { color: "#16a34a" },
   summaryChipValueBad: { color: "#b91c1c" },
   summaryRow: { width: "100%", flexDirection: "row", gap: 8 },
+  summaryToggleCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  summaryToggleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  summaryToggleTitle: { fontSize: 13, fontWeight: "900", color: "#0f172a" },
+  summaryToggleBody: { marginTop: 12 },
+  summaryTable: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  summaryRowLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  summaryHeaderRow: {
+    backgroundColor: "#f1f5f9",
+  },
+  summaryCell: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  summaryHeaderCell: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
+    textTransform: "uppercase",
+  },
+  summaryLabelCell: {
+    fontWeight: "800",
+  },
+  summaryMissing: {
+    color: "#b91c1c",
+  },
+  summaryCredit: {
+    color: "#2563eb",
+  },
 
-  deltaRow: { flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "wrap" },
+  deltaRow: { flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "nowrap" },
+  deltaEndColumn: { alignItems: "flex-end" },
   deltaValueSm: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
   deltaValueLg: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
   deltaArrow: { fontSize: 14, fontWeight: "900", color: "#0a7ea4" },
@@ -2665,15 +3492,19 @@ const styles = StyleSheet.create({
 
   eventCard: {
     marginTop: 10,
-    padding: 12,
+    paddingTop: 4,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
     borderRadius: 14,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  eventHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  eventHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 0 },
   eventHeaderTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  eventHeaderRight: { alignItems: "flex-end", gap: 6 },
+  eventHeaderRight: { alignItems: "flex-end" },
+  eventHeaderRightStack: { alignItems: "flex-end", gap: 4 },
+  eventHeaderLeft: { flex: 1, rowGap: 4 },
   eventBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
   eventBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
   eventBadgeOrder: { backgroundColor: "#2563eb" },
@@ -2681,9 +3512,32 @@ const styles = StyleSheet.create({
   eventBadgeText: { color: "white", fontSize: 11, fontWeight: "900" },
   eventTypeText: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
   eventLabelText: { fontSize: 11, fontWeight: "800", color: "#64748b" },
-  eventTimeText: { fontSize: 11, fontWeight: "700", color: "#64748b" },
-  eventMetaBlock: { marginTop: 8 },
+  eventTimePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  eventTimeText: { fontSize: 11, fontWeight: "800", color: "#475569" },
+  eventMetaBlock: { marginTop: 4 },
+  eventMetaBlockTight: { marginTop: -2 },
   eventMetaText: { fontSize: 12, fontWeight: "700", color: "#334155" },
+  eventTypePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  eventTypePillText: { color: "white", fontSize: 12, fontWeight: "900" },
+  eventCustomerName: { fontSize: 16, fontWeight: "900", color: "#0f172a", marginBottom: 0, lineHeight: 18 },
+  eventCustomerNameTight: { marginTop: 0, marginBottom: 2 },
+  eventMetaSmall: { fontSize: 12, fontWeight: "700", color: "#64748b", marginTop: 0, lineHeight: 14 },
+  eventMetaSmallTight: { marginTop: 2 },
+  eventSummaryLine: { marginTop: 0, fontSize: 12, fontWeight: "800", color: "#0f172a" },
+  eventSummaryLeft: { flex: 1 },
+  eventSummaryRight: { textAlign: "right" },
+  eventSummaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginTop: 2 },
+  eventSummaryRowTight: { marginTop: 0 },
+  eventSummaryAlert: { color: "#b91c1c", marginTop: 0 },
+  eventCreatedAtText: { marginTop: 6, fontSize: 11, fontWeight: "700", color: "#64748b" },
+  eventExpandedRow: { flexDirection: "row", gap: 8, marginTop: 10 },
 
   eventSection: { marginTop: 10 },
   eventSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
@@ -2748,8 +3602,16 @@ const styles = StyleSheet.create({
   smallBtnActive: { backgroundColor: "#0f172a" },
   smallBtnText: { color: "white", fontWeight: "900", fontSize: 12 },
 
+  expandedDivider: {
+    height: 1,
+    backgroundColor: "#e2e8f0",
+    marginVertical: 8,
+  },
+
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, backgroundColor: "#e2e8f0" },
+  chipDisabled: { opacity: 0.6 },
   chipActive: { backgroundColor: "#0a7ea4" },
   chipText: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
   chipTextActive: { color: "white" },

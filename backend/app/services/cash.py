@@ -34,6 +34,7 @@ def delete_cash_deltas_for_source(
   source_types: Optional[list[str]] = None,
 ) -> Optional[date]:
   stmt = select(CashDelta).where(CashDelta.source_id == source_id)
+  stmt = stmt.where(CashDelta.is_deleted == False)  # noqa: E712
   if source_types:
     stmt = stmt.where(CashDelta.source_type.in_(source_types))
   rows = session.exec(stmt).all()
@@ -62,6 +63,7 @@ def recompute_cash_summaries(
   range_end = business_date_start_utc(end_business_date + timedelta(days=1))
   deltas = session.exec(
     select(CashDelta)
+    .where(CashDelta.is_deleted == False)  # noqa: E712
     .where(CashDelta.effective_at >= range_start)
     .where(CashDelta.effective_at < range_end)
     .order_by(CashDelta.effective_at, CashDelta.created_at, CashDelta.id)
@@ -119,6 +121,7 @@ def add_cash_delta(
   delta_cash: float,
   reason: Optional[str] = None,
   actor_id: Optional[str] = None,
+  is_manual: bool = False,
 ) -> CashDelta:
   effective_at_norm = _to_utc_naive(effective_at)
   now = datetime.now(timezone.utc)
@@ -128,6 +131,7 @@ def add_cash_delta(
     source_id=source_id,
     delta_cash=delta_cash,
     reason=reason,
+    is_manual=is_manual,
     created_at=now,
     created_by=actor_id,
   )

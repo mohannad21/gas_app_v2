@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlmodel import Session
 
 from conftest import init_inventory
+from conftest import create_customer, create_system, create_order
 
 
 def test_cash_replay_ordering_tiebreak(client) -> None:
@@ -86,3 +87,28 @@ def test_refill_grouping_by_source_id(client) -> None:
     assert refill["inventory_after"]["empty12"] is not None
     assert refill["inventory_after"]["full48"] is not None
     assert refill["inventory_after"]["empty48"] is not None
+
+
+def test_daily_audit_summary_cash_in_net_zero(client) -> None:
+    day = date(2025, 8, 1)
+    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
+    customer_id = create_customer(client, name="Audit Customer")
+    system_id = create_system(client, customer_id=customer_id, name="Audit System")
+
+    create_order(
+        client,
+        customer_id=customer_id,
+        system_id=system_id,
+        delivered_at=f"{day.isoformat()}T10:00:00",
+        gas_type="12kg",
+        installed=1,
+        received=0,
+        price_total=1000.0,
+        paid_amount=1000.0,
+    )
+
+    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert resp.status_code == 200
+    audit = resp.json()["audit_summary"]
+    assert audit["cash_in"] == 1000.0
+    assert audit["new_debt"] == 0.0

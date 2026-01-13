@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.events import add_activity
-from app.models import Customer, CustomerAdjustment
+from app.models import Customer, CustomerAdjustment, Order
 from app.services.customers import sync_customer_totals
 from app.schemas import CustomerCreate, CustomerUpdate, new_id
 
@@ -66,12 +67,24 @@ def create_customer(payload: CustomerCreate, session: Session = Depends(get_sess
   starting_48kg = payload.starting_48kg if payload.starting_48kg is not None else 0
   has_adjustment = any(value != 0 for value in (starting_money, starting_12kg, starting_48kg))
   if has_adjustment:
+    money_receive = starting_money if starting_money >= 0 else 0
+    money_give = abs(starting_money) if starting_money < 0 else 0
+    count_12_receive = starting_12kg if starting_12kg >= 0 else 0
+    count_12_give = abs(starting_12kg) if starting_12kg < 0 else 0
+    count_48_receive = starting_48kg if starting_48kg >= 0 else 0
+    count_48_give = abs(starting_48kg) if starting_48kg < 0 else 0
     adjustment = CustomerAdjustment(
       id=new_id("adj"),
       customer_id=customer.id,
       amount_money=starting_money,
+      amount_money_to_receive=money_receive,
+      amount_money_to_give=money_give,
       count_12kg=starting_12kg,
+      count_12kg_to_receive=count_12_receive,
+      count_12kg_to_give=count_12_give,
       count_48kg=starting_48kg,
+      count_48kg_to_receive=count_48_receive,
+      count_48kg_to_give=count_48_give,
       reason=payload.starting_reason or "onboarding",
       created_at=datetime.now(timezone.utc),
     )
@@ -130,6 +143,16 @@ def delete_customer(customer_id: str, session: Session = Depends(get_session)) -
   customer = session.get(Customer, customer_id)
   if not customer or customer.is_deleted:
     return
+  orders_count = session.exec(
+    select(func.count(Order.id))
+    .where(Order.customer_id == customer_id)
+    .where(Order.is_deleted == False)  # noqa: E712
+  ).first()
+  if orders_count and orders_count > 0:
+    raise HTTPException(
+      status_code=status.HTTP_409_CONFLICT,
+      detail="customer_has_orders",
+    )
   logger.info("delete_customer id=%s", customer_id)
   customer.is_deleted = True
   customer.deleted_at = datetime.now(timezone.utc)

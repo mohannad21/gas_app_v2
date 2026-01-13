@@ -13,6 +13,7 @@ from app.models import (
   CashDelta,
   CompanyDailySummary,
   CompanyDelta,
+  CollectionEvent,
   Customer,
   Expense,
   InventoryDailySummary,
@@ -27,6 +28,7 @@ from app.schemas import (
   DailyReportV2Card,
   DailyReportV2Day,
   DailyReportV2Event,
+  DailyAuditSummary,
   InventorySnapshot,
   ReportInventoryState,
   ReportInventoryTotals,
@@ -38,6 +40,104 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 def _as_utc(dt: datetime) -> datetime:
   return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _sum_customer_balances(session: Session) -> dict[str, float | int]:
+  customers = session.exec(
+    select(Customer).where(Customer.is_deleted == False)  # noqa: E712
+  ).all()
+
+  money_receivable = 0.0
+  money_payable = 0.0
+  cyl_receivable_12 = 0
+  cyl_payable_12 = 0
+  cyl_receivable_48 = 0
+  cyl_payable_48 = 0
+
+  for customer in customers:
+    money_balance = float(customer.money_balance or 0)
+    if money_balance > 0:
+      money_receivable += money_balance
+    elif money_balance < 0:
+      money_payable += abs(money_balance)
+
+    cyl_12 = int(customer.cylinder_balance_12kg or 0)
+    if cyl_12 > 0:
+      cyl_receivable_12 += cyl_12
+    elif cyl_12 < 0:
+      cyl_payable_12 += abs(cyl_12)
+
+    cyl_48 = int(customer.cylinder_balance_48kg or 0)
+    if cyl_48 > 0:
+      cyl_receivable_48 += cyl_48
+    elif cyl_48 < 0:
+      cyl_payable_48 += abs(cyl_48)
+
+  return {
+    "money_receivable": money_receivable,
+    "money_payable": money_payable,
+    "cyl_receivable_12": cyl_receivable_12,
+    "cyl_payable_12": cyl_payable_12,
+    "cyl_receivable_48": cyl_receivable_48,
+    "cyl_payable_48": cyl_payable_48,
+  }
+
+
+def get_daily_audit_summary(session: Session, business_date: date) -> DailyAuditSummary:
+  start = business_date_start_utc(business_date)
+  end = business_date_start_utc(business_date + timedelta(days=1))
+
+  cash_in = session.exec(
+    select(func.sum(CashDelta.delta_cash))
+    .where(CashDelta.effective_at >= start)
+    .where(CashDelta.effective_at < end)
+    .where(CashDelta.delta_cash > 0)
+    .where(CashDelta.source_type != "cash_init")
+    .where(CashDelta.is_deleted == False)  # noqa: E712
+  ).first() or 0.0
+
+  order_rows = session.exec(
+    select(Order)
+    .where(Order.delivered_at >= start)
+    .where(Order.delivered_at < end)
+    .where(Order.is_deleted == False)  # noqa: E712
+  ).all()
+  new_debt = 0.0
+  for order in order_rows:
+    gross_paid = order.paid_amount
+    if gross_paid is None:
+      money_received = order.money_received or 0.0
+      money_given = order.money_given or 0.0
+      gross_paid = money_received - money_given
+    applied_credit = order.applied_credit or 0.0
+    new_debt += order.price_total - (gross_paid + applied_credit)
+
+  inv_rows = session.exec(
+    select(InventoryDelta)
+    .where(InventoryDelta.effective_at >= start)
+    .where(InventoryDelta.effective_at < end)
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
+    .where(
+      InventoryDelta.source_type.in_(
+        ["order", "refill", "adjust", "init", "init_credit", "init_return", "collection_empty"]
+      )
+    )
+  ).all()
+  inv_delta_12 = 0
+  inv_delta_48 = 0
+  for row in inv_rows:
+    delta = row.delta_full + row.delta_empty
+    if row.gas_type == "12kg":
+      inv_delta_12 += delta
+    elif row.gas_type == "48kg":
+      inv_delta_48 += delta
+
+  return DailyAuditSummary(
+    cash_in=cash_in,
+    new_debt=new_debt,
+    inv_delta_12=inv_delta_12,
+    inv_delta_48=inv_delta_48,
+  )
 
 
 @router.get("/daily", response_model=List[DailyReportRow])
@@ -201,6 +301,7 @@ def list_daily_reports_v2(
     .where(CompanyDailySummary.business_date <= end_date)
   ).all()
   company_by_date: dict[date, CompanyDailySummary] = {row.business_date: row for row in company_rows}
+  customer_totals = _sum_customer_balances(session)
 
   response: list[DailyReportV2Card] = []
   for current_date in sorted(inv_by_date.keys() | cash_by_date.keys() | company_by_date.keys(), reverse=True):
@@ -227,6 +328,22 @@ def list_daily_reports_v2(
     company_summary = company_by_date.get(current_date)
     company_start = company_summary.payable_start if company_summary else 0.0
     company_end = company_summary.payable_end if company_summary else company_start
+    company_12kg_start = company_summary.payable_12kg_start if company_summary else 0
+    company_12kg_end = company_summary.payable_12kg_end if company_summary else company_12kg_start
+    company_48kg_start = company_summary.payable_48kg_start if company_summary else 0
+    company_48kg_end = company_summary.payable_48kg_end if company_summary else company_48kg_start
+    company_give_start = company_summary.payable_give_start if company_summary else 0.0
+    company_give_end = company_summary.payable_give_end if company_summary else company_give_start
+    company_receive_start = company_summary.payable_receive_start if company_summary else 0.0
+    company_receive_end = company_summary.payable_receive_end if company_summary else company_receive_start
+    company_12kg_give_start = company_summary.payable_12kg_give_start if company_summary else 0
+    company_12kg_give_end = company_summary.payable_12kg_give_end if company_summary else company_12kg_give_start
+    company_12kg_receive_start = company_summary.payable_12kg_receive_start if company_summary else 0
+    company_12kg_receive_end = company_summary.payable_12kg_receive_end if company_summary else company_12kg_receive_start
+    company_48kg_give_start = company_summary.payable_48kg_give_start if company_summary else 0
+    company_48kg_give_end = company_summary.payable_48kg_give_end if company_summary else company_48kg_give_start
+    company_48kg_receive_start = company_summary.payable_48kg_receive_start if company_summary else 0
+    company_48kg_receive_end = company_summary.payable_48kg_receive_end if company_summary else company_48kg_receive_start
     last_computed = max(
       [s.computed_at for s in [summary_12, summary_48, cash_summary, company_summary] if s],
       default=None,
@@ -242,6 +359,28 @@ def list_daily_reports_v2(
         cash_end=cash_end,
         company_start=company_start,
         company_end=company_end,
+        company_12kg_start=company_12kg_start,
+        company_12kg_end=company_12kg_end,
+        company_48kg_start=company_48kg_start,
+        company_48kg_end=company_48kg_end,
+        company_give_start=company_give_start,
+        company_give_end=company_give_end,
+        company_receive_start=company_receive_start,
+        company_receive_end=company_receive_end,
+        company_12kg_give_start=company_12kg_give_start,
+        company_12kg_give_end=company_12kg_give_end,
+        company_12kg_receive_start=company_12kg_receive_start,
+        company_12kg_receive_end=company_12kg_receive_end,
+        company_48kg_give_start=company_48kg_give_start,
+        company_48kg_give_end=company_48kg_give_end,
+        company_48kg_receive_start=company_48kg_receive_start,
+        company_48kg_receive_end=company_48kg_receive_end,
+        customer_money_receivable=float(customer_totals["money_receivable"]),
+        customer_money_payable=float(customer_totals["money_payable"]),
+        customer_12kg_receivable=int(customer_totals["cyl_receivable_12"]),
+        customer_12kg_payable=int(customer_totals["cyl_payable_12"]),
+        customer_48kg_receivable=int(customer_totals["cyl_receivable_48"]),
+        customer_48kg_payable=int(customer_totals["cyl_payable_48"]),
         inventory_start=inventory_start,
         inventory_end=inventory_end,
         problems=None,
@@ -265,7 +404,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     select(InventoryDelta)
     .where(InventoryDelta.effective_at >= start)
     .where(InventoryDelta.effective_at < end)
-    .where(InventoryDelta.source_type.in_(["order", "refill", "adjust", "init"]))
+    .where(InventoryDelta.is_deleted == False)  # noqa: E712
+    .where(
+      InventoryDelta.source_type.in_(
+        ["order", "refill", "adjust", "init", "init_credit", "init_return", "collection_empty"]
+      )
+    )
     .order_by(InventoryDelta.effective_at, InventoryDelta.created_at, InventoryDelta.id)
   ).all()
   order_ids = {row.source_id for row in inv_rows if row.source_type == "order" and row.source_id}
@@ -293,9 +437,19 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     select(CashDelta)
     .where(CashDelta.effective_at >= start)
     .where(CashDelta.effective_at < end)
+    .where(CashDelta.is_deleted == False)  # noqa: E712
     .where(
       CashDelta.source_type.in_(
-        ["order", "expense", "cash_adjust", "cash_init", "refill_payment", "company_payment", "bank_deposit"]
+        [
+          "order",
+          "expense",
+          "cash_adjust",
+          "cash_init",
+          "refill_payment",
+          "company_payment",
+          "bank_deposit",
+          "collection_money",
+        ]
       )
     )
     .order_by(CashDelta.effective_at, CashDelta.created_at, CashDelta.id)
@@ -314,11 +468,43 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     for expense in session.exec(select(Expense).where(Expense.id.in_(list(expense_ids)))).all()
   } if expense_ids else {}
 
+  collection_ids = {
+    row.source_id for row in inv_rows if row.source_type == "collection_empty" and row.source_id
+  }
+  collection_ids.update(
+    {
+      row.source_id for row in cash_rows if row.source_type == "collection_money" and row.source_id
+    }
+  )
+  collection_map: dict[str, tuple[CollectionEvent, str, Optional[str], Optional[str], Optional[str]]] = {}
+  if collection_ids:
+    rows = session.exec(
+      select(
+        CollectionEvent,
+        Customer.name,
+        Customer.notes,
+        System.name,
+        System.system_type,
+      )
+      .join(Customer, Customer.id == CollectionEvent.customer_id)
+      .outerjoin(System, System.id == CollectionEvent.system_id)
+      .where(CollectionEvent.id.in_(list(collection_ids)))
+    ).all()
+    collection_map = {
+      row[0].id: (row[0], row[1], row[2], row[3], row[4])
+      for row in rows
+      if not row[0].is_deleted
+    }
+
   company_rows = session.exec(
     select(CompanyDelta)
     .where(CompanyDelta.effective_at >= start)
     .where(CompanyDelta.effective_at < end)
-    .where(CompanyDelta.source_type.in_(["refill", "company_payment"]))
+    .where(
+      CompanyDelta.source_type.in_(
+        ["refill", "company_payment", "init_balance", "init_credit", "init_return"]
+      )
+    )
     .order_by(CompanyDelta.effective_at, CompanyDelta.created_at, CompanyDelta.id)
   ).all()
 
@@ -355,6 +541,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "order_paid": None,
         "order_installed": None,
         "order_received": None,
+        "collection_action": None,
+        "collection_amount": None,
+        "collection_qty_12kg": None,
+        "collection_qty_48kg": None,
       }
       if event_type == "refill":
         entry["label"] = "Refill"
@@ -363,6 +553,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["gas_type"] = row.gas_type
       elif event_type == "init":
         entry["label"] = "Inventory Init"
+        entry["gas_type"] = row.gas_type
+      elif event_type == "init_credit":
+        entry["label"] = "Init Credit"
+        entry["gas_type"] = row.gas_type
+      elif event_type == "init_return":
+        entry["label"] = "Init Return"
         entry["gas_type"] = row.gas_type
       elif event_type == "order" and row.source_id and row.source_id in order_map:
         order, customer_name, customer_description, system_name, system_type = order_map[row.source_id]
@@ -377,6 +573,18 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["order_paid"] = order.paid_amount
         entry["order_installed"] = order.cylinders_installed
         entry["order_received"] = order.cylinders_received
+      elif event_type == "collection_empty" and row.source_id and row.source_id in collection_map:
+        collection, customer_name, customer_description, system_name, system_type = collection_map[row.source_id]
+        entry["label"] = "Collection - Empties"
+        entry["customer_id"] = collection.customer_id
+        entry["customer_name"] = customer_name
+        entry["customer_description"] = customer_description
+        entry["system_name"] = system_name
+        entry["system_type"] = system_type
+        entry["collection_action"] = collection.action_type
+        entry["collection_amount"] = collection.amount_money
+        entry["collection_qty_12kg"] = collection.qty_12kg
+        entry["collection_qty_48kg"] = collection.qty_48kg
       entry["reason"] = row.reason
       event_map[key] = entry
     else:
@@ -415,6 +623,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "order_paid": None,
         "order_installed": None,
         "order_received": None,
+        "collection_action": None,
+        "collection_amount": None,
+        "collection_qty_12kg": None,
+        "collection_qty_48kg": None,
       }
       if event_type == "expense":
         expense = expense_map.get(row.source_id) if row.source_id else None
@@ -448,6 +660,18 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         entry["order_paid"] = order.paid_amount
         entry["order_installed"] = order.cylinders_installed
         entry["order_received"] = order.cylinders_received
+      elif event_type == "collection_money" and row.source_id and row.source_id in collection_map:
+        collection, customer_name, customer_description, system_name, system_type = collection_map[row.source_id]
+        entry["label"] = "Collection - Money"
+        entry["customer_id"] = collection.customer_id
+        entry["customer_name"] = customer_name
+        entry["customer_description"] = customer_description
+        entry["system_name"] = system_name
+        entry["system_type"] = system_type
+        entry["collection_action"] = collection.action_type
+        entry["collection_amount"] = collection.amount_money
+        entry["collection_qty_12kg"] = collection.qty_12kg
+        entry["collection_qty_48kg"] = collection.qty_48kg
       event_map[key] = entry
     else:
       if row.created_at < entry["created_at"]:
@@ -455,7 +679,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     entry["cash_deltas"].append(row)
 
   for row in company_rows:
-    event_type = "refill" if row.source_type == "refill" else "company_payment"
+    if row.source_type == "refill":
+      event_type = "refill"
+    elif row.source_type == "company_payment":
+      event_type = "company_payment"
+    else:
+      event_type = row.source_type
     key = _event_key(event_type, row.source_id, row.id)
     entry = event_map.get(key)
     if not entry:
@@ -480,11 +709,24 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         "order_paid": None,
         "order_installed": None,
         "order_received": None,
+        "collection_action": None,
+        "collection_amount": None,
+        "collection_qty_12kg": None,
+        "collection_qty_48kg": None,
       }
       if event_type == "refill":
         entry["label"] = "Refill"
       elif event_type == "company_payment":
         entry["label"] = "Company Payment"
+        entry["reason"] = row.reason
+      elif event_type == "init_balance":
+        entry["label"] = "Company Init"
+        entry["reason"] = row.reason
+      elif event_type == "init_credit":
+        entry["label"] = "Company Init Credit"
+        entry["reason"] = row.reason
+      elif event_type == "init_return":
+        entry["label"] = "Company Init Return"
         entry["reason"] = row.reason
       event_map[key] = entry
     else:
@@ -529,9 +771,28 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   ).first()
   company_start = company_summary.payable_start if company_summary else 0.0
   company_end = company_summary.payable_end if company_summary else company_start
+  company_12kg_start = company_summary.payable_12kg_start if company_summary else 0
+  company_12kg_end = company_summary.payable_12kg_end if company_summary else company_12kg_start
+  company_48kg_start = company_summary.payable_48kg_start if company_summary else 0
+  company_48kg_end = company_summary.payable_48kg_end if company_summary else company_48kg_start
+  company_give_start = company_summary.payable_give_start if company_summary else 0.0
+  company_give_end = company_summary.payable_give_end if company_summary else company_give_start
+  company_receive_start = company_summary.payable_receive_start if company_summary else 0.0
+  company_receive_end = company_summary.payable_receive_end if company_summary else company_receive_start
+  company_12kg_give_start = company_summary.payable_12kg_give_start if company_summary else 0
+  company_12kg_give_end = company_summary.payable_12kg_give_end if company_summary else company_12kg_give_start
+  company_12kg_receive_start = company_summary.payable_12kg_receive_start if company_summary else 0
+  company_12kg_receive_end = company_summary.payable_12kg_receive_end if company_summary else company_12kg_receive_start
+  company_48kg_give_start = company_summary.payable_48kg_give_start if company_summary else 0
+  company_48kg_give_end = company_summary.payable_48kg_give_end if company_summary else company_48kg_give_start
+  company_48kg_receive_start = company_summary.payable_48kg_receive_start if company_summary else 0
+  company_48kg_receive_end = company_summary.payable_48kg_receive_end if company_summary else company_48kg_receive_start
+  customer_totals = _sum_customer_balances(session)
 
   running_cash = cash_start
   running_company = company_start
+  running_company_12 = company_12kg_start
+  running_company_48 = company_48kg_start
   running_full = {"12kg": inventory_start.full12, "48kg": inventory_start.full48}
   running_empty = {"12kg": inventory_start.empty12, "48kg": inventory_start.empty48}
 
@@ -541,18 +802,34 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     cash_before = running_cash
     cash_delta = sum(row.delta_cash for row in entry["cash_deltas"])
     if entry["event_type"] == "cash_init":
-      cash_after = cash_before
+      cash_before = 0
+      cash_after = cash_start
+      running_cash = cash_after
     else:
       cash_after = cash_before + cash_delta
       running_cash = cash_after
 
     company_before: Optional[float] = None
     company_after: Optional[float] = None
+    company_12kg_before: Optional[int] = None
+    company_12kg_after: Optional[int] = None
+    company_48kg_before: Optional[int] = None
+    company_48kg_after: Optional[int] = None
     company_delta = sum(row.delta_payable for row in entry["company_deltas"])
+    company_delta_12 = sum(row.delta_12kg for row in entry["company_deltas"])
+    company_delta_48 = sum(row.delta_48kg for row in entry["company_deltas"])
     if company_delta or entry["company_deltas"]:
       company_before = running_company
       company_after = running_company + company_delta
       running_company = company_after
+    if company_delta_12 or entry["company_deltas"]:
+      company_12kg_before = running_company_12
+      company_12kg_after = running_company_12 + company_delta_12
+      running_company_12 = company_12kg_after
+    if company_delta_48 or entry["company_deltas"]:
+      company_48kg_before = running_company_48
+      company_48kg_after = running_company_48 + company_delta_48
+      running_company_48 = company_48kg_after
 
     inv_before: Optional[ReportInventoryState] = None
     inv_after: Optional[ReportInventoryState] = None
@@ -639,10 +916,18 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
         order_received=entry["order_received"],
         unit_price_buy_12=refill_event.unit_price_buy_12 if refill_event else None,
         unit_price_buy_48=refill_event.unit_price_buy_48 if refill_event else None,
+        collection_action=entry["collection_action"],
+        collection_amount=entry["collection_amount"],
+        collection_qty_12kg=entry["collection_qty_12kg"],
+        collection_qty_48kg=entry["collection_qty_48kg"],
         cash_before=cash_before,
         cash_after=cash_after,
         company_before=company_before,
         company_after=company_after,
+        company_12kg_before=company_12kg_before,
+        company_12kg_after=company_12kg_after,
+        company_48kg_before=company_48kg_before,
+        company_48kg_after=company_48kg_after,
         inventory_before=inv_before,
         inventory_after=inv_after,
       )
@@ -654,7 +939,30 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     cash_end=cash_end,
     company_start=company_start,
     company_end=company_end,
+    company_12kg_start=company_12kg_start,
+    company_12kg_end=company_12kg_end,
+    company_48kg_start=company_48kg_start,
+    company_48kg_end=company_48kg_end,
+    company_give_start=company_give_start,
+    company_give_end=company_give_end,
+    company_receive_start=company_receive_start,
+    company_receive_end=company_receive_end,
+    company_12kg_give_start=company_12kg_give_start,
+    company_12kg_give_end=company_12kg_give_end,
+    company_12kg_receive_start=company_12kg_receive_start,
+    company_12kg_receive_end=company_12kg_receive_end,
+    company_48kg_give_start=company_48kg_give_start,
+    company_48kg_give_end=company_48kg_give_end,
+    company_48kg_receive_start=company_48kg_receive_start,
+    company_48kg_receive_end=company_48kg_receive_end,
+    customer_money_receivable=float(customer_totals["money_receivable"]),
+    customer_money_payable=float(customer_totals["money_payable"]),
+    customer_12kg_receivable=int(customer_totals["cyl_receivable_12"]),
+    customer_12kg_payable=int(customer_totals["cyl_payable_12"]),
+    customer_48kg_receivable=int(customer_totals["cyl_receivable_48"]),
+    customer_48kg_payable=int(customer_totals["cyl_payable_48"]),
     inventory_start=inventory_start,
     inventory_end=inventory_end,
+    audit_summary=get_daily_audit_summary(session, business_date),
     events=event_rows,
   )

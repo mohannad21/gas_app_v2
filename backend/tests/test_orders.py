@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from .conftest import create_customer, create_system, init_inventory
+from conftest import create_customer, create_system, init_inventory
 
 
 def _get_customer(client: TestClient, customer_id: str) -> dict:
