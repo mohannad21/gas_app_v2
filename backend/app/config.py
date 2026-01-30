@@ -23,7 +23,7 @@ class Settings(BaseSettings):
   access_token_expires_minutes: int = 60
 
   # Inventory
-  business_tz: str = "LOCAL"
+  business_tz: str = "Europe/Berlin"
   allow_negative_admin_ids: str = ""
 
   # CORS

@@ -1,63 +1,77 @@
-from datetime import datetime, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import CompanyPayment
-from app.schemas import CompanyPaymentCreate, new_id
-from app.services.cash import add_cash_delta
-from app.services.company import add_company_delta
-from app.utils.time import business_date_start_utc
+from app.models import CompanyTransaction
+from app.schemas import CompanyCylinderSettleCreate, CompanyCylinderSettleOut
+from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
 
 router = APIRouter(prefix="/company", tags=["company"])
 
 
-@router.post("/payments", status_code=status.HTTP_201_CREATED)
-def create_company_payment(payload: CompanyPaymentCreate, session: Session = Depends(get_session)) -> dict[str, object]:
-  try:
-    day = datetime.fromisoformat(payload.date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  if payload.amount <= 0:
-    raise HTTPException(status_code=400, detail="amount_must_be_positive")
+@router.post("/cylinders/settle", response_model=CompanyCylinderSettleOut, status_code=status.HTTP_201_CREATED)
+def settle_company_cylinders(
+  payload: CompanyCylinderSettleCreate, session: Session = Depends(get_session)
+) -> CompanyCylinderSettleOut:
+  if payload.quantity <= 0:
+    raise HTTPException(status_code=400, detail="quantity_must_be_positive")
 
-  base = business_date_start_utc(day)
-  if payload.time_of_day == "morning":
-    effective_at = base + timedelta(hours=9)
-  elif payload.time_of_day == "evening":
-    effective_at = base + timedelta(hours=18)
+  if payload.request_id:
+    existing = session.exec(
+      select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+    ).first()
+    if existing:
+      if payload.gas_type == "12kg":
+        quantity = existing.buy12 or existing.return12
+        direction = "receive_full" if existing.buy12 else "return_empty"
+      else:
+        quantity = existing.buy48 or existing.return48
+        direction = "receive_full" if existing.buy48 else "return_empty"
+      return CompanyCylinderSettleOut(
+        id=existing.id,
+        happened_at=existing.happened_at,
+        gas_type=payload.gas_type,
+        quantity=quantity,
+        direction=direction,  # type: ignore[arg-type]
+        note=existing.note,
+      )
+
+  happened_at = normalize_happened_at(payload.happened_at)
+  buy12 = return12 = buy48 = return48 = 0
+  if payload.gas_type == "12kg":
+    if payload.direction == "receive_full":
+      buy12 = payload.quantity
+    else:
+      return12 = payload.quantity
   else:
-    effective_at = base + timedelta(hours=12)
+    if payload.direction == "receive_full":
+      buy48 = payload.quantity
+    else:
+      return48 = payload.quantity
 
-  payment_id = new_id("compay_")
-  payment = CompanyPayment(
-    id=payment_id,
-    business_date=day,
-    time_of_day=payload.time_of_day,
-    effective_at=effective_at,
-    amount=payload.amount,
+  txn = CompanyTransaction(
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    buy12=buy12,
+    return12=return12,
+    buy48=buy48,
+    return48=return48,
+    total=0,
+    paid=0,
     note=payload.note,
-    created_at=datetime.utcnow(),
-    is_deleted=False,
+    request_id=payload.request_id,
+    is_reversed=False,
   )
-  add_cash_delta(
-    session,
-    effective_at=effective_at,
-    source_type="company_payment",
-    source_id=payment_id,
-    delta_cash=-payload.amount,
-    reason=payload.note,
-  )
-  add_company_delta(
-    session,
-    effective_at=effective_at,
-    source_type="company_payment",
-    source_id=payment_id,
-    delta_payable=-payload.amount,
-    reason=payload.note,
-  )
-  session.add(payment)
+  session.add(txn)
+  post_company_transaction(session, txn)
   session.commit()
-  # TODO: if payment edits/deletes are introduced, delete cash/company deltas and recompute forward.
-  return {"id": payment_id, "effective_at": effective_at, "amount": payload.amount}
+  session.refresh(txn)
+
+  return CompanyCylinderSettleOut(
+    id=txn.id,
+    happened_at=txn.happened_at,
+    gas_type=payload.gas_type,
+    quantity=payload.quantity,
+    direction=payload.direction,
+    note=txn.note,
+  )

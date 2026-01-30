@@ -1,0 +1,1809 @@
+FILE: frontend/hooks/use-color-scheme.ts
+export { useColorScheme } from 'react-native';
+
+FILE: frontend/hooks/use-color-scheme.web.ts
+import { useEffect, useState } from 'react';
+import { useColorScheme as useRNColorScheme } from 'react-native';
+
+/**
+ * To support static rendering, this value needs to be re-calculated on the client side for web
+ */
+export function useColorScheme() {
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
+
+  const colorScheme = useRNColorScheme();
+
+  if (hasHydrated) {
+    return colorScheme;
+  }
+
+  return 'light';
+}
+
+FILE: frontend/hooks/use-theme-color.ts
+/**
+ * Learn more about light and dark modes:
+ * https://docs.expo.dev/guides/color-schemes/
+ */
+
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+
+export function useThemeColor(
+  props: { light?: string; dark?: string },
+  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+) {
+  const theme = useColorScheme() ?? 'light';
+  const colorFromProps = props[theme];
+
+  if (colorFromProps) {
+    return colorFromProps;
+  } else {
+    return Colors[theme][colorName];
+  }
+}
+
+FILE: frontend/hooks/useActivities.ts
+import { listActivities } from "@/lib/api";
+import { Activity } from "@/types/domain";
+import { useQuery } from "@tanstack/react-query";
+
+export function useActivities() {
+  return useQuery<Activity[]>({
+    queryKey: ["activities"],
+    queryFn: listActivities,
+  });
+}
+
+FILE: frontend/hooks/useBankDeposits.ts
+import { createBankDeposit, deleteBankDeposit, listBankDeposits } from "@/lib/api";
+import { BankDeposit } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import { showToast } from "@/lib/toast";
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useBankDeposits(date: string, options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  return useQuery<BankDeposit[]>({
+    queryKey: ["bank_deposits", date],
+    enabled: enabled && !!date,
+    queryFn: () => listBankDeposits(date),
+  });
+}
+
+export function useCreateBankDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createBankDeposit,
+    onError: (err) => {
+      const message = extractErrorMessage(err as AxiosError);
+      showToast(`Failed to save deposit: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("Deposit saved");
+      queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
+    },
+  });
+}
+
+export function useDeleteBankDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; date: string }) => deleteBankDeposit(id),
+    onError: (err) => {
+      const message = extractErrorMessage(err as AxiosError);
+      showToast(`Failed to remove deposit: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("Deposit removed");
+      queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
+    },
+  });
+}
+
+FILE: frontend/hooks/useCash.ts
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { createCashAdjustment, deleteCashAdjustment, listCashAdjustments, updateCashAdjustment } from "@/lib/api";
+
+export function useCreateCashAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createCashAdjustment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cash"] });
+      queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useCashAdjustments(date?: string, includeDeleted?: boolean) {
+  return useQuery({
+    queryKey: ["cash", "adjustments", date, includeDeleted ?? false],
+    queryFn: () => listCashAdjustments(date as string, includeDeleted),
+    enabled: !!date,
+  });
+}
+
+export function useUpdateCashAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateCashAdjustment>[1] }) =>
+      updateCashAdjustment(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cash"] });
+      queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteCashAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCashAdjustment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cash"] });
+      queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/useCollections.ts
+import { createCollection, deleteCollection, listCollections, updateCollection } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { CollectionCreateInput, CollectionUpdateInput } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useCreateCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CollectionCreateInput) => createCollection(payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      console.error(
+        "[createCollection ERROR]",
+        axiosError.response?.status,
+        axiosError.response?.data ?? axiosError.message
+      );
+      showToast(`Failed to save collection: ${extractErrorMessage(axiosError)}`);
+    },
+    onSuccess: () => {
+      showToast("Collection saved");
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+export function useCollections() {
+  return useQuery({
+    queryKey: ["collections"],
+    queryFn: listCollections,
+  });
+}
+
+export function useUpdateCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CollectionUpdateInput }) =>
+      updateCollection(id, payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      console.error(
+        "[updateCollection ERROR]",
+        axiosError.response?.status,
+        axiosError.response?.data ?? axiosError.message
+      );
+      showToast(`Failed to update collection: ${extractErrorMessage(axiosError)}`);
+    },
+    onSuccess: () => {
+      showToast("Collection updated");
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+export function useDeleteCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCollection(id),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      console.error(
+        "[deleteCollection ERROR]",
+        axiosError.response?.status,
+        axiosError.response?.data ?? axiosError.message
+      );
+      showToast(`Failed to delete collection: ${extractErrorMessage(axiosError)}`);
+    },
+    onSuccess: () => {
+      showToast("Collection deleted");
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/useCompany.ts
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+import { settleCompanyCylinderDebt } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { CompanyCylinderPaymentCreate, CompanyCylinderPaymentDetails } from "@/types/domain";
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useSettleCompanyCylinderDebt() {
+  const queryClient = useQueryClient();
+  return useMutation<CompanyCylinderPaymentDetails, AxiosError, CompanyCylinderPaymentCreate>({
+    mutationFn: (payload) => settleCompanyCylinderDebt(payload),
+    onError: (err) => {
+      const message = extractErrorMessage(err);
+      showToast(`Failed to settle cylinder debt: ${message}`);
+    },
+    onSuccess: () => {
+      showToast("Cylinder debt settled");
+      queryClient.invalidateQueries({ queryKey: ["cash"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/useCustomers.ts
+import { createCustomer, createCustomerAdjustment, deleteCustomer, listCustomers, updateCustomer } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { Customer, CustomerAdjustmentCreateInput, CustomerUpdateInput } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+function extractErrorMessage(err: AxiosError) {
+  const data = err.response?.data;
+  if (data && typeof data === "object") {
+    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
+    if (typeof detail === "string") return detail;
+  }
+  return err.message || "Unknown error";
+}
+
+export function useCustomers() {
+  return useQuery<Customer[]>({
+    queryKey: ["customers"],
+    queryFn: async () => {
+      const data = await listCustomers();
+      return Array.from(new Map(data.map((c) => [c.id, c])).values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    },
+  });
+}
+
+export function useCreateCustomer(options?: { showToast?: boolean }) {
+  const queryClient = useQueryClient();
+  const showSuccessToast = options?.showToast ?? true;
+  return useMutation({
+    mutationFn: createCustomer,
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to create customer: ${message}`);
+      console.error("[createCustomer ERROR]", axiosError.response?.status, message);
+    },
+    onSuccess: () => {
+      if (showSuccessToast) {
+        showToast("Customer created");
+      }
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+}
+
+export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
+  const queryClient = useQueryClient();
+  const showSuccessToast = options?.showToast ?? true;
+  return useMutation({
+    mutationFn: (payload: CustomerAdjustmentCreateInput) => createCustomerAdjustment(payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to create adjustment: ${message}`);
+      console.error("[createCustomerAdjustment ERROR]", axiosError.response?.status, message);
+    },
+    onSuccess: () => {
+      if (showSuccessToast) {
+        showToast("Adjustment added");
+      }
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+  });
+}
+
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CustomerUpdateInput }) =>
+      updateCustomer(id, payload),
+
+    onSuccess: (_, variables) => {
+      showToast("Customer updated");
+
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+
+      // Refresh systems for this customer
+      const key = variables.id ?? null;
+      queryClient.invalidateQueries({ queryKey: ["systems", key] });
+      queryClient.invalidateQueries({ queryKey: ["systems"] });
+    },
+  });
+}
+
+export function useDeleteCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCustomer,
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to delete customer: ${message}`);
+      console.error("[deleteCustomer ERROR]", axiosError.response?.status, message);
+    },
+    onSuccess: (_, id) => {
+      showToast("Customer removed");
+      queryClient.setQueryData<Customer[]>(["customers"], (prev) =>
+        prev ? prev.filter((c) => c.id !== id) : prev
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+}
+
+FILE: frontend/hooks/useDailyReportScreen.ts
+import { useEffect, useMemo, useState } from "react";
+
+import { useCustomers } from "@/hooks/useCustomers";
+import { useDailyReportsV2 } from "@/hooks/useReports";
+import { getDailyReportV2 } from "@/lib/api";
+import { DailyReportV2Day } from "@/types/domain";
+
+type BalanceBucket = { count: number; total: number };
+export type BalanceSummary = {
+  money: { receivable: BalanceBucket; payable: BalanceBucket };
+  cyl12: { receivable: BalanceBucket; payable: BalanceBucket };
+  cyl48: { receivable: BalanceBucket; payable: BalanceBucket };
+};
+
+export type CompanySummary = {
+  give12: number;
+  receive12: number;
+  give48: number;
+  receive48: number;
+  payCash: number;
+  receiveCash: number;
+};
+
+const getLocalDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+export function useDailyReportScreen(rangeDays = 30) {
+  const customersQuery = useCustomers();
+
+  const today = getLocalDateString();
+  const v2From = useMemo(() => {
+    const start = new Date();
+    start.setDate(start.getDate() - rangeDays);
+    const year = start.getFullYear();
+    const month = String(start.getMonth() + 1).padStart(2, "0");
+    const day = String(start.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [rangeDays]);
+  const v2To = today;
+
+  const v2Query = useDailyReportsV2(v2From, v2To);
+  const v2Rows = useMemo(() => {
+    const rows = Array.isArray(v2Query.data) ? v2Query.data : [];
+    return [...rows].sort((a, b) => String(b?.date ?? "").localeCompare(String(a?.date ?? "")));
+  }, [v2Query.data]);
+
+  const [v2Expanded, setV2Expanded] = useState<string[]>([]);
+  const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
+
+  useEffect(() => {
+    const wanted = new Set<string>([...v2Expanded, ...((v2Query.data ?? []) as any[]).map((row) => row.date)]);
+    if (wanted.size === 0) return;
+
+    const missing = Array.from(wanted).filter((date) => !(date in v2DayByDate));
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    const load = async () => {
+      for (const date of missing) {
+        try {
+          const day = await getDailyReportV2(date);
+          if (cancelled) return;
+          setV2DayByDate((prev) => ({ ...prev, [date]: day }));
+        } catch {
+          if (cancelled) return;
+          setV2DayByDate((prev) => ({ ...prev, [date]: null }));
+        }
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [v2Expanded, v2DayByDate, v2Query.data]);
+
+  useEffect(() => {
+    if (!v2Query.data) return;
+    setV2DayByDate({});
+  }, [v2Query.data]);
+
+  const balanceSummary: BalanceSummary = useMemo(() => {
+    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+    const summary: BalanceSummary = {
+      money: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+      cyl12: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+      cyl48: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+    };
+
+    customers.forEach((customer) => {
+      const money = Number(customer.money_balance || 0);
+      if (money > 0) {
+        summary.money.receivable.count += 1;
+        summary.money.receivable.total += money;
+      } else if (money < 0) {
+        summary.money.payable.count += 1;
+        summary.money.payable.total += Math.abs(money);
+      }
+
+      const cyl12 = Number(customer.cylinder_balance_12kg || 0);
+      if (cyl12 > 0) {
+        summary.cyl12.receivable.count += 1;
+        summary.cyl12.receivable.total += cyl12;
+      } else if (cyl12 < 0) {
+        summary.cyl12.payable.count += 1;
+        summary.cyl12.payable.total += Math.abs(cyl12);
+      }
+
+      const cyl48 = Number(customer.cylinder_balance_48kg || 0);
+      if (cyl48 > 0) {
+        summary.cyl48.receivable.count += 1;
+        summary.cyl48.receivable.total += cyl48;
+      } else if (cyl48 < 0) {
+        summary.cyl48.payable.count += 1;
+        summary.cyl48.payable.total += Math.abs(cyl48);
+      }
+    });
+
+    return summary;
+  }, [customersQuery.data]);
+
+  const companySummary: CompanySummary = useMemo(() => {
+    const latest = v2Rows[0];
+    const net12 = Number(latest?.company_12kg_end ?? 0);
+    const net48 = Number(latest?.company_48kg_end ?? 0);
+    const cashNet = Number(latest?.company_end ?? 0);
+    return {
+      give12: Math.max(-net12, 0),
+      receive12: Math.max(net12, 0),
+      give48: Math.max(-net48, 0),
+      receive48: Math.max(net48, 0),
+      payCash: Math.max(cashNet, 0),
+      receiveCash: Math.max(-cashNet, 0),
+    };
+  }, [v2Rows]);
+
+  return {
+    v2Query,
+    v2Rows,
+    v2Expanded,
+    setV2Expanded,
+    v2DayByDate,
+    setV2DayByDate,
+    balanceSummary,
+    companySummary,
+    refetchV2: v2Query.refetch,
+    refetchCustomers: customersQuery.refetch,
+  };
+}
+
+FILE: frontend/hooks/useExpenses.ts
+import { createExpense, deleteExpense, listExpenses } from "@/lib/api";
+import { Expense, ExpenseCreateInput } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import { showToast } from "@/lib/toast";
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useExpenses(date?: string, options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  return useQuery<Expense[]>({
+    queryKey: ["expenses", date ?? "all"],
+    enabled,
+    queryFn: () => listExpenses(date),
+  });
+}
+
+export function useCreateExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ExpenseCreateInput) => createExpense(payload),
+    onError: (err) => {
+      const message = extractErrorMessage(err as AxiosError);
+      showToast(`Failed to save expense: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("Expense saved");
+      queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses", variables.date] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ date, expense_type }: { date: string; expense_type: string }) =>
+      deleteExpense(date, expense_type),
+    onError: (err) => {
+      const message = extractErrorMessage(err as AxiosError);
+      showToast(`Failed to remove expense: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("Expense removed");
+      queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses", variables.date] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/useInventory.ts
+import {
+  createInventoryAdjust,
+  createInventoryRefill,
+  deleteInventoryAdjustment,
+  deleteInventoryRefill,
+  getInventoryLatest,
+  getInventoryRefillDetails,
+  getInventorySnapshot,
+  initInventory,
+  listInventoryAdjustments,
+  listInventoryRefills,
+  updateInventoryAdjustment,
+  updateInventoryRefill,
+} from "@/lib/api";
+import { InventorySnapshot } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+export function useInventoryLatest() {
+  return useQuery<InventorySnapshot | null>({
+    queryKey: ["inventory", "latest"],
+    queryFn: () => getInventoryLatest(),
+  });
+}
+
+export function useInventorySnapshot(params?: {
+  date?: string | null;
+  time?: string | null;
+  time_of_day?: "morning" | "evening" | null;
+  at?: string | null;
+}) {
+  const key = params?.at
+    ? ["inventory", "snapshot", params.at]
+    : ["inventory", "snapshot", params?.date, params?.time, params?.time_of_day];
+  return useQuery<InventorySnapshot | null>({
+    queryKey: key,
+    queryFn: () =>
+      getInventorySnapshot({
+        date: params?.date ?? undefined,
+        time: params?.time ?? undefined,
+        time_of_day: params?.time_of_day ?? undefined,
+        at: params?.at ?? undefined,
+      }),
+    enabled: !!(params?.at || (params?.date && (params?.time || params?.time_of_day))),
+  });
+}
+
+export function useInitInventory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: initInventory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useCreateRefill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createInventoryRefill,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useAdjustInventory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createInventoryAdjust,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useInventoryAdjustments(date?: string, includeDeleted?: boolean) {
+  return useQuery({
+    queryKey: ["inventory", "adjustments", date, includeDeleted ?? false],
+    queryFn: () => listInventoryAdjustments(date as string, includeDeleted),
+    enabled: !!date,
+  });
+}
+
+export function useUpdateInventoryAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateInventoryAdjustment>[1] }) =>
+      updateInventoryAdjustment(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteInventoryAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteInventoryAdjustment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useInventoryRefills(includeDeleted?: boolean) {
+  return useQuery({
+    queryKey: ["inventory", "refills", includeDeleted ?? false],
+    queryFn: () => listInventoryRefills(includeDeleted),
+  });
+}
+
+export function useInventoryRefillDetails(refillId?: string | null) {
+  return useQuery({
+    queryKey: ["inventory", "refill", refillId],
+    queryFn: () => getInventoryRefillDetails(refillId as string),
+    enabled: !!refillId,
+  });
+}
+
+export function useUpdateRefill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ refillId, ...payload }: { refillId: string } & Parameters<typeof updateInventoryRefill>[1]) =>
+      updateInventoryRefill(refillId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteRefill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (refillId: string) => deleteInventoryRefill(refillId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/useInventoryActivity.ts
+import { useMemo } from "react";
+
+import { useCashAdjustments } from "@/hooks/useCash";
+import { useInventoryAdjustments, useInventoryRefills } from "@/hooks/useInventory";
+import { CashAdjustment, InventoryAdjustment, InventoryRefillSummary } from "@/types/domain";
+
+export type InventoryActivityItem =
+  | {
+      kind: "refill";
+      created_at: string;
+      is_deleted: boolean;
+      data: InventoryRefillSummary;
+    }
+  | {
+      kind: "inventory_adjustment";
+      created_at: string;
+      is_deleted: boolean;
+      data: InventoryAdjustment;
+    }
+  | {
+      kind: "cash_adjustment";
+      created_at: string;
+      is_deleted: boolean;
+      data: CashAdjustment;
+    };
+
+function toSafeTime(value?: string) {
+  if (!value) return 0;
+  const normalized = value.replace(/(\.\d{3})\d+/, "$1");
+  const parsed = Date.parse(normalized);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function useInventoryActivity(date: string, includeDeleted?: boolean) {
+  const refillsQuery = useInventoryRefills(includeDeleted);
+  const inventoryAdjustmentsQuery = useInventoryAdjustments(date, includeDeleted);
+  const cashAdjustmentsQuery = useCashAdjustments(date, includeDeleted);
+
+  const items = useMemo<InventoryActivityItem[]>(() => {
+    const refills = (refillsQuery.data ?? []).filter((refill) => refill.date === date);
+    const refillItems = refills.map((refill) => ({
+      kind: "refill" as const,
+      created_at: refill.effective_at,
+      is_deleted: Boolean(refill.is_deleted),
+      data: refill,
+    }));
+
+    const inventoryItems = (inventoryAdjustmentsQuery.data ?? []).map((adjustment) => ({
+      kind: "inventory_adjustment" as const,
+      created_at: adjustment.effective_at,
+      is_deleted: Boolean(adjustment.is_deleted),
+      data: adjustment,
+    }));
+
+    const cashItems = (cashAdjustmentsQuery.data ?? []).map((adjustment) => ({
+      kind: "cash_adjustment" as const,
+      created_at: adjustment.effective_at,
+      is_deleted: Boolean(adjustment.is_deleted),
+      data: adjustment,
+    }));
+
+    return [...refillItems, ...inventoryItems, ...cashItems].sort(
+      (a, b) => toSafeTime(b.created_at) - toSafeTime(a.created_at)
+    );
+  }, [refillsQuery.data, inventoryAdjustmentsQuery.data, cashAdjustmentsQuery.data, date]);
+
+  return {
+    items,
+    refillsQuery,
+    inventoryAdjustmentsQuery,
+    cashAdjustmentsQuery,
+  };
+}
+
+FILE: frontend/hooks/useOrders.ts
+import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { Order, OrderUpdateInput } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useOrders() {
+  return useQuery<Order[]>({
+    queryKey: ["orders"],
+    queryFn: async () => {
+      const data = await listOrders();
+      const deduped = Array.from(new Map(data.map((o) => [o.id, o])).values());
+      return deduped.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    },
+  });
+}
+
+export function useOrdersByDay(date?: string) {
+  return useQuery<Order[]>({
+    queryKey: ["orders", "day", date],
+    queryFn: () => listOrdersByDate(date || ""),
+    enabled: Boolean(date),
+  });
+}
+
+export function useCreateOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createOrder,
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      console.error("[createOrder ERROR]", axiosError.response?.status, axiosError.response?.data ?? axiosError.message);
+      showToast(`Failed to create order: ${extractErrorMessage(axiosError)}`);
+    },
+    onSuccess: () => {
+      showToast("Order created");
+
+      // FIX: remove activities/system/customer invalidations
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+export function useUpdateOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: OrderUpdateInput }) =>
+      updateOrder(id, payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      console.error("[updateOrder ERROR]", axiosError.response?.status, axiosError.response?.data ?? axiosError.message);
+      showToast(`Failed to update order: ${extractErrorMessage(axiosError)}`);
+    },
+
+    onSuccess: () => {
+      showToast("Order updated");
+
+      // FIX: remove activities/system/customer invalidations
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+export function useDeleteOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteOrder,
+    onSuccess: (_, id) => {
+      showToast("Order removed");
+
+      queryClient.setQueryData<Order[]>(["orders"], (prev) =>
+        prev ? prev.filter((o) => o.id !== id) : prev
+      );
+
+      // FIX: remove activities/system/customer invalidations
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
+    },
+  });
+}
+
+FILE: frontend/hooks/usePrices.ts
+import { listPriceSettings, savePriceSetting } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { PriceSetting } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+export function usePriceSettings() {
+  return useQuery<PriceSetting[]>({
+    queryKey: ["prices"],
+    queryFn: listPriceSettings,
+  });
+}
+
+export function useSavePriceSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: savePriceSetting,
+    onSuccess: () => {
+      showToast("Price saved");
+      queryClient.invalidateQueries({ queryKey: ["prices"] });
+      queryClient.invalidateQueries({ queryKey: ["activities"], exact: false });
+    },
+    onError: (err) => {
+      const axiosErr = err as AxiosError;
+      const detail =
+        axiosErr.response?.data?.detail ?? axiosErr.response?.data ?? axiosErr.message;
+      console.error("savePriceSetting failed", axiosErr.response ?? axiosErr.message);
+      showToast(
+        detail
+          ? `Unable to save price${typeof detail === "string" ? `: ${detail}` : ""}`
+          : "Unable to save price"
+      );
+    },
+  });
+}
+
+FILE: frontend/hooks/useReports.ts
+import { getDailyReportV2, listDailyReportsV2 } from "@/lib/api";
+import { DailyReportV2Card, DailyReportV2Day } from "@/types/domain";
+import { useQuery } from "@tanstack/react-query";
+
+export function useDailyReportsV2(from: string, to: string) {
+  return useQuery<DailyReportV2Card[]>({
+    queryKey: ["reports-v2", from, to],
+    queryFn: () => listDailyReportsV2({ from, to }),
+  });
+}
+
+export function useDailyReportDayV2(date: string) {
+  return useQuery<DailyReportV2Day>({
+    queryKey: ["reports-day-v2", date],
+    queryFn: () => getDailyReportV2(date),
+    enabled: !!date,
+  });
+}
+
+FILE: frontend/hooks/useSystems.ts
+import { createSystem, deleteSystem, listSystems, updateSystem } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { System, SystemCreateInput, SystemUpdateInput } from "@/types/domain";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+// Normalize customer ID to prevent "" buckets
+function normalizeCustomerId(id?: string | null) {
+  if (!id || id.trim() === "") return null;
+  return id;
+}
+
+function extractErrorMessage(err: AxiosError) {
+  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return "Unknown error";
+}
+
+export function useSystems(customerId?: string, options?: { enabled?: boolean }) {
+  const keyId = normalizeCustomerId(customerId);
+  const queryKey = ["systems", keyId ?? "all"];
+  const enabled = options?.enabled ?? true;
+
+  return useQuery<System[]>({
+    queryKey,
+    enabled,
+    queryFn: async () => {
+      console.log("[listSystems CALL]", { customerId });
+      const data = await listSystems(customerId);
+      console.log("[listSystems RESULT]", {
+        customerId,
+        count: data.length,
+        systems: data.map((s) => ({ id: s.id, active: s.is_active })),
+      });
+      return data;
+    },
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+}
+
+export function useCreateSystem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SystemCreateInput) => {
+      console.log("[createSystem CALL]", payload);
+      return createSystem(payload);
+    },
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      console.error("[createSystem ERROR]", axiosError.response?.status, message);
+      showToast(`Failed to add system: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("System added");
+
+      const key = normalizeCustomerId(variables.customer_id);
+
+      queryClient.invalidateQueries({ queryKey: ["systems", key] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+}
+
+export function useUpdateSystem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: SystemUpdateInput }) => {
+      console.log("[updateSystem CALL]", { id, payload });
+      return updateSystem(id, payload);
+    },
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      console.error("[updateSystem ERROR]", axiosError.response?.status, message);
+      showToast(`Failed to update system: ${message}`);
+    },
+
+    onSuccess: (updated) => {
+      showToast("System updated");
+
+      const customerKey = normalizeCustomerId(updated.customer_id);
+
+      // Update cache for this customer's systems
+      queryClient.setQueryData<System[]>(["systems", customerKey], (prev) =>
+        prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["systems", customerKey] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+}
+
+export function useDeleteSystem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string; customerId?: string }) => deleteSystem(id),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      console.error("[deleteSystem ERROR]", axiosError.response?.status, message);
+      showToast(`Failed to remove system: ${message}`);
+    },
+    onSuccess: (_, variables) => {
+      showToast("System removed");
+
+      const key = normalizeCustomerId(variables.customerId);
+
+      queryClient.invalidateQueries({ queryKey: ["systems", key] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+}
+
+FILE: frontend/hooks/useSystemSettings.ts
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+
+import { getSystemSettings, initializeSystem } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { SystemInitializeInput, SystemSettings } from "@/types/domain";
+
+function extractErrorMessage(err: AxiosError) {
+  const data = err.response?.data;
+  if (data && typeof data === "object") {
+    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
+    if (typeof detail === "string") return detail;
+  }
+  return err.message || "Unknown error";
+}
+
+export function useSystemSettings() {
+  return useQuery<SystemSettings>({
+    queryKey: ["system-settings"],
+    queryFn: getSystemSettings,
+  });
+}
+
+export function useInitializeSystem(options?: { showToast?: boolean }) {
+  const queryClient = useQueryClient();
+  const showSuccessToast = options?.showToast ?? true;
+  return useMutation({
+    mutationFn: (payload: SystemInitializeInput) => initializeSystem(payload),
+    onError: (err) => {
+      const axiosError = err as AxiosError;
+      const message = extractErrorMessage(axiosError);
+      showToast(`Failed to initialize system: ${message}`);
+      console.error("[initializeSystem ERROR]", axiosError.response?.status, message);
+    },
+    onSuccess: () => {
+      if (showSuccessToast) {
+        showToast("System initialized");
+      }
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["cash"] });
+    },
+  });
+}
+
+FILE: frontend/types/domain.ts
+import { z } from "zod";
+
+export const GasTypeSchema = z.enum(["12kg", "48kg"]);
+export type GasType = z.infer<typeof GasTypeSchema>;
+
+export const OrderModeSchema = z.enum(["replacement", "selling", "buying"]);
+export type OrderMode = z.infer<typeof OrderModeSchema>;
+
+export const CustomerTypeSchema = z.enum(["private", "industrial", "other"]);
+export type CustomerType = z.infer<typeof CustomerTypeSchema>;
+
+export const SystemTypeSchema = z.enum(["main_kitchen", "side_kitchen", "oven", "restaurant", "other"]);
+export type SystemType = z.infer<typeof SystemTypeSchema>;
+
+export const ActivityTypeSchema = z.enum(["order", "customer", "price", "system", "inventory"]);
+export type ActivityType = z.infer<typeof ActivityTypeSchema>;
+
+export const CustomerSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    phone: z.string().nullish(),
+    notes: z.string().nullish(),
+    customer_type: CustomerTypeSchema,
+    money_balance: z.number(),
+    money_to_receive: z.number().optional(),
+    money_to_give: z.number().optional(),
+    total_cylinders_delivered_lifetime: z.number(),
+    order_count: z.number(),
+    cylinder_balance_12kg: z.number(),
+    cylinder_to_receive_12kg: z.number().optional(),
+    cylinder_to_give_12kg: z.number().optional(),
+    cylinder_balance_48kg: z.number(),
+    cylinder_to_receive_48kg: z.number().optional(),
+    cylinder_to_give_48kg: z.number().optional(),
+    created_at: z.string(),
+  })
+  .passthrough();
+export type Customer = z.infer<typeof CustomerSchema>;
+
+export const CustomerCreateInputSchema = z.object({
+  name: z.string(),
+  phone: z.string().nullish().optional(),
+  customer_type: CustomerTypeSchema.optional(),
+  notes: z.string().nullish().optional(),
+  starting_money: z.number().optional(),
+  starting_12kg: z.number().optional(),
+  starting_48kg: z.number().optional(),
+  starting_reason: z.string().optional(),
+});
+export type CustomerCreateInput = z.infer<typeof CustomerCreateInputSchema>;
+
+export const CustomerUpdateInputSchema = z.object({
+  name: z.string().optional(),
+  phone: z.string().nullish().optional(),
+  customer_type: CustomerTypeSchema.optional(),
+  notes: z.string().nullish().optional(),
+});
+export type CustomerUpdateInput = z.infer<typeof CustomerUpdateInputSchema>;
+
+export const SystemSettingsSchema = z
+  .object({
+    id: z.string(),
+    is_initialized: z.boolean(),
+    created_at: z.string(),
+    updated_at: z.string().nullish(),
+  })
+  .passthrough();
+export type SystemSettings = z.infer<typeof SystemSettingsSchema>;
+
+export const SystemInitializeInputSchema = z.object({
+  sell_price_12: z.number(),
+  sell_price_48: z.number(),
+  buy_price_12: z.number().optional(),
+  buy_price_48: z.number().optional(),
+  full_12: z.number(),
+  empty_12: z.number(),
+  full_48: z.number(),
+  empty_48: z.number(),
+  cash_start: z.number(),
+  company_payable_money: z.number().optional(),
+  company_full_12kg: z.number().optional(),
+  company_full_48kg: z.number().optional(),
+  company_empty_12kg: z.number().optional(),
+  company_empty_48kg: z.number().optional(),
+  customer_owe_money: z.number().optional(),
+  customer_credit_money: z.number().optional(),
+  customer_owe_12kg: z.number().optional(),
+  customer_owe_48kg: z.number().optional(),
+  customer_credit_12kg: z.number().optional(),
+  customer_credit_48kg: z.number().optional(),
+});
+export type SystemInitializeInput = z.infer<typeof SystemInitializeInputSchema>;
+
+export const InventoryAdjustmentSchema = z
+  .object({
+    id: z.string(),
+    gas_type: GasTypeSchema,
+    delta_full: z.number(),
+    delta_empty: z.number(),
+    reason: z.string().nullish(),
+    effective_at: z.string(),
+    created_at: z.string(),
+    is_deleted: z.boolean().optional(),
+  })
+  .passthrough();
+export type InventoryAdjustment = z.infer<typeof InventoryAdjustmentSchema>;
+
+export const InventoryRefillSummarySchema = z
+  .object({
+    refill_id: z.string(),
+    date: z.string(),
+    time_of_day: z.enum(["morning", "evening"]),
+    effective_at: z.string(),
+    buy12: z.number(),
+    return12: z.number(),
+    buy48: z.number(),
+    return48: z.number(),
+    is_deleted: z.boolean().optional(),
+    deleted_at: z.string().nullish(),
+  })
+  .passthrough();
+export type InventoryRefillSummary = z.infer<typeof InventoryRefillSummarySchema>;
+
+export const InventoryAdjustmentUpdateSchema = z.object({
+  delta_full: z.number().optional(),
+  delta_empty: z.number().optional(),
+  reason: z.string().optional(),
+  note: z.string().optional(),
+  allow_negative: z.boolean().optional(),
+});
+export type InventoryAdjustmentUpdate = z.infer<typeof InventoryAdjustmentUpdateSchema>;
+
+export const CashAdjustmentSchema = z
+  .object({
+    id: z.string(),
+    delta_cash: z.number(),
+    reason: z.string().nullish(),
+    effective_at: z.string(),
+    created_at: z.string(),
+    is_deleted: z.boolean().optional(),
+  })
+  .passthrough();
+export type CashAdjustment = z.infer<typeof CashAdjustmentSchema>;
+
+export const CashAdjustmentCreateSchema = z.object({
+  date: z.string().optional(),
+  time: z.string().optional(),
+  delta_cash: z.number(),
+  reason: z.string().optional(),
+});
+export type CashAdjustmentCreate = z.infer<typeof CashAdjustmentCreateSchema>;
+
+export const CashAdjustmentUpdateSchema = z.object({
+  delta_cash: z.number().optional(),
+  reason: z.string().optional(),
+});
+export type CashAdjustmentUpdate = z.infer<typeof CashAdjustmentUpdateSchema>;
+
+export const CustomerAdjustmentSchema = z
+  .object({
+    id: z.string(),
+    customer_id: z.string(),
+    amount_money: z.number(),
+    count_12kg: z.number(),
+    count_48kg: z.number(),
+    reason: z.string(),
+    is_inventory_neutral: z.boolean(),
+    created_at: z.string(),
+  })
+  .passthrough();
+export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;
+
+export const CustomerAdjustmentCreateInputSchema = z.object({
+  customer_id: z.string(),
+  amount_money: z.number().optional(),
+  count_12kg: z.number().optional(),
+  count_48kg: z.number().optional(),
+  reason: z.string().optional(),
+  is_inventory_neutral: z.boolean().optional(),
+});
+export type CustomerAdjustmentCreateInput = z.infer<typeof CustomerAdjustmentCreateInputSchema>;
+
+export const SystemSchema = z
+  .object({
+    id: z.string(),
+    customer_id: z.string(),
+    name: z.string(),
+    location: z.string().nullish(),
+    system_type: SystemTypeSchema,
+    gas_type: GasTypeSchema.nullish(),
+    system_customer_type: CustomerTypeSchema.nullish(),
+    is_active: z.boolean().optional(),
+    require_security_check: z.boolean().optional(),
+    security_check_exists: z.boolean().optional(),
+    security_check_date: z.string().nullish(),
+  })
+  .passthrough();
+export type System = z.infer<typeof SystemSchema>;
+
+export const SystemCreateInputSchema = z.object({
+  customer_id: z.string(),
+  name: z.string(),
+  location: z.string().nullish().optional(),
+  system_type: SystemTypeSchema.optional(),
+  gas_type: GasTypeSchema.optional(),
+  system_customer_type: CustomerTypeSchema.optional(),
+  is_active: z.boolean().optional(),
+  require_security_check: z.boolean().optional(),
+  security_check_exists: z.boolean().optional(),
+  security_check_date: z.string().nullish().optional(),
+});
+export type SystemCreateInput = z.infer<typeof SystemCreateInputSchema>;
+
+export const SystemUpdateInputSchema = SystemCreateInputSchema.partial();
+export type SystemUpdateInput = z.infer<typeof SystemUpdateInputSchema>;
+
+export const OrderSchema = z
+  .object({
+    id: z.string(),
+    customer_id: z.string(),
+    system_id: z.string(),
+    delivered_at: z.string(),
+    created_at: z.string(),
+    updated_at: z.string().nullish(),
+    order_mode: OrderModeSchema.optional(),
+    gas_type: GasTypeSchema,
+    cylinders_installed: z.number(),
+    cylinders_received: z.number(),
+    price_total: z.number(),
+    paid_amount: z.number().optional(),
+    applied_credit: z.number().optional(),
+    money_balance_before: z.number().optional(),
+    money_balance_after: z.number().optional(),
+    cyl_balance_before: z.record(z.string(), z.number()).optional(),
+    cyl_balance_after: z.record(z.string(), z.number()).optional(),
+    note: z.string().nullish(),
+  })
+  .passthrough();
+export type Order = z.infer<typeof OrderSchema>;
+
+export const OrderCreateInputSchema = z.object({
+  customer_id: z.string(),
+  system_id: z.string(),
+  delivered_at: z.string().optional(),
+  order_mode: OrderModeSchema.optional(),
+  gas_type: GasTypeSchema,
+  cylinders_installed: z.number(),
+  cylinders_received: z.number(),
+  price_total: z.number(),
+  paid_amount: z.number().optional(),
+  note: z.string().nullish().optional(),
+  client_request_id: z.string().optional(),
+});
+export type OrderCreateInput = z.infer<typeof OrderCreateInputSchema>;
+
+export const OrderUpdateInputSchema = OrderCreateInputSchema.partial();
+export type OrderUpdateInput = z.infer<typeof OrderUpdateInputSchema>;
+
+export const CollectionCreateInputSchema = z.object({
+  customer_id: z.string(),
+  action_type: z.enum(["payment", "return"]),
+  amount_money: z.number().optional(),
+  qty_12kg: z.number().optional(),
+  qty_48kg: z.number().optional(),
+  system_id: z.string().nullish().optional(),
+  effective_at: z.string().optional(),
+  note: z.string().nullish().optional(),
+});
+export type CollectionCreateInput = z.infer<typeof CollectionCreateInputSchema>;
+
+export const CollectionUpdateInputSchema = CollectionCreateInputSchema.partial();
+export type CollectionUpdateInput = z.infer<typeof CollectionUpdateInputSchema>;
+
+export const CollectionEventSchema = z
+  .object({
+    id: z.string(),
+    customer_id: z.string(),
+    action_type: z.enum(["payment", "return"]),
+    amount_money: z.number().nullish(),
+    qty_12kg: z.number().nullish(),
+    qty_48kg: z.number().nullish(),
+    cash_before: z.number().nullish(),
+    cash_after: z.number().nullish(),
+    inv12_full_before: z.number().nullish(),
+    inv12_full_after: z.number().nullish(),
+    inv12_empty_before: z.number().nullish(),
+    inv12_empty_after: z.number().nullish(),
+    inv48_full_before: z.number().nullish(),
+    inv48_full_after: z.number().nullish(),
+    inv48_empty_before: z.number().nullish(),
+    inv48_empty_after: z.number().nullish(),
+    money_balance_before: z.number().nullish(),
+    money_balance_after: z.number().nullish(),
+    cyl_balance_before: z.record(z.string(), z.number()).nullish(),
+    cyl_balance_after: z.record(z.string(), z.number()).nullish(),
+    created_at: z.string(),
+    effective_at: z.string().nullish(),
+    note: z.string().nullish(),
+  })
+  .passthrough();
+export type CollectionEvent = z.infer<typeof CollectionEventSchema>;
+
+export const OrderImpactSchema = z.object({
+  gross_paid: z.number(),
+  applied_credit: z.number(),
+  unpaid: z.number(),
+  new_balance: z.number(),
+  cyl_balance_before: z.record(z.string(), z.number()).optional(),
+  cyl_balance_after: z.record(z.string(), z.number()).optional(),
+});
+export type OrderImpact = z.infer<typeof OrderImpactSchema>;
+
+export const WhatsappLinkSchema = z.object({
+  url: z.string(),
+});
+export type WhatsappLink = z.infer<typeof WhatsappLinkSchema>;
+
+export const ActivityApiSchema = z
+  .object({
+    id: z.string(),
+    entity_type: ActivityTypeSchema,
+    entity_id: z.string().nullish(),
+    action: z.string(),
+    description: z.string(),
+    metadata: z.string().nullish(),
+    created_at: z.string(),
+    created_by: z.string().nullish(),
+  })
+  .passthrough();
+
+export const ActivitySchema = ActivityApiSchema.transform((activity) => ({
+  id: activity.id,
+  type: activity.entity_type,
+  action: activity.action,
+  description: activity.description,
+  entity_id: activity.entity_id ?? undefined,
+  customer_id: activity.entity_type === "customer" ? activity.entity_id ?? undefined : undefined,
+  metadata: activity.metadata ?? undefined,
+  created_at: activity.created_at,
+  created_by: activity.created_by ?? undefined,
+}));
+export type Activity = z.infer<typeof ActivitySchema>;
+
+export const InventorySnapshotSchema = z.object({
+  as_of: z.string(),
+  full12: z.number(),
+  empty12: z.number(),
+  total12: z.number(),
+  full48: z.number(),
+  empty48: z.number(),
+  total48: z.number(),
+  reason: z.string().nullish(),
+});
+export type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;
+
+export const ReportInventoryTotalsSchema = z.object({
+  full12: z.number(),
+  empty12: z.number(),
+  full48: z.number(),
+  empty48: z.number(),
+});
+export type ReportInventoryTotals = z.infer<typeof ReportInventoryTotalsSchema>;
+
+export const ReportInventoryStateSchema = z.object({
+  full12: z.number().nullish(),
+  empty12: z.number().nullish(),
+  full48: z.number().nullish(),
+  empty48: z.number().nullish(),
+});
+export type ReportInventoryState = z.infer<typeof ReportInventoryStateSchema>;
+
+export const DailyReportV2CardSchema = z.object({
+  date: z.string(),
+  cash_start: z.number(),
+  cash_end: z.number(),
+  company_start: z.number().optional(),
+  company_end: z.number().optional(),
+  company_12kg_start: z.number().optional(),
+  company_12kg_end: z.number().optional(),
+  company_48kg_start: z.number().optional(),
+  company_48kg_end: z.number().optional(),
+  company_give_start: z.number().optional(),
+  company_give_end: z.number().optional(),
+  company_receive_start: z.number().optional(),
+  company_receive_end: z.number().optional(),
+  company_12kg_give_start: z.number().optional(),
+  company_12kg_give_end: z.number().optional(),
+  company_12kg_receive_start: z.number().optional(),
+  company_12kg_receive_end: z.number().optional(),
+  company_48kg_give_start: z.number().optional(),
+  company_48kg_give_end: z.number().optional(),
+  company_48kg_receive_start: z.number().optional(),
+  company_48kg_receive_end: z.number().optional(),
+  customer_money_receivable: z.number().optional(),
+  customer_money_payable: z.number().optional(),
+  customer_12kg_receivable: z.number().optional(),
+  customer_12kg_payable: z.number().optional(),
+  customer_48kg_receivable: z.number().optional(),
+  customer_48kg_payable: z.number().optional(),
+  inventory_start: ReportInventoryTotalsSchema,
+  inventory_end: ReportInventoryTotalsSchema,
+  problems: z.array(z.string()).nullish(),
+  recalculated: z.boolean().optional(),
+});
+export type DailyReportV2Card = z.infer<typeof DailyReportV2CardSchema>;
+
+export const DailyReportV2EventSchema = z.object({
+  event_type: z.string(),
+  effective_at: z.string(),
+  created_at: z.string(),
+  source_id: z.string().nullish(),
+  label: z.string().nullish(),
+  label_short: z.string().nullish(),
+  order_mode: OrderModeSchema.nullish(),
+  gas_type: GasTypeSchema.nullish(),
+  customer_id: z.string().nullish(),
+  customer_name: z.string().nullish(),
+  customer_description: z.string().nullish(),
+  system_name: z.string().nullish(),
+  system_type: z.string().nullish(),
+  expense_type: z.string().nullish(),
+  reason: z.string().nullish(),
+  buy12: z.number().nullish(),
+  return12: z.number().nullish(),
+  buy48: z.number().nullish(),
+  return48: z.number().nullish(),
+  paid_buy12: z.number().nullish(),
+  paid_buy48: z.number().nullish(),
+  total_cost: z.number().nullish(),
+  paid_now: z.number().nullish(),
+  order_total: z.number().nullish(),
+  order_paid: z.number().nullish(),
+  order_installed: z.number().nullish(),
+  order_received: z.number().nullish(),
+  unit_price_buy_12: z.number().nullish(),
+  unit_price_buy_48: z.number().nullish(),
+  cash_before: z.number(),
+  cash_after: z.number(),
+  company_before: z.number().nullish(),
+  company_after: z.number().nullish(),
+  company_12kg_before: z.number().nullish(),
+  company_12kg_after: z.number().nullish(),
+  company_48kg_before: z.number().nullish(),
+  company_48kg_after: z.number().nullish(),
+  inventory_before: ReportInventoryStateSchema.nullish(),
+  inventory_after: ReportInventoryStateSchema.nullish(),
+});
+export type DailyReportV2Event = z.infer<typeof DailyReportV2EventSchema>;
+
+export const DailyAuditSummarySchema = z.object({
+  cash_in: z.number(),
+  new_debt: z.number(),
+  inv_delta_12: z.number(),
+  inv_delta_48: z.number(),
+});
+export type DailyAuditSummary = z.infer<typeof DailyAuditSummarySchema>;
+
+export const DailyReportV2DaySchema = z.object({
+  date: z.string(),
+  cash_start: z.number(),
+  cash_end: z.number(),
+  company_start: z.number().optional(),
+  company_end: z.number().optional(),
+  company_12kg_start: z.number().optional(),
+  company_12kg_end: z.number().optional(),
+  company_48kg_start: z.number().optional(),
+  company_48kg_end: z.number().optional(),
+  company_give_start: z.number().optional(),
+  company_give_end: z.number().optional(),
+  company_receive_start: z.number().optional(),
+  company_receive_end: z.number().optional(),
+  company_12kg_give_start: z.number().optional(),
+  company_12kg_give_end: z.number().optional(),
+  company_12kg_receive_start: z.number().optional(),
+  company_12kg_receive_end: z.number().optional(),
+  company_48kg_give_start: z.number().optional(),
+  company_48kg_give_end: z.number().optional(),
+  company_48kg_receive_start: z.number().optional(),
+  company_48kg_receive_end: z.number().optional(),
+  customer_money_receivable: z.number().optional(),
+  customer_money_payable: z.number().optional(),
+  customer_12kg_receivable: z.number().optional(),
+  customer_12kg_payable: z.number().optional(),
+  customer_48kg_receivable: z.number().optional(),
+  customer_48kg_payable: z.number().optional(),
+  inventory_start: ReportInventoryTotalsSchema,
+  inventory_end: ReportInventoryTotalsSchema,
+  recalculated: z.boolean().optional(),
+  audit_summary: DailyAuditSummarySchema,
+  events: z.array(DailyReportV2EventSchema),
+});
+export type DailyReportV2Day = z.infer<typeof DailyReportV2DaySchema>;
+
+export const InventoryRefillDetailsSchema = z.object({
+  refill_id: z.string(),
+  business_date: z.string(),
+  time_of_day: z.enum(["morning", "evening"]).optional(),
+  effective_at: z.string(),
+  buy12: z.number(),
+  return12: z.number(),
+  buy48: z.number(),
+  return48: z.number(),
+  paid_buy12: z.number().optional(),
+  paid_buy48: z.number().optional(),
+  total_cost: z.number(),
+  paid_now: z.number(),
+  unit_price_buy_12: z.number().nullish(),
+  unit_price_buy_48: z.number().nullish(),
+  before_full_12: z.number(),
+  before_empty_12: z.number(),
+  after_full_12: z.number(),
+  after_empty_12: z.number(),
+  before_full_48: z.number(),
+  before_empty_48: z.number(),
+  after_full_48: z.number(),
+  after_empty_48: z.number(),
+  is_deleted: z.boolean().optional(),
+  deleted_at: z.string().nullish(),
+});
+export type InventoryRefillDetails = z.infer<typeof InventoryRefillDetailsSchema>;
+
+export const PriceSettingSchema = z
+  .object({
+    id: z.string(),
+    gas_type: GasTypeSchema,
+    customer_type: CustomerTypeSchema.or(z.literal("any")),
+    selling_price: z.number(),
+    buying_price: z.number().optional().nullable(),
+    effective_from: z.string(),
+    created_at: z.string().optional(),
+    created_by: z.string().nullish(),
+  })
+  .passthrough();
+export type PriceSetting = z.infer<typeof PriceSettingSchema>;
+
+export const ExpenseSchema = z
+  .object({
+    id: z.string(),
+    date: z.string(),
+    expense_type: z.string(),
+    amount: z.number(),
+    note: z.string().nullish(),
+    created_at: z.string().optional(),
+    created_by: z.string().nullish(),
+  })
+  .passthrough();
+export type Expense = z.infer<typeof ExpenseSchema>;
+
+export const ExpenseCreateInputSchema = z.object({
+  date: z.string(),
+  expense_type: z.string(),
+  amount: z.number(),
+  note: z.string().nullish().optional(),
+  created_by: z.string().nullish().optional(),
+});
+export type ExpenseCreateInput = z.infer<typeof ExpenseCreateInputSchema>;
+
+export const BankDepositSchema = z.object({
+  id: z.string(),
+  effective_at: z.string(),
+  created_at: z.string().optional(),
+  amount: z.number(),
+  note: z.string().nullish(),
+  date: z.string(),
+});
+export type BankDeposit = z.infer<typeof BankDepositSchema>;
+
+export const CompanyCylinderPaymentCreateSchema = z.object({
+  date: z.string(),
+  time: z.string().optional(),
+  time_of_day: z.enum(["morning", "evening"]).optional(),
+  effective_at: z.string().optional(),
+  gas_type: GasTypeSchema,
+  quantity: z.number(),
+  amount: z.number(),
+  note: z.string().nullish().optional(),
+});
+export type CompanyCylinderPaymentCreate = z.infer<typeof CompanyCylinderPaymentCreateSchema>;
+
+export const CompanyCylinderPaymentDetailsSchema = z.object({
+  id: z.string(),
+  business_date: z.string(),
+  effective_at: z.string(),
+  gas_type: GasTypeSchema,
+  quantity: z.number(),
+  amount: z.number(),
+  note: z.string().nullish(),
+  is_deleted: z.boolean().optional(),
+  deleted_at: z.string().nullish(),
+  created_at: z.string(),
+  created_by: z.string().nullish(),
+});
+export type CompanyCylinderPaymentDetails = z.infer<typeof CompanyCylinderPaymentDetailsSchema>;
+

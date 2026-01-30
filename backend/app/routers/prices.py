@@ -4,41 +4,46 @@ from fastapi import APIRouter, Depends, status
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.events import add_activity
-from app.models import PriceSetting
-from app.schemas import PriceCreate, new_id
-
+from app.models import PriceCatalog
+from app.schemas import PriceCreate, PriceOut
 
 router = APIRouter(prefix="/prices", tags=["prices"])
 
 
-@router.get("")
-def list_prices(session: Session = Depends(get_session)) -> list[PriceSetting]:
-  stmt = select(PriceSetting).order_by(PriceSetting.effective_from.desc())
-  return session.exec(stmt).all()
+@router.get("", response_model=list[PriceOut])
+def list_prices(session: Session = Depends(get_session)) -> list[PriceOut]:
+  rows = session.exec(select(PriceCatalog).order_by(PriceCatalog.effective_from.desc())).all()
+  return [
+    PriceOut(
+      id=row.id,
+      gas_type=row.gas_type,
+      selling_price=row.sell_price,
+      buying_price=row.buy_price,
+      effective_from=row.effective_from,
+      created_at=row.created_at,
+    )
+    for row in rows
+  ]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_price(payload: PriceCreate, session: Session = Depends(get_session)) -> PriceSetting:
-  setting = PriceSetting(
-    id=new_id("p"),
+@router.post("", response_model=PriceOut, status_code=status.HTTP_201_CREATED)
+def create_price(payload: PriceCreate, session: Session = Depends(get_session)) -> PriceOut:
+  effective_from = payload.effective_from or datetime.now(timezone.utc)
+  row = PriceCatalog(
     gas_type=payload.gas_type,
-    customer_type=payload.customer_type,
-    selling_price=payload.selling_price,
-    buying_price=payload.buying_price,
-    effective_from=payload.effective_from or datetime.now(timezone.utc),
+    sell_price=payload.selling_price,
+    buy_price=payload.buying_price,
+    effective_from=effective_from,
     created_at=datetime.now(timezone.utc),
   )
-  session.add(setting)
-  add_activity(
-    session,
-    "price",
-    "created",
-    f"Price {payload.gas_type} {payload.customer_type} set to sell {payload.selling_price}"
-    + (f" buy {payload.buying_price}" if payload.buying_price else ""),
-    setting.id,
-    metadata=f"selling={payload.selling_price};buying={payload.buying_price or 0};effective={payload.effective_from or datetime.now(timezone.utc).isoformat()}",
-  )
+  session.add(row)
   session.commit()
-  session.refresh(setting)
-  return setting
+  session.refresh(row)
+  return PriceOut(
+    id=row.id,
+    gas_type=row.gas_type,
+    selling_price=row.sell_price,
+    buying_price=row.buy_price,
+    effective_from=row.effective_from,
+    created_at=row.created_at,
+  )

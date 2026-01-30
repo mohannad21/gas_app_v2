@@ -1,283 +1,296 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import CashDailySummary, CashDelta
-from app.schemas import BankDepositCreate, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow, CashInitCreate, new_id
-from app.services.cash import add_cash_delta, delete_cash_deltas_for_source, recompute_cash_summaries
-from app.utils.time import business_date_from_utc, business_date_start_utc
+from app.models import Expense, ExpenseCategory
+from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
+from app.services.posting import derive_day, normalize_happened_at, post_expense, reverse_source
 
 router = APIRouter(prefix="/cash", tags=["cash"])
 
 
-@router.post("/init", status_code=status.HTTP_201_CREATED)
-def init_cash(payload: CashInitCreate, session: Session = Depends(get_session)) -> dict[str, object]:
-  try:
-    day = datetime.fromisoformat(payload.date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-
-  day_start = business_date_start_utc(day)
+def _get_cash_adjust_category(session: Session) -> ExpenseCategory:
   existing = session.exec(
-    select(CashDelta)
-    .where(CashDelta.source_type == "cash_init")
-    .where(CashDelta.is_deleted == False)  # noqa: E712
-    .where(CashDelta.effective_at >= day_start)
-    .where(CashDelta.effective_at < day_start + timedelta(days=1))
+    select(ExpenseCategory).where(ExpenseCategory.name == "Cash Adjustment")
   ).first()
   if existing:
-    raise HTTPException(status_code=400, detail="cash_init_exists")
-
-  delta = add_cash_delta(
-    session,
-    effective_at=day_start,
-    source_type="cash_init",
-    source_id=None,
-    delta_cash=payload.cash_start,
-    reason=payload.reason,
-  )
+    return existing
+  category = ExpenseCategory(name="Cash Adjustment")
+  session.add(category)
   session.commit()
-  return {"id": delta.id, "effective_at": delta.effective_at, "cash_start": payload.cash_start}
-
-
-@router.post("/adjust", response_model=CashAdjustmentRow, status_code=status.HTTP_201_CREATED)
-def adjust_cash(payload: CashAdjustCreate, session: Session = Depends(get_session)) -> CashAdjustmentRow:
-  if payload.date:
-    try:
-      day = datetime.fromisoformat(payload.date).date()
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid date format") from exc
-    effective_at = business_date_start_utc(day) + timedelta(hours=12)
-    if payload.time:
-      try:
-        parts = payload.time.split(":")
-        hours = int(parts[0])
-        minutes = int(parts[1]) if len(parts) > 1 else 0
-      except (ValueError, IndexError) as exc:
-        raise HTTPException(status_code=400, detail="Invalid time format") from exc
-      effective_at = business_date_start_utc(day) + timedelta(hours=hours, minutes=minutes)
-  else:
-    effective_at = datetime.now(timezone.utc)
-
-  delta = add_cash_delta(
-    session,
-    effective_at=effective_at,
-    source_type="cash_adjust",
-    source_id=None,
-    delta_cash=payload.delta_cash,
-    reason=payload.reason,
-    is_manual=True,
-  )
-  session.commit()
-  start_date = business_date_from_utc(effective_at)
-  end_date = business_date_from_utc(datetime.now(timezone.utc))
-  recompute_cash_summaries(session, start_date, end_date)
-  session.commit()
-  return CashAdjustmentRow(
-    id=delta.id,
-    delta_cash=delta.delta_cash,
-    reason=delta.reason,
-    effective_at=delta.effective_at,
-    created_at=delta.created_at,
-    is_deleted=delta.is_deleted,
-  )
+  session.refresh(category)
+  return category
 
 
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
 def list_cash_adjustments(
-  date: str = Query(...),
-  include_deleted: bool = Query(False),
+  date: str,
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[CashAdjustmentRow]:
   try:
     day = datetime.fromisoformat(date).date()
   except ValueError as exc:
     raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  start = business_date_start_utc(day)
-  end = business_date_start_utc(day + timedelta(days=1))
-  stmt = (
-    select(CashDelta)
-    .where(CashDelta.source_type == "cash_adjust")
-    .where(CashDelta.is_manual == True)  # noqa: E712
-    .where(CashDelta.effective_at >= start)
-    .where(CashDelta.effective_at < end)
-    .order_by(CashDelta.effective_at.desc(), CashDelta.created_at.desc())
-  )
+  category = _get_cash_adjust_category(session)
+  stmt = select(Expense).where(Expense.day == day).where(Expense.category_id == category.id)
   if not include_deleted:
-    stmt = stmt.where(CashDelta.is_deleted == False)  # noqa: E712
-  rows = session.exec(stmt).all()
+    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
+  rows = session.exec(stmt.order_by(Expense.happened_at.desc())).all()
   return [
     CashAdjustmentRow(
       id=row.id,
-      delta_cash=row.delta_cash,
-      reason=row.reason,
-      effective_at=row.effective_at,
-      created_at=row.created_at,
-      is_deleted=row.is_deleted,
+      delta_cash=row.amount,
+      reason=row.note,
+      effective_at=row.happened_at,
+      created_at=row.happened_at,
+      is_deleted=row.is_reversed,
     )
     for row in rows
   ]
 
 
-@router.put("/adjust/{delta_id}", response_model=CashAdjustmentRow)
+@router.post("/adjust", response_model=CashAdjustmentRow, status_code=status.HTTP_201_CREATED)
+def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends(get_session)) -> CashAdjustmentRow:
+  if payload.delta_cash == 0:
+    raise HTTPException(status_code=400, detail="delta_cash_required")
+  if payload.request_id:
+    existing = session.exec(select(Expense).where(Expense.request_id == payload.request_id)).first()
+    if existing:
+      return CashAdjustmentRow(
+        id=existing.id,
+        delta_cash=existing.amount,
+        reason=existing.note,
+        effective_at=existing.happened_at,
+        created_at=existing.happened_at,
+        is_deleted=existing.is_reversed,
+      )
+  category = _get_cash_adjust_category(session)
+  happened_at = normalize_happened_at(payload.happened_at)
+  expense = Expense(
+    request_id=payload.request_id,
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="expense",
+    category_id=category.id,
+    amount=payload.delta_cash,
+    paid_from="cash",
+    note=payload.reason,
+    vendor=None,
+    is_reversed=False,
+  )
+  session.add(expense)
+  post_expense(session, expense)
+  session.commit()
+  session.refresh(expense)
+  return CashAdjustmentRow(
+    id=expense.id,
+    delta_cash=expense.amount,
+    reason=expense.note,
+    effective_at=expense.happened_at,
+    created_at=expense.happened_at,
+    is_deleted=False,
+  )
+
+
+@router.put("/adjust/{adjust_id}", response_model=CashAdjustmentRow)
 def update_cash_adjustment(
-  delta_id: str,
+  adjust_id: str,
   payload: CashAdjustUpdate,
   session: Session = Depends(get_session),
 ) -> CashAdjustmentRow:
-  delta = session.get(CashDelta, delta_id)
-  if not delta or delta.is_deleted:
-    raise HTTPException(status_code=404, detail="cash_adjustment_not_found")
-  if delta.source_type != "cash_adjust" or not delta.is_manual:
-    raise HTTPException(status_code=400, detail="cash_adjustment_not_editable")
+  existing = session.get(Expense, adjust_id)
+  if not existing or existing.is_reversed:
+    raise HTTPException(status_code=404, detail="Adjustment not found")
 
-  delta_cash = payload.delta_cash if payload.delta_cash is not None else delta.delta_cash
-  reason = payload.reason if payload.reason is not None else delta.reason
-  delta.delta_cash = delta_cash
-  delta.reason = reason
-  delta.updated_at = datetime.now(timezone.utc)
-  session.add(delta)
+  now = datetime.now(timezone.utc)
+  reversal = Expense(
+    request_id=None,
+    happened_at=now,
+    day=derive_day(now),
+    kind="expense",
+    category_id=existing.category_id,
+    amount=existing.amount,
+    paid_from=existing.paid_from,
+    note=f"Reversal of {existing.id}",
+    vendor=None,
+    reversed_id=existing.id,
+    is_reversed=True,
+  )
+  session.add(reversal)
+  reverse_source(
+    session,
+    source_type="expense",
+    source_id=existing.id,
+    reversal_source_type="expense",
+    reversal_source_id=reversal.id,
+    happened_at=reversal.happened_at,
+    day=reversal.day,
+    note=reversal.note,
+  )
+  existing.is_reversed = True
+  session.add(existing)
 
-  start_date = business_date_from_utc(delta.effective_at)
-  end_date = business_date_from_utc(datetime.now(timezone.utc))
-  recompute_cash_summaries(session, start_date, end_date)
+  new_amount = payload.delta_cash if payload.delta_cash is not None else existing.amount
+  new_note = payload.reason if payload.reason is not None else existing.note
+  new_expense = Expense(
+    request_id=None,
+    happened_at=now,
+    day=derive_day(now),
+    kind="expense",
+    category_id=existing.category_id,
+    amount=new_amount,
+    paid_from=existing.paid_from,
+    note=new_note,
+    vendor=None,
+    is_reversed=False,
+  )
+  session.add(new_expense)
+  post_expense(session, new_expense)
   session.commit()
+  session.refresh(new_expense)
   return CashAdjustmentRow(
-    id=delta.id,
-    delta_cash=delta.delta_cash,
-    reason=delta.reason,
-    effective_at=delta.effective_at,
-    created_at=delta.created_at,
-    is_deleted=delta.is_deleted,
+    id=new_expense.id,
+    delta_cash=new_expense.amount,
+    reason=new_expense.note,
+    effective_at=new_expense.happened_at,
+    created_at=new_expense.happened_at,
+    is_deleted=False,
   )
 
 
-@router.delete("/adjust/{delta_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cash_adjustment(delta_id: str, session: Session = Depends(get_session)) -> None:
-  delta = session.get(CashDelta, delta_id)
-  if not delta or delta.is_deleted:
-    raise HTTPException(status_code=404, detail="cash_adjustment_not_found")
-  if delta.source_type != "cash_adjust" or not delta.is_manual:
-    raise HTTPException(status_code=400, detail="cash_adjustment_not_editable")
-  delta.is_deleted = True
-  delta.deleted_at = datetime.now(timezone.utc)
-  delta.updated_at = delta.deleted_at
-  session.add(delta)
-
-  start_date = business_date_from_utc(delta.effective_at)
-  end_date = business_date_from_utc(datetime.now(timezone.utc))
-  recompute_cash_summaries(session, start_date, end_date)
+@router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
+  existing = session.get(Expense, adjust_id)
+  if not existing or existing.is_reversed:
+    return
+  now = datetime.now(timezone.utc)
+  reversal = Expense(
+    request_id=None,
+    happened_at=now,
+    day=derive_day(now),
+    kind=existing.kind,
+    category_id=existing.category_id,
+    amount=existing.amount,
+    paid_from=existing.paid_from,
+    note=f"Reversal of {existing.id}",
+    vendor=None,
+    reversed_id=existing.id,
+    is_reversed=True,
+  )
+  session.add(reversal)
+  reverse_source(
+    session,
+    source_type="expense",
+    source_id=existing.id,
+    reversal_source_type="expense",
+    reversal_source_id=reversal.id,
+    happened_at=reversal.happened_at,
+    day=reversal.day,
+    note=reversal.note,
+  )
+  existing.is_reversed = True
+  session.add(existing)
   session.commit()
 
 
-@router.post("/bank_deposit", status_code=status.HTTP_201_CREATED)
-def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(get_session)) -> dict[str, object]:
+@router.get("/bank_deposits", response_model=list[BankDepositOut])
+def list_bank_deposits(
+  date: str,
+  session: Session = Depends(get_session),
+) -> list[BankDepositOut]:
   try:
-    day = datetime.fromisoformat(payload.date).date()
+    day = datetime.fromisoformat(date).date()
   except ValueError as exc:
     raise HTTPException(status_code=400, detail="Invalid date format") from exc
+  rows = session.exec(
+    select(Expense)
+    .where(Expense.day == day)
+    .where(Expense.kind == "deposit")
+    .where(Expense.is_reversed == False)  # noqa: E712
+    .order_by(Expense.happened_at.desc())
+  ).all()
+  return [
+    BankDepositOut(
+      id=row.id,
+      happened_at=row.happened_at,
+      amount=row.amount,
+      note=row.note,
+    )
+    for row in rows
+  ]
+
+
+@router.post("/bank_deposit", response_model=BankDepositOut, status_code=status.HTTP_201_CREATED)
+def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(get_session)) -> BankDepositOut:
   if payload.amount <= 0:
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
-
-  base = business_date_start_utc(day)
-  if payload.time_of_day == "morning":
-    effective_at = base + timedelta(hours=9)
-  elif payload.time_of_day == "evening":
-    effective_at = base + timedelta(hours=18)
-  else:
-    effective_at = base + timedelta(hours=12)
-
-  deposit_id = new_id("bankdep_")
-  delta = add_cash_delta(
-    session,
-    effective_at=effective_at,
-    source_type="bank_deposit",
-    source_id=deposit_id,
-    delta_cash=-payload.amount,
-    reason=payload.note,
+  if payload.request_id:
+    existing = session.exec(select(Expense).where(Expense.request_id == payload.request_id)).first()
+    if existing:
+      return BankDepositOut(
+        id=existing.id,
+        happened_at=existing.happened_at,
+        amount=existing.amount,
+        note=existing.note,
+      )
+  happened_at = normalize_happened_at(payload.happened_at)
+  expense = Expense(
+    request_id=payload.request_id,
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="deposit",
+    category_id=None,
+    amount=payload.amount,
+    paid_from=None,
+    note=payload.note,
+    vendor=None,
+    is_reversed=False,
   )
+  session.add(expense)
+  post_expense(session, expense)
   session.commit()
-  return {"id": deposit_id, "effective_at": delta.effective_at, "amount": payload.amount, "note": payload.note}
+  session.refresh(expense)
+  return BankDepositOut(
+    id=expense.id,
+    happened_at=expense.happened_at,
+    amount=expense.amount,
+    note=expense.note,
+  )
 
 
 @router.delete("/bank_deposit/{deposit_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)) -> None:
-  deleted_date = delete_cash_deltas_for_source(session, source_id=deposit_id, source_types=["bank_deposit"])
-  if not deleted_date:
-    raise HTTPException(status_code=404, detail="bank_deposit_not_found")
-  end_date = business_date_from_utc(datetime.now(timezone.utc))
-  recompute_cash_summaries(session, deleted_date, end_date)
+  existing = session.get(Expense, deposit_id)
+  if not existing or existing.is_reversed:
+    return
+  now = datetime.now(timezone.utc)
+  reversal = Expense(
+    request_id=None,
+    happened_at=now,
+    day=derive_day(now),
+    kind=existing.kind,
+    category_id=existing.category_id,
+    amount=existing.amount,
+    paid_from=existing.paid_from,
+    note=f"Reversal of {existing.id}",
+    vendor=None,
+    reversed_id=existing.id,
+    is_reversed=True,
+  )
+  session.add(reversal)
+  reverse_source(
+    session,
+    source_type="expense",
+    source_id=existing.id,
+    reversal_source_type="expense",
+    reversal_source_id=reversal.id,
+    happened_at=reversal.happened_at,
+    day=reversal.day,
+    note=reversal.note,
+  )
+  existing.is_reversed = True
+  session.add(existing)
   session.commit()
-
-
-@router.get("/day")
-def get_cash_day(date: str, session: Session = Depends(get_session)) -> dict[str, object]:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  start = business_date_start_utc(day)
-  end = business_date_start_utc(day + timedelta(days=1))
-  deltas = session.exec(
-    select(CashDelta)
-    .where(CashDelta.is_deleted == False)  # noqa: E712
-    .where(CashDelta.effective_at >= start)
-    .where(CashDelta.effective_at < end)
-    .order_by(CashDelta.effective_at, CashDelta.created_at, CashDelta.id)
-  ).all()
-  summary = session.exec(
-    select(CashDailySummary).where(CashDailySummary.business_date == day)
-  ).first()
-  day_start = summary.cash_start if summary else 0.0
-  day_end = summary.cash_end if summary else day_start
-  return {
-    "date": day.isoformat(),
-    "cash_start": day_start,
-    "cash_end": day_end,
-    "events": [
-      {
-        "id": row.id,
-        "effective_at": row.effective_at,
-        "source_type": row.source_type,
-        "source_id": row.source_id,
-        "delta_cash": row.delta_cash,
-        "reason": row.reason,
-      }
-      for row in deltas
-    ],
-  }
-
-
-@router.get("/bank_deposits")
-def list_bank_deposits(
-  date: str = Query(...),
-  session: Session = Depends(get_session),
-) -> list[dict[str, object]]:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-
-  start = business_date_start_utc(day)
-  end = business_date_start_utc(day + timedelta(days=1))
-  rows = session.exec(
-    select(CashDelta)
-    .where(CashDelta.source_type == "bank_deposit")
-    .where(CashDelta.is_deleted == False)  # noqa: E712
-    .where(CashDelta.effective_at >= start)
-    .where(CashDelta.effective_at < end)
-    .order_by(CashDelta.effective_at, CashDelta.created_at, CashDelta.id)
-  ).all()
-  return [
-    {
-      "id": row.source_id or row.id,
-      "effective_at": row.effective_at,
-      "created_at": row.created_at,
-      "amount": abs(row.delta_cash),
-      "note": row.reason,
-      "date": day.isoformat(),
-    }
-    for row in rows
-  ]

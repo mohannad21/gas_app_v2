@@ -3,12 +3,14 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = Path(__file__).resolve().parent
 DEFAULT_INCLUDE_DIRS = [
     "backend/app",
-    "backend/tests",
-    "app",
-    "hooks",
-    "types",
+    "tests/backend",
+    "frontend/app",
+    "frontend/hooks",
+    "frontend/types",
+    "tests/frontend",
 ]
 
 EXCLUDE_DIRS = {
@@ -74,7 +76,7 @@ def main() -> None:
     if not include_dirs:
         raise SystemExit("No include directories found. Update DEFAULT_INCLUDE_DIRS.")
 
-    output_path = REPO_ROOT / "concat_output.txt"
+    output_path = SCRIPTS_DIR / "concat_output.txt"
     with output_path.open("w", encoding="utf-8") as out_file:
         for base in include_dirs:
             for file_path in iter_files(base):
