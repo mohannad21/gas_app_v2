@@ -2,49 +2,19 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from sqlmodel import Session
-
 from conftest import init_inventory
 from conftest import create_customer, create_system, create_order
 
 
 def test_cash_replay_ordering_tiebreak(client) -> None:
     day = date(2025, 6, 1)
-    effective_at = datetime(2025, 6, 1, 9, 0, tzinfo=timezone.utc).replace(tzinfo=None)
-    created_at = datetime(2025, 6, 1, 9, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+    first_at = datetime(2025, 6, 1, 9, 0, tzinfo=timezone.utc).isoformat()
+    second_at = datetime(2025, 6, 1, 9, 5, tzinfo=timezone.utc).isoformat()
 
-    import app.db as app_db
-    from app.models import CashDelta
-    from app.services.cash import recompute_cash_summaries
-
-    with Session(app_db.engine) as session:
-        session.add(
-            CashDelta(
-                id="cashd_a",
-                effective_at=effective_at,
-                source_type="cash_adjust",
-                source_id=None,
-                delta_cash=10,
-                reason="first",
-                created_at=created_at,
-                created_by=None,
-            )
-        )
-        session.add(
-            CashDelta(
-                id="cashd_b",
-                effective_at=effective_at,
-                source_type="cash_adjust",
-                source_id=None,
-                delta_cash=20,
-                reason="second",
-                created_at=created_at,
-                created_by=None,
-            )
-        )
-        session.commit()
-        recompute_cash_summaries(session, day, day)
-        session.commit()
+    resp = client.post("/cash/adjust", json={"happened_at": first_at, "delta_cash": 10, "reason": "first"})
+    assert resp.status_code == 201
+    resp = client.post("/cash/adjust", json={"happened_at": second_at, "delta_cash": 20, "reason": "second"})
+    assert resp.status_code == 201
 
     resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
     assert resp.status_code == 200

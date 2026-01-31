@@ -14,6 +14,7 @@ import { useDailyReportDayV2, useDailyReportsV2 } from "@/hooks/useReports";
 import { useInventoryLatest } from "@/hooks/useInventory";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrdersByDay } from "@/hooks/useOrders";
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { gasColor } from "@/constants/gas";
 import { DailyReportV2Day } from "@/types/domain";
 import { formatHourLabel, formatTimeHM, toDateKey } from "@/lib/date";
@@ -57,6 +58,7 @@ export default function DashboardScreen() {
   const v2Query = useDailyReportsV2(from, today);
   const dayQuery = useDailyReportDayV2(expandedDate ?? today);
   const inventoryLatest = useInventoryLatest();
+  const companyBalances = useCompanyBalances();
   const customersQuery = useCustomers();
   const ordersQuery = useOrdersByDay(expandedDate ?? today);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -68,7 +70,8 @@ export default function DashboardScreen() {
         dayQuery.refetch();
       }
       customersQuery.refetch();
-    }, [expandedDate, v2Query, dayQuery, customersQuery])
+      companyBalances.refetch();
+    }, [expandedDate, v2Query, dayQuery, customersQuery, companyBalances])
   );
 
   const latestCard = useMemo(() => {
@@ -93,10 +96,17 @@ export default function DashboardScreen() {
   const currentInventory = inventoryLatest.data ?? null;
   const invFallback = latestCard?.inventory_end ?? null;
   const cashNow = latestCard?.cash_end ?? 0;
-  const companyNow = latestCard?.company_end ?? null;
+  const companyNow = companyBalances.data?.company_money ?? latestCard?.company_end ?? null;
   const invDisplay = currentInventory
     ? { full12: currentInventory.full12, empty12: currentInventory.empty12, full48: currentInventory.full48, empty48: currentInventory.empty48 }
-    : invFallback
+    : companyBalances.data
+      ? {
+          full12: companyBalances.data.inventory_full_12,
+          empty12: companyBalances.data.inventory_empty_12,
+          full48: companyBalances.data.inventory_full_48,
+          empty48: companyBalances.data.inventory_empty_48,
+        }
+      : invFallback
       ? { full12: invFallback.full12, empty12: invFallback.empty12, full48: invFallback.full48, empty48: invFallback.empty48 }
       : null;
 

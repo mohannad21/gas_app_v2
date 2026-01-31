@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select
-from app.models import CashDailySummary, CollectionEvent
-from app.services.inventory import inventory_totals_at, inventory_totals_before_source
+from app.models import CustomerTransaction, LedgerEntry
+from app.services.ledger import sum_ledger
 from app.utils.time import business_date_from_utc
 from tests.conftest import create_customer, create_order, create_system, init_inventory
 
@@ -63,22 +63,15 @@ def test_collection_delete_recomputes_cash_chain(client):
 
     from app import db as app_db
     with Session(app_db.engine) as session:
-        cash_date = business_date_from_utc(datetime.fromisoformat(f"{d2}T10:00:00"))
-        summary = session.exec(
-            select(CashDailySummary).where(CashDailySummary.business_date == cash_date)
-        ).first()
-        assert summary is not None
-        assert summary.cash_end == 150.0
+        cash_total = sum_ledger(session, account="cash", unit="money")
+        assert cash_total == 150
 
     _delete_collection(client, first_payment["id"])
 
     from app import db as app_db
     with Session(app_db.engine) as session:
-        summary = session.exec(
-            select(CashDailySummary).where(CashDailySummary.business_date == cash_date)
-        ).first()
-        assert summary is not None
-        assert summary.cash_end == 50.0
+        cash_total = sum_ledger(session, account="cash", unit="money")
+        assert cash_total == 50
 
     resp = client.get("/customers")
     assert resp.status_code == 200
@@ -115,12 +108,8 @@ def test_collection_snapshot_integrity(client):
 
     from app import db as app_db
     with Session(app_db.engine) as session:
-        event = session.exec(
-            select(CollectionEvent).where(CollectionEvent.id == second["id"])
-        ).first()
-        assert event is not None
-        assert event.cash_before == 100.0
-        assert event.cash_after == 150.0
+        cash_total = sum_ledger(session, account="cash", unit="money")
+        assert cash_total == 150
 
     ret = _post_collection(
         client,
@@ -134,28 +123,43 @@ def test_collection_snapshot_integrity(client):
     )
     from app import db as app_db
     with Session(app_db.engine) as session:
-        event = session.exec(
-            select(CollectionEvent).where(CollectionEvent.id == ret["id"])
-        ).first()
-        assert event is not None
-        before_full12, before_empty12 = inventory_totals_before_source(
-            session,
-            gas_type="12kg",
-            source_type="collection_empty",
-            source_id=ret["id"],
+        group_id = ret["id"]
+        txns = session.exec(
+            select(CustomerTransaction).where(CustomerTransaction.group_id == group_id)
+        ).all()
+        assert len(txns) == 2
+        gas_types = {txn.gas_type for txn in txns}
+        assert gas_types == {"12kg", "48kg"}
+        entries = session.exec(
+            select(LedgerEntry).where(
+                LedgerEntry.source_type == "customer_txn",
+                LedgerEntry.source_id.in_([txn.id for txn in txns]),
+            )
+        ).all()
+        inv_empty_12 = sum(
+            entry.amount
+            for entry in entries
+            if entry.account == "inv" and entry.gas_type == "12kg" and entry.state == "empty"
         )
-        before_full48, before_empty48 = inventory_totals_before_source(
-            session,
-            gas_type="48kg",
-            source_type="collection_empty",
-            source_id=ret["id"],
+        inv_empty_48 = sum(
+            entry.amount
+            for entry in entries
+            if entry.account == "inv" and entry.gas_type == "48kg" and entry.state == "empty"
         )
-        assert event.inv12_full_before == before_full12
-        assert event.inv12_empty_before == before_empty12
-        assert event.inv12_empty_after == before_empty12 + 2
-        assert event.inv48_full_before == before_full48
-        assert event.inv48_empty_before == before_empty48
-        assert event.inv48_empty_after == before_empty48 + 1
+        cust_cyl_12 = sum(
+            entry.amount
+            for entry in entries
+            if entry.account == "cust_cylinders_debts" and entry.gas_type == "12kg"
+        )
+        cust_cyl_48 = sum(
+            entry.amount
+            for entry in entries
+            if entry.account == "cust_cylinders_debts" and entry.gas_type == "48kg"
+        )
+        assert inv_empty_12 == 2
+        assert inv_empty_48 == 1
+        assert cust_cyl_12 == -2
+        assert cust_cyl_48 == -1
 
 
 def test_delete_return_allows_negative_inventory(client):

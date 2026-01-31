@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from app.models import (
   CompanyTransaction,
+  CashAdjustment,
   CustomerTransaction,
   Expense,
   InventoryAdjustment,
@@ -35,6 +36,7 @@ ACCOUNT_CUST_CYL = "cust_cylinders_debts"
 ACCOUNT_COMPANY_MONEY = "company_money_debts"
 ACCOUNT_COMPANY_CYL = "company_cylinders_debts"
 ACCOUNT_EXPENSE = "expense"
+ACCOUNT_CASH_ADJUST = "cash_adjustments"
 
 UNIT_MONEY = "money"
 UNIT_COUNT = "count"
@@ -84,7 +86,7 @@ def _insert_ledger_entries(
   return entries
 
 
-def post_customer_transaction(session: Session, txn: CustomerTransaction) -> list[LedgerEntry]:
+def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
   gas = txn.gas_type
   lines: list[LedgerLine] = []
   money_delta = txn.total - txn.paid
@@ -224,6 +226,11 @@ def post_customer_transaction(session: Session, txn: CustomerTransaction) -> lis
         )
       )
 
+  return lines
+
+
+def post_customer_transaction(session: Session, txn: CustomerTransaction) -> list[LedgerEntry]:
+  lines = build_customer_lines(txn)
   return _insert_ledger_entries(
     session,
     source_type="customer_txn",
@@ -234,72 +241,94 @@ def post_customer_transaction(session: Session, txn: CustomerTransaction) -> lis
   )
 
 
-def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[LedgerEntry]:
+def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
   lines: list[LedgerLine] = []
 
-  full12 = txn.buy12 + txn.new12
-  full48 = txn.buy48 + txn.new48
-  if full12:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_INV,
-        gas_type="12kg",
-        state="full",
-        unit=UNIT_COUNT,
-        amount=full12,
+  if txn.kind == "refill":
+    full12 = txn.buy12 + txn.new12
+    full48 = txn.buy48 + txn.new48
+    if full12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="12kg",
+          state="full",
+          unit=UNIT_COUNT,
+          amount=full12,
+        )
       )
-    )
-  if full48:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_INV,
-        gas_type="48kg",
-        state="full",
-        unit=UNIT_COUNT,
-        amount=full48,
+    if full48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="48kg",
+          state="full",
+          unit=UNIT_COUNT,
+          amount=full48,
+        )
       )
-    )
-  if txn.return12:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_INV,
-        gas_type="12kg",
-        state="empty",
-        unit=UNIT_COUNT,
-        amount=-txn.return12,
+    if txn.return12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="12kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=-txn.return12,
+        )
       )
-    )
-  if txn.return48:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_INV,
-        gas_type="48kg",
-        state="empty",
-        unit=UNIT_COUNT,
-        amount=-txn.return48,
+    if txn.return48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="48kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=-txn.return48,
+        )
       )
-    )
 
-  cyl_delta_12 = txn.return12 - txn.buy12
-  cyl_delta_48 = txn.return48 - txn.buy48
-  if cyl_delta_12:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_COMPANY_CYL,
-        gas_type="12kg",
-        unit=UNIT_COUNT,
-        amount=cyl_delta_12,
+    cyl_delta_12 = txn.return12 - txn.buy12
+    cyl_delta_48 = txn.return48 - txn.buy48
+    if cyl_delta_12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="12kg",
+          unit=UNIT_COUNT,
+          amount=cyl_delta_12,
+        )
       )
-    )
-  if cyl_delta_48:
-    lines.append(
-      LedgerLine(
-        account=ACCOUNT_COMPANY_CYL,
-        gas_type="48kg",
-        unit=UNIT_COUNT,
-        amount=cyl_delta_48,
+    if cyl_delta_48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="48kg",
+          unit=UNIT_COUNT,
+          amount=cyl_delta_48,
+        )
       )
-    )
+  elif txn.kind == "buy_iron":
+    if txn.new12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="12kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=txn.new12,
+        )
+      )
+    if txn.new48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="48kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=txn.new48,
+        )
+      )
 
   if txn.paid:
     lines.append(
@@ -320,6 +349,11 @@ def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[
       )
     )
 
+  return lines
+
+
+def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[LedgerEntry]:
+  lines = build_company_lines(txn)
   return _insert_ledger_entries(
     session,
     source_type="company_txn",
@@ -330,7 +364,7 @@ def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[
   )
 
 
-def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> list[LedgerEntry]:
+def build_inventory_adjustment_lines(adj: InventoryAdjustment) -> list[LedgerLine]:
   lines: list[LedgerLine] = []
   if adj.delta_full:
     lines.append(
@@ -352,6 +386,11 @@ def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> lis
         amount=adj.delta_empty,
       )
     )
+  return lines
+
+
+def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> list[LedgerEntry]:
+  lines = build_inventory_adjustment_lines(adj)
   return _insert_ledger_entries(
     session,
     source_type="inventory_adjust",
@@ -362,7 +401,7 @@ def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> lis
   )
 
 
-def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
+def build_expense_lines(expense: Expense) -> list[LedgerLine]:
   lines: list[LedgerLine] = []
   if expense.kind == "expense":
     if expense.paid_from == "bank":
@@ -374,12 +413,54 @@ def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
     lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
     lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
 
+  return lines
+
+
+def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
+  lines = build_expense_lines(expense)
   return _insert_ledger_entries(
     session,
     source_type="expense",
     source_id=expense.id,
     happened_at=expense.happened_at,
     day=expense.day,
+    lines=lines,
+  )
+
+
+def build_cash_adjustment_lines(adjustment: CashAdjustment) -> list[LedgerLine]:
+  return [
+    LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=adjustment.delta_cash, note=adjustment.note),
+    LedgerLine(account=ACCOUNT_CASH_ADJUST, unit=UNIT_MONEY, amount=-adjustment.delta_cash, note=adjustment.note),
+  ]
+
+
+def post_cash_adjustment(session: Session, adjustment: CashAdjustment) -> list[LedgerEntry]:
+  lines = build_cash_adjustment_lines(adjustment)
+  return _insert_ledger_entries(
+    session,
+    source_type="cash_adjust",
+    source_id=adjustment.id,
+    happened_at=adjustment.happened_at,
+    day=adjustment.day,
+    lines=lines,
+  )
+
+
+def post_system_init(
+  session: Session,
+  *,
+  source_id: str,
+  happened_at: datetime,
+  day: datetime.date,
+  lines: Iterable[LedgerLine],
+) -> list[LedgerEntry]:
+  return _insert_ledger_entries(
+    session,
+    source_type="system_init",
+    source_id=source_id,
+    happened_at=happened_at,
+    day=day,
     lines=lines,
   )
 

@@ -36,15 +36,15 @@ def upgrade() -> None:
     "system_type_options",
     sa.Column("id", sa.String(), primary_key=True, nullable=False),
     sa.Column("name", sa.String(), nullable=False, unique=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
   )
   op.create_index("ix_system_type_options_id", "system_type_options", ["id"])
   op.create_index("ix_system_type_options_is_active", "system_type_options", ["is_active"])
 
   op.add_column("systems", sa.Column("gas_type", sa.String(), nullable=False, server_default="12kg"))
-  op.add_column("systems", sa.Column("requires_security_check", sa.Boolean(), nullable=False, server_default=sa.text("0")))
-  op.add_column("systems", sa.Column("security_check_exists", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+  op.add_column("systems", sa.Column("requires_security_check", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+  op.add_column("systems", sa.Column("security_check_exists", sa.Boolean(), nullable=False, server_default=sa.text("false")))
   op.add_column("systems", sa.Column("last_security_check_at", sa.Date(), nullable=True))
   op.add_column("systems", sa.Column("next_security_check_at", sa.Date(), nullable=True))
   op.create_index("ix_systems_gas_type", "systems", ["gas_type"])

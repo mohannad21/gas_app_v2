@@ -5,12 +5,16 @@ import {
   CustomerAdjustment,
   CustomerAdjustmentCreateInput,
   CustomerAdjustmentSchema,
+  CustomerBalance,
+  CustomerBalanceSchema,
   CustomerSchema,
   CustomerUpdateInput,
   DailyReportV2Card,
   DailyReportV2CardSchema,
   DailyReportV2Day,
   DailyReportV2DaySchema,
+  CompanyBalances,
+  CompanyBalancesSchema,
   CashAdjustment,
   CashAdjustmentCreate,
   CashAdjustmentSchema,
@@ -49,6 +53,8 @@ import {
   SystemSettings,
   SystemSettingsSchema,
   SystemInitializeInput,
+  SystemHealthCheck,
+  SystemHealthCheckSchema,
   SystemTypeOption,
   SystemTypeOptionSchema,
   SystemUpdateInput,
@@ -150,6 +156,15 @@ export async function listCustomers(): Promise<Customer[]> {
   }));
 }
 
+export async function getCustomerBalance(customerId: string): Promise<CustomerBalance> {
+  const { data } = await api.get(`/customers/${customerId}/balances`);
+  const parsed = parse(CustomerBalanceSchema, data);
+  return {
+    ...parsed,
+    money_balance: fromMinorUnits(parsed.money_balance),
+  };
+}
+
 export async function createCustomer(payload: CustomerCreateInput): Promise<Customer> {
   const { data } = await api.post("/customers", payload);
   const parsed = parse(CustomerSchema, data);
@@ -189,6 +204,15 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   return parsed;
 }
 
+export async function getCompanyBalances(): Promise<CompanyBalances> {
+  const { data } = await api.get("/company/balances");
+  const parsed = parse(CompanyBalancesSchema, data);
+  return {
+    ...parsed,
+    company_money: fromMinorUnits(parsed.company_money),
+  };
+}
+
 export async function initializeSystem(payload: SystemInitializeInput): Promise<SystemSettings> {
   const { data } = await api.post("/system/initialize", {
     ...payload,
@@ -198,11 +222,20 @@ export async function initializeSystem(payload: SystemInitializeInput): Promise<
     buy_price_48: toMinorUnits(payload.buy_price_48 ?? 0),
     cash_start: toMinorUnits(payload.cash_start),
     company_payable_money: toMinorUnits(payload.company_payable_money ?? 0),
+    customer_debts: payload.customer_debts?.map((entry) => ({
+      ...entry,
+      money: toMinorUnits(entry.money ?? 0),
+    })),
   });
   const parsed = parse(SystemSettingsSchema, data);
   setMoneyDecimals(parsed.money_decimals);
   setCurrencyCode(parsed.currency_code);
   return parsed;
+}
+
+export async function getSystemHealthCheck(): Promise<SystemHealthCheck> {
+  const { data } = await api.get("/system/health-check");
+  return parse(SystemHealthCheckSchema, data);
 }
 
 // Systems

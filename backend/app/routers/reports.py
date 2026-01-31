@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import (
+  CashAdjustment,
   CompanyTransaction,
   Customer,
   CustomerTransaction,
@@ -546,8 +547,29 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     .where(CompanyTransaction.is_reversed == False)  # noqa: E712
   ).all()
   for txn in company_txns:
+    event_type = "refill"
+    buy12 = txn.buy12 + txn.new12
+    buy48 = txn.buy48 + txn.new48
+    return12 = txn.return12
+    return48 = txn.return48
+    total_cost = txn.total
+    paid_now = txn.paid
+    if txn.kind == "payment":
+      event_type = "company_payment"
+      buy12 = None
+      buy48 = None
+      return12 = None
+      return48 = None
+      total_cost = txn.paid
+      paid_now = txn.paid
+    elif txn.kind == "buy_iron":
+      event_type = "company_buy_iron"
+      buy12 = txn.new12
+      buy48 = txn.new48
+      return12 = 0
+      return48 = 0
     event = DailyReportV2Event(
-      event_type="refill",
+      event_type=event_type,
       effective_at=txn.happened_at,
       created_at=txn.happened_at,
       source_id=txn.id,
@@ -562,12 +584,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       system_type=None,
       expense_type=None,
       reason=txn.note,
-      buy12=txn.buy12 + txn.new12,
-      return12=txn.return12,
-      buy48=txn.buy48 + txn.new48,
-      return48=txn.return48,
-      total_cost=txn.total,
-      paid_now=txn.paid,
+      buy12=buy12,
+      return12=return12,
+      buy48=buy48,
+      return48=return48,
+      total_cost=total_cost,
+      paid_now=paid_now,
       order_total=None,
       order_paid=None,
       order_installed=None,
@@ -589,7 +611,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     if expense.kind == "deposit":
       event_type = "bank_deposit"
     else:
-      event_type = "cash_adjust" if categories.get(expense.category_id) == "Cash Adjustment" else "expense"
+      event_type = "expense"
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=expense.happened_at,
@@ -623,6 +645,45 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     )
     events.append((expense.happened_at, event))
 
+  cash_adjustments = session.exec(
+    select(CashAdjustment)
+    .where(CashAdjustment.day == business_date)
+    .where(CashAdjustment.is_reversed == False)  # noqa: E712
+  ).all()
+  for adjustment in cash_adjustments:
+    event = DailyReportV2Event(
+      event_type="cash_adjust",
+      effective_at=adjustment.happened_at,
+      created_at=adjustment.happened_at,
+      source_id=adjustment.id,
+      label=None,
+      label_short=None,
+      order_mode=None,
+      gas_type=None,
+      customer_id=None,
+      customer_name=None,
+      customer_description=None,
+      system_name=None,
+      system_type=None,
+      expense_type="Cash Adjustment",
+      reason=adjustment.note,
+      buy12=None,
+      return12=None,
+      buy48=None,
+      return48=None,
+      total_cost=adjustment.delta_cash,
+      paid_now=None,
+      order_total=None,
+      order_paid=None,
+      order_installed=None,
+      order_received=None,
+      cash_before=None,
+      cash_after=None,
+      inventory_before=None,
+      inventory_after=None,
+    )
+    events.append((adjustment.happened_at, event))
+
   # sort and apply running balances for cash/inventory
   events.sort(key=lambda pair: pair[0])
   running_cash = cash_start
@@ -638,10 +699,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     if event.source_id:
       if event.event_type in {"order", "collection_money", "collection_empty", "customer_adjust"}:
         key = ("customer_txn", event.source_id)
-      elif event.event_type == "refill":
+      elif event.event_type in {"refill", "company_payment", "company_buy_iron"}:
         key = ("company_txn", event.source_id)
-      elif event.event_type in {"expense", "cash_adjust", "bank_deposit"}:
+      elif event.event_type in {"expense", "bank_deposit"}:
         key = ("expense", event.source_id)
+      elif event.event_type == "cash_adjust":
+        key = ("cash_adjust", event.source_id)
       elif event.event_type == "adjust":
         key = ("inventory_adjust", event.source_id)
     entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []

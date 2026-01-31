@@ -16,6 +16,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "collection_empty") return "ReturnEmp";
   if (type === "refill") return "Refill";
   if (type === "company_payment") return "PayCompany";
+  if (type === "company_buy_iron") return "BuyIron";
   if (type === "cash_adjust") return "CashAdjust";
   if (type === "adjust") return "InvAdjust";
   if (type === "init_balance") return "Init Co";
@@ -422,6 +423,7 @@ export function summarizeEventTypes(events: any[]) {
     collection_money: "LatePay",
     collection_empty: "ReturnEmp",
     company_payment: "PayCompany",
+    company_buy_iron: "BuyIron",
   };
   const palette = ["#0a7ea4", "#16a34a", "#f97316", "#8b5cf6", "#e0b93f", "#64748b"];
   const out = Array.from(map.entries()).map(([type, count], i) => ({

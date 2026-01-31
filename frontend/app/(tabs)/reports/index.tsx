@@ -45,6 +45,7 @@ const getEventColor = (eventType: string) => {
     collection_money: "#22c55e",
     collection_empty: "#14b8a6",
     company_payment: "#2563eb",
+    company_buy_iron: "#f59e0b",
     bank_deposit: "#0ea5e9",
   };
   return palette[eventType] ?? "#0a7ea4";

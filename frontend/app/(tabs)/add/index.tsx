@@ -1287,6 +1287,15 @@ const formatDateTime = (value?: string) => {
             >
               <Text style={[styles.linkText, { fontSize: 15 }]}>System types</Text>
             </Pressable>
+            <Pressable
+              style={styles.linkBtn}
+              onPress={() => {
+                router.push("/system-health");
+                setDrawerOpen(false);
+              }}
+            >
+              <Text style={[styles.linkText, { fontSize: 15 }]}>System health</Text>
+            </Pressable>
 
             <Text style={[styles.drawerTitle, { marginTop: 16 }]}>Prices</Text>
             <Pressable

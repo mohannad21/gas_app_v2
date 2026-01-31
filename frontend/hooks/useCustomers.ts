@@ -1,6 +1,18 @@
-import { createCustomer, createCustomerAdjustment, deleteCustomer, listCustomers, updateCustomer } from "@/lib/api";
+import {
+  createCustomer,
+  createCustomerAdjustment,
+  deleteCustomer,
+  getCustomerBalance,
+  listCustomers,
+  updateCustomer,
+} from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { Customer, CustomerAdjustmentCreateInput, CustomerUpdateInput } from "@/types/domain";
+import {
+  Customer,
+  CustomerAdjustmentCreateInput,
+  CustomerBalance,
+  CustomerUpdateInput,
+} from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -42,6 +54,14 @@ export function useCreateCustomer(options?: { showToast?: boolean }) {
       }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
     },
+  });
+}
+
+export function useCustomerBalance(customerId?: string) {
+  return useQuery<CustomerBalance>({
+    queryKey: ["customers", "balance", customerId],
+    queryFn: () => getCustomerBalance(customerId ?? ""),
+    enabled: Boolean(customerId),
   });
 }
 

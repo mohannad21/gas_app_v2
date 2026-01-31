@@ -158,6 +158,7 @@ class CompanyTransaction(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  kind: str = Field(default="refill", index=True)  # "refill" | "buy_iron" | "payment"
   buy12: int = Field(default=0)
   return12: int = Field(default=0)
   buy48: int = Field(default=0)
@@ -222,6 +223,24 @@ class LedgerEntry(SQLModel, table=True):
   amount: int
   note: Optional[str] = Field(default=None, nullable=True)
 
+
+class CashAdjustment(SQLModel, table=True):
+  __tablename__ = "cash_adjustments"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  request_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+  )
+  happened_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  day: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  delta_cash: int
+  note: Optional[str] = Field(default=None, nullable=True)
+  reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
+  is_reversed: bool = Field(default=False, index=True)
 
 class SystemSettings(SQLModel, table=True):
   __tablename__ = "system_settings"

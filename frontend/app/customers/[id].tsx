@@ -7,7 +7,7 @@ import { gasColor } from "@/constants/gas";
 import { formatDateMedium, formatDateTimeMedium, formatTimeHM } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
 
-import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
+import { useCustomerBalance, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
 
@@ -36,6 +36,7 @@ export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
   const customersQuery = useCustomers();
+  const balancesQuery = useCustomerBalance(customerId);
   const systemsQuery = useSystems(id, { enabled: !!id });
   const ordersQuery = useOrders();
   const deleteCustomer = useDeleteCustomer();
@@ -45,6 +46,7 @@ export default function CustomerDetailsScreen() {
     () => (customersQuery.data ?? []).find((c) => c.id === customerId),
     [customersQuery.data, customerId]
   );
+  const balances = balancesQuery.data;
   const systems = systemsQuery.data
     ? Array.from(new Map(systemsQuery.data.map((s) => [s.id, s])).values())
     : [];
@@ -87,22 +89,26 @@ export default function CustomerDetailsScreen() {
     );
   }
 
+  const moneyBalance = balances?.money_balance ?? customer.money_balance ?? 0;
+  const cylBalance12 = balances?.cylinder_balance_12kg ?? customer.cylinder_balance_12kg ?? 0;
+  const cylBalance48 = balances?.cylinder_balance_48kg ?? customer.cylinder_balance_48kg ?? 0;
+
   const balanceStats = [
     {
       label: "Money balance",
-      value: formatCurrency(customer.money_balance),
-      highlighted: customer.money_balance > 0,
+      value: formatCurrency(moneyBalance),
+      highlighted: moneyBalance > 0,
     },
     {
       label: "12kg balance",
-      value: formatCylinder(customer.cylinder_balance_12kg),
-      highlighted: customer.cylinder_balance_12kg > 0,
+      value: formatCylinder(cylBalance12),
+      highlighted: cylBalance12 > 0,
       gas: "12kg" as const,
     },
     {
       label: "48kg balance",
-      value: formatCylinder(customer.cylinder_balance_48kg),
-      highlighted: customer.cylinder_balance_48kg > 0,
+      value: formatCylinder(cylBalance48),
+      highlighted: cylBalance48 > 0,
       gas: "48kg" as const,
     },
   ];
@@ -128,7 +134,7 @@ export default function CustomerDetailsScreen() {
   const sendWhatsApp = () => {
     const msg = encodeURIComponent(
       `Hello ${customer.name}, this is a reminder from Gas Co. Your current balance is ${formatCurrency(
-        customer.money_balance
+        moneyBalance
       )}. Reply if you need a refill.`
     );
     const phone = customer.phone?.replace(/[^0-9+]/g, "") ?? "";

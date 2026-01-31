@@ -292,7 +292,9 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
 def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
   if payload.request_id:
     existing = session.exec(
-      select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+      select(CompanyTransaction)
+      .where(CompanyTransaction.request_id == payload.request_id)
+      .where(CompanyTransaction.kind == "refill")
     ).first()
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
@@ -301,6 +303,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
   txn = CompanyTransaction(
     happened_at=happened_at,
     day=derive_day(happened_at),
+    kind="refill",
     buy12=payload.buy12,
     return12=payload.return12,
     buy48=payload.buy48,
@@ -324,7 +327,7 @@ def list_refills(
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[InventoryRefillSummary]:
-  stmt = select(CompanyTransaction)
+  stmt = select(CompanyTransaction).where(CompanyTransaction.kind == "refill")
   if not include_deleted:
     stmt = stmt.where(CompanyTransaction.is_reversed == False)  # noqa: E712
   rows = session.exec(stmt.order_by(CompanyTransaction.happened_at.desc())).all()
@@ -350,7 +353,7 @@ def list_refills(
 @router.get("/refills/{refill_id}", response_model=InventoryRefillDetails)
 def get_refill_details(refill_id: str, session: Session = Depends(get_session)) -> InventoryRefillDetails:
   row = session.get(CompanyTransaction, refill_id)
-  if not row or row.is_reversed:
+  if not row or row.is_reversed or row.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
   return InventoryRefillDetails(
     refill_id=row.id,
@@ -374,13 +377,14 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
 @router.put("/refills/{refill_id}", response_model=InventoryRefillDetails)
 def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Session = Depends(get_session)) -> InventoryRefillDetails:
   existing = session.get(CompanyTransaction, refill_id)
-  if not existing or existing.is_reversed:
+  if not existing or existing.is_reversed or existing.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
 
   now = datetime.now(timezone.utc)
   reversal = CompanyTransaction(
     happened_at=now,
     day=derive_day(now),
+    kind=existing.kind,
     buy12=existing.buy12,
     return12=existing.return12,
     buy48=existing.buy48,
@@ -410,6 +414,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   new_txn = CompanyTransaction(
     happened_at=now,
     day=derive_day(now),
+    kind="refill",
     buy12=payload.buy12,
     return12=payload.return12,
     buy48=payload.buy48,
@@ -447,12 +452,13 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
 @router.delete("/refills/{refill_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> None:
   existing = session.get(CompanyTransaction, refill_id)
-  if not existing or existing.is_reversed:
+  if not existing or existing.is_reversed or existing.kind != "refill":
     return
   now = datetime.now(timezone.utc)
   reversal = CompanyTransaction(
     happened_at=now,
     day=derive_day(now),
+    kind=existing.kind,
     buy12=existing.buy12,
     return12=existing.return12,
     buy48=existing.buy48,

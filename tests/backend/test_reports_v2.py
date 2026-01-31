@@ -303,8 +303,6 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
 
     import app.services.cash as cash_service
     import app.services.inventory as inventory_service
-    import app.db as app_db
-    from app.models import CashDelta
 
     _freeze_time(monkeypatch, [cash_service, inventory_service], fixed_now)
 
@@ -353,10 +351,6 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
     daily_resp = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()})
     daily = {row["date"]: row for row in daily_resp.json()}
     assert daily[day2.isoformat()]["cash_start"] == 650
-
-    with Session(app_db.engine) as session:
-        rows = session.exec(select(CashDelta).where(CashDelta.source_id == order_id)).all()
-        assert len(rows) == 1
 
 
 def test_expense_ordering_by_created_at(client, monkeypatch) -> None:

@@ -32,6 +32,15 @@ export const CustomerSchema = z
   .passthrough();
 export type Customer = z.infer<typeof CustomerSchema>;
 
+export const CustomerBalanceSchema = z.object({
+  customer_id: z.string(),
+  money_balance: z.number().optional().default(0),
+  cylinder_balance_12kg: z.number().optional().default(0),
+  cylinder_balance_48kg: z.number().optional().default(0),
+  order_count: z.number().optional().default(0),
+});
+export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
+
 export const CustomerCreateInputSchema = z.object({
   name: z.string(),
   phone: z.string().nullish().optional(),
@@ -76,8 +85,46 @@ export const SystemInitializeInputSchema = z.object({
   company_empty_48kg: z.number().optional(),
   currency_code: z.string().optional(),
   money_decimals: z.number().optional(),
+  customer_debts: z
+    .array(
+      z.object({
+        customer_id: z.string(),
+        money: z.number().optional().default(0),
+        cyl_12: z.number().optional().default(0),
+        cyl_48: z.number().optional().default(0),
+      })
+    )
+    .optional(),
 });
 export type SystemInitializeInput = z.infer<typeof SystemInitializeInputSchema>;
+
+export const LedgerHealthIssueSchema = z.object({
+  issue_type: z.enum(["mismatch", "orphan"]),
+  source_type: z.string(),
+  source_id: z.string(),
+  message: z.string(),
+});
+export type LedgerHealthIssue = z.infer<typeof LedgerHealthIssueSchema>;
+
+export const SystemHealthCheckSchema = z.object({
+  ok: z.boolean(),
+  checked_at: z.string(),
+  mismatches: z.number(),
+  orphans: z.number(),
+  issues: z.array(LedgerHealthIssueSchema).optional().default([]),
+});
+export type SystemHealthCheck = z.infer<typeof SystemHealthCheckSchema>;
+
+export const CompanyBalancesSchema = z.object({
+  company_money: z.number(),
+  company_cyl_12: z.number(),
+  company_cyl_48: z.number(),
+  inventory_full_12: z.number(),
+  inventory_empty_12: z.number(),
+  inventory_full_48: z.number(),
+  inventory_empty_48: z.number(),
+});
+export type CompanyBalances = z.infer<typeof CompanyBalancesSchema>;
 
 export const InventoryAdjustmentSchema = z
   .object({

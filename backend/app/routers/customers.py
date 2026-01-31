@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, LedgerEntry
-from app.schemas import CustomerCreate, CustomerOut, CustomerUpdate
+from app.schemas import CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,29 @@ def get_customer(customer_id: str, session: Session = Depends(get_session)) -> C
     address=customer.address,
     note=customer.note,
     created_at=customer.created_at,
+    money_balance=int(money),
+    cylinder_balance_12kg=int(cyl12),
+    cylinder_balance_48kg=int(cyl48),
+    order_count=int(order_count),
+  )
+
+
+@router.get("/{customer_id}/balances", response_model=CustomerBalanceOut)
+def get_customer_balances(customer_id: str, session: Session = Depends(get_session)) -> CustomerBalanceOut:
+  customer = session.get(Customer, customer_id)
+  if not customer:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+  money = sum_customer_money(session, customer_id=customer.id)
+  cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
+  cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
+  order_count = session.exec(
+    select(func.count(CustomerTransaction.id))
+    .where(CustomerTransaction.customer_id == customer.id)
+    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+  ).first() or 0
+  return CustomerBalanceOut(
+    customer_id=customer.id,
     money_balance=int(money),
     cylinder_balance_12kg=int(cyl12),
     cylinder_balance_48kg=int(cyl48),

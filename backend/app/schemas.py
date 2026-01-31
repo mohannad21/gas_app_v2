@@ -61,6 +61,14 @@ class CustomerOut(SQLModel):
   order_count: int = 0
 
 
+class CustomerBalanceOut(SQLModel):
+  customer_id: str
+  money_balance: int = 0
+  cylinder_balance_12kg: int = 0
+  cylinder_balance_48kg: int = 0
+  order_count: int = 0
+
+
 class SystemCreate(SQLModel):
   customer_id: str
   name: str
@@ -121,6 +129,13 @@ class SystemSettingsOut(SQLModel):
   created_at: datetime
 
 
+class CustomerOpeningBalance(SQLModel):
+  customer_id: str
+  money: int = 0
+  cyl_12: int = 0
+  cyl_48: int = 0
+
+
 class SystemInitialize(SQLModel):
   sell_price_12: int
   sell_price_48: int
@@ -138,6 +153,22 @@ class SystemInitialize(SQLModel):
   company_empty_48kg: int = 0
   currency_code: Optional[str] = None
   money_decimals: Optional[int] = None
+  customer_debts: Optional[list[CustomerOpeningBalance]] = None
+
+
+class LedgerHealthIssue(SQLModel):
+  issue_type: Literal["mismatch", "orphan"]
+  source_type: str
+  source_id: str
+  message: str
+
+
+class SystemHealthCheckOut(SQLModel):
+  ok: bool
+  checked_at: datetime
+  mismatches: int
+  orphans: int
+  issues: list[LedgerHealthIssue] = Field(default_factory=list)
 
 
 class OrderCreate(SQLModel):
@@ -308,6 +339,58 @@ class CompanyCylinderSettleOut(SQLModel):
   quantity: int
   direction: Literal["receive_full", "return_empty"]
   note: Optional[str] = None
+
+
+class CompanyPaymentCreate(SQLModel):
+  amount: int
+  note: Optional[str] = None
+  request_id: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
+class CompanyPaymentOut(SQLModel):
+  id: str
+  happened_at: datetime
+  amount: int
+  note: Optional[str] = None
+
+
+class CompanyBuyIronCreate(SQLModel):
+  new12: int = 0
+  new48: int = 0
+  total_cost: int = 0
+  paid_now: int = 0
+  note: Optional[str] = None
+  request_id: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
+class CompanyBuyIronOut(SQLModel):
+  id: str
+  happened_at: datetime
+  new12: int
+  new48: int
+  total_cost: int
+  paid_now: int
+  note: Optional[str] = None
+
+
+class CompanyBalancesOut(SQLModel):
+  company_money: int
+  company_cyl_12: int
+  company_cyl_48: int
+  inventory_full_12: int
+  inventory_empty_12: int
+  inventory_full_48: int
+  inventory_empty_48: int
 
 
 class BankDepositCreate(SQLModel):

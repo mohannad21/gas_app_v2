@@ -1,12 +1,62 @@
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import CompanyTransaction
-from app.schemas import CompanyCylinderSettleCreate, CompanyCylinderSettleOut
+from app.schemas import (
+  CompanyBalancesOut,
+  CompanyBuyIronCreate,
+  CompanyBuyIronOut,
+  CompanyCylinderSettleCreate,
+  CompanyCylinderSettleOut,
+  CompanyPaymentCreate,
+  CompanyPaymentOut,
+)
+from app.services.ledger import sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
+from app.utils.time import business_date_start_utc
 
 router = APIRouter(prefix="/company", tags=["company"])
+
+
+def _parse_datetime(
+  *,
+  date_str: Optional[str],
+  time_str: Optional[str] = None,
+  time_of_day: Optional[str] = None,
+  at: Optional[str] = None,
+) -> Optional[datetime]:
+  if at:
+    try:
+      value = datetime.fromisoformat(at)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
+    if value.tzinfo is None:
+      return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+  if not date_str:
+    return None
+  try:
+    day = datetime.fromisoformat(date_str).date()
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail="Invalid date format") from exc
+  base = business_date_start_utc(day)
+  if time_str:
+    try:
+      parsed = datetime.strptime(time_str, "%H:%M").time()
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid time format") from exc
+    base = base + timedelta(hours=parsed.hour, minutes=parsed.minute)
+  elif time_of_day == "morning":
+    base = base + timedelta(hours=9)
+  elif time_of_day == "evening":
+    base = base + timedelta(hours=18)
+  else:
+    base = base + timedelta(hours=12)
+  return base.replace(tzinfo=timezone.utc)
 
 
 @router.post("/cylinders/settle", response_model=CompanyCylinderSettleOut, status_code=status.HTTP_201_CREATED)
@@ -52,6 +102,7 @@ def settle_company_cylinders(
   txn = CompanyTransaction(
     happened_at=happened_at,
     day=derive_day(happened_at),
+    kind="refill",
     buy12=buy12,
     return12=return12,
     buy48=buy48,
@@ -74,4 +125,132 @@ def settle_company_cylinders(
     quantity=payload.quantity,
     direction=payload.direction,
     note=txn.note,
+  )
+
+
+@router.post("/payments", response_model=CompanyPaymentOut, status_code=status.HTTP_201_CREATED)
+def create_company_payment(
+  payload: CompanyPaymentCreate, session: Session = Depends(get_session)
+) -> CompanyPaymentOut:
+  if payload.amount <= 0:
+    raise HTTPException(status_code=400, detail="amount_must_be_positive")
+
+  if payload.request_id:
+    existing = session.exec(
+      select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+    ).first()
+    if existing:
+      return CompanyPaymentOut(
+        id=existing.id,
+        happened_at=existing.happened_at,
+        amount=existing.paid,
+        note=existing.note,
+      )
+
+  happened_at = (
+    normalize_happened_at(payload.happened_at)
+    if payload.happened_at
+    else _parse_datetime(
+      date_str=payload.date,
+      time_str=payload.time,
+      time_of_day=payload.time_of_day,
+      at=payload.at,
+    )
+  ) or datetime.now(timezone.utc)
+
+  txn = CompanyTransaction(
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="payment",
+    total=0,
+    paid=payload.amount,
+    note=payload.note,
+    request_id=payload.request_id,
+    is_reversed=False,
+  )
+  session.add(txn)
+  post_company_transaction(session, txn)
+  session.commit()
+  session.refresh(txn)
+
+  return CompanyPaymentOut(
+    id=txn.id,
+    happened_at=txn.happened_at,
+    amount=txn.paid,
+    note=txn.note,
+  )
+
+
+@router.post("/buy_iron", response_model=CompanyBuyIronOut, status_code=status.HTTP_201_CREATED)
+def create_company_buy_iron(
+  payload: CompanyBuyIronCreate, session: Session = Depends(get_session)
+) -> CompanyBuyIronOut:
+  if payload.new12 <= 0 and payload.new48 <= 0:
+    raise HTTPException(status_code=400, detail="quantity_must_be_positive")
+
+  if payload.request_id:
+    existing = session.exec(
+      select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+    ).first()
+    if existing:
+      return CompanyBuyIronOut(
+        id=existing.id,
+        happened_at=existing.happened_at,
+        new12=existing.new12,
+        new48=existing.new48,
+        total_cost=existing.total,
+        paid_now=existing.paid,
+        note=existing.note,
+      )
+
+  happened_at = (
+    normalize_happened_at(payload.happened_at)
+    if payload.happened_at
+    else _parse_datetime(
+      date_str=payload.date,
+      time_str=payload.time,
+      time_of_day=payload.time_of_day,
+      at=payload.at,
+    )
+  ) or datetime.now(timezone.utc)
+
+  txn = CompanyTransaction(
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="buy_iron",
+    new12=payload.new12,
+    new48=payload.new48,
+    total=payload.total_cost,
+    paid=payload.paid_now,
+    note=payload.note,
+    request_id=payload.request_id,
+    is_reversed=False,
+  )
+  session.add(txn)
+  post_company_transaction(session, txn)
+  session.commit()
+  session.refresh(txn)
+
+  return CompanyBuyIronOut(
+    id=txn.id,
+    happened_at=txn.happened_at,
+    new12=txn.new12,
+    new48=txn.new48,
+    total_cost=txn.total,
+    paid_now=txn.paid,
+    note=txn.note,
+  )
+
+
+@router.get("/balances", response_model=CompanyBalancesOut)
+def get_company_balances(session: Session = Depends(get_session)) -> CompanyBalancesOut:
+  inv = sum_inventory(session)
+  return CompanyBalancesOut(
+    company_money=sum_company_money(session),
+    company_cyl_12=sum_company_cylinders(session, gas_type="12kg"),
+    company_cyl_48=sum_company_cylinders(session, gas_type="48kg"),
+    inventory_full_12=inv["full12"],
+    inventory_empty_12=inv["empty12"],
+    inventory_full_48=inv["full48"],
+    inventory_empty_48=inv["empty48"],
   )
