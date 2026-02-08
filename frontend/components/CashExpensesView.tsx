@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { ExpenseCreateInput } from "@/types/domain";
+import { buildHappenedAt } from "@/lib/date";
 
 const MODE_LABELS = {
   expense: "Expense",
@@ -53,7 +54,9 @@ type CashExpensesViewProps = {
   setDepositNote: (next: string) => void;
   accessoryId?: string;
   createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown> };
-  createBankDeposit: { mutateAsync: (payload: { date: string; amount: number; note?: string }) => Promise<unknown> };
+  createBankDeposit: {
+    mutateAsync: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<unknown>;
+  };
   CalendarModal: React.ComponentType<CalendarModalProps>;
   TimePickerModal: React.ComponentType<{
     visible: boolean;
@@ -127,6 +130,7 @@ export default function CashExpensesView({
   };
 
   const handleSave = async (resetAfter: boolean) => {
+    const happened_at = buildHappenedAt({ date: expenseDate, time: expenseTime });
     if (expenseMode === "expense") {
       const amount = expenseAmountValue;
       if (!amount || amount <= 0 || !expenseType.trim()) {
@@ -138,6 +142,7 @@ export default function CashExpensesView({
         expense_type: expenseType.trim(),
         amount,
         note: expenseNote.trim() ? expenseNote.trim() : undefined,
+        happened_at,
       });
       if (resetAfter) {
         setExpenseAmount("");
@@ -158,6 +163,7 @@ export default function CashExpensesView({
     }
     await createBankDeposit.mutateAsync({
       date: expenseDate,
+      time: expenseTime,
       amount,
       note: depositNote.trim() ? depositNote.trim() : undefined,
     });

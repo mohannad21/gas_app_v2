@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import importlib
+import os
 import sys
 from pathlib import Path
 from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -11,9 +14,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 @pytest.fixture()
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    db_path = tmp_path / "test.db"
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        pytest.skip("DATABASE_URL is not set. Tests require a Postgres database.")
+    if db_url.startswith("sqlite"):
+        pytest.fail("SQLite is not supported. Set DATABASE_URL to a Postgres URL.")
+
+    monkeypatch.setenv("DATABASE_URL", db_url)
     from app import config as app_config
     app_config.get_settings.cache_clear()
     importlib.reload(app_config)
@@ -21,6 +29,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     importlib.reload(app_db)
     from app import main as app_main
     importlib.reload(app_main)
+
+    app_db.SQLModel.metadata.drop_all(bind=app_db.engine)
+    app_db.SQLModel.metadata.create_all(bind=app_db.engine)
+
     app = app_main.create_app()
     with TestClient(app) as test_client:
         yield test_client
@@ -59,29 +71,40 @@ def create_customer(
     payload = {
         "name": name,
         "phone": None,
-        "customer_type": customer_type,
-        "notes": "",
-        "starting_money": starting_money,
-        "starting_12kg": starting_12kg,
-        "starting_48kg": starting_48kg,
+        "address": None,
+        "note": "",
     }
     resp = client.post("/customers", json=payload)
     assert resp.status_code == 201
-    return resp.json()["id"]
+    customer_id = resp.json()["id"]
+
+    # Apply optional starting balances via customer adjustments.
+    if starting_money or starting_12kg or starting_48kg:
+        adjustment_payload = {
+            "customer_id": customer_id,
+            "amount_money": int(starting_money),
+            "count_12kg": int(starting_12kg),
+            "count_48kg": int(starting_48kg),
+            "reason": "opening_balance",
+        }
+        adj_resp = client.post("/customer-adjustments", json=adjustment_payload)
+        assert adj_resp.status_code == 201
+
+    return customer_id
 
 def create_system(client, *, customer_id: str, name: str = "Main Kitchen") -> str:
-    resp = client.post("/systems", json={
-        "customer_id": customer_id,
-        "name": name,
-        "location": None,
-        "system_type": "main_kitchen",
-        "gas_type": "12kg",
-        "system_customer_type": "private",
-        "is_active": True,
-        "require_security_check": False,
-        "security_check_exists": False,
-        "security_check_date": None,
-    })
+    resp = client.post(
+        "/systems",
+        json={
+            "customer_id": customer_id,
+            "name": name,
+            "gas_type": "12kg",
+            "is_active": True,
+            "requires_security_check": False,
+            "security_check_exists": False,
+            "last_security_check_at": None,
+        },
+    )
     assert resp.status_code == 201
     return resp.json()["id"]
 
@@ -100,12 +123,12 @@ def create_order(
     payload = {
         "customer_id": customer_id, 
         "system_id": system_id, 
-        "delivered_at": delivered_at,
+        "happened_at": delivered_at,
         "gas_type": gas_type,
         "cylinders_installed": installed, 
         "cylinders_received": received,
-        "price_total": price_total, 
-        "paid_amount": paid_amount
+        "price_total": int(price_total), 
+        "paid_amount": int(paid_amount),
     }
     resp = client.post("/orders", json=payload)
     if resp.status_code != 201:
@@ -129,3 +152,11 @@ def assert_inventory(snapshot: dict[str, Any], *, full12: int, empty12: int, ful
     assert snapshot["empty12"] == empty12
     assert snapshot["full48"] == full48
     assert snapshot["empty48"] == empty48
+
+
+def iso_at(date_str: str, time_of_day: str = "morning") -> str:
+    if time_of_day == "evening":
+        return f"{date_str}T18:00:00"
+    if time_of_day == "morning":
+        return f"{date_str}T09:00:00"
+    return f"{date_str}T12:00:00"

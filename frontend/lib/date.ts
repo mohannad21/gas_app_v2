@@ -1,4 +1,10 @@
 type DateInput = string | Date | null | undefined;
+type HappenedAtInput = {
+  date?: string;
+  time?: string;
+  time_of_day?: "morning" | "evening";
+  at?: string;
+};
 
 const toDate = (value: DateInput): Date | null => {
   if (!value) return null;
@@ -7,6 +13,21 @@ const toDate = (value: DateInput): Date | null => {
 };
 
 const pad2 = (value: number) => value.toString().padStart(2, "0");
+
+export const buildHappenedAt = (input?: HappenedAtInput): string | undefined => {
+  if (!input) return undefined;
+  if (input.at) return input.at;
+  if (!input.date) return undefined;
+  const time = input.time
+    ? input.time
+    : input.time_of_day === "morning"
+      ? "09:00"
+      : input.time_of_day === "evening"
+        ? "18:00"
+        : "12:00";
+  const dt = new Date(`${input.date}T${time}:00`);
+  return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
+};
 
 export const toDateKey = (value: DateInput) => {
   const date = toDate(value);

@@ -20,6 +20,10 @@ type WizardState = {
   sell48: string;
   buy12: string;
   buy48: string;
+  sellIron12: string;
+  sellIron48: string;
+  buyIron12: string;
+  buyIron48: string;
   cashStart: string;
   companyPayMoney: string;
   inventoryFull12: string;
@@ -59,6 +63,10 @@ const initialState: WizardState = {
   sell48: "",
   buy12: "",
   buy48: "",
+  sellIron12: "",
+  sellIron48: "",
+  buyIron12: "",
+  buyIron48: "",
   cashStart: "",
   companyPayMoney: "",
   inventoryFull12: "",
@@ -97,8 +105,12 @@ export default function WelcomeScreen() {
         fields: [
           { key: "sell12", label: "12kg selling price", placeholder: "0", gas: "12kg", unit: "money" },
           { key: "sell48", label: "48kg selling price", placeholder: "0", gas: "48kg", unit: "money" },
-          { key: "buy12", label: "12kg buying price (optional)", placeholder: "0", gas: "12kg", unit: "money" },
-          { key: "buy48", label: "48kg buying price (optional)", placeholder: "0", gas: "48kg", unit: "money" },
+          { key: "buy12", label: "12kg buying price", placeholder: "0", gas: "12kg", unit: "money" },
+          { key: "buy48", label: "48kg buying price", placeholder: "0", gas: "48kg", unit: "money" },
+          { key: "sellIron12", label: "12kg iron sell price", placeholder: "0", gas: "12kg", unit: "money" },
+          { key: "sellIron48", label: "48kg iron sell price", placeholder: "0", gas: "48kg", unit: "money" },
+          { key: "buyIron12", label: "12kg iron buy price", placeholder: "0", gas: "12kg", unit: "money" },
+          { key: "buyIron48", label: "48kg iron buy price", placeholder: "0", gas: "48kg", unit: "money" },
         ],
       },
       {
@@ -394,6 +406,10 @@ export default function WelcomeScreen() {
         sell_price_48: toNumber(state.sell48),
         buy_price_12: toNumber(state.buy12),
         buy_price_48: toNumber(state.buy48),
+        sell_iron_price_12: toNumber(state.sellIron12),
+        sell_iron_price_48: toNumber(state.sellIron48),
+        buy_iron_price_12: toNumber(state.buyIron12),
+        buy_iron_price_48: toNumber(state.buyIron48),
         full_12: toNumber(state.inventoryFull12),
         empty_12: toNumber(state.inventoryEmpty12),
         full_48: toNumber(state.inventoryFull48),

@@ -19,6 +19,8 @@ def list_prices(session: Session = Depends(get_session)) -> list[PriceOut]:
       gas_type=row.gas_type,
       selling_price=row.sell_price,
       buying_price=row.buy_price,
+      selling_iron_price=row.sell_iron_price,
+      buying_iron_price=row.buy_iron_price,
       effective_from=row.effective_from,
       created_at=row.created_at,
     )
@@ -33,6 +35,8 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     gas_type=payload.gas_type,
     sell_price=payload.selling_price,
     buy_price=payload.buying_price,
+    sell_iron_price=payload.selling_iron_price,
+    buy_iron_price=payload.buying_iron_price,
     effective_from=effective_from,
     created_at=datetime.now(timezone.utc),
   )
@@ -44,6 +48,8 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     gas_type=row.gas_type,
     selling_price=row.sell_price,
     buying_price=row.buy_price,
+    selling_iron_price=row.sell_iron_price,
+    buying_iron_price=row.buy_iron_price,
     effective_from=row.effective_from,
     created_at=row.created_at,
   )

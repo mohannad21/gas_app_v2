@@ -15,9 +15,8 @@ def test_daily_order_flow(client):
     # 2. Setup Price
     client.post("/prices", json={
         "gas_type": "12kg",
-        "customer_type": "private",
-        "selling_price": 100.0,
-        "buying_price": 50.0,
+        "selling_price": 100,
+        "buying_price": 50,
         "effective_from": ISO_START
     })
 
@@ -30,8 +29,8 @@ def test_daily_order_flow(client):
         client,
         customer_id=c_id,
         system_id=s_id,
-        price_total=100.0,
-        paid_amount=80.0,
+        price_total=100,
+        paid_amount=80,
         delivered_at=ISO_ORDER,
         installed=1,
         received=1

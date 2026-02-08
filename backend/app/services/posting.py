@@ -14,7 +14,7 @@ from app.models import (
   InventoryAdjustment,
   LedgerEntry,
 )
-from app.utils.time import business_date_from_utc, to_utc_naive
+from app.utils.time import business_date_from_utc, business_tz, to_utc_naive
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,8 @@ def normalize_happened_at(value: Optional[datetime]) -> datetime:
   if value is None:
     return datetime.now(timezone.utc)
   if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
-    return value.replace(tzinfo=timezone.utc)
+    local = value.replace(tzinfo=business_tz())
+    return local.astimezone(timezone.utc)
   return value.astimezone(timezone.utc)
 
 
@@ -89,7 +90,8 @@ def _insert_ledger_entries(
 def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
   gas = txn.gas_type
   lines: list[LedgerLine] = []
-  money_delta = txn.total - txn.paid
+  is_buy_iron = txn.kind == "order" and (txn.mode or "") == "buy_iron"
+  money_delta = txn.paid - txn.total if is_buy_iron else txn.total - txn.paid
 
   if txn.kind == "order":
     mode = txn.mode or "replacement"
@@ -159,7 +161,7 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         LedgerLine(
           account=ACCOUNT_CASH,
           unit=UNIT_MONEY,
-          amount=txn.paid,
+          amount=-txn.paid if is_buy_iron else txn.paid,
         )
       )
 
@@ -177,6 +179,24 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
           account=ACCOUNT_CUST_MONEY,
           unit=UNIT_MONEY,
           amount=-txn.paid,
+          customer_id=txn.customer_id,
+        )
+      )
+
+  elif txn.kind == "payout":
+    if txn.paid:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CASH,
+          unit=UNIT_MONEY,
+          amount=-txn.paid,
+        )
+      )
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CUST_MONEY,
+          unit=UNIT_MONEY,
+          amount=txn.paid,
           customer_id=txn.customer_id,
         )
       )

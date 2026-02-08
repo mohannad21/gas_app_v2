@@ -4,20 +4,27 @@ import { gasColor } from "@/constants/gas";
 
 export const gasTypes: GasType[] = ["12kg", "48kg"];
 
-export type PriceInputs = Record<GasType, { selling: string; buying: string }>;
+export type PriceInputs = Record<
+  GasType,
+  { selling: string; buying: string; selling_iron: string; buying_iron: string }
+>;
 
 export function createDefaultPriceInputs(): PriceInputs {
   return gasTypes.reduce((acc, gas) => {
-    acc[gas] = { selling: "", buying: "" };
+    acc[gas] = { selling: "", buying: "", selling_iron: "", buying_iron: "" };
     return acc;
   }, {} as PriceInputs);
 }
 
 type Props = {
   gasType: GasType;
-  inputs: { selling: string; buying: string };
-  previousInputs?: { selling: string; buying: string };
-  onInputChange: (gas: GasType, field: "selling" | "buying", value: string) => void;
+  inputs: { selling: string; buying: string; selling_iron: string; buying_iron: string };
+  previousInputs?: { selling: string; buying: string; selling_iron: string; buying_iron: string };
+  onInputChange: (
+    gas: GasType,
+    field: "selling" | "buying" | "selling_iron" | "buying_iron",
+    value: string
+  ) => void;
 };
 
 export function PriceMatrixSection({ gasType, inputs, previousInputs, onInputChange }: Props) {
@@ -30,7 +37,7 @@ export function PriceMatrixSection({ gasType, inputs, previousInputs, onInputCha
         <Text style={[styles.tableCell, styles.headerLabel, styles.inputCell]}>Sell</Text>
       </View>
       <View key={`${gasType}-prices`} style={styles.tableRow}>
-        <Text style={[styles.rowLabel, styles.labelCell]}>price</Text>
+        <Text style={[styles.rowLabel, styles.labelCell]}>gas</Text>
         <View style={[styles.inputCell, styles.inputStack]}>
           <Text style={styles.oldValue}>
             Old {previousInputs?.buying?.trim() ? previousInputs.buying : "-"}
@@ -53,6 +60,33 @@ export function PriceMatrixSection({ gasType, inputs, previousInputs, onInputCha
             placeholder="Sell"
             value={inputs.selling ?? ""}
             onChangeText={(value) => onInputChange(gasType, "selling", value)}
+          />
+        </View>
+      </View>
+      <View key={`${gasType}-iron-prices`} style={styles.tableRow}>
+        <Text style={[styles.rowLabel, styles.labelCell]}>iron</Text>
+        <View style={[styles.inputCell, styles.inputStack]}>
+          <Text style={styles.oldValue}>
+            Old {previousInputs?.buying_iron?.trim() ? previousInputs.buying_iron : "-"}
+          </Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="Buy"
+            value={inputs.buying_iron ?? ""}
+            onChangeText={(value) => onInputChange(gasType, "buying_iron", value)}
+          />
+        </View>
+        <View style={[styles.inputCell, styles.inputStack]}>
+          <Text style={styles.oldValue}>
+            Old {previousInputs?.selling_iron?.trim() ? previousInputs.selling_iron : "-"}
+          </Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="Sell"
+            value={inputs.selling_iron ?? ""}
+            onChangeText={(value) => onInputChange(gasType, "selling_iron", value)}
           />
         </View>
       </View>

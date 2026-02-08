@@ -141,6 +141,10 @@ class SystemInitialize(SQLModel):
   sell_price_48: int
   buy_price_12: int = 0
   buy_price_48: int = 0
+  sell_iron_price_12: int = 0
+  sell_iron_price_48: int = 0
+  buy_iron_price_12: int = 0
+  buy_iron_price_48: int = 0
   full_12: int
   empty_12: int
   full_48: int
@@ -181,6 +185,9 @@ class OrderCreate(SQLModel):
   cylinders_received: int
   price_total: int
   paid_amount: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -195,6 +202,9 @@ class OrderUpdate(SQLModel):
   cylinders_received: Optional[int] = None
   price_total: Optional[int] = None
   paid_amount: Optional[int] = None
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
 
 
@@ -211,6 +221,9 @@ class OrderOut(SQLModel):
   cylinders_received: int
   price_total: int
   paid_amount: int
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   money_balance_before: Optional[int] = None
   money_balance_after: Optional[int] = None
@@ -220,10 +233,13 @@ class OrderOut(SQLModel):
 
 class CollectionCreate(SQLModel):
   customer_id: str
-  action_type: Literal["payment", "return"]
+  action_type: Literal["payment", "payout", "return"]
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
@@ -231,10 +247,13 @@ class CollectionCreate(SQLModel):
 
 
 class CollectionUpdate(SQLModel):
-  action_type: Optional[Literal["payment", "return"]] = None
+  action_type: Optional[Literal["payment", "payout", "return"]] = None
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
@@ -243,10 +262,13 @@ class CollectionUpdate(SQLModel):
 class CollectionEvent(SQLModel):
   id: str
   customer_id: str
-  action_type: Literal["payment", "return"]
+  action_type: Literal["payment", "payout", "return"]
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   system_id: Optional[str] = None
   created_at: datetime
   effective_at: datetime
@@ -257,6 +279,8 @@ class PriceCreate(SQLModel):
   gas_type: GasType
   selling_price: int
   buying_price: int = 0
+  selling_iron_price: int = 0
+  buying_iron_price: int = 0
   effective_from: Optional[datetime] = None
 
 
@@ -265,6 +289,8 @@ class PriceOut(SQLModel):
   gas_type: GasType
   selling_price: int
   buying_price: int
+  selling_iron_price: int
+  buying_iron_price: int
   effective_from: datetime
   created_at: datetime
 
@@ -475,6 +501,9 @@ class InventoryRefillCreate(SQLModel):
   return48: int = 0
   total_cost: int = 0
   paid_now: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
@@ -492,6 +521,9 @@ class InventoryRefillSummary(SQLModel):
   return48: int
   new12: int = 0
   new48: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   is_deleted: bool = False
   deleted_at: Optional[datetime] = None
 
@@ -503,6 +535,9 @@ class InventoryRefillUpdate(SQLModel):
   return48: int = 0
   total_cost: int = 0
   paid_now: int = 0
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
@@ -521,6 +556,9 @@ class InventoryRefillDetails(SQLModel):
   paid_now: int
   new12: int = 0
   new48: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   notes: Optional[str] = None
   is_deleted: bool = False
   deleted_at: Optional[datetime] = None

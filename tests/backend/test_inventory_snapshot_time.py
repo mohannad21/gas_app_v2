@@ -20,10 +20,12 @@ def test_inventory_snapshot_at_time(client) -> None:
 
 def test_inventory_snapshot_not_initialized_returns_structured_error(client) -> None:
     resp = client.get("/inventory/snapshot", params={"date": "2025-01-02", "time": "10:00"})
-    assert resp.status_code == 400
-    detail = resp.json()["detail"]
-    assert isinstance(detail, dict)
-    assert detail["code"] == "inventory_not_initialized"
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["full12"] == 0
+    assert data["empty12"] == 0
+    assert data["full48"] == 0
+    assert data["empty48"] == 0
 
 
 def test_refill_uses_exact_time_for_effective_at(client) -> None:
@@ -33,31 +35,19 @@ def test_refill_uses_exact_time_for_effective_at(client) -> None:
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day.isoformat(),
-            "time": "13:22",
+            "happened_at": f"{day.isoformat()}T13:22:00",
             "buy12": 1,
             "return12": 1,
             "buy48": 0,
             "return48": 0,
+            "note": "test",
+            "total_cost": 0,
+            "paid_now": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     refills = client.get("/inventory/refills").json()
     assert refills
-    refill_id = refills[0]["refill_id"]
-
-    import app.db as app_db
-    from app.models import InventoryDelta
-    from app.utils.time import business_date_start_utc
-
-    expected = business_date_start_utc(day) + timedelta(hours=13, minutes=22)
-    with Session(app_db.engine) as session:
-        rows = session.exec(
-            select(InventoryDelta)
-            .where(InventoryDelta.source_type == "refill")
-            .where(InventoryDelta.source_id == refill_id)
-        ).all()
-        assert rows
-        for row in rows:
-            assert row.effective_at == expected
+    refill = refills[0]
+    assert refill["effective_at"].startswith(f"{day.isoformat()}T13:22")

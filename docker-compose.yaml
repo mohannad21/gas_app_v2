@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: gas-postgres
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -11,20 +11,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  backend:
-      build: ./backend
-      container_name: gas-backend
-      depends_on:
-        - db
-      environment:
-        - DATABASE_URL=postgresql://postgres:password@db:5432/gas_db
-        - BUSINESS_TZ=Europe/Berlin
-        - PYTHONPATH=/app  # <--- Add this line
-      ports:
-        - "8000:8000"
-      command: >
-        sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

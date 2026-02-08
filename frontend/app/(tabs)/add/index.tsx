@@ -10,6 +10,7 @@ import { useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
+import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
 import {
   useDeleteInventoryAdjustment,
   useDeleteRefill,
@@ -26,7 +27,7 @@ import {
   PriceMatrixSection,
   gasTypes,
 } from "@/components/PriceMatrix";
-import { CashAdjustment, GasType, InventoryAdjustment, PriceSetting } from "@/types/domain";
+import { CashAdjustment, Expense, GasType, InventoryAdjustment, PriceSetting } from "@/types/domain";
 
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
@@ -58,6 +59,7 @@ export default function AddChooserScreen() {
   const deleteRefill = useDeleteRefill();
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
   const deleteCashAdjust = useDeleteCashAdjustment();
+  const deleteExpense = useDeleteExpense();
 
 const formatDateTime = (value?: string) => {
   if (!value) return "—";
@@ -72,6 +74,7 @@ const formatDateTime = (value?: string) => {
   };
   const todayDate = getLocalDateString();
   const inventoryActivity = useInventoryActivity(todayDate, showDeletedInventory);
+  const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
 
 
   const orders = ordersQuery.data
@@ -121,6 +124,14 @@ const formatDateTime = (value?: string) => {
     const data = entry.data;
     return data.buy12 || data.buy48 || data.return12 || data.return48;
   });
+  const expenses = useMemo(() => {
+    const rows = expensesQuery.data ?? [];
+    return [...rows].sort((a, b) => {
+      const aTime = new Date(a.created_at ?? a.date).getTime();
+      const bTime = new Date(b.created_at ?? b.date).getTime();
+      return bTime - aTime;
+    });
+  }, [expensesQuery.data]);
   const customers = customersQuery.data ?? [];
   const [customerFilter, setCustomerFilter] = useState<
     | "all"
@@ -240,9 +251,16 @@ const formatDateTime = (value?: string) => {
           nextSaved[gas] = {
             selling: combo.selling_price.toString(),
             buying: combo.buying_price?.toString() ?? "",
+            selling_iron: combo.selling_iron_price?.toString() ?? "",
+            buying_iron: combo.buying_iron_price?.toString() ?? "",
           };
         } else {
-          nextSaved[gas] = prev[gas] ?? { selling: "", buying: "" };
+          nextSaved[gas] = prev[gas] ?? {
+            selling: "",
+            buying: "",
+            selling_iron: "",
+            buying_iron: "",
+          };
         }
       });
       return nextSaved;
@@ -253,13 +271,20 @@ const formatDateTime = (value?: string) => {
       gasTypes.forEach((gas) => {
         const combo = latestByGas[gas];
         const comboKey = gas;
-        const previousValue = prev[gas] ?? { selling: "", buying: "" };
+        const previousValue = prev[gas] ?? {
+          selling: "",
+          buying: "",
+          selling_iron: "",
+          buying_iron: "",
+        };
         if (dirtyCombos.has(comboKey)) {
           next[gas] = { ...previousValue };
         } else if (combo) {
           next[gas] = {
             selling: combo.selling_price.toString(),
             buying: combo.buying_price?.toString() ?? "",
+            selling_iron: combo.selling_iron_price?.toString() ?? "",
+            buying_iron: combo.buying_iron_price?.toString() ?? "",
           };
         } else {
           next[gas] = { ...previousValue };
@@ -303,7 +328,10 @@ const formatDateTime = (value?: string) => {
       ordersQuery.refetch();
       collectionsQuery.refetch();
       customersQuery.refetch();
-    }, [ordersQuery, customersQuery])
+      if (isExpenses) {
+        expensesQuery.refetch();
+      }
+    }, [ordersQuery, customersQuery, collectionsQuery, expensesQuery, isExpenses])
   );
   useFocusEffect(
     useCallback(() => {
@@ -353,7 +381,9 @@ const formatDateTime = (value?: string) => {
 
   const openCollectionEdit = (collection: any) => {
     setCollectionEditTarget(collection);
-    setCollectionAmount(collection.action_type === "payment" ? String(collection.amount_money ?? "") : "");
+    setCollectionAmount(
+      collection.action_type !== "return" ? String(collection.amount_money ?? "") : ""
+    );
     setCollectionQty12(collection.action_type === "return" ? String(collection.qty_12kg ?? "") : "");
     setCollectionQty48(collection.action_type === "return" ? String(collection.qty_48kg ?? "") : "");
     setCollectionNote(collection.note ?? "");
@@ -363,7 +393,7 @@ const formatDateTime = (value?: string) => {
   const handleSaveCollectionEdit = async () => {
     if (!collectionEditTarget) return;
     const actionType = collectionEditTarget.action_type;
-    if (actionType === "payment") {
+    if (actionType === "payment" || actionType === "payout") {
       const amount = Number(collectionAmount) || 0;
       if (amount <= 0) {
         Alert.alert("Missing amount", "Enter a payment amount.");
@@ -371,7 +401,7 @@ const formatDateTime = (value?: string) => {
       }
       await updateCollection.mutateAsync({
         id: collectionEditTarget.id,
-        payload: { action_type: "payment", amount_money: amount, note: collectionNote || undefined },
+        payload: { action_type: actionType, amount_money: amount, note: collectionNote || undefined },
       });
     } else {
       const qty12 = Number(collectionQty12) || 0;
@@ -391,7 +421,7 @@ const formatDateTime = (value?: string) => {
 
   const handlePriceInputChange = (
     gas: GasType,
-    field: "selling" | "buying",
+    field: "selling" | "buying" | "selling_iron" | "buying_iron",
     value: string
   ) => {
     const comboKey = gas;
@@ -399,15 +429,24 @@ const formatDateTime = (value?: string) => {
       const nextValue = {
         selling: field === "selling" ? value : prev[gas]?.selling ?? "",
         buying: field === "buying" ? value : prev[gas]?.buying ?? "",
+        selling_iron: field === "selling_iron" ? value : prev[gas]?.selling_iron ?? "",
+        buying_iron: field === "buying_iron" ? value : prev[gas]?.buying_iron ?? "",
       };
       const next: PriceInputs = {
         ...prev,
         [gas]: nextValue,
       };
-      const baseline = lastSavedPrices[gas] ?? { selling: "", buying: "" };
+      const baseline = lastSavedPrices[gas] ?? {
+        selling: "",
+        buying: "",
+        selling_iron: "",
+        buying_iron: "",
+      };
       const matchesBaseline =
         (nextValue.selling || "") === (baseline.selling || "") &&
-        (nextValue.buying || "") === (baseline.buying || "");
+        (nextValue.buying || "") === (baseline.buying || "") &&
+        (nextValue.selling_iron || "") === (baseline.selling_iron || "") &&
+        (nextValue.buying_iron || "") === (baseline.buying_iron || "");
       if (matchesBaseline) {
         dirtyPriceCombosRef.current.delete(comboKey);
       } else {
@@ -427,16 +466,20 @@ const formatDateTime = (value?: string) => {
     try {
       for (const comboKey of dirtyCombos) {
         const gas = comboKey as GasType;
-        const { selling, buying } = priceInputs[gas];
+        const { selling, buying, selling_iron, buying_iron } = priceInputs[gas];
         const savedPrice = await savePrice.mutateAsync({
           gas_type: gas,
           selling_price: Number(selling) || 0,
           buying_price: buying ? Number(buying) : undefined,
+          selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
+          buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
         });
         dirtyPriceCombosRef.current.delete(comboKey);
         const normalized = {
           selling: savedPrice.selling_price.toString(),
           buying: savedPrice.buying_price?.toString() ?? "",
+          selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
+          buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
         };
         setLastSavedPrices((prev) => ({
           ...prev,
@@ -504,6 +547,25 @@ const formatDateTime = (value?: string) => {
             inventoryActivity.cashAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete cash adjustment failed", error);
+            Alert.alert("Failed to delete", "Try again later.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteExpense = (entry: Expense) => {
+    Alert.alert("Remove expense?", "This will delete the expense entry.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteExpense.mutateAsync({ date: entry.date, expense_type: entry.expense_type });
+            expensesQuery.refetch();
+          } catch (error) {
+            console.error("[add] delete expense failed", error);
             Alert.alert("Failed to delete", "Try again later.");
           }
         },
@@ -600,7 +662,12 @@ const formatDateTime = (value?: string) => {
                   normalizeIso(collection.created_at ?? collection.effective_at ?? "")
                 );
                 const system = systemsQuery.data?.find((s) => s.id === collection.system_id);
-                const label = collection.action_type === "payment" ? "LatePay" : "ReturnEmp";
+                const label =
+                  collection.action_type === "payment"
+                    ? "Receive"
+                    : collection.action_type === "payout"
+                      ? "Payout"
+                      : "ReturnEmp";
                 const amount = Number(collection.amount_money ?? 0);
                 const qty12 = Number(collection.qty_12kg ?? 0);
                 const qty48 = Number(collection.qty_48kg ?? 0);
@@ -619,7 +686,7 @@ const formatDateTime = (value?: string) => {
                     </View>
                     <View style={styles.infoRow}>
                       <View style={styles.leftInfo}>
-                        {collection.action_type === "payment" ? (
+                        {collection.action_type !== "return" ? (
                           <Text style={styles.metaLine}>Amount {amount.toFixed(0)}</Text>
                         ) : (
                           <Text style={styles.metaLine}>
@@ -859,7 +926,47 @@ const formatDateTime = (value?: string) => {
           />
         </>
          ) : isExpenses ? (
-          <View />
+          <View style={styles.formCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.formTitle}>Recent expenses</Text>
+              <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Refresh</Text>
+              </Pressable>
+            </View>
+            {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+            {expensesQuery.error ? (
+              <Text style={styles.error}>Failed to load expenses.</Text>
+            ) : null}
+            {expenses.length === 0 && !expensesQuery.isLoading ? (
+              <Text style={styles.meta}>No expenses yet.</Text>
+            ) : (
+              <View style={styles.listBlock}>
+                {expenses.map((item) => (
+                  <View key={item.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.titleBlock}>
+                        <View style={styles.pillRow}>
+                          <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
+                        </View>
+                        <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
+                        {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                      </View>
+                      <View style={styles.headerRight}>
+                        <Text style={styles.expenseAmount}>{item.amount}</Text>
+                        <Pressable
+                          accessibilityLabel="Remove expense"
+                          onPress={() => handleDeleteExpense(item)}
+                          style={styles.iconBtn}
+                        >
+                          <Ionicons name="trash" size={16} color="#b00020" />
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         ) : (
           <View style={styles.formCard}>
             <View style={styles.inventoryHeaderRow}>
@@ -1086,7 +1193,7 @@ const formatDateTime = (value?: string) => {
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit collection</Text>
-            {collectionEditTarget?.action_type === "payment" ? (
+            {collectionEditTarget?.action_type !== "return" ? (
               <>
                 <Text style={styles.modalLabel}>Amount</Text>
                 <TextInput

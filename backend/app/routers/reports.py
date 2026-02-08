@@ -402,7 +402,48 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   systems = {s.id: s for s in session.exec(select(System)).all()}
   categories = {c.id: c.name for c in session.exec(select(ExpenseCategory)).all()}
 
-  events: list[tuple[datetime, DailyReportV2Event]] = []
+  events: list[DailyReportV2Event] = []
+
+  # system init entries (opening balances)
+  system_init_rows = [row for row in ledger_rows if row.source_type == "system_init"]
+  if system_init_rows:
+    by_source: dict[str, list[LedgerEntry]] = defaultdict(list)
+    for row in system_init_rows:
+      by_source[row.source_id].append(row)
+    for source_id, rows in by_source.items():
+      base = min(rows, key=lambda r: r.happened_at)
+      event = DailyReportV2Event(
+        event_type="init",
+        effective_at=base.happened_at,
+        created_at=base.happened_at,
+        source_id=source_id,
+        label=None,
+        label_short=None,
+        order_mode=None,
+        gas_type=None,
+        customer_id=None,
+        customer_name=None,
+        customer_description=None,
+        system_name=None,
+        system_type=None,
+        expense_type=None,
+        reason="System initialization",
+        buy12=None,
+        return12=None,
+        buy48=None,
+        return48=None,
+        total_cost=None,
+        paid_now=None,
+        order_total=None,
+        order_paid=None,
+        order_installed=None,
+        order_received=None,
+        cash_before=None,
+        cash_after=None,
+        inventory_before=None,
+        inventory_after=None,
+      )
+      events.append(event)
 
   # group return transactions by group_id
   customer_txns = session.exec(
@@ -417,11 +458,22 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       grouped_returns[txn.group_id].append(txn)
     else:
       other_txns.append(txn)
+  return_group_txn_ids: dict[str, list[str]] = {
+    group_id: [t.id for t in txns] for group_id, txns in grouped_returns.items()
+  }
 
   for txn in other_txns:
     source_key = ("customer_txn", txn.id)
     entry_rows = ledger_by_source.get(source_key, [])
-    event_type = "order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "customer_adjust"
+    event_type = (
+      "order"
+      if txn.kind == "order"
+      else "collection_money"
+      if txn.kind == "payment"
+      else "collection_payout"
+      if txn.kind == "payout"
+      else "customer_adjust"
+    )
     if txn.kind == "adjust":
       event_type = "customer_adjust"
     customer = customers.get(txn.customer_id)
@@ -431,7 +483,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=txn.happened_at,
-      created_at=txn.happened_at,
+      created_at=txn.created_at,
       source_id=txn.id,
       label=None,
       label_short=None,
@@ -459,7 +511,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((txn.happened_at, event))
+    events.append(event)
 
   for group_id, txns in grouped_returns.items():
     base = min(txns, key=lambda t: t.happened_at)
@@ -470,7 +522,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="collection_empty",
       effective_at=base.happened_at,
-      created_at=base.happened_at,
+      created_at=base.created_at,
       source_id=group_id,
       label=None,
       label_short=None,
@@ -498,7 +550,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((base.happened_at, event))
+    events.append(event)
 
   # inventory adjustments
   adjustments = session.exec(
@@ -510,7 +562,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="adjust",
       effective_at=adj.happened_at,
-      created_at=adj.happened_at,
+      created_at=adj.created_at,
       source_id=adj.id,
       label=None,
       label_short=None,
@@ -538,7 +590,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((adj.happened_at, event))
+    events.append(event)
 
   # company transactions
   company_txns = session.exec(
@@ -571,7 +623,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=txn.happened_at,
-      created_at=txn.happened_at,
+      created_at=txn.created_at,
       source_id=txn.id,
       label=None,
       label_short=None,
@@ -599,7 +651,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((txn.happened_at, event))
+    events.append(event)
 
   # expenses and deposits
   expenses = session.exec(
@@ -615,7 +667,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=expense.happened_at,
-      created_at=expense.happened_at,
+      created_at=expense.created_at,
       source_id=expense.id,
       label=None,
       label_short=None,
@@ -643,7 +695,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((expense.happened_at, event))
+    events.append(event)
 
   cash_adjustments = session.exec(
     select(CashAdjustment)
@@ -654,7 +706,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="cash_adjust",
       effective_at=adjustment.happened_at,
-      created_at=adjustment.happened_at,
+      created_at=adjustment.created_at,
       source_id=adjustment.id,
       label=None,
       label_short=None,
@@ -682,10 +734,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((adjustment.happened_at, event))
+    events.append(event)
 
   # sort and apply running balances for cash/inventory
-  events.sort(key=lambda pair: pair[0])
+  events.sort(key=lambda ev: (ev.effective_at, ev.created_at))
   running_cash = cash_start
   running_company = company_start
   running_company_12 = company_12kg_start
@@ -694,20 +746,27 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   running_empty = {"12kg": inventory_start.empty12, "48kg": inventory_start.empty48}
   event_rows: list[DailyReportV2Event] = []
 
-  for happened_at, event in events:
+  for event in events:
     key = (None, None)
     if event.source_id:
-      if event.event_type in {"order", "collection_money", "collection_empty", "customer_adjust"}:
+      if event.event_type in {"order", "collection_money", "collection_payout", "collection_empty", "customer_adjust"}:
         key = ("customer_txn", event.source_id)
       elif event.event_type in {"refill", "company_payment", "company_buy_iron"}:
         key = ("company_txn", event.source_id)
+      elif event.event_type == "init":
+        key = ("system_init", event.source_id)
       elif event.event_type in {"expense", "bank_deposit"}:
         key = ("expense", event.source_id)
       elif event.event_type == "cash_adjust":
         key = ("cash_adjust", event.source_id)
       elif event.event_type == "adjust":
         key = ("inventory_adjust", event.source_id)
-    entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []
+    entry_rows: list[LedgerEntry] = []
+    if event.event_type == "collection_empty" and event.source_id in return_group_txn_ids:
+      for txn_id in return_group_txn_ids[event.source_id]:
+        entry_rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
+    else:
+      entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []
     cash_delta = sum(row.amount for row in entry_rows if row.account == "cash")
     company_delta = sum(row.amount for row in entry_rows if row.account == "company_money_debts")
     company_12_delta = sum(
@@ -765,7 +824,8 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       event.inventory_before = inv_before
       event.inventory_after = inv_after
 
-    event_rows.append(event)
+    if event.event_type != "customer_adjust":
+      event_rows.append(event)
 
   return DailyReportV2Day(
     date=business_date.isoformat(),

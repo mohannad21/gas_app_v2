@@ -6,7 +6,10 @@ from conftest import create_customer, init_inventory
 
 
 def _cash_init(client, *, day: str, amount: float) -> None:
-    resp = client.post("/cash/init", json={"date": day, "cash_start": amount, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day}T08:00:00", "delta_cash": int(amount), "reason": "open"},
+    )
     assert resp.status_code == 201
 
 
@@ -22,10 +25,9 @@ def test_daily_v2_customer_balances_net_zero(client) -> None:
             "customer_id": customer_id,
             "amount_money": 100,
             "reason": "test",
-            "is_inventory_neutral": True,
         },
     )
-    assert adj_resp.status_code == 200
+    assert adj_resp.status_code == 201
 
     pay_resp = client.post(
         "/collections",
@@ -59,10 +61,9 @@ def test_daily_v2_customer_balances_bilateral(client) -> None:
             "amount_money": 50,
             "count_12kg": 2,
             "reason": "test",
-            "is_inventory_neutral": True,
         },
     )
-    assert resp_a.status_code == 200
+    assert resp_a.status_code == 201
     resp_b = client.post(
         "/customer-adjustments",
         json={
@@ -70,10 +71,9 @@ def test_daily_v2_customer_balances_bilateral(client) -> None:
             "amount_money": -50,
             "count_12kg": -1,
             "reason": "test",
-            "is_inventory_neutral": True,
         },
     )
-    assert resp_b.status_code == 200
+    assert resp_b.status_code == 201
 
     report_resp = client.get("/reports/daily_v2", params={"from": day.isoformat(), "to": day.isoformat()})
     assert report_resp.status_code == 200

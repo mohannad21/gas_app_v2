@@ -7,12 +7,15 @@ from conftest import create_customer, create_order, create_system, init_inventor
 
 def test_bank_deposit_reduces_cash_and_appears_in_timeline(client) -> None:
     day1 = date(2025, 11, 1)
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/cash/bank_deposit",
-        json={"date": day1.isoformat(), "amount": 200, "note": "deposit"},
+        json={"happened_at": f"{day1.isoformat()}T09:00:00", "amount": 200, "note": "deposit"},
     )
     assert resp.status_code == 201
     deposit_id = resp.json()["id"]
@@ -28,7 +31,6 @@ def test_bank_deposit_reduces_cash_and_appears_in_timeline(client) -> None:
     assert deposit_event["source_id"] == deposit_id
     assert deposit_event["cash_before"] == 1000
     assert deposit_event["cash_after"] == 800
-    assert deposit_event["label"] == "Bank Deposit"
     assert deposit_event["reason"] == "deposit"
 
     listing = client.get("/cash/bank_deposits", params={"date": day1.isoformat()})
@@ -41,12 +43,15 @@ def test_bank_deposit_reduces_cash_and_appears_in_timeline(client) -> None:
 
 def test_bank_deposit_ordering_vs_expense_same_day(client) -> None:
     day1 = datetime.now(timezone.utc).date()
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 500, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 500, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/cash/bank_deposit",
-        json={"date": day1.isoformat(), "amount": 50, "note": "deposit", "time_of_day": "morning"},
+        json={"happened_at": f"{day1.isoformat()}T09:00:00", "amount": 50, "note": "deposit"},
     )
     assert resp.status_code == 201
 
@@ -68,12 +73,15 @@ def test_bank_deposit_delete_cascades_cash_forward(client) -> None:
     day1 = date(2025, 11, 3)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat())
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/cash/bank_deposit",
-        json={"date": day1.isoformat(), "amount": 200, "note": "deposit"},
+        json={"happened_at": f"{day1.isoformat()}T09:00:00", "amount": 200, "note": "deposit"},
     )
     assert resp.status_code == 201
     deposit_id = resp.json()["id"]

@@ -33,16 +33,17 @@ def test_refill_grouping_by_source_id(client) -> None:
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day1.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day1.isoformat()}T09:00:00",
             "buy12": 2,
             "return12": 1,
             "buy48": 3,
             "return48": 0,
-            "reason": "group",
+            "note": "group",
+            "total_cost": 0,
+            "paid_now": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     report = client.get("/reports/day_v2", params={"date": day1.isoformat()})
     assert report.status_code == 200
@@ -73,12 +74,12 @@ def test_daily_audit_summary_cash_in_net_zero(client) -> None:
         gas_type="12kg",
         installed=1,
         received=0,
-        price_total=1000.0,
-        paid_amount=1000.0,
+        price_total=1000,
+        paid_amount=1000,
     )
 
     resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
     assert resp.status_code == 200
     audit = resp.json()["audit_summary"]
-    assert audit["cash_in"] == 1000.0
-    assert audit["new_debt"] == 0.0
+    assert audit["cash_in"] == 1000
+    assert audit["new_debt"] == 0

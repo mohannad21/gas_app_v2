@@ -21,7 +21,7 @@ def test_company_refill_updates_inventory_and_debt(client) -> None:
             "paid_now": 50,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     balances = client.get("/company/balances")
     assert balances.status_code == 200

@@ -14,6 +14,11 @@ from app.services.posting import derive_day, normalize_happened_at, post_custome
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+def _money_delta_for_mode(order_mode: str, total: int, paid: int) -> int:
+  if order_mode == "buy_iron":
+    return paid - total
+  return total - paid
+
 
 def _order_out(txn: CustomerTransaction) -> OrderOut:
   return OrderOut(
@@ -21,7 +26,7 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
     customer_id=txn.customer_id,
     system_id=txn.system_id or "",
     delivered_at=txn.happened_at,
-    created_at=txn.happened_at,
+    created_at=txn.created_at,
     updated_at=None,
     order_mode=txn.mode or "replacement",
     gas_type=txn.gas_type or "12kg",
@@ -29,6 +34,9 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
     cylinders_received=txn.received,
     price_total=txn.total,
     paid_amount=txn.paid,
+    debt_cash=txn.debt_cash,
+    debt_cylinders_12=txn.debt_cylinders_12,
+    debt_cylinders_48=txn.debt_cylinders_48,
     note=txn.note,
     money_balance_before=None,
     money_balance_after=None,
@@ -40,7 +48,8 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
 def _compute_impact(*, customer_money: int, customer_cyl_12: int, customer_cyl_48: int, payload: OrderCreate) -> dict:
   paid = payload.paid_amount or 0
   total = payload.price_total
-  new_balance = customer_money + (total - paid)
+  money_delta = _money_delta_for_mode(payload.order_mode, total, paid)
+  new_balance = customer_money + money_delta
   cyl_delta = payload.cylinders_installed - payload.cylinders_received
   if payload.order_mode in {"sell_iron", "buy_iron"}:
     cyl_delta = 0
@@ -52,7 +61,7 @@ def _compute_impact(*, customer_money: int, customer_cyl_12: int, customer_cyl_4
   return {
     "gross_paid": paid,
     "applied_credit": 0,
-    "unpaid": total - paid,
+    "unpaid": money_delta,
     "new_balance": new_balance,
     "cyl_balance_before": cyl_before,
     "cyl_balance_after": cyl_after,
@@ -182,6 +191,18 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     )
 
   happened_at = normalize_happened_at(payload.happened_at)
+  paid_amount = payload.paid_amount or 0
+  money_delta = _money_delta_for_mode(payload.order_mode, payload.price_total, paid_amount)
+  cyl_delta = payload.cylinders_installed - payload.cylinders_received
+  if payload.order_mode in {"sell_iron", "buy_iron"}:
+    cyl_delta = 0
+  current_money = sum_customer_money(session, customer_id=payload.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+  next_money = current_money + money_delta
+  next_cyl_12 = current_cyl_12 + (cyl_delta if payload.gas_type == "12kg" else 0)
+  next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
+
   txn = CustomerTransaction(
     customer_id=payload.customer_id,
     system_id=payload.system_id,
@@ -193,7 +214,10 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     installed=payload.cylinders_installed,
     received=payload.cylinders_received,
     total=payload.price_total,
-    paid=payload.paid_amount or 0,
+    paid=paid_amount,
+    debt_cash=next_money,
+    debt_cylinders_12=next_cyl_12,
+    debt_cylinders_48=next_cyl_48,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
@@ -225,6 +249,9 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     received=existing.received,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -242,24 +269,46 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   )
   existing.is_reversed = True
   session.add(existing)
+  session.flush()
 
   # create new order with merged payload
   new_data = existing.model_dump()
   for field, value in payload.model_dump(exclude_unset=True).items():
     new_data[field] = value
   happened_at = normalize_happened_at(new_data.get("happened_at") or existing.happened_at)
+  paid_amount = new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid
+  total_amount = new_data.get("price_total") or existing.total
+  mode = new_data.get("order_mode") or existing.mode or "replacement"
+  gas_type = new_data.get("gas_type") or existing.gas_type
+  installed = new_data.get("cylinders_installed") or existing.installed
+  received = new_data.get("cylinders_received") or existing.received
+
+  money_delta = _money_delta_for_mode(mode, total_amount, paid_amount)
+  cyl_delta = installed - received
+  if mode in {"sell_iron", "buy_iron"}:
+    cyl_delta = 0
+  current_money = sum_customer_money(session, customer_id=existing.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="48kg")
+  next_money = current_money + money_delta
+  next_cyl_12 = current_cyl_12 + (cyl_delta if gas_type == "12kg" else 0)
+  next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
+
   txn = CustomerTransaction(
     customer_id=new_data.get("customer_id") or existing.customer_id,
     system_id=new_data.get("system_id") or existing.system_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
     kind="order",
-    mode=new_data.get("order_mode") or existing.mode,
-    gas_type=new_data.get("gas_type") or existing.gas_type,
-    installed=new_data.get("cylinders_installed") or existing.installed,
-    received=new_data.get("cylinders_received") or existing.received,
-    total=new_data.get("price_total") or existing.total,
-    paid=new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid,
+    mode=mode,
+    gas_type=gas_type,
+    installed=installed,
+    received=received,
+    total=total_amount,
+    paid=paid_amount,
+    debt_cash=next_money,
+    debt_cylinders_12=next_cyl_12,
+    debt_cylinders_48=next_cyl_48,
     note=new_data.get("note") if new_data.get("note") is not None else existing.note,
     is_reversed=False,
   )
@@ -288,6 +337,9 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
     received=existing.received,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,

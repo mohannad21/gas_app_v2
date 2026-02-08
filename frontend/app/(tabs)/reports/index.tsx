@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Alert,
   FlatList,
@@ -32,7 +32,7 @@ import {
   summarizeOrderEvents,
   summarizeRefillEvents,
 } from "@/lib/reports/utils";
-import { formatDateTimeYMDHM, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { buildHappenedAt, formatDateTimeYMDHM, formatWeekdayShort, toDateKey } from "@/lib/date";
 
 const getEventColor = (eventType: string) => {
   const palette: Record<string, string> = {
@@ -43,6 +43,7 @@ const getEventColor = (eventType: string) => {
     adjust: "#64748b",
     cash_adjust: "#64748b",
     collection_money: "#22c55e",
+    collection_payout: "#ef4444",
     collection_empty: "#14b8a6",
     company_payment: "#2563eb",
     company_buy_iron: "#f59e0b",
@@ -289,6 +290,7 @@ export default function ReportsScreen() {
       expense_type: type,
       amount,
       note: expenseNote.trim() ? expenseNote.trim() : undefined,
+      happened_at: buildHappenedAt({ date }),
     });
 
     setExpenseModalOpen(false);
@@ -488,6 +490,7 @@ export default function ReportsScreen() {
                                   if (name === "CashAdjust") return "cash_adjust";
                                   if (name === "InvAdjust") return "adjust";
                                   if (name === "LatePay") return "collection_money";
+                                  if (name === "Payout") return "collection_payout";
                                   if (name === "ReturnEmp") return "collection_empty";
                                   if (name === "PayCompany") return "company_payment";
                                   if (name === "Deposit") return "bank_deposit";
@@ -968,6 +971,7 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+      if (eventType === "customer_adjust") return;
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -995,10 +999,13 @@ function V2Timeline({
       const parsed = Date.parse(value);
       return Number.isNaN(parsed) ? 0 : parsed;
     };
+    const getEffectiveTime = (ev: any) => getTime(ev?.effective_at ?? ev?.delivered_at ?? ev?.created_at);
+    const getCreatedTime = (ev: any) => getTime(ev?.created_at);
     return [...normalizedEvents].sort((a, b) => {
-      const aTime = getTime(a?.effective_at ?? a?.created_at);
-      const bTime = getTime(b?.effective_at ?? b?.created_at);
-      return bTime - aTime;
+      const aTime = getEffectiveTime(a);
+      const bTime = getEffectiveTime(b);
+      if (aTime !== bTime) return bTime - aTime;
+      return getCreatedTime(b) - getCreatedTime(a);
     });
   }, [normalizedEvents]);
 
@@ -1078,6 +1085,14 @@ function V2Timeline({
     );
   };
 
+  const renderExpandedRow = (slots: { full?: ReactNode; empty?: ReactNode; cash?: ReactNode }) => (
+    <View style={styles.eventExpandedRow}>
+      {slots.full ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
+      {slots.empty ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
+      {slots.cash ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
+    </View>
+  );
+
   return (
     <View>
       {sortedEvents.map((ev, idx) => {
@@ -1085,21 +1100,32 @@ function V2Timeline({
         const eventTitle = ev?.label_short ?? formatEventType(eventType, ev?.order_mode ?? null);
         const eventKey = `${date}-ev-${idx}-${ev?.source_id ?? ev?.id ?? ""}`;
         const isOpenEvent = openEvents.includes(eventKey);
-        const eventTimeRaw =
-          eventType === "order"
-            ? ev?.delivered_at ?? ev?.effective_at ?? ev?.created_at ?? ""
-            : eventType === "refill"
-              ? isOpenEvent
-                ? ev?.created_at ?? ev?.effective_at ?? ""
-                : ev?.effective_at ?? ev?.created_at ?? ""
-              : eventType === "expense"
-                ? ev?.created_at ?? ev?.effective_at ?? ""
-              : ev?.effective_at ?? ev?.created_at ?? "";
+        const eventTimeRaw = ev?.effective_at ?? ev?.delivered_at ?? ev?.created_at ?? "";
         const eventTime = formatDateTimeYMDHM(eventTimeRaw);
         const createdAtTime = formatDateTimeYMDHM(ev?.created_at ?? "");
         const hasDescription =
           typeof ev?.customer_description === "string" && ev.customer_description.trim().length > 0;
         const gasTypeLabel = ev?.gas_type ?? "";
+        const orderMode = String(ev?.order_mode ?? "replacement");
+        const orderModeKey = orderMode.toLowerCase();
+        const isReplacementOrder = eventType === "order" && orderModeKey === "replacement";
+        const isBuyIronOrder =
+          eventType === "order" && (orderModeKey === "buy_iron" || orderModeKey === "buying" || orderModeKey === "buy");
+        const isSellIronOrder =
+          eventType === "order" &&
+          (orderModeKey === "sell_iron" || orderModeKey === "selling" || orderModeKey === "sell");
+        const isPaymentOrder =
+          eventType === "order" && (orderModeKey === "payment" || orderModeKey === "pay");
+        const isReturnOrder =
+          eventType === "order" &&
+          (orderModeKey === "return" || orderModeKey === "return_empty" || orderModeKey === "return_iron");
+        const isUnknownOrder =
+          eventType === "order" &&
+          !isReplacementOrder &&
+          !isBuyIronOrder &&
+          !isSellIronOrder &&
+          !isPaymentOrder &&
+          !isReturnOrder;
         const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
         const orderPaid =
           typeof ev?.order_paid === "number"
@@ -1116,14 +1142,15 @@ function V2Timeline({
         );
         const collectionQty12 = Number(ev?.collection_qty_12kg ?? ev?.qty_12kg ?? 0);
         const collectionQty48 = Number(ev?.collection_qty_48kg ?? ev?.qty_48kg ?? 0);
-        const orderUnpaid = Math.max(orderTotal - orderPaid, 0);
-        const orderCredit = Math.max(orderPaid - orderTotal, 0);
+        const orderMoneyDelta = isBuyIronOrder ? orderPaid - orderTotal : orderTotal - orderPaid;
+        const orderUnpaid = Math.max(orderMoneyDelta, 0);
+        const orderCredit = Math.max(-orderMoneyDelta, 0);
         const orderMissingCyl =
-          typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
+          isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
             ? Math.max(ev.order_installed - ev.order_received, 0)
             : 0;
         const orderCylCredit =
-          typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
+          isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
             ? Math.max(ev.order_received - ev.order_installed, 0)
             : 0;
         const installed =
@@ -1228,7 +1255,27 @@ function V2Timeline({
         const collectionEmpty48Delta = hasInvEmpty48 ? invEmpty48After - invEmpty48Before : 0;
         const collectionEmpty12Display = hasInvEmpty12 ? collectionEmpty12Delta : collectionQty12;
         const collectionEmpty48Display = hasInvEmpty48 ? collectionEmpty48Delta : collectionQty48;
-        const orderPaidForCash = typeof orderPaid === "number" ? orderPaid : cashDelta;
+        const collectionEmptyGasType =
+          ev?.gas_type ??
+          (Math.abs(collectionEmpty12Delta) > 0
+            ? "12kg"
+            : Math.abs(collectionEmpty48Delta) > 0
+              ? "48kg"
+              : collectionQty12
+                ? "12kg"
+                : collectionQty48
+                  ? "48kg"
+                  : "12kg");
+        const collectionEmptyBefore = collectionEmptyGasType === "48kg" ? invEmpty48Before : invEmpty12Before;
+        const collectionEmptyAfter = collectionEmptyGasType === "48kg" ? invEmpty48After : invEmpty12After;
+        const collectionEmptyDelta =
+          Number.isFinite(collectionEmptyBefore) && Number.isFinite(collectionEmptyAfter)
+            ? collectionEmptyAfter - collectionEmptyBefore
+            : 0;
+        const showCollectionEmptyBox =
+          eventType === "collection_empty" &&
+          (Math.abs(collectionEmptyDelta) > 0 || collectionQty12 > 0 || collectionQty48 > 0);
+        const orderPaidForCash = typeof orderPaid === "number" ? orderPaid : 0;
         const orderUnpaidForCash =
           typeof orderTotal === "number" && typeof orderPaidForCash === "number"
             ? Math.max(orderTotal - orderPaidForCash, 0)
@@ -1254,13 +1301,14 @@ function V2Timeline({
             ? Math.max((ev?.buy48 ?? 0) - (ev?.return48 ?? 0), 0)
             : null;
 
-        const isOrderLike =
-          eventType === "order" ||
-          eventType === "collection_money" ||
-          eventType === "collection_empty" ||
-          eventType === "refill" ||
-          eventType === "expense" ||
-          eventType === "adjust";
+          const isOrderLike =
+            eventType === "order" ||
+            eventType === "collection_money" ||
+            eventType === "collection_payout" ||
+            eventType === "collection_empty" ||
+            eventType === "refill" ||
+            eventType === "expense" ||
+            eventType === "adjust";
 
         return (
           <Pressable
@@ -1406,18 +1454,26 @@ function V2Timeline({
             ) : null}
 
             {eventType === "collection_money" ? (
-              <View style={styles.eventSummaryRow}>
-                <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                  customer paid {formatMoney(paymentAmount)}
-                </Text>
-              </View>
-            ) : null}
+                <View style={styles.eventSummaryRow}>
+                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                    customer paid {formatMoney(paymentAmount)}
+                  </Text>
+                </View>
+              ) : null}
+  
+            {eventType === "collection_payout" ? (
+                <View style={styles.eventSummaryRow}>
+                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                    you paid customer {formatMoney(paymentAmount)}
+                  </Text>
+                </View>
+              ) : null}
 
             {eventType === "collection_empty" ? (
-              <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    received {formatCount(collectionEmpty12Display)} x{" "}
-                    <Text style={{ color: gasColor("12kg") }}>12kg</Text>
+                <View style={styles.eventSummaryRow}>
+                    <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
+                     received {formatCount(collectionEmpty12Display)} x{" "}
+                      <Text style={{ color: gasColor("12kg") }}>12kg</Text>
                     {" | "}received {formatCount(collectionEmpty48Display)} x{" "}
                     <Text style={{ color: gasColor("48kg") }}>48kg</Text>
                   </Text>
@@ -1480,63 +1536,70 @@ function V2Timeline({
             {isOpenEvent ? (
               <>
                 {eventType === "order" ? (
-                  <View style={styles.eventExpandedRow}>
-                    <DeltaBox
-                      label={`${ev?.gas_type ?? "12kg"} F`}
-                      before={ev?.gas_type === "48kg" ? invBefore.full48 ?? 0 : invBefore.full12 ?? 0}
-                      after={ev?.gas_type === "48kg" ? invAfter.full48 ?? 0 : invAfter.full12 ?? 0}
-                      format={formatCount}
-                      accent={gasColor(ev?.gas_type ?? "12kg")}
-                      compact
-                    />
-                    <DeltaBox
-                      label={`${ev?.gas_type ?? "12kg"} E`}
-                      before={ev?.gas_type === "48kg" ? invBefore.empty48 ?? 0 : invBefore.empty12 ?? 0}
-                      after={ev?.gas_type === "48kg" ? invAfter.empty48 ?? 0 : invAfter.empty12 ?? 0}
-                      format={formatCount}
-                      accent={gasColor(ev?.gas_type ?? "12kg")}
-                      compact
-                    />
-                    <DeltaBox
-                      label="Cash"
-                      before={ev?.cash_before ?? 0}
-                      after={ev?.cash_after ?? 0}
-                      format={formatMoney}
-                      smallDelta
-                      compact
-                      badgeTone={cashBadgeTone}
-                    />
-                  </View>
+                  renderExpandedRow({
+                    full:
+                      isReplacementOrder || isSellIronOrder || isUnknownOrder ? (
+                        <DeltaBox
+                          label={`${ev?.gas_type ?? "12kg"} F`}
+                          before={ev?.gas_type === "48kg" ? invBefore.full48 ?? 0 : invBefore.full12 ?? 0}
+                          after={ev?.gas_type === "48kg" ? invAfter.full48 ?? 0 : invAfter.full12 ?? 0}
+                          format={formatCount}
+                          accent={gasColor(ev?.gas_type ?? "12kg")}
+                          compact
+                        />
+                      ) : null,
+                    empty:
+                      isReplacementOrder || isBuyIronOrder || isReturnOrder || isUnknownOrder ? (
+                        <DeltaBox
+                          label={`${ev?.gas_type ?? "12kg"} E`}
+                          before={ev?.gas_type === "48kg" ? invBefore.empty48 ?? 0 : invBefore.empty12 ?? 0}
+                          after={ev?.gas_type === "48kg" ? invAfter.empty48 ?? 0 : invAfter.empty12 ?? 0}
+                          format={formatCount}
+                          accent={gasColor(ev?.gas_type ?? "12kg")}
+                          compact
+                        />
+                      ) : null,
+                    cash:
+                      !isReturnOrder ? (
+                        <DeltaBox
+                          label="Cash"
+                          before={ev?.cash_before ?? 0}
+                          after={ev?.cash_after ?? 0}
+                          format={formatMoney}
+                          smallDelta
+                          compact
+                          badgeTone={cashBadgeTone}
+                        />
+                      ) : null,
+                  })
                 ) : null}
 
-                {eventType === "collection_money" || eventType === "collection_empty" ? (
-                  <View style={styles.eventExpandedRow}>
-                    <DeltaBox
-                      label="12kg E"
-                      before={invEmpty12Before}
-                      after={invEmpty12After}
-                      format={formatCount}
-                      accent={gasColor("12kg")}
-                      compact
-                    />
-                    <DeltaBox
-                      label="48kg E"
-                      before={invEmpty48Before}
-                      after={invEmpty48After}
-                      format={formatCount}
-                      accent={gasColor("48kg")}
-                      compact
-                    />
-                    <DeltaBox
-                      label="Cash"
-                      before={ev?.cash_before ?? 0}
-                      after={ev?.cash_after ?? 0}
-                      format={formatMoney}
-                      smallDelta
-                      compact
-                      badgeTone={cashBadgeTone}
-                    />
-                  </View>
+                {eventType === "collection_money" || eventType === "collection_payout" || eventType === "collection_empty" ? (
+                    renderExpandedRow({
+                      empty:
+                        showCollectionEmptyBox ? (
+                          <DeltaBox
+                          label={`${collectionEmptyGasType} E`}
+                          before={collectionEmptyBefore}
+                          after={collectionEmptyAfter}
+                          format={formatCount}
+                          accent={gasColor(collectionEmptyGasType)}
+                          compact
+                        />
+                        ) : null,
+                      cash:
+                        eventType === "collection_money" || eventType === "collection_payout" ? (
+                          <DeltaBox
+                            label="Cash"
+                            before={ev?.cash_before ?? 0}
+                            after={ev?.cash_after ?? 0}
+                          format={formatMoney}
+                          smallDelta
+                          compact
+                          badgeTone={cashBadgeTone}
+                        />
+                      ) : null,
+                  })
                 ) : null}
 
                 {eventType === "refill" ? (
@@ -1637,17 +1700,19 @@ function V2Timeline({
                 ) : null}
 
                 {eventType === "expense" ? (
-                  <View style={styles.eventExpandedRow}>
-                    <DeltaBox
-                      label="Cash"
-                      before={ev?.cash_before ?? 0}
-                      after={ev?.cash_after ?? 0}
-                      format={formatMoney}
-                      smallDelta
-                      compact
-                      badgeTone={expenseCashBadgeTone}
-                    />
-                  </View>
+                  renderExpandedRow({
+                    cash: (
+                      <DeltaBox
+                        label="Cash"
+                        before={ev?.cash_before ?? 0}
+                        after={ev?.cash_after ?? 0}
+                        format={formatMoney}
+                        smallDelta
+                        compact
+                        badgeTone={expenseCashBadgeTone}
+                      />
+                    ),
+                  })
                 ) : null}
 
                 {createdAtTime ? (
@@ -2100,6 +2165,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   deltaBoxCompact: { minWidth: 0, flex: 1 },
+  deltaBoxPlaceholder: { opacity: 0 },
   deltaBoxLabel: { fontSize: 11, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
   deltaBadge: {
     position: "absolute",

@@ -31,7 +31,7 @@ def list_cash_adjustments(
       delta_cash=row.delta_cash,
       reason=row.note,
       effective_at=row.happened_at,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       is_deleted=row.is_reversed,
     )
     for row in rows
@@ -52,7 +52,7 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
         delta_cash=existing.delta_cash,
         reason=existing.note,
         effective_at=existing.happened_at,
-        created_at=existing.happened_at,
+        created_at=existing.created_at,
         is_deleted=existing.is_reversed,
       )
   happened_at = normalize_happened_at(payload.happened_at)
@@ -73,7 +73,7 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
     delta_cash=adjustment.delta_cash,
     reason=adjustment.note,
     effective_at=adjustment.happened_at,
-    created_at=adjustment.happened_at,
+    created_at=adjustment.created_at,
     is_deleted=False,
   )
 
@@ -131,7 +131,7 @@ def update_cash_adjustment(
     delta_cash=new_adjustment.delta_cash,
     reason=new_adjustment.note,
     effective_at=new_adjustment.happened_at,
-    created_at=new_adjustment.happened_at,
+    created_at=new_adjustment.created_at,
     is_deleted=False,
   )
 

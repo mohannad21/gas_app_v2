@@ -38,6 +38,10 @@ def _business_tz() -> tzinfo:
     return timezone.utc
 
 
+def business_tz() -> tzinfo:
+  return _business_tz()
+
+
 def effective_business_tz_name() -> str:
   tz = _business_tz()
   if isinstance(tz, ZoneInfo):

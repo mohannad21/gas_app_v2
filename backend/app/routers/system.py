@@ -31,6 +31,7 @@ from app.services.posting import (
     derive_day,
     post_system_init,
 )
+from app.utils.time import business_date_start_utc
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -72,6 +73,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
 
     now = datetime.now(timezone.utc)
     day = derive_day(now)
+    init_at = business_date_start_utc(day).replace(tzinfo=timezone.utc)
 
     # 1. Seed price catalog
     prices = [
@@ -79,6 +81,8 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             gas_type="12kg",
             sell_price=payload.sell_price_12,
             buy_price=payload.buy_price_12,
+            sell_iron_price=payload.sell_iron_price_12,
+            buy_iron_price=payload.buy_iron_price_12,
             effective_from=now,
             created_at=now,
         ),
@@ -86,6 +90,8 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             gas_type="48kg",
             sell_price=payload.sell_price_48,
             buy_price=payload.buy_price_48,
+            sell_iron_price=payload.sell_iron_price_48,
+            buy_iron_price=payload.buy_iron_price_48,
             effective_from=now,
             created_at=now,
         ),
@@ -130,7 +136,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             add_line("cust_cylinders_debts", entry.cyl_48, gas_type="48kg", state="empty", unit="count", customer_id=entry.customer_id)
 
     # Post to Ledger
-    post_system_init(session, source_id="system_init", happened_at=now, day=day, lines=lines)
+    post_system_init(session, source_id="system_init", happened_at=init_at, day=day, lines=lines)
 
     # 3. Finalize Settings
     settings.is_setup_completed = True

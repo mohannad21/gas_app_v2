@@ -415,6 +415,9 @@ export function RefillForm({
           new_shells_12kg: payloadNewShells12,
           new_shells_48kg: payloadNewShells48,
           total_cost: totalCost,
+          debt_cash: liveMoneyGive,
+          debt_cylinders_12: liveCompanyNet12,
+          debt_cylinders_48: liveCompanyNet48,
         });
       } else {
         await createRefill.mutateAsync({
@@ -431,6 +434,9 @@ export function RefillForm({
           paid_buy12: isBuyMode ? buy12Value : undefined,
           paid_buy48: isBuyMode ? buy48Value : undefined,
           total_cost: totalCost,
+          debt_cash: liveMoneyGive,
+          debt_cylinders_12: liveCompanyNet12,
+          debt_cylinders_48: liveCompanyNet48,
         });
       }
       Keyboard.dismiss();

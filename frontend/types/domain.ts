@@ -73,6 +73,10 @@ export const SystemInitializeInputSchema = z.object({
   sell_price_48: z.number(),
   buy_price_12: z.number().optional(),
   buy_price_48: z.number().optional(),
+  sell_iron_price_12: z.number().optional(),
+  sell_iron_price_48: z.number().optional(),
+  buy_iron_price_12: z.number().optional(),
+  buy_iron_price_48: z.number().optional(),
   full_12: z.number(),
   empty_12: z.number(),
   full_48: z.number(),
@@ -152,6 +156,9 @@ export const InventoryRefillSummarySchema = z
     return48: z.number(),
     new12: z.number().optional(),
     new48: z.number().optional(),
+    debt_cash: z.number().optional().default(0),
+    debt_cylinders_12: z.number().optional().default(0),
+    debt_cylinders_48: z.number().optional().default(0),
     is_deleted: z.boolean().optional(),
     deleted_at: z.string().nullish(),
   })
@@ -184,6 +191,7 @@ export const CashAdjustmentCreateSchema = z.object({
   time: z.string().optional(),
   delta_cash: z.number(),
   reason: z.string().optional(),
+  happened_at: z.string().optional(),
 });
 export type CashAdjustmentCreate = z.infer<typeof CashAdjustmentCreateSchema>;
 
@@ -213,6 +221,7 @@ export const CustomerAdjustmentCreateInputSchema = z.object({
   count_48kg: z.number().optional(),
   reason: z.string().optional(),
   request_id: z.string().optional(),
+  happened_at: z.string().optional(),
 });
 export type CustomerAdjustmentCreateInput = z.infer<typeof CustomerAdjustmentCreateInputSchema>;
 
@@ -272,6 +281,9 @@ export const OrderSchema = z
     cylinders_received: z.number(),
     price_total: z.number(),
     paid_amount: z.number().optional(),
+    debt_cash: z.number().optional().default(0),
+    debt_cylinders_12: z.number().optional().default(0),
+    debt_cylinders_48: z.number().optional().default(0),
     applied_credit: z.number().optional().nullish(),
     money_balance_before: z.number().optional().nullish(),
     money_balance_after: z.number().optional().nullish(),
@@ -292,6 +304,9 @@ export const OrderCreateInputSchema = z.object({
   cylinders_received: z.number(),
   price_total: z.number(),
   paid_amount: z.number().optional(),
+  debt_cash: z.number().optional(),
+  debt_cylinders_12: z.number().optional(),
+  debt_cylinders_48: z.number().optional(),
   note: z.string().nullish().optional(),
   request_id: z.string().optional(),
 });
@@ -302,10 +317,13 @@ export type OrderUpdateInput = z.infer<typeof OrderUpdateInputSchema>;
 
 export const CollectionCreateInputSchema = z.object({
   customer_id: z.string(),
-  action_type: z.enum(["payment", "return"]),
+  action_type: z.enum(["payment", "payout", "return"]),
   amount_money: z.number().optional(),
   qty_12kg: z.number().optional(),
   qty_48kg: z.number().optional(),
+  debt_cash: z.number().optional(),
+  debt_cylinders_12: z.number().optional(),
+  debt_cylinders_48: z.number().optional(),
   system_id: z.string().nullish().optional(),
   effective_at: z.string().optional(),
   note: z.string().nullish().optional(),
@@ -319,10 +337,13 @@ export const CollectionEventSchema = z
   .object({
     id: z.string(),
     customer_id: z.string(),
-    action_type: z.enum(["payment", "return"]),
+    action_type: z.enum(["payment", "payout", "return"]),
     amount_money: z.number().nullish(),
     qty_12kg: z.number().nullish(),
     qty_48kg: z.number().nullish(),
+    debt_cash: z.number().nullish(),
+    debt_cylinders_12: z.number().nullish(),
+    debt_cylinders_48: z.number().nullish(),
     system_id: z.string().nullish(),
     created_at: z.string(),
     effective_at: z.string().nullish(),
@@ -537,6 +558,9 @@ export const InventoryRefillDetailsSchema = z.object({
   paid_now: z.number(),
   new12: z.number().optional(),
   new48: z.number().optional(),
+  debt_cash: z.number().optional().default(0),
+  debt_cylinders_12: z.number().optional().default(0),
+  debt_cylinders_48: z.number().optional().default(0),
   notes: z.string().nullish(),
   unit_price_buy_12: z.number().nullish(),
   unit_price_buy_48: z.number().nullish(),
@@ -559,6 +583,8 @@ export const PriceSettingSchema = z
     gas_type: GasTypeSchema,
     selling_price: z.number(),
     buying_price: z.number().optional().nullable(),
+    selling_iron_price: z.number().optional().nullable(),
+    buying_iron_price: z.number().optional().nullable(),
     effective_from: z.string(),
     created_at: z.string().optional(),
   })
@@ -584,6 +610,7 @@ export const ExpenseCreateInputSchema = z.object({
   amount: z.number(),
   note: z.string().nullish().optional(),
   created_by: z.string().nullish().optional(),
+  happened_at: z.string().optional(),
 });
 export type ExpenseCreateInput = z.infer<typeof ExpenseCreateInputSchema>;
 

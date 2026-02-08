@@ -76,6 +76,8 @@ class PriceCatalog(SQLModel, table=True):
   gas_type: str = Field(index=True)
   sell_price: int
   buy_price: int
+  sell_iron_price: int = Field(default=0)
+  buy_iron_price: int = Field(default=0)
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -106,6 +108,10 @@ class Expense(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(index=True)  # "expense" | "deposit"
   category_id: Optional[str] = Field(default=None, foreign_key="expense_categories.id")
@@ -130,6 +136,10 @@ class CustomerTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(index=True)  # "order" | "payment" | "return" | "adjust"
   mode: Optional[str] = Field(default=None, index=True)  # order mode
@@ -140,6 +150,9 @@ class CustomerTransaction(SQLModel, table=True):
   received: int = Field(default=0)
   total: int = Field(default=0)
   paid: int = Field(default=0)
+  debt_cash: int = Field(default=0)
+  debt_cylinders_12: int = Field(default=0)
+  debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
@@ -157,6 +170,10 @@ class CompanyTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(default="refill", index=True)  # "refill" | "buy_iron" | "payment"
   buy12: int = Field(default=0)
@@ -167,6 +184,9 @@ class CompanyTransaction(SQLModel, table=True):
   new48: int = Field(default=0)
   total: int = Field(default=0)
   paid: int = Field(default=0)
+  debt_cash: int = Field(default=0)
+  debt_cylinders_12: int = Field(default=0)
+  debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
@@ -183,6 +203,10 @@ class InventoryAdjustment(SQLModel, table=True):
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   gas_type: str = Field(index=True)
@@ -235,6 +259,10 @@ class CashAdjustment(SQLModel, table=True):
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   delta_cash: int

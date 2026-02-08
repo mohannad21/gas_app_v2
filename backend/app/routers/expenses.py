@@ -48,7 +48,7 @@ def list_expenses(
       expense_type=cats.get(row.category_id, "Other"),
       amount=row.amount,
       note=row.note,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       created_by=None,
     )
     for row in rows
@@ -88,7 +88,7 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
     expense_type=payload.expense_type,
     amount=expense.amount,
     note=expense.note,
-    created_at=expense.happened_at,
+    created_at=expense.created_at,
     created_by=None,
   )
 

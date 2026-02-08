@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
+from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -23,17 +24,23 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
   base = min(txns, key=lambda t: t.happened_at)
   qty_12 = sum(t.received for t in txns if t.gas_type == "12kg")
   qty_48 = sum(t.received for t in txns if t.gas_type == "48kg")
-  amount = sum(t.paid for t in txns if t.kind == "payment")
+  amount_payment = sum(t.paid for t in txns if t.kind == "payment")
+  amount_payout = sum(t.paid for t in txns if t.kind == "payout")
+  action_type = "payment" if amount_payment else "payout" if amount_payout else "return"
+  amount = amount_payment or amount_payout
   group_id = base.group_id or base.id
   return CollectionEvent(
     id=group_id,
     customer_id=base.customer_id,
-    action_type="payment" if amount else "return",
+    action_type=action_type,
     amount_money=amount or None,
     qty_12kg=qty_12 or None,
     qty_48kg=qty_48 or None,
+    debt_cash=base.debt_cash,
+    debt_cylinders_12=base.debt_cylinders_12,
+    debt_cylinders_48=base.debt_cylinders_48,
     system_id=base.system_id,
-    created_at=base.happened_at,
+    created_at=base.created_at,
     effective_at=base.happened_at,
     note=base.note,
   )
@@ -43,7 +50,7 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
 def list_collections(session: Session = Depends(get_session)) -> list[CollectionEvent]:
   rows = session.exec(
     select(CustomerTransaction)
-    .where(CustomerTransaction.kind.in_(["payment", "return"]))
+    .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
     .where(CustomerTransaction.is_reversed == False)  # noqa: E712
     .order_by(CustomerTransaction.happened_at.desc())
   ).all()
@@ -81,21 +88,30 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
   group_id = _new_group_id()
   txns: list[CustomerTransaction] = []
 
-  if payload.action_type == "payment":
+  current_money = sum_customer_money(session, customer_id=payload.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+
+  if payload.action_type in ("payment", "payout"):
     amount = payload.amount_money or 0
     if amount <= 0:
       raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    is_payout = payload.action_type == "payout"
+    next_money = current_money + amount if is_payout else current_money - amount
     txn = CustomerTransaction(
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payment",
+      kind="payout" if is_payout else "payment",
       gas_type=None,
       installed=0,
       received=0,
       total=0,
       paid=amount,
+      debt_cash=next_money,
+      debt_cylinders_12=current_cyl_12,
+      debt_cylinders_48=current_cyl_48,
       note=payload.note,
       group_id=group_id,
       request_id=payload.request_id,
@@ -110,6 +126,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
     if qty_12 <= 0 and qty_48 <= 0:
       raise HTTPException(status_code=400, detail="return_quantity_required")
     if qty_12 > 0:
+      next_cyl_12 = current_cyl_12 - qty_12
       txn = CustomerTransaction(
         customer_id=payload.customer_id,
         system_id=payload.system_id,
@@ -121,6 +138,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_12,
         total=0,
         paid=0,
+        debt_cash=current_money,
+        debt_cylinders_12=next_cyl_12,
+        debt_cylinders_48=current_cyl_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -129,7 +149,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       session.add(txn)
       post_customer_transaction(session, txn)
       txns.append(txn)
+      current_cyl_12 = next_cyl_12
     if qty_48 > 0:
+      next_cyl_48 = current_cyl_48 - qty_48
       txn = CustomerTransaction(
         customer_id=payload.customer_id,
         system_id=payload.system_id,
@@ -141,6 +163,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_48,
         total=0,
         paid=0,
+        debt_cash=current_money,
+        debt_cylinders_12=current_cyl_12,
+        debt_cylinders_48=next_cyl_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -149,6 +174,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       session.add(txn)
       post_customer_transaction(session, txn)
       txns.append(txn)
+      current_cyl_48 = next_cyl_48
 
   session.commit()
   for txn in txns:
@@ -183,6 +209,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
       received=txn.received,
       total=txn.total,
       paid=txn.paid,
+      debt_cash=txn.debt_cash,
+      debt_cylinders_12=txn.debt_cylinders_12,
+      debt_cylinders_48=txn.debt_cylinders_48,
       note=f"Reversal of {txn.id}",
       reversed_id=txn.id,
       is_reversed=True,
@@ -203,27 +232,48 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
     session.add(txn)
 
   payload_data = payload.model_dump(exclude_unset=True)
-  action_type = payload_data.get("action_type") or ("payment" if base.kind == "payment" else "return")
+  action_type = payload_data.get("action_type") or (
+    "payment"
+    if base.kind == "payment"
+    else "payout"
+    if base.kind == "payout"
+    else "return"
+  )
+  debt_cash = payload_data.get("debt_cash") if payload_data.get("debt_cash") is not None else base.debt_cash
+  debt_cylinders_12 = (
+    payload_data.get("debt_cylinders_12")
+    if payload_data.get("debt_cylinders_12") is not None
+    else base.debt_cylinders_12
+  )
+  debt_cylinders_48 = (
+    payload_data.get("debt_cylinders_48")
+    if payload_data.get("debt_cylinders_48") is not None
+    else base.debt_cylinders_48
+  )
   happened_at = normalize_happened_at(payload_data.get("happened_at") or base.happened_at)
   group_id = collection_id
   new_txns: list[CustomerTransaction] = []
 
-  if action_type == "payment":
+  if action_type in ("payment", "payout"):
     amount = payload_data.get("amount_money")
     amount = amount if amount is not None else base.paid
     if amount <= 0:
       raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    is_payout = action_type == "payout"
     txn = CustomerTransaction(
       customer_id=payload_data.get("customer_id") or base.customer_id,
       system_id=payload_data.get("system_id") or base.system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payment",
+      kind="payout" if is_payout else "payment",
       gas_type=None,
       installed=0,
       received=0,
       total=0,
       paid=amount,
+      debt_cash=debt_cash,
+      debt_cylinders_12=debt_cylinders_12,
+      debt_cylinders_48=debt_cylinders_48,
       note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
       group_id=group_id,
       is_reversed=False,
@@ -250,6 +300,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         received=qty_12,
         total=0,
         paid=0,
+        debt_cash=debt_cash,
+        debt_cylinders_12=debt_cylinders_12,
+        debt_cylinders_48=debt_cylinders_48,
         note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
         group_id=group_id,
         is_reversed=False,
@@ -269,6 +322,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         received=qty_48,
         total=0,
         paid=0,
+        debt_cash=debt_cash,
+        debt_cylinders_12=debt_cylinders_12,
+        debt_cylinders_48=debt_cylinders_48,
         note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
         group_id=group_id,
         is_reversed=False,
@@ -308,6 +364,9 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
       received=txn.received,
       total=txn.total,
       paid=txn.paid,
+      debt_cash=txn.debt_cash,
+      debt_cylinders_12=txn.debt_cylinders_12,
+      debt_cylinders_48=txn.debt_cylinders_48,
       note=f"Reversal of {txn.id}",
       reversed_id=txn.id,
       is_reversed=True,

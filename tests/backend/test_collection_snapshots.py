@@ -47,8 +47,8 @@ def test_collection_delete_recomputes_cash_chain(client):
         {
             "customer_id": customer_id,
             "action_type": "payment",
-            "amount_money": 100.0,
-            "effective_at": f"{d1}T10:00:00",
+            "amount_money": 100,
+            "happened_at": f"{d1}T10:00:00",
         },
     )
     _post_collection(
@@ -56,8 +56,8 @@ def test_collection_delete_recomputes_cash_chain(client):
         {
             "customer_id": customer_id,
             "action_type": "payment",
-            "amount_money": 50.0,
-            "effective_at": f"{d2}T10:00:00",
+            "amount_money": 50,
+            "happened_at": f"{d2}T10:00:00",
         },
     )
 
@@ -76,7 +76,7 @@ def test_collection_delete_recomputes_cash_chain(client):
     resp = client.get("/customers")
     assert resp.status_code == 200
     updated = next(c for c in resp.json() if c["id"] == customer_id)
-    assert updated["money_balance"] == 150.0
+    assert updated["money_balance"] == 150
 
 
 def test_collection_snapshot_integrity(client):
@@ -92,8 +92,8 @@ def test_collection_snapshot_integrity(client):
         {
             "customer_id": customer_id,
             "action_type": "payment",
-            "amount_money": 100.0,
-            "effective_at": f"{d0}T09:00:00",
+            "amount_money": 100,
+            "happened_at": f"{d0}T09:00:00",
         },
     )
     second = _post_collection(
@@ -101,8 +101,8 @@ def test_collection_snapshot_integrity(client):
         {
             "customer_id": customer_id,
             "action_type": "payment",
-            "amount_money": 50.0,
-            "effective_at": f"{d0}T10:00:00",
+            "amount_money": 50,
+            "happened_at": f"{d0}T10:00:00",
         },
     )
 
@@ -118,7 +118,7 @@ def test_collection_snapshot_integrity(client):
             "action_type": "return",
             "qty_12kg": 2,
             "qty_48kg": 1,
-            "effective_at": f"{d1}T10:00:00",
+            "happened_at": f"{d1}T10:00:00",
         },
     )
     from app import db as app_db
@@ -177,21 +177,22 @@ def test_delete_return_allows_negative_inventory(client):
             "customer_id": customer_id,
             "action_type": "return",
             "qty_12kg": 1,
-            "effective_at": f"{d1}T10:00:00",
+            "happened_at": f"{d1}T10:00:00",
         },
     )
 
     refill_payload = {
-        "date": d2,
-        "time_of_day": "morning",
+        "happened_at": f"{d2}T09:00:00",
         "buy12": 0,
         "return12": 1,
         "buy48": 0,
         "return48": 0,
-        "reason": "test",
+        "total_cost": 0,
+        "paid_now": 0,
+        "note": "test",
     }
     refill_resp = client.post("/inventory/refill", json=refill_payload)
-    assert refill_resp.status_code == 201
+    assert refill_resp.status_code == 200
 
     _delete_collection(client, ret["id"])
 

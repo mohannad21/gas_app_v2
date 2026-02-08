@@ -19,12 +19,6 @@ def _init_payload(**overrides):
         "company_full_48kg": 0,
         "company_empty_12kg": 0,
         "company_empty_48kg": 0,
-        "customer_owe_money": 0,
-        "customer_credit_money": 0,
-        "customer_owe_12kg": 0,
-        "customer_owe_48kg": 0,
-        "customer_credit_12kg": 0,
-        "customer_credit_48kg": 0,
     }
     payload.update(overrides)
     return payload
@@ -32,10 +26,10 @@ def _init_payload(**overrides):
 
 def test_system_initialize_company_only_creates_no_customers(client) -> None:
     today = date.today().isoformat()
-    payload = _init_payload(company_payable_money=500, customer_owe_money=100, customer_credit_money=50)
+    payload = _init_payload(company_payable_money=500)
 
     resp = client.post("/system/initialize", json=payload)
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     customers = client.get("/customers").json()
     assert customers == []
@@ -51,7 +45,7 @@ def test_company_payable_zeroes_after_payment(client) -> None:
     payload = _init_payload(company_payable_money=500)
 
     resp = client.post("/system/initialize", json=payload)
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     payment = client.post(
         "/company/payments",

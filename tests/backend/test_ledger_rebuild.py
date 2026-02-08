@@ -31,14 +31,12 @@ def test_rebuild_customer_ledger_updates_snapshots(client: TestClient) -> None:
   order_payload = {
     "customer_id": customer_id,
     "system_id": system_id,
-    "delivered_at": "2025-01-02T10:00:00",
+    "happened_at": "2025-01-02T10:00:00",
     "gas_type": "12kg",
     "cylinders_installed": 0,
     "cylinders_received": 0,
-    "price_total": 140.0,
-    "paid_amount": 0.0,
-    "money_received": 0.0,
-    "money_given": 0.0,
+    "price_total": 140,
+    "paid_amount": 0,
   }
   order_resp = client.post("/orders", json=order_payload)
   assert order_resp.status_code == 201
@@ -47,14 +45,14 @@ def test_rebuild_customer_ledger_updates_snapshots(client: TestClient) -> None:
   collection_payload = {
     "customer_id": customer_id,
     "action_type": "payment",
-    "amount_money": 100.0,
-    "effective_at": "2025-01-02T12:00:00",
+    "amount_money": 100,
+    "happened_at": "2025-01-02T12:00:00",
   }
   collection_resp = client.post("/collections", json=collection_payload)
   assert collection_resp.status_code == 201
 
-  update_resp = client.put(f"/orders/{order_id}", json={"price_total": 200.0})
+  update_resp = client.put(f"/orders/{order_id}", json={"price_total": 200})
   assert update_resp.status_code == 200
 
   customer = _get_customer(client, customer_id)
-  assert customer["money_balance"] == 100.0
+  assert customer["money_balance"] == 100

@@ -31,6 +31,9 @@ export default function PricesScreen() {
               <Text style={styles.meta}>
                 Sell ${p.selling_price}
                 {p.buying_price ? ` • Buy $${p.buying_price}` : ""}
+                {p.selling_iron_price != null || p.buying_iron_price != null
+                  ? ` - Iron Sell $${p.selling_iron_price ?? 0} - Iron Buy $${p.buying_iron_price ?? 0}`
+                  : ""}
               </Text>
               <Text style={styles.meta}>From {p.effective_from}</Text>
             </View>

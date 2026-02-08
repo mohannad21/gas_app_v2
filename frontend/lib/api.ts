@@ -59,6 +59,7 @@ import {
   SystemTypeOptionSchema,
   SystemUpdateInput,
 } from "@/types/domain";
+import { buildHappenedAt } from "@/lib/date";
 import { fromMinorUnits, setCurrencyCode, setMoneyDecimals, toMinorUnits } from "@/lib/money";
 import { z } from "zod";
 
@@ -125,25 +126,6 @@ function parseArray<T>(schema: z.ZodType<T>, data: unknown): T[] {
   return schema.array().parse(data);
 }
 
-function buildHappenedAt(input?: {
-  date?: string;
-  time?: string;
-  time_of_day?: "morning" | "evening";
-  at?: string;
-}): string | undefined {
-  if (!input) return undefined;
-  if (input.at) return input.at;
-  if (!input.date) return undefined;
-  const time = input.time
-    ? input.time
-    : input.time_of_day === "morning"
-      ? "09:00"
-      : input.time_of_day === "evening"
-        ? "18:00"
-        : "12:00";
-  const dt = new Date(`${input.date}T${time}:00`);
-  return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
-}
 
 // Customers
 export async function listCustomers(): Promise<Customer[]> {
@@ -177,6 +159,7 @@ export async function createCustomerAdjustment(
   const { data } = await api.post("/customer-adjustments", {
     ...payload,
     amount_money: payload.amount_money != null ? toMinorUnits(payload.amount_money) : payload.amount_money,
+    happened_at: payload.happened_at,
   });
   const parsed = parse(CustomerAdjustmentSchema, data);
   return {
@@ -220,6 +203,10 @@ export async function initializeSystem(payload: SystemInitializeInput): Promise<
     sell_price_48: toMinorUnits(payload.sell_price_48),
     buy_price_12: toMinorUnits(payload.buy_price_12 ?? 0),
     buy_price_48: toMinorUnits(payload.buy_price_48 ?? 0),
+    sell_iron_price_12: toMinorUnits(payload.sell_iron_price_12 ?? 0),
+    sell_iron_price_48: toMinorUnits(payload.sell_iron_price_48 ?? 0),
+    buy_iron_price_12: toMinorUnits(payload.buy_iron_price_12 ?? 0),
+    buy_iron_price_48: toMinorUnits(payload.buy_iron_price_48 ?? 0),
     cash_start: toMinorUnits(payload.cash_start),
     company_payable_money: toMinorUnits(payload.company_payable_money ?? 0),
     customer_debts: payload.customer_debts?.map((entry) => ({
@@ -317,9 +304,12 @@ export async function listCashAdjustments(
 }
 
 export async function createCashAdjustment(payload: CashAdjustmentCreate): Promise<CashAdjustment> {
+  const happened_at =
+    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/adjust", {
     ...payload,
     delta_cash: toMinorUnits(payload.delta_cash),
+    happened_at,
   });
   const parsed = parse(CashAdjustmentSchema, data);
   return { ...parsed, delta_cash: fromMinorUnits(parsed.delta_cash) };
@@ -348,6 +338,7 @@ export async function listOrders(): Promise<Order[]> {
     ...o,
     price_total: fromMinorUnits(o.price_total),
     paid_amount: fromMinorUnits(o.paid_amount ?? 0),
+    debt_cash: o.debt_cash != null ? fromMinorUnits(o.debt_cash) : o.debt_cash,
     applied_credit: o.applied_credit != null ? fromMinorUnits(o.applied_credit) : o.applied_credit,
     money_balance_before: o.money_balance_before != null ? fromMinorUnits(o.money_balance_before) : o.money_balance_before,
     money_balance_after: o.money_balance_after != null ? fromMinorUnits(o.money_balance_after) : o.money_balance_after,
@@ -360,6 +351,7 @@ export async function listOrdersByDate(date: string): Promise<Order[]> {
     ...o,
     price_total: fromMinorUnits(o.price_total),
     paid_amount: fromMinorUnits(o.paid_amount ?? 0),
+    debt_cash: o.debt_cash != null ? fromMinorUnits(o.debt_cash) : o.debt_cash,
     applied_credit: o.applied_credit != null ? fromMinorUnits(o.applied_credit) : o.applied_credit,
     money_balance_before: o.money_balance_before != null ? fromMinorUnits(o.money_balance_before) : o.money_balance_before,
     money_balance_after: o.money_balance_after != null ? fromMinorUnits(o.money_balance_after) : o.money_balance_after,
@@ -372,12 +364,14 @@ export async function createOrder(payload: OrderCreateInput): Promise<Order> {
     happened_at: payload.delivered_at,
     price_total: toMinorUnits(payload.price_total),
     paid_amount: toMinorUnits(payload.paid_amount ?? 0),
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
   });
   const parsed = parse(OrderSchema, data);
   return {
     ...parsed,
     price_total: fromMinorUnits(parsed.price_total),
     paid_amount: fromMinorUnits(parsed.paid_amount ?? 0),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
     applied_credit: parsed.applied_credit != null ? fromMinorUnits(parsed.applied_credit) : parsed.applied_credit,
     money_balance_before:
       parsed.money_balance_before != null ? fromMinorUnits(parsed.money_balance_before) : parsed.money_balance_before,
@@ -392,12 +386,14 @@ export async function updateOrder(id: string, payload: OrderUpdateInput): Promis
     happened_at: payload.delivered_at,
     price_total: payload.price_total != null ? toMinorUnits(payload.price_total) : payload.price_total,
     paid_amount: payload.paid_amount != null ? toMinorUnits(payload.paid_amount) : payload.paid_amount,
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
   });
   const parsed = parse(OrderSchema, data);
   return {
     ...parsed,
     price_total: fromMinorUnits(parsed.price_total),
     paid_amount: fromMinorUnits(parsed.paid_amount ?? 0),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
     applied_credit: parsed.applied_credit != null ? fromMinorUnits(parsed.applied_credit) : parsed.applied_credit,
     money_balance_before:
       parsed.money_balance_before != null ? fromMinorUnits(parsed.money_balance_before) : parsed.money_balance_before,
@@ -416,11 +412,13 @@ export async function createCollection(payload: CollectionCreateInput): Promise<
     ...payload,
     happened_at: payload.effective_at,
     amount_money: payload.amount_money != null ? toMinorUnits(payload.amount_money) : payload.amount_money,
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
   });
   const parsed = CollectionEventSchema.parse(data);
   return {
     ...parsed,
     amount_money: parsed.amount_money != null ? fromMinorUnits(parsed.amount_money) : parsed.amount_money,
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }
 
@@ -429,6 +427,7 @@ export async function listCollections(): Promise<CollectionEvent[]> {
   return parseArray(CollectionEventSchema, data).map((ev) => ({
     ...ev,
     amount_money: ev.amount_money != null ? fromMinorUnits(ev.amount_money) : ev.amount_money,
+    debt_cash: ev.debt_cash != null ? fromMinorUnits(ev.debt_cash) : ev.debt_cash,
   }));
 }
 
@@ -437,11 +436,13 @@ export async function updateCollection(id: string, payload: CollectionUpdateInpu
     ...payload,
     happened_at: payload.effective_at,
     amount_money: payload.amount_money != null ? toMinorUnits(payload.amount_money) : payload.amount_money,
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
   });
   const parsed = parse(CollectionEventSchema, data);
   return {
     ...parsed,
     amount_money: parsed.amount_money != null ? fromMinorUnits(parsed.amount_money) : parsed.amount_money,
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }
 
@@ -571,6 +572,9 @@ export async function createInventoryRefill(payload: {
   paid_buy48?: number;
   total_cost?: number;
   paid_now?: number;
+  debt_cash?: number;
+  debt_cylinders_12?: number;
+  debt_cylinders_48?: number;
   reason?: string;
   notes?: string;
   new_shells_12kg?: number;
@@ -586,6 +590,9 @@ export async function createInventoryRefill(payload: {
     return48: payload.return48,
     total_cost: toMinorUnits(payload.total_cost ?? 0),
     paid_now: toMinorUnits(payload.paid_now ?? 0),
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
+    debt_cylinders_12: payload.debt_cylinders_12,
+    debt_cylinders_48: payload.debt_cylinders_48,
     note: payload.notes ?? payload.reason,
     new12: payload.new_shells_12kg ?? 0,
     new48: payload.new_shells_48kg ?? 0,
@@ -597,7 +604,10 @@ export async function listInventoryRefills(includeDeleted?: boolean): Promise<In
   const { data } = await api.get("/inventory/refills", {
     params: { include_deleted: includeDeleted ?? false },
   });
-  return parseArray(InventoryRefillSummarySchema, data);
+  return parseArray(InventoryRefillSummarySchema, data).map((row) => ({
+    ...row,
+    debt_cash: row.debt_cash != null ? fromMinorUnits(row.debt_cash) : row.debt_cash,
+  }));
 }
 
 export async function getInventorySnapshot(payload: {
@@ -618,6 +628,7 @@ export async function getInventoryRefillDetails(refillId: string): Promise<Inven
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),
     paid_now: fromMinorUnits(parsed.paid_now),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }
 
@@ -637,6 +648,9 @@ export async function updateInventoryRefill(
     allow_negative?: boolean;
     total_cost?: number;
     paid_now?: number;
+    debt_cash?: number;
+    debt_cylinders_12?: number;
+    debt_cylinders_48?: number;
   }
 ): Promise<InventoryRefillDetails> {
   const { data } = await api.put(`/inventory/refills/${refillId}`, {
@@ -646,6 +660,9 @@ export async function updateInventoryRefill(
     return48: payload.return48,
     total_cost: toMinorUnits(payload.total_cost ?? 0),
     paid_now: toMinorUnits(payload.paid_now ?? 0),
+    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
+    debt_cylinders_12: payload.debt_cylinders_12 ?? 0,
+    debt_cylinders_48: payload.debt_cylinders_48 ?? 0,
     note: payload.notes ?? payload.reason,
     new12: payload.new_shells_12kg ?? 0,
     new48: payload.new_shells_48kg ?? 0,
@@ -655,6 +672,7 @@ export async function updateInventoryRefill(
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),
     paid_now: fromMinorUnits(parsed.paid_now),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }
 
@@ -690,6 +708,10 @@ export async function listPriceSettings(): Promise<PriceSetting[]> {
     ...p,
     selling_price: fromMinorUnits(p.selling_price),
     buying_price: p.buying_price != null ? fromMinorUnits(p.buying_price) : p.buying_price,
+    selling_iron_price:
+      p.selling_iron_price != null ? fromMinorUnits(p.selling_iron_price) : p.selling_iron_price,
+    buying_iron_price:
+      p.buying_iron_price != null ? fromMinorUnits(p.buying_iron_price) : p.buying_iron_price,
   }));
 }
 
@@ -697,18 +719,30 @@ export async function savePriceSetting(payload: {
   gas_type: "12kg" | "48kg";
   selling_price: number;
   buying_price?: number;
+  selling_iron_price?: number;
+  buying_iron_price?: number;
   effective_from?: string;
 }): Promise<PriceSetting> {
   const { data } = await api.post("/prices", {
     ...payload,
     selling_price: toMinorUnits(payload.selling_price),
     buying_price: toMinorUnits(payload.buying_price ?? 0),
+    selling_iron_price: toMinorUnits(payload.selling_iron_price ?? 0),
+    buying_iron_price: toMinorUnits(payload.buying_iron_price ?? 0),
   });
   const parsed = parse(PriceSettingSchema, data);
   return {
     ...parsed,
     selling_price: fromMinorUnits(parsed.selling_price),
     buying_price: parsed.buying_price != null ? fromMinorUnits(parsed.buying_price) : parsed.buying_price,
+    selling_iron_price:
+      parsed.selling_iron_price != null
+        ? fromMinorUnits(parsed.selling_iron_price)
+        : parsed.selling_iron_price,
+    buying_iron_price:
+      parsed.buying_iron_price != null
+        ? fromMinorUnits(parsed.buying_iron_price)
+        : parsed.buying_iron_price,
   };
 }
 
@@ -722,9 +756,11 @@ export async function listExpenses(date?: string): Promise<Expense[]> {
 }
 
 export async function createExpense(payload: ExpenseCreateInput): Promise<Expense> {
+  const happened_at = payload.happened_at ?? buildHappenedAt({ date: payload.date });
   const { data } = await api.post("/expenses", {
     ...payload,
     amount: toMinorUnits(payload.amount),
+    happened_at,
   });
   const parsed = parse(ExpenseSchema, data);
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
@@ -745,10 +781,13 @@ export async function listBankDeposits(date: string): Promise<BankDeposit[]> {
 
 export async function createBankDeposit(payload: {
   date: string;
+  time?: string;
   amount: number;
   note?: string;
+  happened_at?: string;
 }): Promise<BankDeposit> {
-  const happened_at = buildHappenedAt({ date: payload.date });
+  const happened_at =
+    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/bank_deposit", {
     amount: toMinorUnits(payload.amount),
     note: payload.note,

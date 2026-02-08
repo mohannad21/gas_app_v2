@@ -107,7 +107,7 @@ def init_inventory(payload: dict, session: Session = Depends(get_session)) -> In
   empty48 = int(payload.get("empty48", 0))
   reason = payload.get("reason")
 
-  happened_at = _parse_datetime(date_str=date_str, time_str=None, time_of_day=None, at=None) or datetime.now(timezone.utc)
+  happened_at = _parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
   current = sum_inventory(session, up_to=happened_at)
 
   delta_full12 = full12 - current["full12"]
@@ -185,7 +185,7 @@ def list_inventory_adjustments(
       delta_empty=row.delta_empty,
       reason=row.note,
       effective_at=row.happened_at,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       is_deleted=row.is_reversed,
     )
     for row in rows
@@ -251,7 +251,7 @@ def update_inventory_adjustment(
     delta_empty=new_adj.delta_empty,
     reason=new_adj.note,
     effective_at=new_adj.happened_at,
-    created_at=new_adj.happened_at,
+    created_at=new_adj.created_at,
     is_deleted=False,
   )
 
@@ -312,6 +312,9 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     new48=payload.new48,
     total=payload.total_cost,
     paid=payload.paid_now,
+    debt_cash=payload.debt_cash,
+    debt_cylinders_12=payload.debt_cylinders_12,
+    debt_cylinders_48=payload.debt_cylinders_48,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
@@ -343,6 +346,9 @@ def list_refills(
       return48=row.return48,
       new12=row.new12,
       new48=row.new48,
+      debt_cash=row.debt_cash,
+      debt_cylinders_12=row.debt_cylinders_12,
+      debt_cylinders_48=row.debt_cylinders_48,
       is_deleted=row.is_reversed,
       deleted_at=None,
     )
@@ -368,6 +374,9 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
     paid_now=row.paid,
     new12=row.new12,
     new48=row.new48,
+    debt_cash=row.debt_cash,
+    debt_cylinders_12=row.debt_cylinders_12,
+    debt_cylinders_48=row.debt_cylinders_48,
     notes=row.note,
     is_deleted=row.is_reversed,
     deleted_at=None,
@@ -393,6 +402,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     new48=existing.new48,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -423,6 +435,13 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     new48=payload.new48,
     total=payload.total_cost,
     paid=payload.paid_now,
+    debt_cash=payload.debt_cash if payload.debt_cash is not None else existing.debt_cash,
+    debt_cylinders_12=payload.debt_cylinders_12
+    if payload.debt_cylinders_12 is not None
+    else existing.debt_cylinders_12,
+    debt_cylinders_48=payload.debt_cylinders_48
+    if payload.debt_cylinders_48 is not None
+    else existing.debt_cylinders_48,
     note=payload.note,
     is_reversed=False,
   )
@@ -443,6 +462,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     paid_now=new_txn.paid,
     new12=new_txn.new12,
     new48=new_txn.new48,
+    debt_cash=new_txn.debt_cash,
+    debt_cylinders_12=new_txn.debt_cylinders_12,
+    debt_cylinders_48=new_txn.debt_cylinders_48,
     notes=new_txn.note,
     is_deleted=False,
     deleted_at=None,
@@ -467,6 +489,9 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
     new48=existing.new48,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,

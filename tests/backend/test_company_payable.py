@@ -9,24 +9,26 @@ def test_company_payable_partial_refill(client) -> None:
     day1 = date(2025, 10, 1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day1.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day1.isoformat()}T09:00:00",
             "buy12": 2,
             "return12": 1,
             "buy48": 0,
             "return48": 0,
-            "reason": "restock",
+            "note": "restock",
             "total_cost": 200,
             "paid_now": 150,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     report = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
@@ -38,24 +40,26 @@ def test_company_payment_affects_cash_and_company(client) -> None:
     day1 = date(2025, 10, 2)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day1.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day1.isoformat()}T09:00:00",
             "buy12": 2,
             "return12": 1,
             "buy48": 0,
             "return48": 0,
-            "reason": "restock",
+            "note": "restock",
             "total_cost": 200,
             "paid_now": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     resp = client.post(
         "/company/payments",
@@ -81,7 +85,10 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     customer_id = create_customer(client, name="Cascade Company")
@@ -101,18 +108,17 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day1.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day1.isoformat()}T09:00:00",
             "buy12": 2,
             "return12": 1,
             "buy48": 0,
             "return48": 0,
-            "reason": "restock",
+            "note": "restock",
             "total_cost": 200,
             "paid_now": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     resp = client.post(
         "/company/payments",
@@ -143,24 +149,26 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
     day1 = date(2025, 10, 4)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
-    resp = client.post("/cash/init", json={"date": day1.isoformat(), "cash_start": 1000, "reason": "open"})
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day1.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
     assert resp.status_code == 201
 
     resp = client.post(
         "/inventory/refill",
         json={
-            "date": day1.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day1.isoformat()}T09:00:00",
             "buy12": 0,
             "return12": 0,
             "buy48": 0,
             "return48": 0,
-            "reason": "restock",
+            "note": "restock",
             "total_cost": 2000,
             "paid_now": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     resp = client.post(
         "/company/payments",

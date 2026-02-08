@@ -20,8 +20,8 @@ def test_debt_lifecycle_collection_return_moves_assets(client) -> None:
     create_payload = {
         "name": "Customer A",
         "phone": None,
-        "customer_type": "private",
-        "notes": "",
+        "address": None,
+        "note": "",
     }
     resp = client.post("/customers", json=create_payload)
     assert resp.status_code == 201
@@ -33,10 +33,9 @@ def test_debt_lifecycle_collection_return_moves_assets(client) -> None:
             "customer_id": customer_id,
             "count_12kg": 5,
             "reason": "Opening Balance (App Setup)",
-            "is_inventory_neutral": True,
         },
     )
-    assert adj_resp.status_code == 200
+    assert adj_resp.status_code == 201
 
     customer = client.get(f"/customers/{customer_id}").json()
     assert customer["cylinder_balance_12kg"] == 5

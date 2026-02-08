@@ -13,16 +13,17 @@ def test_refill_soft_delete_keeps_audit_and_reverts_inventory(client) -> None:
     refill_resp = client.post(
         "/inventory/refill",
         json={
-            "date": day2.isoformat(),
-            "time_of_day": "morning",
+            "happened_at": f"{day2.isoformat()}T09:00:00",
             "buy12": 5,
             "return12": 0,
             "buy48": 0,
             "return48": 0,
-            "reason": "test",
+            "note": "test",
+            "total_cost": 0,
+            "paid_now": 0,
         },
     )
-    assert refill_resp.status_code == 201
+    assert refill_resp.status_code == 200
 
     refills = client.get("/inventory/refills").json()
     assert len(refills) == 1

@@ -1,11 +1,9 @@
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-_DEFAULT_DB_PATH = (Path(__file__).resolve().parent.parent / "gas_app.db").as_posix()
-_DEFAULT_DATABASE_URL = f"sqlite:///{_DEFAULT_DB_PATH}"
+_DEFAULT_DATABASE_URL = "postgresql://postgres:password@localhost:5432/gas_db"
 
 
 class Settings(BaseSettings):

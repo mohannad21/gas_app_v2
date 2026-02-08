@@ -31,7 +31,7 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
     count_12kg=count_12,
     count_48kg=count_48,
     reason=base.note,
-    created_at=base.happened_at,
+    created_at=base.created_at,
   )
 
 

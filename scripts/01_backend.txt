@@ -51,13 +51,20 @@ else:
   run_migrations_online()
 
 FILE: backend/alembic/script.py.mako
-"""A generic, single-database configuration."""
+"""${message}"""
 from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
 
 ${imports if imports else ""}
+
+# revision identifiers, used by Alembic.
+revision = ${repr(revision)}
+down_revision = ${repr(down_revision)}
+branch_labels = ${repr(branch_labels)}
+depends_on = ${repr(depends_on)}
+
 
 def upgrade() -> None:
     ${upgrades if upgrades else "pass"}
@@ -66,1424 +73,370 @@ def upgrade() -> None:
 def downgrade() -> None:
     ${downgrades if downgrades else "pass"}
 
-FILE: backend/alembic/versions/0001_init.py
-"""initial schema
-
-Revision ID: 0001_init
-Revises:
-Create Date: 2025-12-07
-"""
+FILE: backend/alembic/versions_v2/0d12367ce15f_init_schema.py
+"""A generic, single-database configuration."""
+from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+import sqlmodel
+
 
 # revision identifiers, used by Alembic.
-revision = "0001_init"
+revision = "0d12367ce15f"
 down_revision = None
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-  op.create_table(
-    "customers",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("name", sa.String(), nullable=False),
-    sa.Column("phone", sa.String(), nullable=False),
-    sa.Column("notes", sa.Text(), nullable=True),
-    sa.Column("customer_type", sa.String(), nullable=False, index=True),
-    sa.Column("money_balance", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("number_of_orders", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("cylinder_balance_12kg", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("cylinder_balance_48kg", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("created_by", sa.String(), nullable=True),
-    sa.Column("updated_by", sa.String(), nullable=True),
-    sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("deletion_reason", sa.Text(), nullable=True),
-  )
-
-  op.create_table(
-    "systems",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True),
-    sa.Column("name", sa.String(), nullable=False),
-    sa.Column("location", sa.String(), nullable=True),
-    sa.Column("system_type", sa.String(), nullable=False, index=True),
-    sa.Column("gas_type", sa.String(), nullable=True, index=True),
-    sa.Column("system_customer_type", sa.String(), nullable=True, index=True),
-    sa.Column("security_required", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    sa.Column("last_security_check_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("next_security_due_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("security_status", sa.String(), nullable=True),
-    sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("deletion_reason", sa.Text(), nullable=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("created_by", sa.String(), nullable=True),
-    sa.Column("updated_by", sa.String(), nullable=True),
-  )
-
-  op.create_table(
-    "orders",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True),
-    sa.Column("system_id", sa.String(), sa.ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False, index=True),
-    sa.Column("delivered_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, index=True),
-    sa.Column("gas_type", sa.String(), nullable=False, index=True),
-    sa.Column("cylinders_installed", sa.Integer(), nullable=False),
-    sa.Column("cylinders_received", sa.Integer(), nullable=False),
-    sa.Column("price_total", sa.Float(), nullable=False),
-    sa.Column("paid_amount", sa.Float(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("created_by", sa.String(), nullable=True),
-    sa.Column("updated_by", sa.String(), nullable=True),
-    sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-    sa.Column("deletion_reason", sa.Text(), nullable=True),
-  )
-
-  op.create_table(
-    "price_settings",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("gas_type", sa.String(), nullable=False, index=True),
-    sa.Column("customer_type", sa.String(), nullable=False, index=True),
-    sa.Column("selling_price", sa.Float(), nullable=False),
-    sa.Column("buying_price", sa.Float(), nullable=True),
-    sa.Column("effective_from", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, index=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-
-  op.create_table(
-    "activities",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("entity_type", sa.String(), nullable=False, index=True),
-    sa.Column("entity_id", sa.String(), nullable=True, index=True),
-    sa.Column("action", sa.String(), nullable=False, index=True),
-    sa.Column("description", sa.Text(), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, index=True),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-
-
-def downgrade() -> None:
-  op.drop_table("activities")
-  op.drop_table("price_settings")
-  op.drop_table("orders")
-  op.drop_table("systems")
-  op.drop_table("customers")
-
-FILE: backend/alembic/versions/0002_add_system_flags.py
-"""add system flags
-
-Revision ID: 0002_add_system_flags
-Revises: 0001_init
-Create Date: 2025-12-07
-
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0002_add_system_flags"
-down_revision = "0001_init"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.add_column(
-        "systems",
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('cash_adjustments',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('request_id', sa.String(), nullable=True),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('delta_cash', sa.Integer(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('reversed_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_reversed', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('request_id')
     )
-    op.add_column(
-        "systems",
-        sa.Column(
-            "require_security_check",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("false"),
-        ),
+    op.create_index(op.f('ix_cash_adjustments_day'), 'cash_adjustments', ['day'], unique=False)
+    op.create_index(op.f('ix_cash_adjustments_happened_at'), 'cash_adjustments', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_cash_adjustments_id'), 'cash_adjustments', ['id'], unique=False)
+    op.create_index(op.f('ix_cash_adjustments_is_reversed'), 'cash_adjustments', ['is_reversed'], unique=False)
+    op.create_index(op.f('ix_cash_adjustments_reversed_id'), 'cash_adjustments', ['reversed_id'], unique=False)
+    op.create_table('company_transactions',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('request_id', sa.String(), nullable=True),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('kind', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('buy12', sa.Integer(), nullable=False),
+    sa.Column('return12', sa.Integer(), nullable=False),
+    sa.Column('buy48', sa.Integer(), nullable=False),
+    sa.Column('return48', sa.Integer(), nullable=False),
+    sa.Column('new12', sa.Integer(), nullable=False),
+    sa.Column('new48', sa.Integer(), nullable=False),
+    sa.Column('total', sa.Integer(), nullable=False),
+    sa.Column('paid', sa.Integer(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('reversed_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_reversed', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('request_id')
     )
-    op.add_column(
-        "systems",
-        sa.Column(
-            "security_check_exists",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("false"),
-        ),
+    op.create_index(op.f('ix_company_transactions_day'), 'company_transactions', ['day'], unique=False)
+    op.create_index(op.f('ix_company_transactions_happened_at'), 'company_transactions', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_company_transactions_id'), 'company_transactions', ['id'], unique=False)
+    op.create_index(op.f('ix_company_transactions_is_reversed'), 'company_transactions', ['is_reversed'], unique=False)
+    op.create_index(op.f('ix_company_transactions_kind'), 'company_transactions', ['kind'], unique=False)
+    op.create_index(op.f('ix_company_transactions_reversed_id'), 'company_transactions', ['reversed_id'], unique=False)
+    op.create_table('customers',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('phone', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('address', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id')
     )
-    op.add_column(
-        "systems",
-        sa.Column("security_check_date", sa.DateTime(timezone=True), nullable=True),
+    op.create_index(op.f('ix_customers_id'), 'customers', ['id'], unique=False)
+    op.create_table('expense_categories',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
     )
-
-
-def downgrade() -> None:
-    op.drop_column("systems", "security_check_date")
-    op.drop_column("systems", "security_check_exists")
-    op.drop_column("systems", "require_security_check")
-    op.drop_column("systems", "is_active")
-
-FILE: backend/alembic/versions/0002_order_price_snapshot.py
-"""add order price snapshot fields
-
-Revision ID: 0002_order_price_snapshot
-Revises: 0001_init
-Create Date: 2025-12-15
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0002_order_price_snapshot"
-down_revision = "0001_init"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.add_column("orders", sa.Column("price_setting_id", sa.String(), nullable=True))
-  op.add_column("orders", sa.Column("unit_price_sell", sa.Float(), nullable=True))
-  op.add_column("orders", sa.Column("unit_price_buy", sa.Float(), nullable=True))
-  op.create_index("ix_orders_price_setting_id", "orders", ["price_setting_id"], unique=False)
-
-
-def downgrade() -> None:
-  op.drop_index("ix_orders_price_setting_id", table_name="orders")
-  op.drop_column("orders", "unit_price_buy")
-  op.drop_column("orders", "unit_price_sell")
-  op.drop_column("orders", "price_setting_id")
-
-FILE: backend/alembic/versions/0003_add_activity_metadata.py
-"""add activity metadata
-
-Revision ID: 0003_add_activity_metadata
-Revises: 0002_add_system_flags
-Create Date: 2025-12-14
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0003_add_activity_metadata"
-down_revision = "0002_add_system_flags"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.add_column("activities", sa.Column("metadata", sa.Text(), nullable=True))
-
-
-def downgrade() -> None:
-  op.drop_column("activities", "metadata")
-
-FILE: backend/alembic/versions/0004_inventory_indexes.py
-"""add inventory indexes for snapshots
-
-Revision ID: 0004_inventory_indexes
-Revises: 0003_add_activity_metadata
-Create Date: 2025-12-19
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0004_inventory_indexes"
-down_revision = "0003_add_activity_metadata"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_index(
-    "ix_inventory_versions_gas_effective_created",
-    "inventory_versions",
-    ["gas_type", "effective_at", "created_at"],
-    unique=False,
-  )
-
-
-def downgrade() -> None:
-  op.drop_index("ix_inventory_versions_gas_effective_created", table_name="inventory_versions")
-
-FILE: backend/alembic/versions/0005_remove_legacy_security_fields.py
-"""remove legacy system security fields
-
-Revision ID: 0005_remove_legacy_security_fields
-Revises: 0004_inventory_indexes
-Create Date: 2025-12-20
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0005_remove_legacy_security_fields"
-down_revision = "0004_inventory_indexes"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  with op.batch_alter_table("systems") as batch_op:
-    batch_op.drop_column("security_required")
-    batch_op.drop_column("last_security_check_at")
-    batch_op.drop_column("next_security_due_at")
-    batch_op.drop_column("security_status")
-
-
-def downgrade() -> None:
-  with op.batch_alter_table("systems") as batch_op:
-    batch_op.add_column(
-      sa.Column("security_required", sa.Boolean(), nullable=False, server_default=sa.text("false"))
+    op.create_index(op.f('ix_expense_categories_id'), 'expense_categories', ['id'], unique=False)
+    op.create_index(op.f('ix_expense_categories_is_active'), 'expense_categories', ['is_active'], unique=False)
+    op.create_table('inventory_adjustments',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('request_id', sa.String(), nullable=True),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('gas_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('delta_full', sa.Integer(), nullable=False),
+    sa.Column('delta_empty', sa.Integer(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('reversed_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_reversed', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('request_id')
     )
-    batch_op.add_column(sa.Column("last_security_check_at", sa.DateTime(timezone=True), nullable=True))
-    batch_op.add_column(sa.Column("next_security_due_at", sa.DateTime(timezone=True), nullable=True))
-    batch_op.add_column(sa.Column("security_status", sa.String(), nullable=True))
-
-FILE: backend/alembic/versions/0006_add_expense_created_by.py
-"""add created_by to expenses
-
-Revision ID: 0006_add_expense_created_by
-Revises: 0005_remove_legacy_security_fields
-Create Date: 2025-12-21
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0006_add_expense_created_by"
-down_revision = "0005_remove_legacy_security_fields"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  with op.batch_alter_table("expenses") as batch_op:
-    batch_op.add_column(sa.Column("created_by", sa.String(), nullable=True))
-
-
-def downgrade() -> None:
-  with op.batch_alter_table("expenses") as batch_op:
-    batch_op.drop_column("created_by")
-
-FILE: backend/alembic/versions/0007_make_customer_phone_nullable.py
-"""make customer phone nullable
-
-Revision ID: 0007_make_customer_phone_nullable
-Revises: 0006_add_expense_created_by
-Create Date: 2025-12-21
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0007_make_customer_phone_nullable"
-down_revision = "0006_add_expense_created_by"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  with op.batch_alter_table("customers") as batch_op:
-    batch_op.alter_column("phone", existing_type=sa.String(), nullable=True)
-
-
-def downgrade() -> None:
-  with op.batch_alter_table("customers") as batch_op:
-    batch_op.alter_column("phone", existing_type=sa.String(), nullable=False)
-
-FILE: backend/alembic/versions/0008_add_inventory_ledger.py
-"""add inventory ledger tables
-
-Revision ID: 0008_add_inventory_ledger
-Revises: 0007_make_customer_phone_nullable
-Create Date: 2025-12-21
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0008_add_inventory_ledger"
-down_revision = "0007_make_customer_phone_nullable"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_table(
-    "inventory_deltas",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("gas_type", sa.String(), nullable=False),
-    sa.Column("delta_full", sa.Integer(), nullable=False),
-    sa.Column("delta_empty", sa.Integer(), nullable=False),
-    sa.Column("effective_at", sa.DateTime(), nullable=False),
-    sa.Column("source_type", sa.String(), nullable=False),
-    sa.Column("source_id", sa.String(), nullable=True),
-    sa.Column("reason", sa.String(), nullable=True),
-    sa.Column("created_at", sa.DateTime(), nullable=False),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-  op.create_index(
-    "ix_inventory_deltas_gas_effective_created_id",
-    "inventory_deltas",
-    ["gas_type", "effective_at", "created_at", "id"],
-  )
-  op.create_index(
-    "ix_inventory_deltas_source_lookup",
-    "inventory_deltas",
-    ["source_type", "source_id", "gas_type"],
-  )
-  op.create_index(
-    "uq_inventory_deltas_source",
-    "inventory_deltas",
-    ["source_type", "source_id", "gas_type"],
-    unique=True,
-    postgresql_where=sa.text(
-      "source_id IS NOT NULL AND source_type IN ('order','refill','adjust','init')"
-    ),
-    sqlite_where=sa.text(
-      "source_id IS NOT NULL AND source_type IN ('order','refill','adjust','init')"
-    ),
-  )
-
-  op.create_table(
-    "inventory_daily_summary",
-    sa.Column("business_date", sa.Date(), primary_key=True, nullable=False),
-    sa.Column("gas_type", sa.String(), primary_key=True, nullable=False),
-    sa.Column("day_start_full", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("day_start_empty", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("day_delta_full", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("day_delta_empty", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("day_end_full", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("day_end_empty", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("computed_at", sa.DateTime(), nullable=False),
-  )
-  op.create_index(
-    "ix_inventory_daily_summary_gas_date",
-    "inventory_daily_summary",
-    ["gas_type", "business_date"],
-  )
-
-  op.create_table(
-    "inventory_recalc_queue",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("gas_type", sa.String(), nullable=False),
-    sa.Column("start_business_date", sa.Date(), nullable=False),
-    sa.Column("status", sa.String(), nullable=False),
-    sa.Column("created_at", sa.DateTime(), nullable=False),
-    sa.Column("updated_at", sa.DateTime(), nullable=False),
-    sa.Column("last_error", sa.String(), nullable=True),
-  )
-  op.create_index(
-    "ix_inventory_recalc_queue_gas_status",
-    "inventory_recalc_queue",
-    ["gas_type", "status"],
-  )
-  op.create_index(
-    "uq_inventory_recalc_queue_pending",
-    "inventory_recalc_queue",
-    ["gas_type"],
-    unique=True,
-    postgresql_where=sa.text("status = 'pending'"),
-    sqlite_where=sa.text("status = 'pending'"),
-  )
+    op.create_index(op.f('ix_inventory_adjustments_day'), 'inventory_adjustments', ['day'], unique=False)
+    op.create_index(op.f('ix_inventory_adjustments_gas_type'), 'inventory_adjustments', ['gas_type'], unique=False)
+    op.create_index(op.f('ix_inventory_adjustments_happened_at'), 'inventory_adjustments', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_inventory_adjustments_id'), 'inventory_adjustments', ['id'], unique=False)
+    op.create_index(op.f('ix_inventory_adjustments_is_reversed'), 'inventory_adjustments', ['is_reversed'], unique=False)
+    op.create_index(op.f('ix_inventory_adjustments_reversed_id'), 'inventory_adjustments', ['reversed_id'], unique=False)
+    op.create_table('price_catalog',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('effective_from', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('gas_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('sell_price', sa.Integer(), nullable=False),
+    sa.Column('buy_price', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_price_catalog_effective_from'), 'price_catalog', ['effective_from'], unique=False)
+    op.create_index(op.f('ix_price_catalog_gas_type'), 'price_catalog', ['gas_type'], unique=False)
+    op.create_index(op.f('ix_price_catalog_id'), 'price_catalog', ['id'], unique=False)
+    op.create_table('system_settings',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('is_setup_completed', sa.Boolean(), nullable=False),
+    sa.Column('currency_code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('money_decimals', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('system_type_options',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
+    op.create_index(op.f('ix_system_type_options_id'), 'system_type_options', ['id'], unique=False)
+    op.create_index(op.f('ix_system_type_options_is_active'), 'system_type_options', ['is_active'], unique=False)
+    op.create_table('expenses',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('request_id', sa.String(), nullable=True),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('kind', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('category_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('amount', sa.Integer(), nullable=False),
+    sa.Column('paid_from', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('vendor', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('reversed_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_reversed', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['category_id'], ['expense_categories.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('request_id')
+    )
+    op.create_index(op.f('ix_expenses_day'), 'expenses', ['day'], unique=False)
+    op.create_index(op.f('ix_expenses_happened_at'), 'expenses', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_expenses_id'), 'expenses', ['id'], unique=False)
+    op.create_index(op.f('ix_expenses_is_reversed'), 'expenses', ['is_reversed'], unique=False)
+    op.create_index(op.f('ix_expenses_kind'), 'expenses', ['kind'], unique=False)
+    op.create_index(op.f('ix_expenses_reversed_id'), 'expenses', ['reversed_id'], unique=False)
+    op.create_table('ledger_entries',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('source_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('source_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('customer_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('account', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('gas_type', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('state', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('unit', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('amount', sa.Integer(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('source_type', 'source_id', 'account', 'gas_type', 'state', 'unit', name='uq_ledger_source_account')
+    )
+    op.create_index(op.f('ix_ledger_entries_account'), 'ledger_entries', ['account'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_customer_id'), 'ledger_entries', ['customer_id'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_day'), 'ledger_entries', ['day'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_gas_type'), 'ledger_entries', ['gas_type'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_happened_at'), 'ledger_entries', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_id'), 'ledger_entries', ['id'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_source_id'), 'ledger_entries', ['source_id'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_source_type'), 'ledger_entries', ['source_type'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_state'), 'ledger_entries', ['state'], unique=False)
+    op.create_index(op.f('ix_ledger_entries_unit'), 'ledger_entries', ['unit'], unique=False)
+    op.create_table('systems',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('customer_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('gas_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('requires_security_check', sa.Boolean(), nullable=False),
+    sa.Column('security_check_exists', sa.Boolean(), nullable=False),
+    sa.Column('last_security_check_at', sa.Date(), nullable=True),
+    sa.Column('next_security_check_at', sa.Date(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_systems_customer_id'), 'systems', ['customer_id'], unique=False)
+    op.create_index(op.f('ix_systems_gas_type'), 'systems', ['gas_type'], unique=False)
+    op.create_index(op.f('ix_systems_id'), 'systems', ['id'], unique=False)
+    op.create_index(op.f('ix_systems_is_active'), 'systems', ['is_active'], unique=False)
+    op.create_index(op.f('ix_systems_next_security_check_at'), 'systems', ['next_security_check_at'], unique=False)
+    op.create_index(op.f('ix_systems_requires_security_check'), 'systems', ['requires_security_check'], unique=False)
+    op.create_index(op.f('ix_systems_security_check_exists'), 'systems', ['security_check_exists'], unique=False)
+    op.create_table('customer_transactions',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('group_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('request_id', sa.String(), nullable=True),
+    sa.Column('happened_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('day', sa.Date(), nullable=True),
+    sa.Column('kind', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('mode', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('customer_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('system_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('gas_type', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('installed', sa.Integer(), nullable=False),
+    sa.Column('received', sa.Integer(), nullable=False),
+    sa.Column('total', sa.Integer(), nullable=False),
+    sa.Column('paid', sa.Integer(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('reversed_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_reversed', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
+    sa.ForeignKeyConstraint(['system_id'], ['systems.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('request_id')
+    )
+    op.create_index(op.f('ix_customer_transactions_customer_id'), 'customer_transactions', ['customer_id'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_day'), 'customer_transactions', ['day'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_gas_type'), 'customer_transactions', ['gas_type'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_group_id'), 'customer_transactions', ['group_id'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_happened_at'), 'customer_transactions', ['happened_at'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_id'), 'customer_transactions', ['id'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_is_reversed'), 'customer_transactions', ['is_reversed'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_kind'), 'customer_transactions', ['kind'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_mode'), 'customer_transactions', ['mode'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_reversed_id'), 'customer_transactions', ['reversed_id'], unique=False)
+    op.create_index(op.f('ix_customer_transactions_system_id'), 'customer_transactions', ['system_id'], unique=False)
+    # ### end Alembic commands ###
 
 
 def downgrade() -> None:
-  op.drop_index("uq_inventory_recalc_queue_pending", table_name="inventory_recalc_queue")
-  op.drop_index("ix_inventory_recalc_queue_gas_status", table_name="inventory_recalc_queue")
-  op.drop_table("inventory_recalc_queue")
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_customer_transactions_system_id'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_reversed_id'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_mode'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_kind'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_is_reversed'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_id'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_happened_at'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_group_id'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_gas_type'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_day'), table_name='customer_transactions')
+    op.drop_index(op.f('ix_customer_transactions_customer_id'), table_name='customer_transactions')
+    op.drop_table('customer_transactions')
+    op.drop_index(op.f('ix_systems_security_check_exists'), table_name='systems')
+    op.drop_index(op.f('ix_systems_requires_security_check'), table_name='systems')
+    op.drop_index(op.f('ix_systems_next_security_check_at'), table_name='systems')
+    op.drop_index(op.f('ix_systems_is_active'), table_name='systems')
+    op.drop_index(op.f('ix_systems_id'), table_name='systems')
+    op.drop_index(op.f('ix_systems_gas_type'), table_name='systems')
+    op.drop_index(op.f('ix_systems_customer_id'), table_name='systems')
+    op.drop_table('systems')
+    op.drop_index(op.f('ix_ledger_entries_unit'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_state'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_source_type'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_source_id'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_id'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_happened_at'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_gas_type'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_day'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_customer_id'), table_name='ledger_entries')
+    op.drop_index(op.f('ix_ledger_entries_account'), table_name='ledger_entries')
+    op.drop_table('ledger_entries')
+    op.drop_index(op.f('ix_expenses_reversed_id'), table_name='expenses')
+    op.drop_index(op.f('ix_expenses_kind'), table_name='expenses')
+    op.drop_index(op.f('ix_expenses_is_reversed'), table_name='expenses')
+    op.drop_index(op.f('ix_expenses_id'), table_name='expenses')
+    op.drop_index(op.f('ix_expenses_happened_at'), table_name='expenses')
+    op.drop_index(op.f('ix_expenses_day'), table_name='expenses')
+    op.drop_table('expenses')
+    op.drop_index(op.f('ix_system_type_options_is_active'), table_name='system_type_options')
+    op.drop_index(op.f('ix_system_type_options_id'), table_name='system_type_options')
+    op.drop_table('system_type_options')
+    op.drop_table('system_settings')
+    op.drop_index(op.f('ix_price_catalog_id'), table_name='price_catalog')
+    op.drop_index(op.f('ix_price_catalog_gas_type'), table_name='price_catalog')
+    op.drop_index(op.f('ix_price_catalog_effective_from'), table_name='price_catalog')
+    op.drop_table('price_catalog')
+    op.drop_index(op.f('ix_inventory_adjustments_reversed_id'), table_name='inventory_adjustments')
+    op.drop_index(op.f('ix_inventory_adjustments_is_reversed'), table_name='inventory_adjustments')
+    op.drop_index(op.f('ix_inventory_adjustments_id'), table_name='inventory_adjustments')
+    op.drop_index(op.f('ix_inventory_adjustments_happened_at'), table_name='inventory_adjustments')
+    op.drop_index(op.f('ix_inventory_adjustments_gas_type'), table_name='inventory_adjustments')
+    op.drop_index(op.f('ix_inventory_adjustments_day'), table_name='inventory_adjustments')
+    op.drop_table('inventory_adjustments')
+    op.drop_index(op.f('ix_expense_categories_is_active'), table_name='expense_categories')
+    op.drop_index(op.f('ix_expense_categories_id'), table_name='expense_categories')
+    op.drop_table('expense_categories')
+    op.drop_index(op.f('ix_customers_id'), table_name='customers')
+    op.drop_table('customers')
+    op.drop_index(op.f('ix_company_transactions_reversed_id'), table_name='company_transactions')
+    op.drop_index(op.f('ix_company_transactions_kind'), table_name='company_transactions')
+    op.drop_index(op.f('ix_company_transactions_is_reversed'), table_name='company_transactions')
+    op.drop_index(op.f('ix_company_transactions_id'), table_name='company_transactions')
+    op.drop_index(op.f('ix_company_transactions_happened_at'), table_name='company_transactions')
+    op.drop_index(op.f('ix_company_transactions_day'), table_name='company_transactions')
+    op.drop_table('company_transactions')
+    op.drop_index(op.f('ix_cash_adjustments_reversed_id'), table_name='cash_adjustments')
+    op.drop_index(op.f('ix_cash_adjustments_is_reversed'), table_name='cash_adjustments')
+    op.drop_index(op.f('ix_cash_adjustments_id'), table_name='cash_adjustments')
+    op.drop_index(op.f('ix_cash_adjustments_happened_at'), table_name='cash_adjustments')
+    op.drop_index(op.f('ix_cash_adjustments_day'), table_name='cash_adjustments')
+    op.drop_table('cash_adjustments')
+    # ### end Alembic commands ###
 
-  op.drop_index("ix_inventory_daily_summary_gas_date", table_name="inventory_daily_summary")
-  op.drop_table("inventory_daily_summary")
-
-  op.drop_index("uq_inventory_deltas_source", table_name="inventory_deltas")
-  op.drop_index("ix_inventory_deltas_source_lookup", table_name="inventory_deltas")
-  op.drop_index("ix_inventory_deltas_gas_effective_created_id", table_name="inventory_deltas")
-  op.drop_table("inventory_deltas")
-
-FILE: backend/alembic/versions/0009_add_cash_ledger.py
-"""add cash ledger tables
-
-Revision ID: 0009_add_cash_ledger
-Revises: 0008_add_inventory_ledger
-Create Date: 2025-12-27
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0009_add_cash_ledger"
-down_revision = "0008_add_inventory_ledger"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_table(
-    "cash_deltas",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("effective_at", sa.DateTime(), nullable=False),
-    sa.Column("source_type", sa.String(), nullable=False),
-    sa.Column("source_id", sa.String(), nullable=True),
-    sa.Column("delta_cash", sa.Float(), nullable=False),
-    sa.Column("reason", sa.String(), nullable=True),
-    sa.Column("created_at", sa.DateTime(), nullable=False),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-  op.create_index(
-    "ix_cash_deltas_effective_created_id",
-    "cash_deltas",
-    ["effective_at", "created_at", "id"],
-  )
-  op.create_index(
-    "ix_cash_deltas_source_lookup",
-    "cash_deltas",
-    ["source_type", "source_id"],
-  )
-
-  op.create_table(
-    "cash_daily_summary",
-    sa.Column("business_date", sa.Date(), primary_key=True, nullable=False),
-    sa.Column("cash_start", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("cash_delta", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("cash_end", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("computed_at", sa.DateTime(), nullable=False),
-  )
-  op.create_index(
-    "ix_cash_daily_summary_date",
-    "cash_daily_summary",
-    ["business_date"],
-  )
-
-
-def downgrade() -> None:
-  op.drop_index("ix_cash_daily_summary_date", table_name="cash_daily_summary")
-  op.drop_table("cash_daily_summary")
-
-  op.drop_index("ix_cash_deltas_source_lookup", table_name="cash_deltas")
-  op.drop_index("ix_cash_deltas_effective_created_id", table_name="cash_deltas")
-  op.drop_table("cash_deltas")
-
-FILE: backend/alembic/versions/0010_add_refill_events.py
-"""add refill events table
-
-Revision ID: 0010_add_refill_events
-Revises: 0009_add_cash_ledger
-Create Date: 2025-12-27
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0010_add_refill_events"
-down_revision = "0009_add_cash_ledger"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_table(
-    "refill_events",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("business_date", sa.Date(), nullable=False),
-    sa.Column("effective_at", sa.DateTime(), nullable=False),
-    sa.Column("total_cost", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("paid_now", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("reason", sa.String(), nullable=True),
-    sa.Column("created_at", sa.DateTime(), nullable=False),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-  op.create_index("ix_refill_events_business_date", "refill_events", ["business_date"])
-  op.create_index("ix_refill_events_effective_at", "refill_events", ["effective_at"])
-
-
-def downgrade() -> None:
-  op.drop_index("ix_refill_events_effective_at", table_name="refill_events")
-  op.drop_index("ix_refill_events_business_date", table_name="refill_events")
-  op.drop_table("refill_events")
-
-FILE: backend/alembic/versions/0011_add_company_ledger.py
-"""add company payable ledger tables
-
-Revision ID: 0011_add_company_ledger
-Revises: 0010_add_refill_events
-Create Date: 2025-12-27
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0011_add_company_ledger"
-down_revision = "0010_add_refill_events"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_table(
-    "company_deltas",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("effective_at", sa.DateTime(), nullable=False),
-    sa.Column("source_type", sa.String(), nullable=False),
-    sa.Column("source_id", sa.String(), nullable=True),
-    sa.Column("delta_payable", sa.Float(), nullable=False),
-    sa.Column("reason", sa.String(), nullable=True),
-    sa.Column("created_at", sa.DateTime(), nullable=False),
-    sa.Column("created_by", sa.String(), nullable=True),
-  )
-  op.create_index(
-    "ix_company_deltas_effective_created_id",
-    "company_deltas",
-    ["effective_at", "created_at", "id"],
-  )
-  op.create_index(
-    "ix_company_deltas_source_lookup",
-    "company_deltas",
-    ["source_type", "source_id"],
-  )
-
-  op.create_table(
-    "company_daily_summary",
-    sa.Column("business_date", sa.Date(), primary_key=True, nullable=False),
-    sa.Column("payable_start", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("payable_delta", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("payable_end", sa.Float(), nullable=False, server_default="0"),
-    sa.Column("computed_at", sa.DateTime(), nullable=False),
-  )
-  op.create_index(
-    "ix_company_daily_summary_date",
-    "company_daily_summary",
-    ["business_date"],
-  )
-
-
-def downgrade() -> None:
-  op.drop_index("ix_company_daily_summary_date", table_name="company_daily_summary")
-  op.drop_table("company_daily_summary")
-
-  op.drop_index("ix_company_deltas_source_lookup", table_name="company_deltas")
-  op.drop_index("ix_company_deltas_effective_created_id", table_name="company_deltas")
-  op.drop_table("company_deltas")
-
-FILE: backend/alembic/versions/0012_add_refill_unit_prices.py
-"""add refill unit buy prices snapshot
-
-Revision ID: 0012_add_refill_unit_prices
-Revises: 0011_add_company_ledger
-Create Date: 2025-12-27
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0012_add_refill_unit_prices"
-down_revision = "0011_add_company_ledger"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.add_column("refill_events", sa.Column("unit_price_buy_12", sa.Float(), nullable=True))
-  op.add_column("refill_events", sa.Column("unit_price_buy_48", sa.Float(), nullable=True))
-
-
-def downgrade() -> None:
-  op.drop_column("refill_events", "unit_price_buy_48")
-  op.drop_column("refill_events", "unit_price_buy_12")
-
-FILE: backend/alembic/versions/0013_add_bilateral_order_fields.py
-"""add bilateral order fields
-
-Revision ID: 0013_add_bilateral_order_fields
-Revises: 0012_add_refill_unit_prices
-Create Date: 2026-01-02
-"""
-
+FILE: backend/alembic/versions_v2/b7a4d1c3e9f0_add_debt_fields.py
 from alembic import op
 import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "0013_add_bilateral_order_fields"
-down_revision = "0012_add_refill_unit_prices"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.add_column("orders", sa.Column("money_received", sa.Float(), nullable=False, server_default="0"))
-  op.add_column("orders", sa.Column("money_given", sa.Float(), nullable=False, server_default="0"))
-  op.add_column("orders", sa.Column("applied_credit", sa.Float(), nullable=False, server_default="0"))
-  op.add_column("orders", sa.Column("money_balance_before", sa.Float(), nullable=False, server_default="0"))
-  op.add_column("orders", sa.Column("money_balance_after", sa.Float(), nullable=False, server_default="0"))
-  op.add_column("orders", sa.Column("cyl_balance_before", sa.JSON(), nullable=True))
-  op.add_column("orders", sa.Column("cyl_balance_after", sa.JSON(), nullable=True))
-
-
-def downgrade() -> None:
-  op.drop_column("orders", "cyl_balance_after")
-  op.drop_column("orders", "cyl_balance_before")
-  op.drop_column("orders", "money_balance_after")
-  op.drop_column("orders", "money_balance_before")
-  op.drop_column("orders", "applied_credit")
-  op.drop_column("orders", "money_given")
-  op.drop_column("orders", "money_received")
-
-FILE: backend/alembic/versions/0014_add_collection_events.py
-"""add collection events
-
-Revision ID: 0014_add_collection_events
-Revises: 644fd69abc6c
-Create Date: 2026-01-04
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-# revision identifiers, used by Alembic.
-revision = "0014_add_collection_events"
-down_revision = "644fd69abc6c"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.create_table(
-        "collection_events",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("customer_id", sa.String(), nullable=False),
-        sa.Column("system_id", sa.String(), nullable=True),
-        sa.Column("action_type", sa.String(), nullable=False),
-        sa.Column("amount_money", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("qty_12kg", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("qty_48kg", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("money_balance_before", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("money_balance_after", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("cyl_balance_before", sa.JSON(), nullable=True),
-        sa.Column("cyl_balance_after", sa.JSON(), nullable=True),
-        sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("effective_at", sa.DateTime(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=True),
-        sa.Column("created_by", sa.String(), nullable=True),
-        sa.Column("updated_by", sa.String(), nullable=True),
-        sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("0")),
-        sa.Column("deleted_at", sa.DateTime(), nullable=True),
-        sa.Column("deletion_reason", sa.Text(), nullable=True),
-    )
-    op.create_index("ix_collection_events_customer_id", "collection_events", ["customer_id"])
-    op.create_index("ix_collection_events_system_id", "collection_events", ["system_id"])
-    op.create_index("ix_collection_events_action_type", "collection_events", ["action_type"])
-    op.create_index("ix_collection_events_effective_at", "collection_events", ["effective_at"])
-    op.create_index("ix_collection_events_created_at", "collection_events", ["created_at"])
-    op.create_index("ix_collection_events_is_deleted", "collection_events", ["is_deleted"])
-
-
-def downgrade() -> None:
-    op.drop_index("ix_collection_events_is_deleted", table_name="collection_events")
-    op.drop_index("ix_collection_events_created_at", table_name="collection_events")
-    op.drop_index("ix_collection_events_effective_at", table_name="collection_events")
-    op.drop_index("ix_collection_events_action_type", table_name="collection_events")
-    op.drop_index("ix_collection_events_system_id", table_name="collection_events")
-    op.drop_index("ix_collection_events_customer_id", table_name="collection_events")
-    op.drop_table("collection_events")
-
-FILE: backend/alembic/versions/0015_add_collection_snapshots.py
-"""add collection snapshot fields
-
-Revision ID: 0015_add_collection_snapshots
-Revises: 0014_add_collection_events
-Create Date: 2026-01-04
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-# revision identifiers, used by Alembic.
-revision = "0015_add_collection_snapshots"
-down_revision = "0014_add_collection_events"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.add_column("collection_events", sa.Column("cash_before", sa.Float(), nullable=True))
-    op.add_column("collection_events", sa.Column("cash_after", sa.Float(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv12_full_before", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv12_full_after", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv12_empty_before", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv12_empty_after", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv48_full_before", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv48_full_after", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv48_empty_before", sa.Integer(), nullable=True))
-    op.add_column("collection_events", sa.Column("inv48_empty_after", sa.Integer(), nullable=True))
-
-
-def downgrade() -> None:
-    op.drop_column("collection_events", "inv48_empty_after")
-    op.drop_column("collection_events", "inv48_empty_before")
-    op.drop_column("collection_events", "inv48_full_after")
-    op.drop_column("collection_events", "inv48_full_before")
-    op.drop_column("collection_events", "inv12_empty_after")
-    op.drop_column("collection_events", "inv12_empty_before")
-    op.drop_column("collection_events", "inv12_full_after")
-    op.drop_column("collection_events", "inv12_full_before")
-    op.drop_column("collection_events", "cash_after")
-    op.drop_column("collection_events", "cash_before")
-
-FILE: backend/alembic/versions/0016_add_company_payments.py
-"""add company payments table
-
-Revision ID: 0016_add_company_payments
-Revises: 0015_add_collection_snapshots
-Create Date: 2026-01-07
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-
-# revision identifiers, used by Alembic.
-revision = "0016_add_company_payments"
-down_revision = "0015_add_collection_snapshots"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.create_table(
-        "company_payments",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("business_date", sa.Date(), nullable=False),
-        sa.Column("time_of_day", sa.String(), nullable=True),
-        sa.Column("effective_at", sa.DateTime(), nullable=False),
-        sa.Column("amount", sa.Float(), nullable=False),
-        sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=True),
-        sa.Column("created_by", sa.String(), nullable=True),
-        sa.Column("updated_by", sa.String(), nullable=True),
-        sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("0")),
-        sa.Column("deleted_at", sa.DateTime(), nullable=True),
-        sa.Column("deletion_reason", sa.Text(), nullable=True),
-    )
-    op.create_index("ix_company_payments_business_date", "company_payments", ["business_date"])
-    op.create_index("ix_company_payments_effective_at", "company_payments", ["effective_at"])
-    op.create_index("ix_company_payments_is_deleted", "company_payments", ["is_deleted"])
-
-
-def downgrade() -> None:
-    op.drop_index("ix_company_payments_is_deleted", table_name="company_payments")
-    op.drop_index("ix_company_payments_effective_at", table_name="company_payments")
-    op.drop_index("ix_company_payments_business_date", table_name="company_payments")
-    op.drop_table("company_payments")
-
-FILE: backend/alembic/versions/0017_add_company_cylinder_payables.py
-"""add company cylinder payables
-
-Revision ID: 0017_add_company_cylinder_payables
-Revises: 0016_add_company_payments
-Create Date: 2026-01-13
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-
-# revision identifiers, used by Alembic.
-revision = "0017_add_company_cylinder_payables"
-down_revision = "0016_add_company_payments"
+revision = "b7a4d1c3e9f0"
+down_revision = "0d12367ce15f"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     op.add_column(
-        "company_deltas",
-        sa.Column("delta_12kg", sa.Integer(), nullable=False, server_default="0"),
+        "customer_transactions",
+        sa.Column("debt_cash", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "company_deltas",
-        sa.Column("delta_48kg", sa.Integer(), nullable=False, server_default="0"),
+        "customer_transactions",
+        sa.Column("debt_cylinders_12", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_start", sa.Integer(), nullable=False, server_default="0"),
+        "customer_transactions",
+        sa.Column("debt_cylinders_48", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_delta", sa.Integer(), nullable=False, server_default="0"),
+        "company_transactions",
+        sa.Column("debt_cash", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_end", sa.Integer(), nullable=False, server_default="0"),
+        "company_transactions",
+        sa.Column("debt_cylinders_12", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_start", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_delta", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_end", sa.Integer(), nullable=False, server_default="0"),
+        "company_transactions",
+        sa.Column("debt_cylinders_48", sa.Integer(), nullable=False, server_default="0"),
     )
 
 
 def downgrade() -> None:
-    op.drop_column("company_daily_summary", "payable_48kg_end")
-    op.drop_column("company_daily_summary", "payable_48kg_delta")
-    op.drop_column("company_daily_summary", "payable_48kg_start")
-    op.drop_column("company_daily_summary", "payable_12kg_end")
-    op.drop_column("company_daily_summary", "payable_12kg_delta")
-    op.drop_column("company_daily_summary", "payable_12kg_start")
-    op.drop_column("company_deltas", "delta_48kg")
-    op.drop_column("company_deltas", "delta_12kg")
-
-FILE: backend/alembic/versions/0018_add_gross_relationship_fields.py
-"""add gross relationship fields
-
-Revision ID: 0018_add_gross_relationship_fields
-Revises: 0017_add_company_cylinder_payables
-Create Date: 2026-01-13
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-
-# revision identifiers, used by Alembic.
-revision = "0018_add_gross_relationship_fields"
-down_revision = "0017_add_company_cylinder_payables"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.add_column(
-        "customers",
-        sa.Column("money_to_receive", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("money_to_give", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("cylinder_to_receive_12kg", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("cylinder_to_give_12kg", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("cylinder_to_receive_48kg", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("cylinder_to_give_48kg", sa.Integer(), nullable=False, server_default="0"),
-    )
-
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("amount_money_to_receive", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("amount_money_to_give", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("count_12kg_to_receive", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("count_12kg_to_give", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("count_48kg_to_receive", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "customer_adjustments",
-        sa.Column("count_48kg_to_give", sa.Integer(), nullable=False, server_default="0"),
-    )
-
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_give_start", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_give_delta", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_give_end", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_receive_start", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_receive_delta", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_receive_end", sa.Float(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_give_start", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_give_delta", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_give_end", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_receive_start", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_receive_delta", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_12kg_receive_end", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_give_start", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_give_delta", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_give_end", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_receive_start", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_receive_delta", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "company_daily_summary",
-        sa.Column("payable_48kg_receive_end", sa.Integer(), nullable=False, server_default="0"),
-    )
-
-
-def downgrade() -> None:
-    op.drop_column("company_daily_summary", "payable_48kg_receive_end")
-    op.drop_column("company_daily_summary", "payable_48kg_receive_delta")
-    op.drop_column("company_daily_summary", "payable_48kg_receive_start")
-    op.drop_column("company_daily_summary", "payable_48kg_give_end")
-    op.drop_column("company_daily_summary", "payable_48kg_give_delta")
-    op.drop_column("company_daily_summary", "payable_48kg_give_start")
-    op.drop_column("company_daily_summary", "payable_12kg_receive_end")
-    op.drop_column("company_daily_summary", "payable_12kg_receive_delta")
-    op.drop_column("company_daily_summary", "payable_12kg_receive_start")
-    op.drop_column("company_daily_summary", "payable_12kg_give_end")
-    op.drop_column("company_daily_summary", "payable_12kg_give_delta")
-    op.drop_column("company_daily_summary", "payable_12kg_give_start")
-    op.drop_column("company_daily_summary", "payable_receive_end")
-    op.drop_column("company_daily_summary", "payable_receive_delta")
-    op.drop_column("company_daily_summary", "payable_receive_start")
-    op.drop_column("company_daily_summary", "payable_give_end")
-    op.drop_column("company_daily_summary", "payable_give_delta")
-    op.drop_column("company_daily_summary", "payable_give_start")
-
-    op.drop_column("customer_adjustments", "count_48kg_to_give")
-    op.drop_column("customer_adjustments", "count_48kg_to_receive")
-    op.drop_column("customer_adjustments", "count_12kg_to_give")
-    op.drop_column("customer_adjustments", "count_12kg_to_receive")
-    op.drop_column("customer_adjustments", "amount_money_to_give")
-    op.drop_column("customer_adjustments", "amount_money_to_receive")
-
-    op.drop_column("customers", "cylinder_to_give_48kg")
-    op.drop_column("customers", "cylinder_to_receive_48kg")
-    op.drop_column("customers", "cylinder_to_give_12kg")
-    op.drop_column("customers", "cylinder_to_receive_12kg")
-    op.drop_column("customers", "money_to_give")
-    op.drop_column("customers", "money_to_receive")
-
-FILE: backend/alembic/versions/0019_add_order_mode.py
-"""add order mode
-
-Revision ID: 0019_add_order_mode
-Revises: 0018_add_gross_relationship_fields
-Create Date: 2026-01-15
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-
-# revision identifiers, used by Alembic.
-revision = "0019_add_order_mode"
-down_revision = "0018_add_gross_relationship_fields"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.add_column(
-        "orders",
-        sa.Column("order_mode", sa.String(), nullable=False, server_default="replacement"),
-    )
-
-
-def downgrade() -> None:
-    op.drop_column("orders", "order_mode")
-
-FILE: backend/alembic/versions/0020_remove_bilateral_order_fields.py
-"""remove bilateral order fields
-
-Revision ID: 0020_remove_bilateral_order_fields
-Revises: bdba764a24e1, 0019_add_order_mode
-Create Date: 2026-01-28
-"""
-
-from __future__ import annotations
-
-import sqlalchemy as sa
-
-from alembic import op
-
-
-# revision identifiers, used by Alembic.
-revision = "0020_remove_bilateral_order_fields"
-down_revision = ("bdba764a24e1", "0019_add_order_mode")
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.drop_column("orders", "money_given")
-    op.drop_column("orders", "money_received")
-
-
-def downgrade() -> None:
-    op.add_column("orders", sa.Column("money_received", sa.Float(), nullable=False, server_default="0"))
-    op.add_column("orders", sa.Column("money_given", sa.Float(), nullable=False, server_default="0"))
-
-FILE: backend/alembic/versions/0021_new_ledger_schema.py
-"""new_ledger_schema"""
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0021_new_ledger_schema"
-down_revision = "0020_remove_bilateral_order_fields"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  conn = op.get_bind()
-  dialect = conn.dialect.name
-  cascade = " CASCADE" if dialect == "postgresql" else ""
-
-  tables_to_drop = [
-    "activities",
-    "cash_daily_summary",
-    "cash_deltas",
-    "collection_events",
-    "company_cylinder_payment_events",
-    "company_daily_summary",
-    "company_deltas",
-    "company_payments",
-    "customer_adjustments",
-    "expenses",
-    "inventory_daily_summary",
-    "inventory_deltas",
-    "inventory_recalc_queue",
-    "inventory_versions",
-    "orders",
-    "price_settings",
-    "refill_events",
-    "system_settings",
-    "systems",
-    "customers",
-    "company_transactions",
-    "customer_transactions",
-    "price_catalog",
-    "expense_categories",
-    "inventory_adjustments",
-    "ledger_entries",
-  ]
-  for table in tables_to_drop:
-    op.execute(f"DROP TABLE IF EXISTS {table}{cascade}")
-
-  op.create_table(
-    "customers",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("name", sa.Text(), nullable=False),
-    sa.Column("phone", sa.Text(), nullable=True),
-    sa.Column("address", sa.Text(), nullable=True),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_customers_id", "customers", ["id"], unique=False)
-
-  op.create_table(
-    "systems",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=False),
-    sa.Column("name", sa.Text(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_systems_id", "systems", ["id"], unique=False)
-  op.create_index("ix_systems_customer_id", "systems", ["customer_id"], unique=False)
-  op.create_index("ix_systems_is_active", "systems", ["is_active"], unique=False)
-
-  op.create_table(
-    "price_catalog",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("effective_from", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=False),
-    sa.Column("sell_price", sa.Integer(), nullable=False),
-    sa.Column("buy_price", sa.Integer(), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_price_catalog_id", "price_catalog", ["id"], unique=False)
-  op.create_index("ix_price_catalog_effective_from", "price_catalog", ["effective_from"], unique=False)
-  op.create_index("ix_price_catalog_gas_type", "price_catalog", ["gas_type"], unique=False)
-
-  op.create_table(
-    "expense_categories",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("name", sa.Text(), nullable=False, unique=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_expense_categories_id", "expense_categories", ["id"], unique=False)
-  op.create_index("ix_expense_categories_is_active", "expense_categories", ["is_active"], unique=False)
-
-  op.create_table(
-    "expenses",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("kind", sa.Text(), nullable=False),
-    sa.Column("category_id", sa.String(), sa.ForeignKey("expense_categories.id"), nullable=True),
-    sa.Column("amount", sa.Integer(), nullable=False),
-    sa.Column("paid_from", sa.Text(), nullable=True),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("vendor", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_expenses_id", "expenses", ["id"], unique=False)
-  op.create_index("ix_expenses_happened_at", "expenses", ["happened_at"], unique=False)
-  op.create_index("ix_expenses_day", "expenses", ["day"], unique=False)
-  op.create_index("ix_expenses_kind", "expenses", ["kind"], unique=False)
-  op.create_index("ix_expenses_is_reversed", "expenses", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "customer_transactions",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("group_id", sa.String(), nullable=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("kind", sa.Text(), nullable=False),
-    sa.Column("mode", sa.Text(), nullable=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=False),
-    sa.Column("system_id", sa.String(), sa.ForeignKey("systems.id"), nullable=True),
-    sa.Column("gas_type", sa.Text(), nullable=True),
-    sa.Column("installed", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("received", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("paid", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_customer_transactions_id", "customer_transactions", ["id"], unique=False)
-  op.create_index("ix_customer_transactions_group_id", "customer_transactions", ["group_id"], unique=False)
-  op.create_index("ix_customer_transactions_request_id", "customer_transactions", ["request_id"], unique=False)
-  op.create_index("ix_customer_transactions_happened_at", "customer_transactions", ["happened_at"], unique=False)
-  op.create_index("ix_customer_transactions_day", "customer_transactions", ["day"], unique=False)
-  op.create_index("ix_customer_transactions_kind", "customer_transactions", ["kind"], unique=False)
-  op.create_index("ix_customer_transactions_mode", "customer_transactions", ["mode"], unique=False)
-  op.create_index("ix_customer_transactions_customer_id", "customer_transactions", ["customer_id"], unique=False)
-  op.create_index("ix_customer_transactions_system_id", "customer_transactions", ["system_id"], unique=False)
-  op.create_index("ix_customer_transactions_gas_type", "customer_transactions", ["gas_type"], unique=False)
-  op.create_index("ix_customer_transactions_is_reversed", "customer_transactions", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "company_transactions",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("buy12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("return12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("buy48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("return48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("new12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("new48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("paid", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_company_transactions_id", "company_transactions", ["id"], unique=False)
-  op.create_index("ix_company_transactions_request_id", "company_transactions", ["request_id"], unique=False)
-  op.create_index("ix_company_transactions_happened_at", "company_transactions", ["happened_at"], unique=False)
-  op.create_index("ix_company_transactions_day", "company_transactions", ["day"], unique=False)
-  op.create_index("ix_company_transactions_is_reversed", "company_transactions", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "inventory_adjustments",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=False),
-    sa.Column("delta_full", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("delta_empty", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_inventory_adjustments_id", "inventory_adjustments", ["id"], unique=False)
-  op.create_index("ix_inventory_adjustments_request_id", "inventory_adjustments", ["request_id"], unique=False)
-  op.create_index("ix_inventory_adjustments_happened_at", "inventory_adjustments", ["happened_at"], unique=False)
-  op.create_index("ix_inventory_adjustments_day", "inventory_adjustments", ["day"], unique=False)
-  op.create_index("ix_inventory_adjustments_gas_type", "inventory_adjustments", ["gas_type"], unique=False)
-  op.create_index("ix_inventory_adjustments_is_reversed", "inventory_adjustments", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "ledger_entries",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("source_type", sa.Text(), nullable=False),
-    sa.Column("source_id", sa.String(), nullable=False),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=True),
-    sa.Column("account", sa.Text(), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=True),
-    sa.Column("state", sa.Text(), nullable=True),
-    sa.Column("unit", sa.Text(), nullable=False),
-    sa.Column("amount", sa.Integer(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.UniqueConstraint("source_type", "source_id", "account", "gas_type", "state", "unit", name="uq_ledger_source_account"),
-  )
-  op.create_index("ix_ledger_entries_id", "ledger_entries", ["id"], unique=False)
-  op.create_index("ix_ledger_entries_happened_at", "ledger_entries", ["happened_at"], unique=False)
-  op.create_index("ix_ledger_entries_day", "ledger_entries", ["day"], unique=False)
-  op.create_index("ix_ledger_entries_source_type", "ledger_entries", ["source_type"], unique=False)
-  op.create_index("ix_ledger_entries_source_id", "ledger_entries", ["source_id"], unique=False)
-  op.create_index("ix_ledger_entries_customer_id", "ledger_entries", ["customer_id"], unique=False)
-  op.create_index("ix_ledger_entries_account", "ledger_entries", ["account"], unique=False)
-  op.create_index("ix_ledger_entries_gas_type", "ledger_entries", ["gas_type"], unique=False)
-  op.create_index("ix_ledger_entries_state", "ledger_entries", ["state"], unique=False)
-  op.create_index("ix_ledger_entries_unit", "ledger_entries", ["unit"], unique=False)
-
-  op.create_table(
-    "system_settings",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("is_setup_completed", sa.Boolean(), nullable=False, server_default=sa.false()),
-    sa.Column("currency_code", sa.Text(), nullable=False),
-    sa.Column("money_decimals", sa.Integer(), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-
-
-def downgrade() -> None:
-  raise NotImplementedError("Downgrade not supported for new ledger schema.")
-
-FILE: backend/alembic/versions/644fd69abc6c_merge_heads.py
-"""merge heads
-
-Revision ID: 644fd69abc6c
-Revises: 0002_order_price_snapshot, 0013_add_bilateral_order_fields
-Create Date: 2026-01-02
-"""
-
-from __future__ import annotations
-
-# revision identifiers, used by Alembic.
-revision = "644fd69abc6c"
-down_revision = ("0002_order_price_snapshot", "0013_add_bilateral_order_fields")
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    pass
-
-
-def downgrade() -> None:
-    pass
-
-FILE: backend/alembic/versions/ab7f45f1593e_add_new_shells_to_refill_events.py
-"""add new_shells to refill events
-
-Revision ID: ab7f45f1593e
-Revises: b8c9babe27bc
-Create Date: 2026-01-22 15:58:00.000000
-
-"""
+    op.drop_column("company_transactions", "debt_cylinders_48")
+    op.drop_column("company_transactions", "debt_cylinders_12")
+    op.drop_column("company_transactions", "debt_cash")
+    op.drop_column("customer_transactions", "debt_cylinders_48")
+    op.drop_column("customer_transactions", "debt_cylinders_12")
+    op.drop_column("customer_transactions", "debt_cash")
+
+FILE: backend/alembic/versions_v2/c3e2f1a4b5c6_add_created_at_columns.py
+"""add created_at to activity tables"""
 from __future__ import annotations
 
 from alembic import op
@@ -1491,595 +444,37 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'ab7f45f1593e'
-down_revision = 'b8c9babe27bc'
+revision = "c3e2f1a4b5c6"
+down_revision = "b7a4d1c3e9f0"
 branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
-    op.add_column("refill_events", sa.Column("new_shells_12kg", sa.Integer(), nullable=True, server_default="0"))
-    op.add_column("refill_events", sa.Column("new_shells_48kg", sa.Integer(), nullable=True, server_default="0"))
-
-
-def downgrade() -> None:
-    op.drop_column("refill_events", "new_shells_12kg")
-    op.drop_column("refill_events", "new_shells_48kg")
-
-FILE: backend/alembic/versions/b8c9babe27bc_add_notes_to_refill_events.py
-"""add notes to refill events
-
-Revision ID: b8c9babe27bc
-Revises: 644fd69abc6c
-Create Date: 2026-01-22 15:30:03.967323
-
-"""
-from __future__ import annotations
-
-from alembic import op
-import sqlalchemy as sa
-
-
-# revision identifiers, used by Alembic.
-revision = 'b8c9babe27bc'
-down_revision = '644fd69abc6c'
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.add_column("refill_events", sa.Column("notes", sa.String(), nullable=True))
-
-
-def downgrade() -> None:
-    op.drop_column("refill_events", "notes")
-
-FILE: backend/alembic/versions/bdba764a24e1_add_company_cylinder_payment_event.py
-"""add company cylinder payment event
-
-Revision ID: bdbd764a24e1
-Revises: ab7f45f1593e
-Create Date: 2026-01-22 16:30:00.000000
-
-"""
-from __future__ import annotations
-
-from alembic import op
-import sqlalchemy as sa
-from datetime import datetime, timezone
-
-# revision identifiers, used by Alembic.
-revision = 'bdba764a24e1'
-down_revision = 'ab7f45f1593e'
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.create_table(
-        "company_cylinder_payment_events",
-        sa.Column("id", sa.String(), nullable=False, index=True),
-        sa.Column("business_date", sa.Date(), nullable=False, index=True),
-        sa.Column("effective_at", sa.DateTime(), nullable=False, index=True, default=lambda: datetime.now(timezone.utc)),
-        sa.Column("gas_type", sa.String(), nullable=False, index=True),
-        sa.Column("quantity", sa.Integer(), nullable=False, default=0),
-        sa.Column("amount", sa.Float(), nullable=False, default=0),
-        sa.Column("note", sa.String(), nullable=True),
-        sa.Column("is_deleted", sa.Boolean(), nullable=False, default=False, index=True),
-        sa.Column("deleted_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, index=True, default=lambda: datetime.now(timezone.utc)),
-        sa.Column("created_by", sa.String(), nullable=True, index=True),
-        sa.PrimaryKeyConstraint("id")
+def _add_created_at(table: str) -> None:
+    op.add_column(table, sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
+    op.execute(sa.text(f"UPDATE {table} SET created_at = happened_at WHERE created_at IS NULL"))
+    op.alter_column(
+        table,
+        "created_at",
+        nullable=False,
+        server_default=sa.text("now()"),
     )
 
 
-def downgrade() -> None:
-    op.drop_table("company_cylinder_payment_events")
-
-FILE: backend/alembic/versions_v2/0001_new_ledger_schema.py
-﻿"""v2 ledger schema
-
-Revision ID: 0001_new_ledger_schema
-Revises:
-Create Date: 2026-01-30
-"""
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers, used by Alembic.
-revision = "0001_new_ledger_schema"
-down_revision = None
-branch_labels = None
-depends_on = None
-
-
 def upgrade() -> None:
-  conn = op.get_bind()
-  dialect = conn.dialect.name
-  cascade = " CASCADE" if dialect == "postgresql" else ""
-
-  tables_to_drop = [
-    "activities",
-    "cash_daily_summary",
-    "cash_deltas",
-    "collection_events",
-    "company_cylinder_payment_events",
-    "company_daily_summary",
-    "company_deltas",
-    "company_payments",
-    "customer_adjustments",
-    "expenses",
-    "inventory_daily_summary",
-    "inventory_deltas",
-    "inventory_recalc_queue",
-    "inventory_versions",
-    "orders",
-    "price_settings",
-    "refill_events",
-    "system_settings",
-    "systems",
-    "customers",
-    "company_transactions",
-    "customer_transactions",
-    "price_catalog",
-    "expense_categories",
-    "inventory_adjustments",
-    "ledger_entries",
-  ]
-  for table in tables_to_drop:
-    op.execute(f"DROP TABLE IF EXISTS {table}{cascade}")
-
-  op.create_table(
-    "customers",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("name", sa.Text(), nullable=False),
-    sa.Column("phone", sa.Text(), nullable=True),
-    sa.Column("address", sa.Text(), nullable=True),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_customers_id", "customers", ["id"], unique=False)
-
-  op.create_table(
-    "systems",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=False),
-    sa.Column("name", sa.Text(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_systems_id", "systems", ["id"], unique=False)
-  op.create_index("ix_systems_customer_id", "systems", ["customer_id"], unique=False)
-  op.create_index("ix_systems_is_active", "systems", ["is_active"], unique=False)
-
-  op.create_table(
-    "price_catalog",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("effective_from", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=False),
-    sa.Column("sell_price", sa.Integer(), nullable=False),
-    sa.Column("buy_price", sa.Integer(), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_price_catalog_id", "price_catalog", ["id"], unique=False)
-  op.create_index("ix_price_catalog_effective_from", "price_catalog", ["effective_from"], unique=False)
-  op.create_index("ix_price_catalog_gas_type", "price_catalog", ["gas_type"], unique=False)
-
-  op.create_table(
-    "expense_categories",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("name", sa.Text(), nullable=False, unique=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_expense_categories_id", "expense_categories", ["id"], unique=False)
-  op.create_index("ix_expense_categories_is_active", "expense_categories", ["is_active"], unique=False)
-
-  op.create_table(
-    "expenses",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("kind", sa.Text(), nullable=False),
-    sa.Column("category_id", sa.String(), sa.ForeignKey("expense_categories.id"), nullable=True),
-    sa.Column("amount", sa.Integer(), nullable=False),
-    sa.Column("paid_from", sa.Text(), nullable=True),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("vendor", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_expenses_id", "expenses", ["id"], unique=False)
-  op.create_index("ix_expenses_happened_at", "expenses", ["happened_at"], unique=False)
-  op.create_index("ix_expenses_day", "expenses", ["day"], unique=False)
-  op.create_index("ix_expenses_kind", "expenses", ["kind"], unique=False)
-  op.create_index("ix_expenses_is_reversed", "expenses", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "customer_transactions",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("group_id", sa.String(), nullable=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("kind", sa.Text(), nullable=False),
-    sa.Column("mode", sa.Text(), nullable=True),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=False),
-    sa.Column("system_id", sa.String(), sa.ForeignKey("systems.id"), nullable=True),
-    sa.Column("gas_type", sa.Text(), nullable=True),
-    sa.Column("installed", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("received", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("paid", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_customer_transactions_id", "customer_transactions", ["id"], unique=False)
-  op.create_index("ix_customer_transactions_group_id", "customer_transactions", ["group_id"], unique=False)
-  op.create_index("ix_customer_transactions_request_id", "customer_transactions", ["request_id"], unique=False)
-  op.create_index("ix_customer_transactions_happened_at", "customer_transactions", ["happened_at"], unique=False)
-  op.create_index("ix_customer_transactions_day", "customer_transactions", ["day"], unique=False)
-  op.create_index("ix_customer_transactions_kind", "customer_transactions", ["kind"], unique=False)
-  op.create_index("ix_customer_transactions_mode", "customer_transactions", ["mode"], unique=False)
-  op.create_index("ix_customer_transactions_customer_id", "customer_transactions", ["customer_id"], unique=False)
-  op.create_index("ix_customer_transactions_system_id", "customer_transactions", ["system_id"], unique=False)
-  op.create_index("ix_customer_transactions_gas_type", "customer_transactions", ["gas_type"], unique=False)
-  op.create_index("ix_customer_transactions_is_reversed", "customer_transactions", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "company_transactions",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("buy12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("return12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("buy48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("return48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("new12", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("new48", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("paid", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_company_transactions_id", "company_transactions", ["id"], unique=False)
-  op.create_index("ix_company_transactions_request_id", "company_transactions", ["request_id"], unique=False)
-  op.create_index("ix_company_transactions_happened_at", "company_transactions", ["happened_at"], unique=False)
-  op.create_index("ix_company_transactions_day", "company_transactions", ["day"], unique=False)
-  op.create_index("ix_company_transactions_is_reversed", "company_transactions", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "inventory_adjustments",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=False),
-    sa.Column("delta_full", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("delta_empty", sa.Integer(), nullable=False, server_default="0"),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_inventory_adjustments_id", "inventory_adjustments", ["id"], unique=False)
-  op.create_index("ix_inventory_adjustments_request_id", "inventory_adjustments", ["request_id"], unique=False)
-  op.create_index("ix_inventory_adjustments_happened_at", "inventory_adjustments", ["happened_at"], unique=False)
-  op.create_index("ix_inventory_adjustments_day", "inventory_adjustments", ["day"], unique=False)
-  op.create_index("ix_inventory_adjustments_gas_type", "inventory_adjustments", ["gas_type"], unique=False)
-  op.create_index("ix_inventory_adjustments_is_reversed", "inventory_adjustments", ["is_reversed"], unique=False)
-
-  op.create_table(
-    "ledger_entries",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("source_type", sa.Text(), nullable=False),
-    sa.Column("source_id", sa.String(), nullable=False),
-    sa.Column("customer_id", sa.String(), sa.ForeignKey("customers.id"), nullable=True),
-    sa.Column("account", sa.Text(), nullable=False),
-    sa.Column("gas_type", sa.Text(), nullable=True),
-    sa.Column("state", sa.Text(), nullable=True),
-    sa.Column("unit", sa.Text(), nullable=False),
-    sa.Column("amount", sa.Integer(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.UniqueConstraint(
-      "source_type",
-      "source_id",
-      "account",
-      "gas_type",
-      "state",
-      "unit",
-      name="uq_ledger_source_account",
-    ),
-  )
-  op.create_index("ix_ledger_entries_id", "ledger_entries", ["id"], unique=False)
-  op.create_index("ix_ledger_entries_happened_at", "ledger_entries", ["happened_at"], unique=False)
-  op.create_index("ix_ledger_entries_day", "ledger_entries", ["day"], unique=False)
-  op.create_index("ix_ledger_entries_source_type", "ledger_entries", ["source_type"], unique=False)
-  op.create_index("ix_ledger_entries_source_id", "ledger_entries", ["source_id"], unique=False)
-  op.create_index("ix_ledger_entries_customer_id", "ledger_entries", ["customer_id"], unique=False)
-  op.create_index("ix_ledger_entries_account", "ledger_entries", ["account"], unique=False)
-  op.create_index("ix_ledger_entries_gas_type", "ledger_entries", ["gas_type"], unique=False)
-  op.create_index("ix_ledger_entries_state", "ledger_entries", ["state"], unique=False)
-  op.create_index("ix_ledger_entries_unit", "ledger_entries", ["unit"], unique=False)
-
-  op.create_table(
-    "system_settings",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("is_setup_completed", sa.Boolean(), nullable=False, server_default=sa.false()),
-    sa.Column("currency_code", sa.Text(), nullable=False),
-    sa.Column("money_decimals", sa.Integer(), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
+    _add_created_at("customer_transactions")
+    _add_created_at("company_transactions")
+    _add_created_at("inventory_adjustments")
+    _add_created_at("cash_adjustments")
+    _add_created_at("expenses")
 
 
 def downgrade() -> None:
-  raise NotImplementedError("Downgrade not supported for v2 schema.")
-
-FILE: backend/alembic/versions_v2/0002_system_types_and_security.py
-"""add system types and security fields
-
-Revision ID: 0002_system_types_and_security
-Revises: 0001_new_ledger_schema
-Create Date: 2026-01-30
-"""
-
-from datetime import datetime
-
-import sqlalchemy as sa
-from alembic import op
-
-
-revision = "0002_system_types_and_security"
-down_revision = "0001_new_ledger_schema"
-branch_labels = None
-depends_on = None
-
-
-DEFAULT_SYSTEM_TYPES = [
-  "main kitchen",
-  "side kitchen",
-  "water heater",
-  "water heater + main kitchen",
-  "water heater + side kitchen",
-  "restaurant",
-  "backery",
-  "outside ofen",
-  "outside stove",
-  "other",
-]
-
-
-def upgrade() -> None:
-  op.create_table(
-    "system_type_options",
-    sa.Column("id", sa.String(), primary_key=True, nullable=False),
-    sa.Column("name", sa.String(), nullable=False, unique=True),
-    sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-  )
-  op.create_index("ix_system_type_options_id", "system_type_options", ["id"])
-  op.create_index("ix_system_type_options_is_active", "system_type_options", ["is_active"])
-
-  op.add_column("systems", sa.Column("gas_type", sa.String(), nullable=False, server_default="12kg"))
-  op.add_column("systems", sa.Column("requires_security_check", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-  op.add_column("systems", sa.Column("security_check_exists", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-  op.add_column("systems", sa.Column("last_security_check_at", sa.Date(), nullable=True))
-  op.add_column("systems", sa.Column("next_security_check_at", sa.Date(), nullable=True))
-  op.create_index("ix_systems_gas_type", "systems", ["gas_type"])
-  op.create_index("ix_systems_requires_security_check", "systems", ["requires_security_check"])
-  op.create_index("ix_systems_security_check_exists", "systems", ["security_check_exists"])
-  op.create_index("ix_systems_next_security_check_at", "systems", ["next_security_check_at"])
-
-  # seed defaults
-  now = datetime.utcnow()
-  op.bulk_insert(
-    sa.table(
-      "system_type_options",
-      sa.Column("id", sa.String()),
-      sa.Column("name", sa.String()),
-      sa.Column("is_active", sa.Boolean()),
-      sa.Column("created_at", sa.DateTime(timezone=True)),
-    ),
-    [
-      {
-        "id": f"system_type_{idx + 1}",
-        "name": name,
-        "is_active": True,
-        "created_at": now,
-      }
-      for idx, name in enumerate(DEFAULT_SYSTEM_TYPES)
-    ],
-  )
-
-
-def downgrade() -> None:
-  op.drop_index("ix_systems_next_security_check_at", table_name="systems")
-  op.drop_index("ix_systems_security_check_exists", table_name="systems")
-  op.drop_index("ix_systems_requires_security_check", table_name="systems")
-  op.drop_index("ix_systems_gas_type", table_name="systems")
-  op.drop_column("systems", "next_security_check_at")
-  op.drop_column("systems", "last_security_check_at")
-  op.drop_column("systems", "security_check_exists")
-  op.drop_column("systems", "requires_security_check")
-  op.drop_column("systems", "gas_type")
-
-  op.drop_index("ix_system_type_options_is_active", table_name="system_type_options")
-  op.drop_index("ix_system_type_options_id", table_name="system_type_options")
-  op.drop_table("system_type_options")
-
-FILE: backend/alembic/versions_v2/0003_cash_adjustments.py
-"""add cash adjustments intent table
-
-Revision ID: 0003_cash_adjustments
-Revises: 0002_system_types_and_security
-Create Date: 2026-01-30
-"""
-from alembic import op
-import sqlalchemy as sa
-
-revision = "0003_cash_adjustments"
-down_revision = "0002_system_types_and_security"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-  op.create_table(
-    "cash_adjustments",
-    sa.Column("id", sa.String(), primary_key=True),
-    sa.Column("request_id", sa.String(), nullable=True, unique=True),
-    sa.Column("happened_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("day", sa.Date(), nullable=False),
-    sa.Column("delta_cash", sa.Integer(), nullable=False),
-    sa.Column("note", sa.Text(), nullable=True),
-    sa.Column("reversed_id", sa.String(), nullable=True),
-    sa.Column("is_reversed", sa.Boolean(), nullable=False, server_default=sa.false()),
-  )
-  op.create_index("ix_cash_adjustments_id", "cash_adjustments", ["id"], unique=False)
-  op.create_index("ix_cash_adjustments_request_id", "cash_adjustments", ["request_id"], unique=False)
-  op.create_index("ix_cash_adjustments_happened_at", "cash_adjustments", ["happened_at"], unique=False)
-  op.create_index("ix_cash_adjustments_day", "cash_adjustments", ["day"], unique=False)
-  op.create_index("ix_cash_adjustments_is_reversed", "cash_adjustments", ["is_reversed"], unique=False)
-  op.create_index("ix_cash_adjustments_reversed_id", "cash_adjustments", ["reversed_id"], unique=False)
-
-
-def downgrade() -> None:
-  op.drop_index("ix_cash_adjustments_reversed_id", table_name="cash_adjustments")
-  op.drop_index("ix_cash_adjustments_is_reversed", table_name="cash_adjustments")
-  op.drop_index("ix_cash_adjustments_day", table_name="cash_adjustments")
-  op.drop_index("ix_cash_adjustments_happened_at", table_name="cash_adjustments")
-  op.drop_index("ix_cash_adjustments_request_id", table_name="cash_adjustments")
-  op.drop_index("ix_cash_adjustments_id", table_name="cash_adjustments")
-  op.drop_table("cash_adjustments")
-
-FILE: backend/alembic/versions_v2/0004_ledger_unique_coalesce.py
-"""add coalesce-based unique index for ledger entries
-
-Revision ID: 0004_ledger_unique_coalesce
-Revises: 0003_cash_adjustments
-Create Date: 2026-01-30
-"""
-from alembic import op
-
-revision = "0004_ledger_unique_coalesce"
-down_revision = "0003_cash_adjustments"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    # Ensure uniqueness even when gas_type/state/customer_id are NULL by normalizing to "N/A".
-    op.execute("DROP INDEX IF EXISTS ux_ledger_source_account_coalesce")
-    op.execute("DROP INDEX IF EXISTS ix_ledger_unique_lines")
-    op.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS ix_ledger_unique_lines ON ledger_entries (
-          source_type,
-          source_id,
-          account,
-          unit,
-          COALESCE(gas_type, 'N/A'),
-          COALESCE(state, 'N/A'),
-          COALESCE(customer_id, 'N/A')
-        )
-        """
-    )
-
-
-def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS ix_ledger_unique_lines")
-
-FILE: backend/alembic/versions_v2/0005_legacy_purge.py
-"""purge legacy columns and tables
-
-Revision ID: 0005_legacy_purge
-Revises: 0004_ledger_unique_coalesce
-Create Date: 2026-01-30
-"""
-import sqlalchemy as sa
-from alembic import op
-
-revision = "0005_legacy_purge"
-down_revision = "0004_ledger_unique_coalesce"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    tables = set(inspector.get_table_names())
-
-    legacy_columns = {"money_received", "before_balance", "after_balance"}
-    for table in ("orders", "collection_events"):
-        if table not in tables:
-            continue
-        cols = {col["name"] for col in inspector.get_columns(table)}
-        drop_cols = sorted(legacy_columns.intersection(cols))
-        if drop_cols:
-            with op.batch_alter_table(table) as batch:
-                for col in drop_cols:
-                    batch.drop_column(col)
-
-    # Legacy delta tables (safe if they no longer exist)
-    op.execute("DROP TABLE IF EXISTS cash_deltas")
-    op.execute("DROP TABLE IF EXISTS inventory_deltas")
-
-
-def downgrade() -> None:
-    # Irreversible cleanup; no downgrade.
-    pass
-
-FILE: backend/alembic/versions_v2/0006_company_kinds_and_inventory_cleanup.py
-"""add company transaction kind + drop legacy inventory tables
-
-Revision ID: 0006_company_kinds_cleanup
-Revises: 0005_legacy_purge
-Create Date: 2026-01-30
-"""
-
-import sqlalchemy as sa
-from alembic import op
-
-revision = "0006_company_kinds_cleanup"
-down_revision = "0005_legacy_purge"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    tables = set(inspector.get_table_names())
-
-    if "company_transactions" in tables:
-        cols = {col["name"] for col in inspector.get_columns("company_transactions")}
-        if "kind" not in cols:
-            with op.batch_alter_table("company_transactions") as batch:
-                batch.add_column(
-                    sa.Column("kind", sa.String(), nullable=False, server_default="refill")
-                )
-            with op.batch_alter_table("company_transactions") as batch:
-                batch.alter_column("kind", server_default=None)
-
-        existing_indexes = {idx["name"] for idx in inspector.get_indexes("company_transactions")}
-        if "ix_company_transactions_kind" not in existing_indexes:
-            op.create_index("ix_company_transactions_kind", "company_transactions", ["kind"])
-
-    op.execute("DROP TABLE IF EXISTS inventory_daily_summary")
-    op.execute("DROP TABLE IF EXISTS inventory_recalc_queue")
-    op.execute("DROP TABLE IF EXISTS inventory_versions")
-
-
-def downgrade() -> None:
-    # Irreversible cleanup; no downgrade.
-    pass
+    op.drop_column("expenses", "created_at")
+    op.drop_column("cash_adjustments", "created_at")
+    op.drop_column("inventory_adjustments", "created_at")
+    op.drop_column("company_transactions", "created_at")
+    op.drop_column("customer_transactions", "created_at")
 
 FILE: backend/alembic.ini
 [alembic]
@@ -2185,13 +580,11 @@ def get_optional_user(
 
 FILE: backend/app/config.py
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-_DEFAULT_DB_PATH = (Path(__file__).resolve().parent.parent / "gas_app.db").as_posix()
-_DEFAULT_DATABASE_URL = f"sqlite:///{_DEFAULT_DB_PATH}"
+_DEFAULT_DATABASE_URL = "postgresql://postgres:password@localhost:5432/gas_db"
 
 
 class Settings(BaseSettings):
@@ -2228,9 +621,9 @@ def get_settings() -> Settings:
 
 FILE: backend/app/db.py
 from collections.abc import Generator
-import json
+
 from sqlmodel import Session, SQLModel, create_engine
-from sqlalchemy import event
+
 from .config import get_settings
 
 settings = get_settings()
@@ -2238,41 +631,34 @@ db_url = settings.database_url
 
 # Ensure the URL is in the format 'postgresql://' (SQLAlchemy requirement)
 if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+  db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-connect_args = {}
-engine_kwargs = {
-    "echo": settings.debug,
-    "future": True,
-    "pool_pre_ping": True,  # Checks if connection is alive before using it
-}
+engine = create_engine(
+  db_url,
+  echo=settings.debug,
+  future=True,
+  pool_pre_ping=True,  # Checks if connection is alive before using it
+  pool_size=10,        # How many permanent connections to keep
+  max_overflow=20,     # How many extra connections to allow during spikes
+  pool_timeout=30,     # How long to wait for a connection before failing
+)
 
-if db_url.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-    # Remove pooling kwargs not supported by SQLite
-    engine_kwargs["echo"] = settings.debug
-else:
-    # PostgreSQL specific pooling logic
-    engine_kwargs["pool_size"] = 10      # How many permanent connections to keep
-    engine_kwargs["max_overflow"] = 20  # How many extra connections to allow during spikes
-    engine_kwargs["pool_timeout"] = 30  # How long to wait for a connection before failing
-
-engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
 
 def init_db() -> None:
-    """
-    Initializes the database. 
-    Note: In production with Postgres, we usually rely on Alembic migrations.
-    """
-    from . import models  # noqa: F401
-    SQLModel.metadata.create_all(bind=engine)
+  """
+  Initializes the database.
+  Note: In production with Postgres, we usually rely on Alembic migrations.
+  """
+  from . import models  # noqa: F401
+  SQLModel.metadata.create_all(bind=engine)
+
 
 def get_session() -> Generator[Session, None, None]:
-    """
-    Dependency to get a database session for FastAPI routes.
-    """
-    with Session(engine) as session:
-        yield session
+  """
+  Dependency to get a database session for FastAPI routes.
+  """
+  with Session(engine) as session:
+    yield session
 
 FILE: backend/app/logging_config.py
 import logging
@@ -2442,6 +828,10 @@ class Expense(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(index=True)  # "expense" | "deposit"
   category_id: Optional[str] = Field(default=None, foreign_key="expense_categories.id")
@@ -2466,6 +856,10 @@ class CustomerTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(index=True)  # "order" | "payment" | "return" | "adjust"
   mode: Optional[str] = Field(default=None, index=True)  # order mode
@@ -2476,6 +870,9 @@ class CustomerTransaction(SQLModel, table=True):
   received: int = Field(default=0)
   total: int = Field(default=0)
   paid: int = Field(default=0)
+  debt_cash: int = Field(default=0)
+  debt_cylinders_12: int = Field(default=0)
+  debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
@@ -2493,6 +890,10 @@ class CompanyTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(default="refill", index=True)  # "refill" | "buy_iron" | "payment"
   buy12: int = Field(default=0)
@@ -2503,6 +904,9 @@ class CompanyTransaction(SQLModel, table=True):
   new48: int = Field(default=0)
   total: int = Field(default=0)
   paid: int = Field(default=0)
+  debt_cash: int = Field(default=0)
+  debt_cylinders_12: int = Field(default=0)
+  debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
@@ -2519,6 +923,10 @@ class InventoryAdjustment(SQLModel, table=True):
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   gas_type: str = Field(index=True)
@@ -2571,6 +979,10 @@ class CashAdjustment(SQLModel, table=True):
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   delta_cash: int
@@ -2627,7 +1039,7 @@ def list_cash_adjustments(
       delta_cash=row.delta_cash,
       reason=row.note,
       effective_at=row.happened_at,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       is_deleted=row.is_reversed,
     )
     for row in rows
@@ -2648,7 +1060,7 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
         delta_cash=existing.delta_cash,
         reason=existing.note,
         effective_at=existing.happened_at,
-        created_at=existing.happened_at,
+        created_at=existing.created_at,
         is_deleted=existing.is_reversed,
       )
   happened_at = normalize_happened_at(payload.happened_at)
@@ -2669,7 +1081,7 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
     delta_cash=adjustment.delta_cash,
     reason=adjustment.note,
     effective_at=adjustment.happened_at,
-    created_at=adjustment.happened_at,
+    created_at=adjustment.created_at,
     is_deleted=False,
   )
 
@@ -2727,7 +1139,7 @@ def update_cash_adjustment(
     delta_cash=new_adjustment.delta_cash,
     reason=new_adjustment.note,
     effective_at=new_adjustment.happened_at,
-    created_at=new_adjustment.happened_at,
+    created_at=new_adjustment.created_at,
     is_deleted=False,
   )
 
@@ -2897,8 +1309,11 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
     amount_money=amount or None,
     qty_12kg=qty_12 or None,
     qty_48kg=qty_48 or None,
+    debt_cash=base.debt_cash,
+    debt_cylinders_12=base.debt_cylinders_12,
+    debt_cylinders_48=base.debt_cylinders_48,
     system_id=base.system_id,
-    created_at=base.happened_at,
+    created_at=base.created_at,
     effective_at=base.happened_at,
     note=base.note,
   )
@@ -2961,6 +1376,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       received=0,
       total=0,
       paid=amount,
+      debt_cash=payload.debt_cash,
+      debt_cylinders_12=payload.debt_cylinders_12,
+      debt_cylinders_48=payload.debt_cylinders_48,
       note=payload.note,
       group_id=group_id,
       request_id=payload.request_id,
@@ -2986,6 +1404,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_12,
         total=0,
         paid=0,
+        debt_cash=payload.debt_cash,
+        debt_cylinders_12=payload.debt_cylinders_12,
+        debt_cylinders_48=payload.debt_cylinders_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -3006,6 +1427,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_48,
         total=0,
         paid=0,
+        debt_cash=payload.debt_cash,
+        debt_cylinders_12=payload.debt_cylinders_12,
+        debt_cylinders_48=payload.debt_cylinders_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -3048,6 +1472,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
       received=txn.received,
       total=txn.total,
       paid=txn.paid,
+      debt_cash=txn.debt_cash,
+      debt_cylinders_12=txn.debt_cylinders_12,
+      debt_cylinders_48=txn.debt_cylinders_48,
       note=f"Reversal of {txn.id}",
       reversed_id=txn.id,
       is_reversed=True,
@@ -3069,6 +1496,17 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
 
   payload_data = payload.model_dump(exclude_unset=True)
   action_type = payload_data.get("action_type") or ("payment" if base.kind == "payment" else "return")
+  debt_cash = payload_data.get("debt_cash") if payload_data.get("debt_cash") is not None else base.debt_cash
+  debt_cylinders_12 = (
+    payload_data.get("debt_cylinders_12")
+    if payload_data.get("debt_cylinders_12") is not None
+    else base.debt_cylinders_12
+  )
+  debt_cylinders_48 = (
+    payload_data.get("debt_cylinders_48")
+    if payload_data.get("debt_cylinders_48") is not None
+    else base.debt_cylinders_48
+  )
   happened_at = normalize_happened_at(payload_data.get("happened_at") or base.happened_at)
   group_id = collection_id
   new_txns: list[CustomerTransaction] = []
@@ -3089,6 +1527,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
       received=0,
       total=0,
       paid=amount,
+      debt_cash=debt_cash,
+      debt_cylinders_12=debt_cylinders_12,
+      debt_cylinders_48=debt_cylinders_48,
       note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
       group_id=group_id,
       is_reversed=False,
@@ -3115,6 +1556,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         received=qty_12,
         total=0,
         paid=0,
+        debt_cash=debt_cash,
+        debt_cylinders_12=debt_cylinders_12,
+        debt_cylinders_48=debt_cylinders_48,
         note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
         group_id=group_id,
         is_reversed=False,
@@ -3134,6 +1578,9 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         received=qty_48,
         total=0,
         paid=0,
+        debt_cash=debt_cash,
+        debt_cylinders_12=debt_cylinders_12,
+        debt_cylinders_48=debt_cylinders_48,
         note=payload_data.get("note") if payload_data.get("note") is not None else base.note,
         group_id=group_id,
         is_reversed=False,
@@ -3173,6 +1620,9 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
       received=txn.received,
       total=txn.total,
       paid=txn.paid,
+      debt_cash=txn.debt_cash,
+      debt_cylinders_12=txn.debt_cylinders_12,
+      debt_cylinders_48=txn.debt_cylinders_48,
       note=f"Reversal of {txn.id}",
       reversed_id=txn.id,
       is_reversed=True,
@@ -3485,7 +1935,7 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
     count_12kg=count_12,
     count_48kg=count_48,
     reason=base.note,
-    created_at=base.happened_at,
+    created_at=base.created_at,
   )
 
 
@@ -3857,7 +2307,7 @@ def list_expenses(
       expense_type=cats.get(row.category_id, "Other"),
       amount=row.amount,
       note=row.note,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       created_by=None,
     )
     for row in rows
@@ -3897,7 +2347,7 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
     expense_type=payload.expense_type,
     amount=expense.amount,
     note=expense.note,
-    created_at=expense.happened_at,
+    created_at=expense.created_at,
     created_by=None,
   )
 
@@ -4072,7 +2522,7 @@ def init_inventory(payload: dict, session: Session = Depends(get_session)) -> In
   empty48 = int(payload.get("empty48", 0))
   reason = payload.get("reason")
 
-  happened_at = _parse_datetime(date_str=date_str, time_str=None, time_of_day=None, at=None) or datetime.now(timezone.utc)
+  happened_at = _parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
   current = sum_inventory(session, up_to=happened_at)
 
   delta_full12 = full12 - current["full12"]
@@ -4150,7 +2600,7 @@ def list_inventory_adjustments(
       delta_empty=row.delta_empty,
       reason=row.note,
       effective_at=row.happened_at,
-      created_at=row.happened_at,
+      created_at=row.created_at,
       is_deleted=row.is_reversed,
     )
     for row in rows
@@ -4216,7 +2666,7 @@ def update_inventory_adjustment(
     delta_empty=new_adj.delta_empty,
     reason=new_adj.note,
     effective_at=new_adj.happened_at,
-    created_at=new_adj.happened_at,
+    created_at=new_adj.created_at,
     is_deleted=False,
   )
 
@@ -4277,6 +2727,9 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     new48=payload.new48,
     total=payload.total_cost,
     paid=payload.paid_now,
+    debt_cash=payload.debt_cash,
+    debt_cylinders_12=payload.debt_cylinders_12,
+    debt_cylinders_48=payload.debt_cylinders_48,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
@@ -4308,6 +2761,9 @@ def list_refills(
       return48=row.return48,
       new12=row.new12,
       new48=row.new48,
+      debt_cash=row.debt_cash,
+      debt_cylinders_12=row.debt_cylinders_12,
+      debt_cylinders_48=row.debt_cylinders_48,
       is_deleted=row.is_reversed,
       deleted_at=None,
     )
@@ -4333,6 +2789,9 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
     paid_now=row.paid,
     new12=row.new12,
     new48=row.new48,
+    debt_cash=row.debt_cash,
+    debt_cylinders_12=row.debt_cylinders_12,
+    debt_cylinders_48=row.debt_cylinders_48,
     notes=row.note,
     is_deleted=row.is_reversed,
     deleted_at=None,
@@ -4358,6 +2817,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     new48=existing.new48,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -4388,6 +2850,13 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     new48=payload.new48,
     total=payload.total_cost,
     paid=payload.paid_now,
+    debt_cash=payload.debt_cash if payload.debt_cash is not None else existing.debt_cash,
+    debt_cylinders_12=payload.debt_cylinders_12
+    if payload.debt_cylinders_12 is not None
+    else existing.debt_cylinders_12,
+    debt_cylinders_48=payload.debt_cylinders_48
+    if payload.debt_cylinders_48 is not None
+    else existing.debt_cylinders_48,
     note=payload.note,
     is_reversed=False,
   )
@@ -4408,6 +2877,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     paid_now=new_txn.paid,
     new12=new_txn.new12,
     new48=new_txn.new48,
+    debt_cash=new_txn.debt_cash,
+    debt_cylinders_12=new_txn.debt_cylinders_12,
+    debt_cylinders_48=new_txn.debt_cylinders_48,
     notes=new_txn.note,
     is_deleted=False,
     deleted_at=None,
@@ -4432,6 +2904,9 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
     new48=existing.new48,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -4475,7 +2950,7 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
     customer_id=txn.customer_id,
     system_id=txn.system_id or "",
     delivered_at=txn.happened_at,
-    created_at=txn.happened_at,
+    created_at=txn.created_at,
     updated_at=None,
     order_mode=txn.mode or "replacement",
     gas_type=txn.gas_type or "12kg",
@@ -4483,6 +2958,9 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
     cylinders_received=txn.received,
     price_total=txn.total,
     paid_amount=txn.paid,
+    debt_cash=txn.debt_cash,
+    debt_cylinders_12=txn.debt_cylinders_12,
+    debt_cylinders_48=txn.debt_cylinders_48,
     note=txn.note,
     money_balance_before=None,
     money_balance_after=None,
@@ -4648,6 +3126,9 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     received=payload.cylinders_received,
     total=payload.price_total,
     paid=payload.paid_amount or 0,
+    debt_cash=payload.debt_cash,
+    debt_cylinders_12=payload.debt_cylinders_12,
+    debt_cylinders_48=payload.debt_cylinders_48,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
@@ -4679,6 +3160,9 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     received=existing.received,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -4714,6 +3198,13 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     received=new_data.get("cylinders_received") or existing.received,
     total=new_data.get("price_total") or existing.total,
     paid=new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid,
+    debt_cash=new_data.get("debt_cash") if new_data.get("debt_cash") is not None else existing.debt_cash,
+    debt_cylinders_12=new_data.get("debt_cylinders_12")
+    if new_data.get("debt_cylinders_12") is not None
+    else existing.debt_cylinders_12,
+    debt_cylinders_48=new_data.get("debt_cylinders_48")
+    if new_data.get("debt_cylinders_48") is not None
+    else existing.debt_cylinders_48,
     note=new_data.get("note") if new_data.get("note") is not None else existing.note,
     is_reversed=False,
   )
@@ -4742,6 +3233,9 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
     received=existing.received,
     total=existing.total,
     paid=existing.paid,
+    debt_cash=existing.debt_cash,
+    debt_cylinders_12=existing.debt_cylinders_12,
+    debt_cylinders_48=existing.debt_cylinders_48,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
     is_reversed=True,
@@ -5246,7 +3740,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=txn.happened_at,
-      created_at=txn.happened_at,
+      created_at=txn.created_at,
       source_id=txn.id,
       label=None,
       label_short=None,
@@ -5285,7 +3779,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="collection_empty",
       effective_at=base.happened_at,
-      created_at=base.happened_at,
+      created_at=base.created_at,
       source_id=group_id,
       label=None,
       label_short=None,
@@ -5325,7 +3819,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="adjust",
       effective_at=adj.happened_at,
-      created_at=adj.happened_at,
+      created_at=adj.created_at,
       source_id=adj.id,
       label=None,
       label_short=None,
@@ -5386,7 +3880,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=txn.happened_at,
-      created_at=txn.happened_at,
+      created_at=txn.created_at,
       source_id=txn.id,
       label=None,
       label_short=None,
@@ -5430,7 +3924,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type=event_type,
       effective_at=expense.happened_at,
-      created_at=expense.happened_at,
+      created_at=expense.created_at,
       source_id=expense.id,
       label=None,
       label_short=None,
@@ -5469,7 +3963,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event = DailyReportV2Event(
       event_type="cash_adjust",
       effective_at=adjustment.happened_at,
-      created_at=adjustment.happened_at,
+      created_at=adjustment.created_at,
       source_id=adjustment.id,
       label=None,
       label_short=None,
@@ -5650,6 +4144,7 @@ from app.services.posting import (
     derive_day,
     post_system_init,
 )
+from app.utils.time import business_date_start_utc
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -5691,6 +4186,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
 
     now = datetime.now(timezone.utc)
     day = derive_day(now)
+    init_at = business_date_start_utc(day).replace(tzinfo=timezone.utc)
 
     # 1. Seed price catalog
     prices = [
@@ -5749,7 +4245,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             add_line("cust_cylinders_debts", entry.cyl_48, gas_type="48kg", state="empty", unit="count", customer_id=entry.customer_id)
 
     # Post to Ledger
-    post_system_init(session, source_id="system_init", happened_at=now, day=day, lines=lines)
+    post_system_init(session, source_id="system_init", happened_at=init_at, day=day, lines=lines)
 
     # 3. Finalize Settings
     settings.is_setup_completed = True
@@ -6234,6 +4730,9 @@ class OrderCreate(SQLModel):
   cylinders_received: int
   price_total: int
   paid_amount: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -6248,6 +4747,9 @@ class OrderUpdate(SQLModel):
   cylinders_received: Optional[int] = None
   price_total: Optional[int] = None
   paid_amount: Optional[int] = None
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
 
 
@@ -6264,6 +4766,9 @@ class OrderOut(SQLModel):
   cylinders_received: int
   price_total: int
   paid_amount: int
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   money_balance_before: Optional[int] = None
   money_balance_after: Optional[int] = None
@@ -6277,6 +4782,9 @@ class CollectionCreate(SQLModel):
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
@@ -6288,6 +4796,9 @@ class CollectionUpdate(SQLModel):
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
@@ -6300,6 +4811,9 @@ class CollectionEvent(SQLModel):
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   system_id: Optional[str] = None
   created_at: datetime
   effective_at: datetime
@@ -6528,6 +5042,9 @@ class InventoryRefillCreate(SQLModel):
   return48: int = 0
   total_cost: int = 0
   paid_now: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
@@ -6545,6 +5062,9 @@ class InventoryRefillSummary(SQLModel):
   return48: int
   new12: int = 0
   new48: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   is_deleted: bool = False
   deleted_at: Optional[datetime] = None
 
@@ -6556,6 +5076,9 @@ class InventoryRefillUpdate(SQLModel):
   return48: int = 0
   total_cost: int = 0
   paid_now: int = 0
+  debt_cash: Optional[int] = None
+  debt_cylinders_12: Optional[int] = None
+  debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
@@ -6574,6 +5097,9 @@ class InventoryRefillDetails(SQLModel):
   paid_now: int
   new12: int = 0
   new48: int = 0
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
   notes: Optional[str] = None
   is_deleted: bool = False
   deleted_at: Optional[datetime] = None
@@ -6834,7 +5360,7 @@ from app.models import (
   InventoryAdjustment,
   LedgerEntry,
 )
-from app.utils.time import business_date_from_utc, to_utc_naive
+from app.utils.time import business_date_from_utc, business_tz, to_utc_naive
 
 
 @dataclass(frozen=True)
@@ -6866,7 +5392,8 @@ def normalize_happened_at(value: Optional[datetime]) -> datetime:
   if value is None:
     return datetime.now(timezone.utc)
   if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
-    return value.replace(tzinfo=timezone.utc)
+    local = value.replace(tzinfo=business_tz())
+    return local.astimezone(timezone.utc)
   return value.astimezone(timezone.utc)
 
 
@@ -7394,6 +5921,10 @@ def _business_tz() -> tzinfo:
     return timezone.utc
 
 
+def business_tz() -> tzinfo:
+  return _business_tz()
+
+
 def effective_business_tz_name() -> str:
   tz = _business_tz()
   if isinstance(tz, ZoneInfo):
@@ -7432,34 +5963,6 @@ def business_date_end_utc(business_date: date) -> datetime:
   """
   next_day_start = business_date_start_utc(business_date + timedelta(days=1))
   return next_day_start - timedelta(seconds=1)
-
-FILE: backend/dockerfile
-# Use Python 3.11
-FROM python:3.11-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies for PostgreSQL (psycopg2)
-RUN apt-get update && apt-get install -y \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Poetry
-RUN pip install poetry
-
-# Copy dependency files
-COPY pyproject.toml poetry.lock* /app/
-
-# Updated install command
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --no-root
-
-# Copy the rest of the application code
-COPY . /app
-
-# The command is handled by docker-compose.yaml
 
 FILE: backend/poetry.lock
 # This file is automatically @generated by Poetry 2.2.1 and should not be changed by hand.

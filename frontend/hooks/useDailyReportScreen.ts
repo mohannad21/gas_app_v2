@@ -82,7 +82,7 @@ export function useDailyReportScreen(rangeDays = 30) {
   useEffect(() => {
     if (!v2Query.data) return;
     setV2DayByDate({});
-  }, [v2Query.data]);
+  }, [v2Query.data, v2Query.dataUpdatedAt]);
 
   const balanceSummary: BalanceSummary = useMemo(() => {
     const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];

@@ -13,6 +13,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
     return "Replace";
   }
   if (type === "collection_money") return "LatePay";
+  if (type === "collection_payout") return "Payout";
   if (type === "collection_empty") return "ReturnEmp";
   if (type === "refill") return "Refill";
   if (type === "company_payment") return "PayCompany";
@@ -48,6 +49,10 @@ export function summarizeOrderEvents(events: any[]) {
   const perCustomerMoney = new Map<string, number>();
   events.forEach((ev) => {
     if (String(ev?.event_type ?? ev?.type ?? ev?.source_type) !== "order") return;
+    const orderMode = String(ev?.order_mode ?? "replacement");
+    const isReplacement = orderMode === "replacement";
+    const isBuyIron = orderMode === "buy_iron";
+    const isSaleOrder = orderMode !== "buy_iron";
     const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
     const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
     const missing = installed - received;
@@ -55,19 +60,26 @@ export function summarizeOrderEvents(events: any[]) {
       (typeof ev?.customer_id === "string" && ev.customer_id) ||
       (typeof ev?.customer_name === "string" && ev.customer_name) ||
       `unknown:${ev?.source_id ?? ""}`;
-    if (ev?.gas_type === "12kg") {
+    if (isSaleOrder && ev?.gas_type === "12kg") {
       summary.sold12 += installed;
+    }
+    if (isSaleOrder && ev?.gas_type === "48kg") {
+      summary.sold48 += installed;
+    }
+    if (isReplacement && ev?.gas_type === "12kg") {
       perCustomerCyl12.set(customerKey, (perCustomerCyl12.get(customerKey) ?? 0) + missing);
     }
-    if (ev?.gas_type === "48kg") {
-      summary.sold48 += installed;
+    if (isReplacement && ev?.gas_type === "48kg") {
       perCustomerCyl48.set(customerKey, (perCustomerCyl48.get(customerKey) ?? 0) + missing);
     }
     const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
     const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
-    summary.total += orderTotal;
-    summary.paid += orderPaid;
-    perCustomerMoney.set(customerKey, (perCustomerMoney.get(customerKey) ?? 0) + (orderTotal - orderPaid));
+    if (isSaleOrder) {
+      summary.total += orderTotal;
+      summary.paid += orderPaid;
+    }
+    const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
+    perCustomerMoney.set(customerKey, (perCustomerMoney.get(customerKey) ?? 0) + moneyDelta);
   });
   perCustomerCyl12.forEach((net) => {
     if (net > 0) summary.missing12 += net;
@@ -101,15 +113,19 @@ export function summarizeDayNet(events: any[]) {
       `unknown:${ev?.source_id ?? ""}`;
 
     if (eventType === "order") {
+      const orderMode = String(ev?.order_mode ?? "replacement");
+      const isReplacement = orderMode === "replacement";
+      const isBuyIron = orderMode === "buy_iron";
       const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
       const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
       const missing = installed - received;
-      if (ev?.gas_type === "12kg") addNet(perCustomerCyl12, customerKey, missing);
-      if (ev?.gas_type === "48kg") addNet(perCustomerCyl48, customerKey, missing);
+      if (isReplacement && ev?.gas_type === "12kg") addNet(perCustomerCyl12, customerKey, missing);
+      if (isReplacement && ev?.gas_type === "48kg") addNet(perCustomerCyl48, customerKey, missing);
 
       const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
       const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
-      addNet(perCustomerMoney, customerKey, orderTotal - orderPaid);
+      const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
+      addNet(perCustomerMoney, customerKey, moneyDelta);
       return;
     }
 
@@ -125,6 +141,22 @@ export function summarizeDayNet(events: any[]) {
               ? ev.amount_money
               : 0;
       if (delta !== 0) addNet(perCustomerMoney, customerKey, -delta);
+      return;
+    }
+
+    if (eventType === "collection_payout") {
+      const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+      const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+      const rawDelta =
+        cashBefore != null && cashAfter != null
+          ? cashAfter - cashBefore
+          : typeof ev?.collection_amount === "number"
+            ? ev.collection_amount
+            : typeof ev?.amount_money === "number"
+              ? ev.amount_money
+              : 0;
+      const amount = Math.abs(rawDelta);
+      if (amount !== 0) addNet(perCustomerMoney, customerKey, amount);
       return;
     }
 
@@ -216,12 +248,15 @@ export function scanDaySummary(events: any[]): DaySummaryTotals {
     const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type);
 
     if (eventType === "order") {
+      const orderMode = String(ev?.order_mode ?? "replacement");
+      const isReplacement = orderMode === "replacement";
+      const isBuyIron = orderMode === "buy_iron";
       const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
       const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
       const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
       const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
-      const moneyDelta = orderTotal - orderPaid;
-      const cylDelta = installed - received;
+      const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
+      const cylDelta = isReplacement ? installed - received : 0;
       if (moneyDelta === 0 && cylDelta === 0) return;
       if (ev?.gas_type === "12kg") summary.newDebt.cyl12 += cylDelta;
       if (ev?.gas_type === "48kg") summary.newDebt.cyl48 += cylDelta;
@@ -244,6 +279,21 @@ export function scanDaySummary(events: any[]): DaySummaryTotals {
       return;
     }
 
+    if (eventType === "collection_payout") {
+      const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+      const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+      const rawDelta =
+        cashBefore != null && cashAfter != null
+          ? cashAfter - cashBefore
+          : typeof ev?.collection_amount === "number"
+            ? ev.collection_amount
+            : typeof ev?.amount_money === "number"
+              ? ev.amount_money
+              : 0;
+      const amount = Math.abs(rawDelta);
+      if (amount !== 0) summary.collections.cash -= amount;
+      return;
+    }
     if (eventType === "collection_empty") {
       let qty12 = typeof ev?.collection_qty_12kg === "number" ? ev.collection_qty_12kg : 0;
       let qty48 = typeof ev?.collection_qty_48kg === "number" ? ev.collection_qty_48kg : 0;
@@ -395,7 +445,7 @@ export function summarizeRefillEvents(events: any[]) {
 
 export function summarizeEventTypes(events: any[]) {
   const map = new Map<string, number>();
-  const hiddenTypes = new Set(["init", "init_credit", "init_return", "init_balance", "cash_init"]);
+  const hiddenTypes = new Set(["init", "init_credit", "init_return", "init_balance", "cash_init", "customer_adjust"]);
   events.forEach((ev) => {
     const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
     if (hiddenTypes.has(eventType)) return;
@@ -421,6 +471,7 @@ export function summarizeEventTypes(events: any[]) {
     adjust: "InvAdjust",
     cash_adjust: "CashAdjust",
     collection_money: "LatePay",
+    collection_payout: "Payout",
     collection_empty: "ReturnEmp",
     company_payment: "PayCompany",
     company_buy_iron: "BuyIron",
