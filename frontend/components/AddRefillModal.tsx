@@ -19,6 +19,11 @@ import {
 import { gasColor } from "@/constants/gas";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
 import {
+  calcCompanyCylinderLedgerDelta,
+  calcCompanyCylinderUiResult,
+  calcMoneyUiResult,
+} from "@/lib/ledgerMath";
+import {
   useCreateRefill,
   useInitInventory,
   useInventoryRefillDetails,
@@ -49,8 +54,6 @@ type EditRefillEntry = {
   return12: number;
   buy48: number;
   return48: number;
-  new_shells_12kg?: number;
-  new_shells_48kg?: number;
 };
 
 type AddRefillModalProps = {
@@ -105,6 +108,11 @@ function formatCount(value: number | null | undefined) {
   return value.toString();
 }
 
+function formatMoney(value: number | null | undefined) {
+  if (value === null || value === undefined) return "--";
+  return Number(value).toFixed(0);
+}
+
 function sanitizeCountInput(value: string) {
   if (!value.trim()) return "";
   const parsed = parseInt(value, 10);
@@ -128,7 +136,7 @@ export function RefillForm({
   useCard?: boolean;
   containerStyle?: any;
   scrollStyle?: any;
-  mode?: "refill" | "buy";
+  mode?: "refill" | "buy" | "return";
 }) {
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
@@ -160,18 +168,17 @@ export function RefillForm({
   const [paidTouched, setPaidTouched] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
   const [initCounts, setInitCounts] = useState({ full12: "", empty12: "", full48: "", empty48: "" });
-  const [pricesEditable, setPricesEditable] = useState(false);
-  const [ironPricesEditable, setIronPricesEditable] = useState(false);
   const [price12Input, setPrice12Input] = useState("");
   const [price48Input, setPrice48Input] = useState("");
-  const [ironPrice12Input, setIronPrice12Input] = useState("0");
-  const [ironPrice48Input, setIronPrice48Input] = useState("0");
+  const [price12Dirty, setPrice12Dirty] = useState(false);
+  const [price48Dirty, setPrice48Dirty] = useState(false);
+  const [ironPrice12Input, setIronPrice12Input] = useState("");
+  const [ironPrice48Input, setIronPrice48Input] = useState("");
   const [notes, setNotes] = useState(""); // New state for notes
-  const [newShells12, setNewShells12] = useState("");
-  const [newShells48, setNewShells48] = useState("");
   const accessoryViewId = accessoryId;
   const paidAccessoryViewId = Platform.OS === "ios" ? "refillPaidAccessory" : undefined;
   const isBuyMode = mode === "buy";
+  const isReturnMode = mode === "return";
 
   const prevVisible = useRef(visible);
   useEffect(() => {
@@ -194,8 +201,10 @@ export function RefillForm({
         setRet48Touched(true);
         setPaidTouched(false);
         setNotes(refillDetails?.notes ?? ""); // Initialize notes
-        setNewShells12(String(refillDetails?.new12 ?? ""));
-        setNewShells48(String(refillDetails?.new48 ?? ""));
+        setPrice12Dirty(false);
+        setPrice48Dirty(false);
+        setIronPrice12Input("0");
+        setIronPrice48Input("0");
       } else {
         setDate(getNowDate());
         setTime(getNowTime());
@@ -208,8 +217,10 @@ export function RefillForm({
         setPaidNow("");
         setPaidTouched(false);
         setNotes(""); // Clear notes for new entry
-        setNewShells12("");
-        setNewShells48("");
+        setPrice12Dirty(false);
+        setPrice48Dirty(false);
+        setIronPrice12Input("0");
+        setIronPrice48Input("0");
       }
       if (isBuyMode) {
         setRet12("0");
@@ -217,9 +228,13 @@ export function RefillForm({
         setRet12Touched(true);
         setRet48Touched(true);
       }
+      if (isReturnMode) {
+        setBuy12("0");
+        setBuy48("0");
+      }
     }
     prevVisible.current = visible;
-  }, [visible, editEntry, refillDetails, isBuyMode]); // Added refillDetails to dependencies
+  }, [visible, editEntry, refillDetails, isBuyMode, isReturnMode]); // Added refillDetails to dependencies
 
   useEffect(() => {
     if (!visible || !editEntry?.effective_at) return;
@@ -235,6 +250,12 @@ export function RefillForm({
     setRet12Touched(true);
     setRet48Touched(true);
   }, [isBuyMode, visible]);
+
+  useEffect(() => {
+    if (!visible || !isReturnMode) return;
+    setBuy12("0");
+    setBuy48("0");
+  }, [isReturnMode, visible]);
 
   const snapshotAt = useMemo(() => {
     if (!editEntry?.effective_at) return null;
@@ -287,71 +308,131 @@ export function RefillForm({
   const buy12Price = resolveBuyingPrice("12kg", priceTarget);
   const buy48Price = resolveBuyingPrice("48kg", priceTarget);
   useEffect(() => {
-    if (pricesEditable) return;
-    setPrice12Input(buy12Price.toString());
-    setPrice48Input(buy48Price.toString());
-  }, [buy12Price, buy48Price, pricesEditable]);
+    if (price12Dirty) return;
+    if (buy12Price > 0) {
+      setPrice12Input(buy12Price.toString());
+    }
+  }, [buy12Price, price12Dirty]);
+  useEffect(() => {
+    if (price48Dirty) return;
+    if (buy48Price > 0) {
+      setPrice48Input(buy48Price.toString());
+    }
+  }, [buy48Price, price48Dirty]);
 
-  const price12Value = pricesEditable ? Number(price12Input) || 0 : buy12Price;
-  const price48Value = pricesEditable ? Number(price48Input) || 0 : buy48Price;
-  const ironPrice12Value = ironPricesEditable ? Number(ironPrice12Input) || 0 : Number(ironPrice12Input) || 0;
-  const ironPrice48Value = ironPricesEditable ? Number(ironPrice48Input) || 0 : Number(ironPrice48Input) || 0;
+  const price12Value = Number(price12Input) || 0;
+  const price48Value = Number(price48Input) || 0;
+  const ironPrice12Value = Number(ironPrice12Input) || 0;
+  const ironPrice48Value = Number(ironPrice48Input) || 0;
 
   const buy12Value = Number(buy12) || 0;
   const buy48Value = Number(buy48) || 0;
   const ret12Value = Number(ret12) || 0;
   const ret48Value = Number(ret48) || 0;
-  const newShells12Value = Number(newShells12) || 0;
-  const newShells48Value = Number(newShells48) || 0;
-
-  const totalBuy12 = buy12Value + (isBuyMode ? 0 : newShells12Value);
-  const totalBuy48 = buy48Value + (isBuyMode ? 0 : newShells48Value);
+  const totalBuy12 = buy12Value;
+  const totalBuy48 = buy48Value;
+  const rawCylinderUi12 = isBuyMode ? 0 : calcCompanyCylinderUiResult(buy12Value, ret12Value);
+  const rawCylinderUi48 = isBuyMode ? 0 : calcCompanyCylinderUiResult(buy48Value, ret48Value);
+  const shortEmpties12 = Math.max(rawCylinderUi12, 0);
+  const shortEmpties48 = Math.max(rawCylinderUi48, 0);
+  const companyCredit12 = Math.max(calcCompanyCylinderLedgerDelta(buy12Value, ret12Value), 0);
+  const companyCredit48 = Math.max(calcCompanyCylinderLedgerDelta(buy48Value, ret48Value), 0);
 
   const reportRows = useMemo(() => {
     const rows = Array.isArray(reportsQuery.data) ? reportsQuery.data : [];
     return [...rows].sort((a, b) => String(b?.date ?? "").localeCompare(String(a?.date ?? "")));
   }, [reportsQuery.data]);
   const reportRow = reportRows[0];
-  const baseMoneyGive = Math.max(
-    0,
-    Number(reportRow?.company_end ?? 0) -
-      (editEntry ? Math.max(0, Number(refillDetails?.total_cost ?? 0) - Number(refillDetails?.paid_now ?? 0)) : 0)
-  );
-  const baseMoneyReceive = 0;
-  const line12Cost = totalBuy12 * (price12Value + (isBuyMode ? ironPrice12Value : 0));
-  const line48Cost = totalBuy48 * (price48Value + (isBuyMode ? ironPrice48Value : 0));
-  const totalCost = line12Cost + line48Cost;
+  const originalMoneyResult = editEntry
+    ? calcMoneyUiResult(Number(refillDetails?.total_cost ?? 0), Number(refillDetails?.paid_now ?? 0))
+    : 0;
+  const baseMoneyNet = Number(reportRow?.company_end ?? 0) - originalMoneyResult;
+  const line12Cost = totalBuy12 * price12Value;
+  const line48Cost = totalBuy48 * price48Value;
+  const ironLine12Cost = isBuyMode ? totalBuy12 * ironPrice12Value : 0;
+  const ironLine48Cost = isBuyMode ? totalBuy48 * ironPrice48Value : 0;
+  const totalCost = line12Cost + line48Cost + ironLine12Cost + ironLine48Cost;
   useEffect(() => {
     if (paidTouched) return;
     setPaidNow(totalCost ? totalCost.toString() : "");
   }, [totalCost, paidTouched]);
 
   const paidNowValue = Number(paidNow) || 0;
-  const owed = Math.max(0, totalCost - paidNowValue);
+  const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
+  const moneyResultIsOutflow = moneyResult > 0;
 
   const availableEmpty12 = base?.empty12 ?? 0;
   const availableEmpty48 = base?.empty48 ?? 0;
   const return12Invalid = ret12Value > availableEmpty12;
   const return48Invalid = ret48Value > availableEmpty48;
-  const liveMoneyGive = baseMoneyGive + owed;
-  const liveMoneyReceive = baseMoneyReceive;
-  const originalDelta12 = editEntry ? editEntry.return12 - editEntry.buy12 : 0;
-  const originalDelta48 = editEntry ? editEntry.return48 - editEntry.buy48 : 0;
+  const liveMoneyNet = baseMoneyNet + moneyResult;
+  const liveMoneyGive = Math.max(liveMoneyNet, 0);
+  const liveMoneyReceive = Math.max(-liveMoneyNet, 0);
+  const originalDelta12 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy12, editEntry.return12) : 0;
+  const originalDelta48 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy48, editEntry.return48) : 0;
   // Only actual swaps affect company cylinders (new shells do not).
-  const delta12 = ret12Value - buy12Value;
-  const delta48 = ret48Value - buy48Value;
+  const delta12 = isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy12Value, ret12Value);
+  const delta48 = isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy48Value, ret48Value);
 
   // Recalculate net company balance for display purposes, excluding new shells from the 'buy' side that affect company debt
   const baseCompanyNet12 = Number(reportRow?.company_12kg_end ?? 0);
   const baseCompanyNet48 = Number(reportRow?.company_48kg_end ?? 0);
   const adjustedBase12 = baseCompanyNet12 - originalDelta12;
   const adjustedBase48 = baseCompanyNet48 - originalDelta48;
+  const owedReturn12 = Math.max(-adjustedBase12, 0);
+  const owedReturn48 = Math.max(-adjustedBase48, 0);
+  const disableReturn12 = isReturnMode && owedReturn12 <= 0;
+  const disableReturn48 = isReturnMode && owedReturn48 <= 0;
   const liveCompanyNet12 = adjustedBase12 + delta12;
   const liveCompanyNet48 = adjustedBase48 + delta48;
   const liveReceive12 = Math.max(liveCompanyNet12, 0);
   const liveReceive48 = Math.max(liveCompanyNet48, 0);
   const liveGive12 = Math.max(-liveCompanyNet12, 0);
   const liveGive48 = Math.max(-liveCompanyNet48, 0);
+
+  const balanceAlertLines = useMemo(() => {
+    const lines: string[] = [];
+    if (isReturnMode) {
+      if (liveGive12 > 0) lines.push(`You return to company ${formatCount(liveGive12)} empty 12kg`);
+      if (liveGive48 > 0) lines.push(`You return to company ${formatCount(liveGive48)} empty 48kg`);
+      return lines;
+    }
+    if (isBuyMode) {
+      if (liveMoneyGive > 0) lines.push(`You pay company ${formatMoney(liveMoneyGive)}₪`);
+      if (liveMoneyReceive > 0) lines.push(`Company pays you ${formatMoney(liveMoneyReceive)}₪`);
+      return lines;
+    }
+    if (liveMoneyGive > 0) lines.push(`You pay company ${formatMoney(liveMoneyGive)}₪`);
+    if (liveMoneyReceive > 0) lines.push(`Company pays you ${formatMoney(liveMoneyReceive)}₪`);
+    if (liveGive12 > 0) lines.push(`You return to company ${formatCount(liveGive12)} empty 12kg`);
+    if (liveReceive12 > 0) lines.push(`Company gives you ${formatCount(liveReceive12)} full 12kg`);
+    if (liveGive48 > 0) lines.push(`You return to company ${formatCount(liveGive48)} empty 48kg`);
+    if (liveReceive48 > 0) lines.push(`Company gives you ${formatCount(liveReceive48)} full 48kg`);
+    return lines;
+  }, [
+    isBuyMode,
+    isReturnMode,
+    liveGive12,
+    liveGive48,
+    liveMoneyGive,
+    liveMoneyReceive,
+    liveReceive12,
+    liveReceive48,
+  ]);
+
+  useEffect(() => {
+    if (disableReturn12 && ret12Value !== 0) {
+      setRet12Touched(true);
+      setRet12("0");
+    }
+  }, [disableReturn12, ret12Value]);
+
+  useEffect(() => {
+    if (disableReturn48 && ret48Value !== 0) {
+      setRet48Touched(true);
+      setRet48("0");
+    }
+  }, [disableReturn48, ret48Value]);
 
   const full12Color = totalBuy12 > 0 ? "#f97316" : "#64748b";
   const full48Color = totalBuy48 > 0 ? "#f97316" : "#64748b";
@@ -376,12 +457,10 @@ export function RefillForm({
     updateRefill.isPending ||
     initInventory.isPending;
 
-  const payloadBuy12 = isBuyMode ? 0 : buy12Value;
-  const payloadBuy48 = isBuyMode ? 0 : buy48Value;
+  const payloadBuy12 = isReturnMode ? 0 : buy12Value;
+  const payloadBuy48 = isReturnMode ? 0 : buy48Value;
   const payloadReturn12 = isBuyMode ? 0 : ret12Value;
   const payloadReturn48 = isBuyMode ? 0 : ret48Value;
-  const payloadNewShells12 = isBuyMode ? buy12Value : newShells12Value;
-  const payloadNewShells48 = isBuyMode ? buy48Value : newShells48Value;
 
   const handleSave = async () => {
     if (!base || inventoryNotInitialized) {
@@ -412,8 +491,6 @@ export function RefillForm({
           buy48: payloadBuy48,
           return48: payloadReturn48,
           notes: notes.trim() ? notes.trim() : undefined,
-          new_shells_12kg: payloadNewShells12,
-          new_shells_48kg: payloadNewShells48,
           total_cost: totalCost,
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
@@ -429,10 +506,6 @@ export function RefillForm({
           return48: payloadReturn48,
           paid_now: paidNowValue,
           notes: notes.trim() ? notes.trim() : undefined,
-          new_shells_12kg: payloadNewShells12,
-          new_shells_48kg: payloadNewShells48,
-          paid_buy12: isBuyMode ? buy12Value : undefined,
-          paid_buy48: isBuyMode ? buy48Value : undefined,
           total_cost: totalCost,
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
@@ -465,6 +538,7 @@ export function RefillForm({
     }
   };
   const handleBuy12Change = (value: string) => {
+    if (isReturnMode) return;
     const next = sanitizeCountInput(value);
     setBuy12(next);
     if (!ret12Touched && !isBuyMode) {
@@ -472,11 +546,58 @@ export function RefillForm({
     }
   };
   const handleBuy48Change = (value: string) => {
+    if (isReturnMode) return;
     const next = sanitizeCountInput(value);
     setBuy48(next);
     if (!ret48Touched && !isBuyMode) {
       setRet48(next);
     }
+  };
+
+  const canEditBuy = !isReturnMode;
+  const canEditReturn = !isBuyMode;
+  const canEditMoney = !isReturnMode;
+  const showReturnToggle = !isBuyMode && !isReturnMode;
+  const showEmptyHint = !isBuyMode && !isReturnMode;
+
+  const adjustBuy12 = (delta: number) => {
+    if (!canEditBuy) return;
+    handleBuy12Change(String(Math.max(buy12Value + delta, 0)));
+  };
+  const adjustBuy48 = (delta: number) => {
+    if (!canEditBuy) return;
+    handleBuy48Change(String(Math.max(buy48Value + delta, 0)));
+  };
+  const adjustReturn12 = (delta: number) => {
+    if (!canEditReturn) return;
+    const next = Math.max(ret12Value + delta, 0);
+    setRet12Touched(true);
+    setRet12(String(next));
+  };
+  const adjustReturn48 = (delta: number) => {
+    if (!canEditReturn) return;
+    const next = Math.max(ret48Value + delta, 0);
+    setRet48Touched(true);
+    setRet48(String(next));
+  };
+  const adjustPaid = (delta: number) => {
+    if (!canEditMoney) return;
+    const current = Number(paidNow) || 0;
+    const next = Math.max(current + delta, 0);
+    setPaidTouched(true);
+    setPaidNow(String(next));
+  };
+  const adjustIronPrice12 = (delta: number) => {
+    if (!canEditMoney || !isBuyMode) return;
+    const current = Number(ironPrice12Input) || 0;
+    const next = Math.max(current + delta, 0);
+    setIronPrice12Input(String(next));
+  };
+  const adjustIronPrice48 = (delta: number) => {
+    if (!canEditMoney || !isBuyMode) return;
+    const current = Number(ironPrice48Input) || 0;
+    const next = Math.max(current + delta, 0);
+    setIronPrice48Input(String(next));
   };
 
   const footerActions = (
@@ -638,445 +759,722 @@ export function RefillForm({
                 </View>
               </View>
 
-              {!isBuyMode && (liveGive12 > 0 || liveGive48 > 0) ? (
+              {balanceAlertLines.length > 0 ? (
                 <View style={styles.alertBox}>
-                  {liveGive12 > 0 ? (
-                    <Text style={styles.alertText}>
-                      You owe the company{" "}
-                      <Text style={styles.alertValue}>{liveGive12}</Text> Empties 12kg. Return them now to settle
-                      your debt.
+                  {balanceAlertLines.map((line) => (
+                    <Text key={line} style={styles.alertText}>
+                      {line}
                     </Text>
-                  ) : null}
-                  {liveGive48 > 0 ? (
-                    <Text style={styles.alertText}>
-                      You owe the company{" "}
-                      <Text style={styles.alertValue}>{liveGive48}</Text> Empties 48kg. Return them now to settle
-                      your debt.
-                    </Text>
-                  ) : null}
+                  ))}
                 </View>
               ) : null}
 
               <View style={styles.section}>
-                <Text style={styles.label}>Refill input</Text>
-                {isBuyMode ? (
-                  <View style={styles.inputBlock}>
-                    <View style={styles.row}>
-                      <View style={styles.half}>
-                        <Text style={[styles.inputTitle, gasLabelStyle("12kg")]}>12kg</Text>
-                        <Text style={styles.fieldLabel}>Buy (Full)</Text>
-                        <View style={styles.stepperRow}>
-                          <Pressable
-                            style={styles.stepperBtn}
-                            onPress={() =>
-                              handleBuy12Change(String(Math.max((Number(buy12) || 0) - 1, 0)))
-                            }
-                          >
-                            <Ionicons name="remove" size={14} color="#0a7ea4" />
-                          </Pressable>
-                          <TextInput
-                            style={[styles.input, styles.stepperInput]}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={buy12}
-                            onChangeText={handleBuy12Change}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                          <Pressable
-                            style={styles.stepperBtn}
-                            onPress={() => handleBuy12Change(String((Number(buy12) || 0) + 1))}
-                          >
-                            <Ionicons name="add" size={14} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
+                <Text style={styles.label}>Cylinders</Text>
+                <View style={styles.fieldBox}>
+                  <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
+                  <View
+                    style={[styles.amountsRow, disableReturn12 && styles.sectionDisabled]}
+                    pointerEvents={disableReturn12 ? "none" : "auto"}
+                  >
+                    <View style={styles.amountCell}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Buy</Text>
+                        <Text style={styles.helperText}>
+                          {showEmptyHint ? `Empties on hand: ${availableEmpty12}` : " "}
+                        </Text>
                       </View>
-                      <View style={styles.half}>
-                        <Text style={[styles.inputTitle, gasLabelStyle("48kg")]}>48kg</Text>
-                        <Text style={styles.fieldLabel}>Buy (Full)</Text>
-                        <View style={styles.stepperRow}>
-                          <Pressable
-                            style={styles.stepperBtn}
-                            onPress={() =>
-                              handleBuy48Change(String(Math.max((Number(buy48) || 0) - 1, 0)))
-                            }
-                          >
-                            <Ionicons name="remove" size={14} color="#0a7ea4" />
+                      {canEditBuy ? (
+                        <View style={styles.stepperStack}>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy12(10)}>
+                            <Ionicons name="add" size={10} color="#0a7ea4" />
                           </Pressable>
-                          <TextInput
-                            style={[styles.input, styles.stepperInput]}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={buy48}
-                            onChangeText={handleBuy48Change}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                          <Pressable
-                            style={styles.stepperBtn}
-                            onPress={() => handleBuy48Change(String((Number(buy48) || 0) + 1))}
-                          >
-                            <Ionicons name="add" size={14} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.inputBlock}>
-                      <Text style={[styles.inputTitle, gasLabelStyle("12kg")]}>12kg</Text>
-                      <View style={styles.row}>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>Buy (Full)</Text>
-                          <Text style={styles.helperText}>You have {availableEmpty12} empties</Text>
-                          <View style={styles.stepperRow}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() =>
-                                handleBuy12Change(String(Math.max((Number(buy12) || 0) - 1, 0)))
-                              }
-                            >
-                              <Ionicons name="remove" size={14} color="#0a7ea4" />
+                          <View style={styles.amountGroup}>
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy12(-1)}>
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
                             </Pressable>
                             <TextInput
-                              style={[styles.input, styles.stepperInput]}
-                              placeholder="0"
+                              style={[styles.input, styles.amountInput]}
                               keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
                               value={buy12}
+                              editable
                               onChangeText={handleBuy12Change}
                               inputAccessoryViewID={accessoryViewId}
                             />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => handleBuy12Change(String((Number(buy12) || 0) + 1))}
-                            >
-                              <Ionicons name="add" size={14} color="#0a7ea4" />
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy12(1)}>
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
                             </Pressable>
                           </View>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy12(-10)}>
+                            <Ionicons name="remove" size={10} color="#0a7ea4" />
+                          </Pressable>
                         </View>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>Return (Empty)</Text>
-                          <Text style={styles.helperText} />
-                          <View style={styles.stepperRow}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => {
-                                const nextValue = String(Math.max((Number(ret12) || 0) - 1, 0));
-                                setRet12Touched(true);
-                                setRet12(nextValue);
-                              }}
-                            >
-                              <Ionicons name="remove" size={14} color="#0a7ea4" />
+                      ) : (
+                        <TextInput
+                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                          keyboardType="numeric"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={buy12}
+                          editable={false}
+                        />
+                      )}
+                    </View>
+                    <View style={styles.amountCell}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Return</Text>
+                        <Text style={styles.helperText}> </Text>
+                      </View>
+                      {canEditReturn && !disableReturn12 ? (
+                        <View style={styles.stepperStack}>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn12(10)}>
+                            <Ionicons name="add" size={10} color="#0a7ea4" />
+                          </Pressable>
+                          <View style={styles.amountGroup}>
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(-1)}>
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
                             </Pressable>
                             <TextInput
-                              style={[styles.input, styles.stepperInput, return12Invalid && styles.inputError]}
-                              placeholder="0"
+                              style={[
+                                styles.input,
+                                styles.amountInput,
+                                return12Invalid && styles.inputError,
+                              ]}
                               keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
                               value={ret12}
+                              editable
                               onChangeText={(value) => {
                                 setRet12Touched(true);
                                 setRet12(sanitizeCountInput(value));
                               }}
                               inputAccessoryViewID={accessoryViewId}
                             />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => {
-                                const nextValue = String((Number(ret12) || 0) + 1);
-                                setRet12Touched(true);
-                                setRet12(nextValue);
-                              }}
-                            >
-                              <Ionicons name="add" size={14} color="#0a7ea4" />
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(1)}>
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
                             </Pressable>
                           </View>
-                          {return12Invalid ? (
-                            <Text style={styles.errorText}>
-                              You only have {availableEmpty12} empty 12kg cylinders. You entered return={ret12Value}.
-                            </Text>
-                          ) : null}
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn12(-10)}>
+                            <Ionicons name="remove" size={10} color="#0a7ea4" />
+                          </Pressable>
                         </View>
-                      </View>
-                      <View style={styles.row}>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>New Shells (12kg)</Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={newShells12}
-                            onChangeText={setNewShells12}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                        </View>
-                        <View style={styles.half} />
-                      </View>
+                      ) : (
+                        <TextInput
+                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                          keyboardType="numeric"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={ret12}
+                          editable={false}
+                        />
+                      )}
                     </View>
-                    <View style={styles.inputBlock}>
-                      <Text style={[styles.inputTitle, gasLabelStyle("48kg")]}>48kg</Text>
-                      <View style={styles.row}>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>Buy (Full)</Text>
-                          <Text style={styles.helperText}>You have {availableEmpty48} empties</Text>
-                          <View style={styles.stepperRow}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() =>
-                                handleBuy48Change(String(Math.max((Number(buy48) || 0) - 1, 0)))
-                              }
-                            >
-                              <Ionicons name="remove" size={14} color="#0a7ea4" />
+                    <View style={[styles.amountCell, styles.amountCellResult]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Short empties (you owe)</Text>
+                        <Text style={styles.helperText}>Shell credit at company: {companyCredit12}</Text>
+                      </View>
+                      <View style={styles.stepperSpacer} />
+                      <TextInput
+                        style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                        value={shortEmpties12.toString()}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+                  {return12Invalid && !disableReturn12 ? (
+                    <Text style={styles.errorText}>
+                      You only have {availableEmpty12} empty 12kg cylinders. You entered return={ret12Value}.
+                    </Text>
+                  ) : null}
+                  {isReturnMode && owedReturn12 > 0 ? (
+                    <View style={[styles.amountsRow, styles.actionRow]}>
+                      <View style={styles.amountCell} />
+                      <View style={styles.amountCell}>
+                        <View style={styles.inlineActionRow}>
+                          {(() => {
+                            const isAllReturned = ret12Value === owedReturn12;
+                            return (
+                              <Pressable
+                                style={[
+                                  styles.inlineActionButton,
+                                  isAllReturned ? null : styles.inlineActionButtonSuccess,
+                                ]}
+                                onPress={() => {
+                                  setRet12Touched(true);
+                                  if (isAllReturned) {
+                                    setRet12("0");
+                                  } else {
+                                    setRet12(String(owedReturn12));
+                                  }
+                                }}
+                              >
+                                <Text style={styles.inlineActionText}>
+                                  {isAllReturned ? "Didnt return" : "Return all"}
+                                </Text>
+                              </Pressable>
+                            );
+                          })()}
+                        </View>
+                      </View>
+                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    </View>
+                  ) : showReturnToggle ? (
+                    <View style={[styles.amountsRow, styles.actionRow]}>
+                      <View style={styles.amountCell} />
+                      <View style={styles.amountCell}>
+                        <View style={styles.inlineActionRow}>
+                          {(() => {
+                            const isReturned = buy12Value > 0 && ret12Value === buy12Value;
+                            return (
+                              <Pressable
+                                style={[
+                                  styles.inlineActionButton,
+                                  isReturned ? null : styles.inlineActionButtonSuccess,
+                                ]}
+                                onPress={() => {
+                                  if (buy12Value <= 0) return;
+                                  if (isReturned) {
+                                    setRet12Touched(true);
+                                    setRet12("0");
+                                    return;
+                                  }
+                                  setRet12Touched(true);
+                                  setRet12(String(buy12Value));
+                                }}
+                              >
+                                <Text style={styles.inlineActionText}>
+                                  {isReturned ? "Didnt return" : "Returned"}
+                                </Text>
+                              </Pressable>
+                            );
+                          })()}
+                        </View>
+                      </View>
+                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    </View>
+                  ) : null}
+
+                  <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg</Text>
+                  <View
+                    style={[styles.amountsRow, disableReturn48 && styles.sectionDisabled]}
+                    pointerEvents={disableReturn48 ? "none" : "auto"}
+                  >
+                    <View style={styles.amountCell}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Buy</Text>
+                        <Text style={styles.helperText}>
+                          {showEmptyHint ? `Empties on hand: ${availableEmpty48}` : " "}
+                        </Text>
+                      </View>
+                      {canEditBuy ? (
+                        <View style={styles.stepperStack}>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy48(10)}>
+                            <Ionicons name="add" size={10} color="#0a7ea4" />
+                          </Pressable>
+                          <View style={styles.amountGroup}>
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy48(-1)}>
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
                             </Pressable>
                             <TextInput
-                              style={[styles.input, styles.stepperInput]}
-                              placeholder="0"
+                              style={[styles.input, styles.amountInput]}
                               keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
                               value={buy48}
+                              editable
                               onChangeText={handleBuy48Change}
                               inputAccessoryViewID={accessoryViewId}
                             />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => handleBuy48Change(String((Number(buy48) || 0) + 1))}
-                            >
-                              <Ionicons name="add" size={14} color="#0a7ea4" />
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy48(1)}>
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
                             </Pressable>
                           </View>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy48(-10)}>
+                            <Ionicons name="remove" size={10} color="#0a7ea4" />
+                          </Pressable>
                         </View>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>Return (Empty)</Text>
-                          <Text style={styles.helperText} />
-                          <View style={styles.stepperRow}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => {
-                                const nextValue = String(Math.max((Number(ret48) || 0) - 1, 0));
-                                setRet48Touched(true);
-                                setRet48(nextValue);
-                              }}
-                            >
-                              <Ionicons name="remove" size={14} color="#0a7ea4" />
+                      ) : (
+                        <TextInput
+                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                          keyboardType="numeric"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={buy48}
+                          editable={false}
+                        />
+                      )}
+                    </View>
+                    <View style={styles.amountCell}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Return</Text>
+                        <Text style={styles.helperText}> </Text>
+                      </View>
+                      {canEditReturn && !disableReturn48 ? (
+                        <View style={styles.stepperStack}>
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn48(10)}>
+                            <Ionicons name="add" size={10} color="#0a7ea4" />
+                          </Pressable>
+                          <View style={styles.amountGroup}>
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(-1)}>
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
                             </Pressable>
                             <TextInput
-                              style={[styles.input, styles.stepperInput, return48Invalid && styles.inputError]}
-                              placeholder="0"
+                              style={[
+                                styles.input,
+                                styles.amountInput,
+                                return48Invalid && styles.inputError,
+                              ]}
                               keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
                               value={ret48}
+                              editable
                               onChangeText={(value) => {
                                 setRet48Touched(true);
                                 setRet48(sanitizeCountInput(value));
                               }}
                               inputAccessoryViewID={accessoryViewId}
                             />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => {
-                                const nextValue = String((Number(ret48) || 0) + 1);
-                                setRet48Touched(true);
-                                setRet48(nextValue);
-                              }}
-                            >
-                              <Ionicons name="add" size={14} color="#0a7ea4" />
+                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(1)}>
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
                             </Pressable>
                           </View>
-                          {return48Invalid ? (
-                            <Text style={styles.errorText}>
-                              You only have {availableEmpty48} empty 48kg cylinders. You entered return={ret48Value}.
-                            </Text>
-                          ) : null}
+                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn48(-10)}>
+                            <Ionicons name="remove" size={10} color="#0a7ea4" />
+                          </Pressable>
                         </View>
-                      </View>
-                      <View style={styles.row}>
-                        <View style={styles.half}>
-                          <Text style={styles.fieldLabel}>New Shells (48kg)</Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={newShells48}
-                            onChangeText={setNewShells48}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                        </View>
-                        <View style={styles.half} />
-                      </View>
+                      ) : (
+                        <TextInput
+                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                          keyboardType="numeric"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={ret48}
+                          editable={false}
+                        />
+                      )}
                     </View>
-                  </>
-                )}
+                    <View style={[styles.amountCell, styles.amountCellResult]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Short empties (you owe)</Text>
+                        <Text style={styles.helperText}>Shell credit at company: {companyCredit48}</Text>
+                      </View>
+                      <View style={styles.stepperSpacer} />
+                      <TextInput
+                        style={[styles.input, styles.amountInput, styles.inputReadOnly]}
+                        value={shortEmpties48.toString()}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+                  {return48Invalid && !disableReturn48 ? (
+                    <Text style={styles.errorText}>
+                      You only have {availableEmpty48} empty 48kg cylinders. You entered return={ret48Value}.
+                    </Text>
+                  ) : null}
+                  {isReturnMode && owedReturn48 > 0 ? (
+                    <View style={[styles.amountsRow, styles.actionRow]}>
+                      <View style={styles.amountCell} />
+                      <View style={styles.amountCell}>
+                        <View style={styles.inlineActionRow}>
+                          {(() => {
+                            const isAllReturned = ret48Value === owedReturn48;
+                            return (
+                              <Pressable
+                                style={[
+                                  styles.inlineActionButton,
+                                  isAllReturned ? null : styles.inlineActionButtonSuccess,
+                                ]}
+                                onPress={() => {
+                                  setRet48Touched(true);
+                                  if (isAllReturned) {
+                                    setRet48("0");
+                                  } else {
+                                    setRet48(String(owedReturn48));
+                                  }
+                                }}
+                              >
+                                <Text style={styles.inlineActionText}>
+                                  {isAllReturned ? "Didnt return" : "Return all"}
+                                </Text>
+                              </Pressable>
+                            );
+                          })()}
+                        </View>
+                      </View>
+                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    </View>
+                  ) : showReturnToggle ? (
+                    <View style={[styles.amountsRow, styles.actionRow]}>
+                      <View style={styles.amountCell} />
+                      <View style={styles.amountCell}>
+                        <View style={styles.inlineActionRow}>
+                          {(() => {
+                            const isReturned = buy48Value > 0 && ret48Value === buy48Value;
+                            return (
+                              <Pressable
+                                style={[
+                                  styles.inlineActionButton,
+                                  isReturned ? null : styles.inlineActionButtonSuccess,
+                                ]}
+                                onPress={() => {
+                                  if (buy48Value <= 0) return;
+                                  if (isReturned) {
+                                    setRet48Touched(true);
+                                    setRet48("0");
+                                    return;
+                                  }
+                                  setRet48Touched(true);
+                                  setRet48(String(buy48Value));
+                                }}
+                              >
+                                <Text style={styles.inlineActionText}>
+                                  {isReturned ? "Didnt return" : "Returned"}
+                                </Text>
+                              </Pressable>
+                            );
+                          })()}
+                        </View>
+                      </View>
+                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    </View>
+                  ) : null}
+                </View>
               </View>
 
-              <View style={styles.section}>
-                {!isBuyMode &&
-                ((liveCompanyNet12 > 0 && totalBuy12 > 0) || (liveCompanyNet48 > 0 && totalBuy48 > 0)) ? (
-                  <View style={styles.alertBox}>
-                    {liveCompanyNet12 > 0 && totalBuy12 > 0 ? (
-                      <Text style={styles.alertText}>
-                        {liveCompanyNet12} cylinders of type 12kg are already paid.
-                      </Text>
-                    ) : null}
-                    {liveCompanyNet48 > 0 && totalBuy48 > 0 ? (
-                      <Text style={styles.alertText}>
-                        {liveCompanyNet48} cylinders of type 48kg are already paid.
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : null}
-                {!isBuyMode ? (
-                  <View style={styles.companyMoneyRow}>
-                    {liveMoneyGive ? (
-                      <Text style={styles.companyMoneyText}>
-                        You pay company <Text style={styles.companyAlertValue}>{liveMoneyGive}</Text>
-                      </Text>
-                    ) : null}
-                    {liveMoneyReceive ? (
-                      <Text style={styles.companyMoneyText}>
-                        Company gives you <Text style={styles.companyAlertValue}>{liveMoneyReceive}</Text>
-                      </Text>
-                    ) : null}
-                    {!liveMoneyGive && !liveMoneyReceive ? (
-                      <Text style={styles.companyMoneyTextMuted}>No company money balance.</Text>
-                    ) : null}
-                  </View>
-                ) : null}
-                <View style={styles.moneyHeaderRow}>
+              {!isReturnMode ? (
+                <View style={styles.section}>
                   <Text style={styles.label}>Money</Text>
-                  <View style={styles.moneyHeaderActions}>
-                    <Pressable
-                      style={styles.editPriceButton}
-                      onPress={() => setPricesEditable((prev) => !prev)}
-                    >
-                      <Text style={styles.editPriceText}>{pricesEditable ? "Done" : "Edit Prices"}</Text>
-                    </Pressable>
-                    {isBuyMode ? (
-                      <Pressable
-                        style={styles.editPriceButton}
-                        onPress={() => setIronPricesEditable((prev) => !prev)}
-                      >
-                        <Text style={styles.editPriceText}>{ironPricesEditable ? "Done" : "Edit Iron"}</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-                <View style={styles.moneyRow}>
-                  <Text style={[styles.moneyGasLabel, gasLabelStyle("12kg")]}>12kg</Text>
-                  <View style={styles.moneyRowFields}>
-                    <View style={styles.moneyQty}>
-                      <Text style={styles.fieldLabel}>Qty</Text>
-                      <Text style={styles.moneyValue}>{totalBuy12.toFixed(0)}</Text>
-                    </View>
-                    <View style={styles.moneyPrice}>
-                      <Text style={styles.fieldLabel}>{isBuyMode ? "Gas Price" : "Price"}</Text>
-                      {pricesEditable ? (
-                        <TextInput
-                          style={styles.input}
-                          keyboardType="numeric"
-                          value={price12Input}
-                          onChangeText={setPrice12Input}
-                          inputAccessoryViewID={accessoryViewId}
-                        />
-                      ) : (
-                        <Text style={styles.moneyValue}>{price12Value.toFixed(0)}</Text>
-                      )}
-                    </View>
-                    {isBuyMode ? (
-                      <View style={styles.moneyIron}>
-                        <Text style={styles.fieldLabel}>Iron Price</Text>
-                        {ironPricesEditable ? (
-                          <TextInput
-                            style={styles.input}
-                            keyboardType="numeric"
-                            value={ironPrice12Input}
-                            onChangeText={setIronPrice12Input}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                        ) : (
-                          <Text style={styles.moneyValue}>{ironPrice12Value.toFixed(0)}</Text>
-                        )}
+                  <View style={styles.fieldBox}>
+                  <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
+                  <View style={styles.amountsRow}>
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Qty</Text>
                       </View>
-                    ) : null}
-                    <View style={styles.moneyTotal}>
-                      <Text style={styles.fieldLabel}>Line</Text>
-                      <Text style={styles.moneyValue}>{line12Cost.toFixed(0)}</Text>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        value={totalBuy12.toString()}
+                        editable={false}
+                        placeholder="0"
+                      />
                     </View>
-                  </View>
-                </View>
-                <View style={styles.moneyRow}>
-                  <Text style={[styles.moneyGasLabel, gasLabelStyle("48kg")]}>48kg</Text>
-                  <View style={styles.moneyRowFields}>
-                    <View style={styles.moneyQty}>
-                      <Text style={styles.fieldLabel}>Qty</Text>
-                      <Text style={styles.moneyValue}>{totalBuy48.toFixed(0)}</Text>
-                    </View>
-                    <View style={styles.moneyPrice}>
-                      <Text style={styles.fieldLabel}>{isBuyMode ? "Gas Price" : "Price"}</Text>
-                      {pricesEditable ? (
-                        <TextInput
-                          style={styles.input}
-                          keyboardType="numeric"
-                          value={price48Input}
-                          onChangeText={setPrice48Input}
-                          inputAccessoryViewID={accessoryViewId}
-                        />
-                      ) : (
-                        <Text style={styles.moneyValue}>{price48Value.toFixed(0)}</Text>
-                      )}
-                    </View>
-                    {isBuyMode ? (
-                      <View style={styles.moneyIron}>
-                        <Text style={styles.fieldLabel}>Iron Price</Text>
-                        {ironPricesEditable ? (
-                          <TextInput
-                            style={styles.input}
-                            keyboardType="numeric"
-                            value={ironPrice48Input}
-                            onChangeText={setIronPrice48Input}
-                            inputAccessoryViewID={accessoryViewId}
-                          />
-                        ) : (
-                          <Text style={styles.moneyValue}>{ironPrice48Value.toFixed(0)}</Text>
-                        )}
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>{isBuyMode ? "Gas Price" : "Price"}</Text>
                       </View>
-                    ) : null}
-                    <View style={styles.moneyTotal}>
-                      <Text style={styles.fieldLabel}>Line</Text>
-                      <Text style={styles.moneyValue}>{line48Cost.toFixed(0)}</Text>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        keyboardType="numeric"
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={price12Input}
+                        editable={false}
+                      />
+                    </View>
+                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Result</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        value={line12Cost.toFixed(0)}
+                        editable={false}
+                        placeholder="0"
+                      />
                     </View>
                   </View>
+                  {isBuyMode ? (
+                    <>
+                      <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg Iron</Text>
+                      <View style={styles.amountsRow}>
+                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Qty</Text>
+                          </View>
+                          <TextInput
+                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                            value={totalBuy12.toString()}
+                            editable={false}
+                            placeholder="0"
+                          />
+                        </View>
+                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Iron Price</Text>
+                          </View>
+                          <View style={styles.amountGroup}>
+                            <Pressable
+                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                              onPress={() => adjustIronPrice12(-10)}
+                              disabled={!canEditMoney}
+                            >
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
+                            </Pressable>
+                            <TextInput
+                              style={[styles.input, styles.moneyInput]}
+                              keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={ironPrice12Input}
+                              editable={canEditMoney}
+                              onChangeText={(value) => {
+                                if (!canEditMoney) return;
+                                setIronPrice12Input(value);
+                              }}
+                              inputAccessoryViewID={accessoryViewId}
+                            />
+                            <Pressable
+                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                              onPress={() => adjustIronPrice12(10)}
+                              disabled={!canEditMoney}
+                            >
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
+                            </Pressable>
+                          </View>
+                        </View>
+                        <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Result</Text>
+                          </View>
+                          <TextInput
+                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                            value={ironLine12Cost.toFixed(0)}
+                            editable={false}
+                            placeholder="0"
+                          />
+                        </View>
+                      </View>
+                    </>
+                  ) : null}
+
+                  <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg</Text>
+                  <View style={styles.amountsRow}>
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Qty</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        value={totalBuy48.toString()}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>{isBuyMode ? "Gas Price" : "Price"}</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        keyboardType="numeric"
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={price48Input}
+                        editable={false}
+                      />
+                    </View>
+                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Result</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        value={line48Cost.toFixed(0)}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+                  {isBuyMode ? (
+                    <>
+                      <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg Iron</Text>
+                      <View style={styles.amountsRow}>
+                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Qty</Text>
+                          </View>
+                          <TextInput
+                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                            value={totalBuy48.toString()}
+                            editable={false}
+                            placeholder="0"
+                          />
+                        </View>
+                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Iron Price</Text>
+                          </View>
+                          <View style={styles.amountGroup}>
+                            <Pressable
+                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                              onPress={() => adjustIronPrice48(-10)}
+                              disabled={!canEditMoney}
+                            >
+                              <Ionicons name="remove" size={10} color="#0a7ea4" />
+                            </Pressable>
+                            <TextInput
+                              style={[styles.input, styles.moneyInput]}
+                              keyboardType="numeric"
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={ironPrice48Input}
+                              editable={canEditMoney}
+                              onChangeText={(value) => {
+                                if (!canEditMoney) return;
+                                setIronPrice48Input(value);
+                              }}
+                              inputAccessoryViewID={accessoryViewId}
+                            />
+                            <Pressable
+                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                              onPress={() => adjustIronPrice48(10)}
+                              disabled={!canEditMoney}
+                            >
+                              <Ionicons name="add" size={10} color="#0a7ea4" />
+                            </Pressable>
+                          </View>
+                        </View>
+                        <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
+                          <View style={styles.amountHeader}>
+                            <Text style={styles.fieldName}>Result</Text>
+                          </View>
+                          <TextInput
+                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                            value={ironLine48Cost.toFixed(0)}
+                            editable={false}
+                            placeholder="0"
+                          />
+                        </View>
+                      </View>
+                    </>
+                  ) : null}
+
+                  <View style={[styles.amountsRow, styles.totalsRow]}>
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Total</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
+                        value={totalCost.toFixed(0)}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Paid</Text>
+                      </View>
+                      <View style={styles.stepperStack}>
+                        <Pressable
+                          style={[styles.stepperTiny, !canEditMoney && styles.stepperBtnDisabled]}
+                          onPress={() => adjustPaid(50)}
+                          disabled={!canEditMoney}
+                        >
+                          <Ionicons name="add" size={10} color="#0a7ea4" />
+                        </Pressable>
+                        <View style={styles.amountGroup}>
+                          <Pressable
+                            style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                            onPress={() => adjustPaid(-1)}
+                            disabled={!canEditMoney}
+                          >
+                            <Ionicons name="remove" size={10} color="#0a7ea4" />
+                          </Pressable>
+                          <TextInput
+                            style={[
+                              styles.input,
+                              styles.moneyInput,
+                              !canEditMoney && styles.inputReadOnly,
+                            ]}
+                            keyboardType="numeric"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={paidNow}
+                            editable={canEditMoney}
+                            onChangeText={(value) => {
+                              if (!canEditMoney) return;
+                              setPaidTouched(true);
+                              setPaidNow(value);
+                            }}
+                            inputAccessoryViewID={paidAccessoryViewId}
+                          />
+                          <Pressable
+                            style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
+                            onPress={() => adjustPaid(1)}
+                            disabled={!canEditMoney}
+                          >
+                            <Ionicons name="add" size={10} color="#0a7ea4" />
+                          </Pressable>
+                        </View>
+                        <Pressable
+                          style={[styles.stepperTiny, !canEditMoney && styles.stepperBtnDisabled]}
+                          onPress={() => adjustPaid(-50)}
+                          disabled={!canEditMoney}
+                        >
+                          <Ionicons name="remove" size={10} color="#0a7ea4" />
+                        </Pressable>
+                      </View>
+                    </View>
+                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.fieldName}>Result</Text>
+                      </View>
+                      <TextInput
+                        style={[
+                          styles.input,
+                          styles.moneyInput,
+                          styles.inputReadOnly,
+                          moneyResultIsOutflow
+                            ? styles.negativeValue
+                            : moneyResult < 0
+                              ? styles.positiveValue
+                              : null,
+                        ]}
+                        value={moneyResult.toFixed(0)}
+                        editable={false}
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+                  {canEditMoney ? (
+                    <View style={[styles.amountsRow, styles.actionRow]}>
+                      <View style={styles.amountCell} />
+                      <View style={styles.amountCell}>
+                        <View style={styles.inlineActionRow}>
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
+                            ]}
+                            onPress={() => {
+                              setPaidTouched(true);
+                              if (paidNowValue === 0) {
+                                setPaidNow(String(totalCost));
+                              } else {
+                                setPaidNow("0");
+                              }
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {paidNowValue === 0 ? "Paid" : "Didnt pay"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    </View>
+                  ) : null}
+                  </View>
                 </View>
-                <View style={styles.row}>
-                  <View style={styles.third}>
-                    <Text style={styles.fieldLabel}>Total</Text>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={totalCost.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
-                  </View>
-                  <View style={styles.third}>
-                    <Text style={styles.fieldLabel}>Paid</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="0"
-                      keyboardType="numeric"
-                      value={paidNow}
-                      onChangeText={(value) => {
-                        setPaidTouched(true);
-                        setPaidNow(value);
-                      }}
-                      inputAccessoryViewID={paidAccessoryViewId}
-                    />
-                  </View>
-                  <View style={styles.third}>
-                    <Text style={styles.fieldLabel}>Remaining</Text>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={owed.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
-                  </View>
-                </View>
-              </View>
+              ) : null}
               <View style={styles.section}>
                 <Text style={styles.label}>Notes</Text>
                 <TextInput
@@ -1544,47 +1942,28 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   alertBox: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#fecaca",
-    gap: 8,
-  },
-  alertRow: {
-    gap: 8,
+    backgroundColor: "#fdecea",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#f5c6cb",
+    gap: 4,
   },
   alertText: {
-    fontSize: 12,
-    color: "#7f1d1d",
-    fontWeight: "600",
-  },
-  alertValue: {
-    fontWeight: "800",
-  },
-  alertButton: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#ef4444",
-  },
-  alertButtonText: {
-    color: "#fff",
+    color: "#b00020",
     fontWeight: "700",
     fontSize: 12,
   },
   input: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#fff",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
+    borderColor: "#d7dde4",
   },
   inputReadOnly: {
-    backgroundColor: "#f8fafc",
-    color: "#6b7280",
+    backgroundColor: "#eef2f6",
+    color: "#8a8a8a",
   },
   inputError: {
     borderColor: "#b00020",
@@ -1600,29 +1979,123 @@ const styles = StyleSheet.create({
     color: "#475569",
     marginBottom: 4,
   },
+  fieldBox: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    gap: 4,
+  },
+  gasTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  amountsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginTop: 6,
+    gap: 12,
+  },
+  totalsRow: {
+    marginTop: 12,
+  },
+  actionRow: {
+    marginTop: 2,
+  },
+  amountCell: {
+    flex: 1,
+    alignItems: "center",
+    flexDirection: "column",
+    minHeight: 80,
+    gap: 6,
+  },
+  amountCellAlignEnd: {
+    alignSelf: "stretch",
+  },
+  amountCellResult: {
+    flex: 1,
+  },
+  fieldName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+    textAlign: "center",
+    alignSelf: "center",
+  },
+  amountHeader: {
+    height: 40,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginBottom: 4,
+  },
+  amountGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  stepperStack: {
+    alignItems: "center",
+    gap: 2,
+    width: 120,
+  },
+  stepperSpacer: {
+    height: 30,
+    opacity: 0,
+  },
+  amountInput: {
+    flex: 1,
+    minWidth: 72,
+    textAlign: "center",
+    paddingHorizontal: 6,
+    height: 40,
+  },
+  moneyInput: {
+    flex: 1,
+    minWidth: 72,
+    textAlign: "center",
+    paddingHorizontal: 6,
+    height: 40,
+  },
   stepperRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   stepperBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "#e8eef1",
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
+  },
+  stepperTiny: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperBtnDisabled: {
+    opacity: 0.4,
   },
   stepperInput: {
     flex: 1,
     textAlign: "center",
   },
   helperText: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#6b7280",
-    marginTop: 4,
-    lineHeight: 14,
-    minHeight: 14,
+    lineHeight: 12,
   },
   meta: {
     color: "#444",
@@ -1727,6 +2200,40 @@ const styles = StyleSheet.create({
   companyAlertValue: {
     color: "#0a7ea4",
     fontWeight: "700",
+  },
+  inlineActionRow: {
+    marginTop: 8,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineActionButton: {
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    backgroundColor: "#dc2626",
+    minWidth: 110,
+    alignSelf: "center",
+  },
+  inlineActionButtonSuccess: {
+    backgroundColor: "#16a34a",
+  },
+  inlineActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  positiveValue: {
+    color: "#15803d",
+    fontWeight: "700",
+  },
+  negativeValue: {
+    color: "#b91c1c",
+    fontWeight: "700",
+  },
+  sectionDisabled: {
+    opacity: 0.45,
   },
   footerActions: {
     flexDirection: "row",

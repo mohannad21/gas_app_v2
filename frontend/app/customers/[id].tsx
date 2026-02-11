@@ -10,6 +10,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCustomerBalance, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
+import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 
 const formatCurrency = (value: number) => {
   const abs = Math.abs(value);
@@ -319,7 +320,13 @@ export default function CustomerDetailsScreen() {
       )}
       {orders.map((ord) => {
         const system = systems.find((s) => s.id === ord.system_id);
-        const unpaid = ord.price_total - ord.paid_amount;
+        const unpaid = calcMoneyUiResult(ord.price_total, ord.paid_amount);
+        const cylDelta = calcCustomerCylinderDelta(
+          ord.order_mode ?? "replacement",
+          ord.cylinders_installed ?? 0,
+          ord.cylinders_received ?? 0
+        );
+        const remainingCyl = Math.max(0, cylDelta);
         return (
           <Pressable key={ord.id} style={styles.orderCard} onPress={() => router.push(`/orders/${ord.id}`)}>
             <View style={styles.orderHeader}>
@@ -373,8 +380,8 @@ export default function CustomerDetailsScreen() {
                 },
                 {
                   label: "Rest",
-                  value: `${Math.max(0, (ord.cylinders_installed ?? 0) - (ord.cylinders_received ?? 0))}`,
-                  highlight: Math.max(0, (ord.cylinders_installed ?? 0) - (ord.cylinders_received ?? 0)) > 0,
+                  value: `${remainingCyl}`,
+                  highlight: remainingCyl > 0,
                 },
               ].map((stat) => (
                 <View

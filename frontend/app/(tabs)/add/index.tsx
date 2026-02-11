@@ -20,6 +20,7 @@ import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateLocale, formatDateTimeLocale, formatTimeHM, toDateKey } from "@/lib/date";
+import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { gasColor } from "@/constants/gas";
 import {
   PriceInputs,
@@ -725,12 +726,19 @@ const formatDateTime = (value?: string) => {
               }
 
               const order = item.data;
-              const unpaid = order.price_total - order.paid_amount;
+              const unpaid = calcMoneyUiResult(order.price_total, order.paid_amount ?? 0);
               const system = systemsQuery.data?.find((s) => s.id === order.system_id);
               const customer = customersQuery.data?.find((c) => c.id === order.customer_id);
               const createdAt = new Date(normalizeIso(order.created_at));
               const deliveredAt = new Date(normalizeIso(order.delivered_at));
-              const outstandingCyl = Math.max(0, order.cylinders_installed - order.cylinders_received);
+              const outstandingCyl = Math.max(
+                0,
+                calcCustomerCylinderDelta(
+                  order.order_mode ?? "replacement",
+                  order.cylinders_installed ?? 0,
+                  order.cylinders_received ?? 0
+                )
+              );
               const fullyReturned = outstandingCyl === 0;
               const returnedLabel = fullyReturned
                 ? "Returned"

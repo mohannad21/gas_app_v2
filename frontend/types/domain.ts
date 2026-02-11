@@ -130,6 +130,22 @@ export const CompanyBalancesSchema = z.object({
 });
 export type CompanyBalances = z.infer<typeof CompanyBalancesSchema>;
 
+export const CompanyPaymentSchema = z.object({
+  id: z.string(),
+  happened_at: z.string(),
+  amount: z.number(),
+  note: z.string().nullish(),
+});
+export type CompanyPayment = z.infer<typeof CompanyPaymentSchema>;
+export type CompanyPaymentCreateInput = {
+  amount: number;
+  note?: string;
+  date?: string;
+  time?: string;
+  happened_at?: string;
+  request_id?: string;
+};
+
 export const InventoryAdjustmentSchema = z
   .object({
     id: z.string(),

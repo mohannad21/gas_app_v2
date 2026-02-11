@@ -33,6 +33,7 @@ import {
   summarizeRefillEvents,
 } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateTimeYMDHM, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 
 const getEventColor = (eventType: string) => {
   const palette: Record<string, string> = {
@@ -482,10 +483,11 @@ export default function ReportsScreen() {
                             (() => {
                               const resolveSummaryType = (type: string, label: string) => {
                                 if (type.startsWith("order:")) return "order";
-                                if (type.startsWith("label:")) {
-                                  const name = label.replace(/\s+\d+$/, "");
-                                  if (["Replace", "SellFull", "BuyEmpty"].includes(name)) return "order";
-                                  if (["Refill", "BuyIron"].includes(name)) return "refill";
+                                    if (type.startsWith("label:")) {
+                                      const name = label.replace(/\s+\d+$/, "");
+                                      if (["Replace", "SellFull", "BuyEmpty"].includes(name)) return "order";
+                                      if (name === "Refill") return "refill";
+                                      if (name === "BuyIron") return "company_buy_iron";
                                   if (name === "Expense") return "expense";
                                   if (name === "CashAdjust") return "cash_adjust";
                                   if (name === "InvAdjust") return "adjust";
@@ -1142,16 +1144,16 @@ function V2Timeline({
         );
         const collectionQty12 = Number(ev?.collection_qty_12kg ?? ev?.qty_12kg ?? 0);
         const collectionQty48 = Number(ev?.collection_qty_48kg ?? ev?.qty_48kg ?? 0);
-        const orderMoneyDelta = isBuyIronOrder ? orderPaid - orderTotal : orderTotal - orderPaid;
+        const orderMoneyDelta = calcCustomerMoneyDelta(orderMode, orderTotal, orderPaid);
         const orderUnpaid = Math.max(orderMoneyDelta, 0);
         const orderCredit = Math.max(-orderMoneyDelta, 0);
         const orderMissingCyl =
           isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
-            ? Math.max(ev.order_installed - ev.order_received, 0)
+            ? Math.max(calcCustomerCylinderDelta(orderMode, ev.order_installed, ev.order_received), 0)
             : 0;
         const orderCylCredit =
           isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
-            ? Math.max(ev.order_received - ev.order_installed, 0)
+            ? Math.max(-calcCustomerCylinderDelta(orderMode, ev.order_installed, ev.order_received), 0)
             : 0;
         const installed =
           typeof ev?.order_installed === "number"
@@ -1167,8 +1169,9 @@ function V2Timeline({
               : 0;
         const refillTotal = typeof ev?.total_cost === "number" ? ev.total_cost : 0;
         const refillPaid = typeof ev?.paid_now === "number" ? ev.paid_now : 0;
-        const refillUnpaid = Math.max(refillTotal - refillPaid, 0);
-        const refillCreditCash = Math.max(refillPaid - refillTotal, 0);
+        const refillResult = calcMoneyUiResult(refillTotal, refillPaid);
+        const refillUnpaid = Math.max(refillResult, 0);
+        const refillCreditCash = Math.max(-refillResult, 0);
         const refillCredit12 =
           typeof ev?.buy12 === "number" && typeof ev?.return12 === "number"
             ? Math.max(ev.return12 - ev.buy12, 0)
@@ -1278,7 +1281,7 @@ function V2Timeline({
         const orderPaidForCash = typeof orderPaid === "number" ? orderPaid : 0;
         const orderUnpaidForCash =
           typeof orderTotal === "number" && typeof orderPaidForCash === "number"
-            ? Math.max(orderTotal - orderPaidForCash, 0)
+            ? Math.max(calcMoneyUiResult(orderTotal, orderPaidForCash), 0)
             : null;
         const cashBadgeTone =
           typeof cashDelta === "number" && typeof orderTotal === "number"

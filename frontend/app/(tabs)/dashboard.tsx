@@ -18,6 +18,7 @@ import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { gasColor } from "@/constants/gas";
 import { DailyReportV2Day } from "@/types/domain";
 import { formatHourLabel, formatTimeHM, toDateKey } from "@/lib/date";
+import { calcMoneyUiResult } from "@/lib/ledgerMath";
 
 const formatMoney = (value: number) => {
   const rounded = Math.round(value);
@@ -269,7 +270,7 @@ function DayTimeline({
             const order = event.source_id ? orderMap[event.source_id] : undefined;
             const cashDelta = event.cash_after - event.cash_before;
             const invAfter = event.inventory_after;
-            const debt = order ? Math.max(0, order.price_total - order.paid_amount) : null;
+            const debt = order ? Math.max(0, calcMoneyUiResult(order.price_total, order.paid_amount)) : null;
             return (
               <View key={`${event.event_type}-${event.source_id ?? event.effective_at}`} style={styles.eventCard}>
                 <View style={styles.eventHeader}>

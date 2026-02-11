@@ -6,6 +6,7 @@ import { useOrders, useDeleteOrder } from "@/hooks/useOrders";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useSystems } from "@/hooks/useSystems";
 import { gasColor } from "@/constants/gas";
+import { calcMoneyUiResult } from "@/lib/ledgerMath";
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,7 +42,7 @@ export default function OrderDetailsScreen() {
   }
 
   const netPaid = order.paid_amount ?? 0;
-  const remaining = order.price_total - netPaid;
+  const remaining = calcMoneyUiResult(order.price_total, netPaid);
   const formatBalance = (value?: number) => {
     const amount = value ?? 0;
     if (amount < 0) return `Credit ${Math.abs(amount).toFixed(0)}`;

@@ -600,8 +600,8 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   ).all()
   for txn in company_txns:
     event_type = "refill"
-    buy12 = txn.buy12 + txn.new12
-    buy48 = txn.buy48 + txn.new48
+    buy12 = txn.buy12
+    buy48 = txn.buy48
     return12 = txn.return12
     return48 = txn.return48
     total_cost = txn.total
@@ -615,6 +615,17 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       total_cost = txn.paid
       paid_now = txn.paid
     elif txn.kind == "buy_iron":
+      event_type = "company_buy_iron"
+      buy12 = txn.new12
+      buy48 = txn.new48
+      return12 = 0
+      return48 = 0
+    elif (
+      txn.kind == "refill"
+      and (txn.new12 or txn.new48)
+      and not (txn.buy12 or txn.buy48 or txn.return12 or txn.return48)
+    ):
+      # Legacy data: new shells stored as a refill with no swap quantities.
       event_type = "company_buy_iron"
       buy12 = txn.new12
       buy48 = txn.new48

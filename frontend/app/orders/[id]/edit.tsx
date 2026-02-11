@@ -17,6 +17,7 @@ import { useOrders, useUpdateOrder } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
 import { GasType } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
+import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 
 /**
  * 🔴 BACKEND CONTRACT (IMPORTANT)
@@ -98,8 +99,8 @@ export default function EditOrderScreen() {
   const total = Number(watch("price_total")) || 0;
   const paid = Number(watch("paid_amount")) || 0;
 
-  const diff = installed - received;
-  const remaining = Math.max(total - paid, 0);
+  const diff = calcCustomerCylinderDelta("replacement", installed, received);
+  const remaining = Math.max(calcMoneyUiResult(total, paid), 0);
 
   const updateOrder = useUpdateOrder();
 

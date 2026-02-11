@@ -16,7 +16,7 @@ from app.schemas import (
   InventoryRefillUpdate,
   InventorySnapshot,
 )
-from app.services.ledger import sum_inventory
+from app.services.ledger import snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.utils.time import business_date_start_utc
 
@@ -76,6 +76,11 @@ def _snapshot_at(session: Session, at: datetime, reason: Optional[str] = None) -
 
 def _time_of_day(value: datetime) -> str:
   return "morning" if value.hour < 12 else "evening"
+
+
+def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
+  if new12 != 0 or new48 != 0:
+    raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
 
 
 @router.get("/latest", response_model=InventorySnapshot)
@@ -299,6 +304,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
 
+  _reject_new_shells_for_refill(payload.new12, payload.new48)
   happened_at = normalize_happened_at(payload.happened_at)
   txn = CompanyTransaction(
     happened_at=happened_at,
@@ -308,19 +314,23 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     return12=payload.return12,
     buy48=payload.buy48,
     return48=payload.return48,
-    new12=payload.new12,
-    new48=payload.new48,
+    new12=0,
+    new48=0,
     total=payload.total_cost,
     paid=payload.paid_now,
-    debt_cash=payload.debt_cash,
-    debt_cylinders_12=payload.debt_cylinders_12,
-    debt_cylinders_48=payload.debt_cylinders_48,
+    debt_cash=0,
+    debt_cylinders_12=0,
+    debt_cylinders_48=0,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
   )
   session.add(txn)
   post_company_transaction(session, txn)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  txn.debt_cash = snapshot["debt_cash"]
+  txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   return _snapshot_at(session, happened_at, payload.note)
 
@@ -389,6 +399,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   if not existing or existing.is_reversed or existing.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
 
+  _reject_new_shells_for_refill(payload.new12, payload.new48)
   now = datetime.now(timezone.utc)
   reversal = CompanyTransaction(
     happened_at=now,
@@ -431,22 +442,22 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     return12=payload.return12,
     buy48=payload.buy48,
     return48=payload.return48,
-    new12=payload.new12,
-    new48=payload.new48,
+    new12=0,
+    new48=0,
     total=payload.total_cost,
     paid=payload.paid_now,
-    debt_cash=payload.debt_cash if payload.debt_cash is not None else existing.debt_cash,
-    debt_cylinders_12=payload.debt_cylinders_12
-    if payload.debt_cylinders_12 is not None
-    else existing.debt_cylinders_12,
-    debt_cylinders_48=payload.debt_cylinders_48
-    if payload.debt_cylinders_48 is not None
-    else existing.debt_cylinders_48,
+    debt_cash=0,
+    debt_cylinders_12=0,
+    debt_cylinders_48=0,
     note=payload.note,
     is_reversed=False,
   )
   session.add(new_txn)
   post_company_transaction(session, new_txn)
+  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at)
+  new_txn.debt_cash = snapshot["debt_cash"]
+  new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   session.refresh(new_txn)
   return InventoryRefillDetails(

@@ -82,6 +82,14 @@ def sum_company_cylinders(
   )
 
 
+def snapshot_company_debts(session: Session, *, up_to: Optional[datetime] = None) -> dict[str, int]:
+  return {
+    "debt_cash": sum_company_money(session, up_to=up_to),
+    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to),
+    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to),
+  }
+
+
 def sum_customer_money(session: Session, *, customer_id: str, up_to: Optional[datetime] = None) -> int:
   return sum_ledger(
     session,

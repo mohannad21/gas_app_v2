@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import uuid4
 
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel
 
 GasType = Literal["12kg", "48kg"]
@@ -12,6 +13,14 @@ OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
 
 def new_id(prefix: str = "") -> str:
   return f"{prefix}{uuid4()}"
+
+
+def _non_negative(value: Optional[int], field_name: str) -> Optional[int]:
+  if value is None:
+    return value
+  if value < 0:
+    raise ValueError(f"{field_name}_must_be_non_negative")
+  return value
 
 
 class CustomerCreate(SQLModel):
@@ -191,6 +200,11 @@ class OrderCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("cylinders_installed", "cylinders_received", "price_total", "paid_amount")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class OrderUpdate(SQLModel):
   customer_id: Optional[str] = None
@@ -206,6 +220,11 @@ class OrderUpdate(SQLModel):
   debt_cylinders_12: Optional[int] = None
   debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
+
+  @field_validator("cylinders_installed", "cylinders_received", "price_total", "paid_amount")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class OrderOut(SQLModel):
@@ -245,6 +264,11 @@ class CollectionCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("amount_money", "qty_12kg", "qty_48kg")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class CollectionUpdate(SQLModel):
   action_type: Optional[Literal["payment", "payout", "return"]] = None
@@ -257,6 +281,11 @@ class CollectionUpdate(SQLModel):
   system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
+
+  @field_validator("amount_money", "qty_12kg", "qty_48kg")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class CollectionEvent(SQLModel):
@@ -357,6 +386,11 @@ class CompanyCylinderSettleCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("quantity")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class CompanyCylinderSettleOut(SQLModel):
   id: str
@@ -397,6 +431,11 @@ class CompanyBuyIronCreate(SQLModel):
   time: Optional[str] = None
   time_of_day: Optional[Literal["morning", "evening"]] = None
   at: Optional[str] = None
+
+  @field_validator("new12", "new48", "total_cost", "paid_now")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class CompanyBuyIronOut(SQLModel):
@@ -509,6 +548,20 @@ class InventoryRefillCreate(SQLModel):
   new48: int = 0
   request_id: Optional[str] = None
 
+  @field_validator(
+    "buy12",
+    "return12",
+    "buy48",
+    "return48",
+    "total_cost",
+    "paid_now",
+    "new12",
+    "new48",
+  )
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class InventoryRefillSummary(SQLModel):
   refill_id: str
@@ -541,6 +594,20 @@ class InventoryRefillUpdate(SQLModel):
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
+
+  @field_validator(
+    "buy12",
+    "return12",
+    "buy48",
+    "return48",
+    "total_cost",
+    "paid_now",
+    "new12",
+    "new48",
+  )
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class InventoryRefillDetails(SQLModel):

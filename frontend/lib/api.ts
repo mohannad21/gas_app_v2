@@ -15,6 +15,9 @@ import {
   DailyReportV2DaySchema,
   CompanyBalances,
   CompanyBalancesSchema,
+  CompanyPayment,
+  CompanyPaymentCreateInput,
+  CompanyPaymentSchema,
   CashAdjustment,
   CashAdjustmentCreate,
   CashAdjustmentSchema,
@@ -194,6 +197,15 @@ export async function getCompanyBalances(): Promise<CompanyBalances> {
     ...parsed,
     company_money: fromMinorUnits(parsed.company_money),
   };
+}
+
+export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {
+  const { data } = await api.post("/company/payments", {
+    ...payload,
+    amount: toMinorUnits(payload.amount),
+  });
+  const parsed = parse(CompanyPaymentSchema, data);
+  return { ...parsed, amount: fromMinorUnits(parsed.amount) };
 }
 
 export async function initializeSystem(payload: SystemInitializeInput): Promise<SystemSettings> {
@@ -577,8 +589,6 @@ export async function createInventoryRefill(payload: {
   debt_cylinders_48?: number;
   reason?: string;
   notes?: string;
-  new_shells_12kg?: number;
-  new_shells_48kg?: number;
 }): Promise<InventorySnapshot> {
   const happened_at =
     payload.effective_at ?? buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
@@ -594,8 +604,6 @@ export async function createInventoryRefill(payload: {
     debt_cylinders_12: payload.debt_cylinders_12,
     debt_cylinders_48: payload.debt_cylinders_48,
     note: payload.notes ?? payload.reason,
-    new12: payload.new_shells_12kg ?? 0,
-    new48: payload.new_shells_48kg ?? 0,
   });
   return parse(InventorySnapshotSchema, data);
 }
@@ -643,8 +651,6 @@ export async function updateInventoryRefill(
     paid_buy48?: number;
     reason?: string;
     notes?: string;
-    new_shells_12kg?: number;
-    new_shells_48kg?: number;
     allow_negative?: boolean;
     total_cost?: number;
     paid_now?: number;
@@ -653,20 +659,25 @@ export async function updateInventoryRefill(
     debt_cylinders_48?: number;
   }
 ): Promise<InventoryRefillDetails> {
-  const { data } = await api.put(`/inventory/refills/${refillId}`, {
+  const body: Record<string, unknown> = {
     buy12: payload.buy12,
     return12: payload.return12,
     buy48: payload.buy48,
     return48: payload.return48,
     total_cost: toMinorUnits(payload.total_cost ?? 0),
     paid_now: toMinorUnits(payload.paid_now ?? 0),
-    debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
-    debt_cylinders_12: payload.debt_cylinders_12 ?? 0,
-    debt_cylinders_48: payload.debt_cylinders_48 ?? 0,
     note: payload.notes ?? payload.reason,
-    new12: payload.new_shells_12kg ?? 0,
-    new48: payload.new_shells_48kg ?? 0,
-  });
+  };
+  if (payload.debt_cash != null) {
+    body.debt_cash = toMinorUnits(payload.debt_cash);
+  }
+  if (payload.debt_cylinders_12 != null) {
+    body.debt_cylinders_12 = payload.debt_cylinders_12;
+  }
+  if (payload.debt_cylinders_48 != null) {
+    body.debt_cylinders_48 = payload.debt_cylinders_48;
+  }
+  const { data } = await api.put(`/inventory/refills/${refillId}`, body);
   const parsed = parse(InventoryRefillDetailsSchema, data);
   return {
     ...parsed,

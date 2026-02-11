@@ -476,6 +476,38 @@ def downgrade() -> None:
     op.drop_column("company_transactions", "created_at")
     op.drop_column("customer_transactions", "created_at")
 
+FILE: backend/alembic/versions_v2/d9f1a2b3c4d5_add_iron_prices.py
+"""add iron prices to price_catalog"""
+from __future__ import annotations
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = "d9f1a2b3c4d5"
+down_revision = "c3e2f1a4b5c6"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column(
+        "price_catalog",
+        sa.Column("sell_iron_price", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "price_catalog",
+        sa.Column("buy_iron_price", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.alter_column("price_catalog", "sell_iron_price", server_default=None)
+    op.alter_column("price_catalog", "buy_iron_price", server_default=None)
+
+
+def downgrade() -> None:
+    op.drop_column("price_catalog", "buy_iron_price")
+    op.drop_column("price_catalog", "sell_iron_price")
+
 FILE: backend/alembic.ini
 [alembic]
 script_location = alembic
@@ -798,6 +830,8 @@ class PriceCatalog(SQLModel, table=True):
   gas_type: str = Field(index=True)
   sell_price: int
   buy_price: int
+  sell_iron_price: int = Field(default=0)
+  buy_iron_price: int = Field(default=0)
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -1285,6 +1319,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
+from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -1300,12 +1335,15 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
   base = min(txns, key=lambda t: t.happened_at)
   qty_12 = sum(t.received for t in txns if t.gas_type == "12kg")
   qty_48 = sum(t.received for t in txns if t.gas_type == "48kg")
-  amount = sum(t.paid for t in txns if t.kind == "payment")
+  amount_payment = sum(t.paid for t in txns if t.kind == "payment")
+  amount_payout = sum(t.paid for t in txns if t.kind == "payout")
+  action_type = "payment" if amount_payment else "payout" if amount_payout else "return"
+  amount = amount_payment or amount_payout
   group_id = base.group_id or base.id
   return CollectionEvent(
     id=group_id,
     customer_id=base.customer_id,
-    action_type="payment" if amount else "return",
+    action_type=action_type,
     amount_money=amount or None,
     qty_12kg=qty_12 or None,
     qty_48kg=qty_48 or None,
@@ -1323,7 +1361,7 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
 def list_collections(session: Session = Depends(get_session)) -> list[CollectionEvent]:
   rows = session.exec(
     select(CustomerTransaction)
-    .where(CustomerTransaction.kind.in_(["payment", "return"]))
+    .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
     .where(CustomerTransaction.is_reversed == False)  # noqa: E712
     .order_by(CustomerTransaction.happened_at.desc())
   ).all()
@@ -1361,24 +1399,30 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
   group_id = _new_group_id()
   txns: list[CustomerTransaction] = []
 
-  if payload.action_type == "payment":
+  current_money = sum_customer_money(session, customer_id=payload.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+
+  if payload.action_type in ("payment", "payout"):
     amount = payload.amount_money or 0
     if amount <= 0:
       raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    is_payout = payload.action_type == "payout"
+    next_money = current_money + amount if is_payout else current_money - amount
     txn = CustomerTransaction(
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payment",
+      kind="payout" if is_payout else "payment",
       gas_type=None,
       installed=0,
       received=0,
       total=0,
       paid=amount,
-      debt_cash=payload.debt_cash,
-      debt_cylinders_12=payload.debt_cylinders_12,
-      debt_cylinders_48=payload.debt_cylinders_48,
+      debt_cash=next_money,
+      debt_cylinders_12=current_cyl_12,
+      debt_cylinders_48=current_cyl_48,
       note=payload.note,
       group_id=group_id,
       request_id=payload.request_id,
@@ -1393,6 +1437,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
     if qty_12 <= 0 and qty_48 <= 0:
       raise HTTPException(status_code=400, detail="return_quantity_required")
     if qty_12 > 0:
+      next_cyl_12 = current_cyl_12 - qty_12
       txn = CustomerTransaction(
         customer_id=payload.customer_id,
         system_id=payload.system_id,
@@ -1404,9 +1449,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_12,
         total=0,
         paid=0,
-        debt_cash=payload.debt_cash,
-        debt_cylinders_12=payload.debt_cylinders_12,
-        debt_cylinders_48=payload.debt_cylinders_48,
+        debt_cash=current_money,
+        debt_cylinders_12=next_cyl_12,
+        debt_cylinders_48=current_cyl_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -1415,7 +1460,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       session.add(txn)
       post_customer_transaction(session, txn)
       txns.append(txn)
+      current_cyl_12 = next_cyl_12
     if qty_48 > 0:
+      next_cyl_48 = current_cyl_48 - qty_48
       txn = CustomerTransaction(
         customer_id=payload.customer_id,
         system_id=payload.system_id,
@@ -1427,9 +1474,9 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         received=qty_48,
         total=0,
         paid=0,
-        debt_cash=payload.debt_cash,
-        debt_cylinders_12=payload.debt_cylinders_12,
-        debt_cylinders_48=payload.debt_cylinders_48,
+        debt_cash=current_money,
+        debt_cylinders_12=current_cyl_12,
+        debt_cylinders_48=next_cyl_48,
         note=payload.note,
         group_id=group_id,
         request_id=payload.request_id,
@@ -1438,6 +1485,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       session.add(txn)
       post_customer_transaction(session, txn)
       txns.append(txn)
+      current_cyl_48 = next_cyl_48
 
   session.commit()
   for txn in txns:
@@ -1495,7 +1543,13 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
     session.add(txn)
 
   payload_data = payload.model_dump(exclude_unset=True)
-  action_type = payload_data.get("action_type") or ("payment" if base.kind == "payment" else "return")
+  action_type = payload_data.get("action_type") or (
+    "payment"
+    if base.kind == "payment"
+    else "payout"
+    if base.kind == "payout"
+    else "return"
+  )
   debt_cash = payload_data.get("debt_cash") if payload_data.get("debt_cash") is not None else base.debt_cash
   debt_cylinders_12 = (
     payload_data.get("debt_cylinders_12")
@@ -1511,17 +1565,18 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
   group_id = collection_id
   new_txns: list[CustomerTransaction] = []
 
-  if action_type == "payment":
+  if action_type in ("payment", "payout"):
     amount = payload_data.get("amount_money")
     amount = amount if amount is not None else base.paid
     if amount <= 0:
       raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    is_payout = action_type == "payout"
     txn = CustomerTransaction(
       customer_id=payload_data.get("customer_id") or base.customer_id,
       system_id=payload_data.get("system_id") or base.system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payment",
+      kind="payout" if is_payout else "payment",
       gas_type=None,
       installed=0,
       received=0,
@@ -1661,7 +1716,7 @@ from app.schemas import (
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.ledger import snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
 from app.utils.time import business_date_start_utc
 
@@ -1761,6 +1816,10 @@ def settle_company_cylinders(
   )
   session.add(txn)
   post_company_transaction(session, txn)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  txn.debt_cash = snapshot["debt_cash"]
+  txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   session.refresh(txn)
 
@@ -1778,8 +1837,8 @@ def settle_company_cylinders(
 def create_company_payment(
   payload: CompanyPaymentCreate, session: Session = Depends(get_session)
 ) -> CompanyPaymentOut:
-  if payload.amount <= 0:
-    raise HTTPException(status_code=400, detail="amount_must_be_positive")
+  if payload.amount == 0:
+    raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
 
   if payload.request_id:
     existing = session.exec(
@@ -2431,7 +2490,7 @@ from app.schemas import (
   InventoryRefillUpdate,
   InventorySnapshot,
 )
-from app.services.ledger import sum_inventory
+from app.services.ledger import snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.utils.time import business_date_start_utc
 
@@ -2491,6 +2550,11 @@ def _snapshot_at(session: Session, at: datetime, reason: Optional[str] = None) -
 
 def _time_of_day(value: datetime) -> str:
   return "morning" if value.hour < 12 else "evening"
+
+
+def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
+  if new12 != 0 or new48 != 0:
+    raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
 
 
 @router.get("/latest", response_model=InventorySnapshot)
@@ -2714,6 +2778,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
 
+  _reject_new_shells_for_refill(payload.new12, payload.new48)
   happened_at = normalize_happened_at(payload.happened_at)
   txn = CompanyTransaction(
     happened_at=happened_at,
@@ -2723,19 +2788,23 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     return12=payload.return12,
     buy48=payload.buy48,
     return48=payload.return48,
-    new12=payload.new12,
-    new48=payload.new48,
+    new12=0,
+    new48=0,
     total=payload.total_cost,
     paid=payload.paid_now,
-    debt_cash=payload.debt_cash,
-    debt_cylinders_12=payload.debt_cylinders_12,
-    debt_cylinders_48=payload.debt_cylinders_48,
+    debt_cash=0,
+    debt_cylinders_12=0,
+    debt_cylinders_48=0,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
   )
   session.add(txn)
   post_company_transaction(session, txn)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  txn.debt_cash = snapshot["debt_cash"]
+  txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   return _snapshot_at(session, happened_at, payload.note)
 
@@ -2804,6 +2873,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   if not existing or existing.is_reversed or existing.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
 
+  _reject_new_shells_for_refill(payload.new12, payload.new48)
   now = datetime.now(timezone.utc)
   reversal = CompanyTransaction(
     happened_at=now,
@@ -2846,22 +2916,22 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     return12=payload.return12,
     buy48=payload.buy48,
     return48=payload.return48,
-    new12=payload.new12,
-    new48=payload.new48,
+    new12=0,
+    new48=0,
     total=payload.total_cost,
     paid=payload.paid_now,
-    debt_cash=payload.debt_cash if payload.debt_cash is not None else existing.debt_cash,
-    debt_cylinders_12=payload.debt_cylinders_12
-    if payload.debt_cylinders_12 is not None
-    else existing.debt_cylinders_12,
-    debt_cylinders_48=payload.debt_cylinders_48
-    if payload.debt_cylinders_48 is not None
-    else existing.debt_cylinders_48,
+    debt_cash=0,
+    debt_cylinders_12=0,
+    debt_cylinders_48=0,
     note=payload.note,
     is_reversed=False,
   )
   session.add(new_txn)
   post_company_transaction(session, new_txn)
+  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at)
+  new_txn.debt_cash = snapshot["debt_cash"]
+  new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   session.refresh(new_txn)
   return InventoryRefillDetails(
@@ -2943,6 +3013,11 @@ from app.services.posting import derive_day, normalize_happened_at, post_custome
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+def _money_delta_for_mode(order_mode: str, total: int, paid: int) -> int:
+  if order_mode == "buy_iron":
+    return paid - total
+  return total - paid
+
 
 def _order_out(txn: CustomerTransaction) -> OrderOut:
   return OrderOut(
@@ -2972,7 +3047,8 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
 def _compute_impact(*, customer_money: int, customer_cyl_12: int, customer_cyl_48: int, payload: OrderCreate) -> dict:
   paid = payload.paid_amount or 0
   total = payload.price_total
-  new_balance = customer_money + (total - paid)
+  money_delta = _money_delta_for_mode(payload.order_mode, total, paid)
+  new_balance = customer_money + money_delta
   cyl_delta = payload.cylinders_installed - payload.cylinders_received
   if payload.order_mode in {"sell_iron", "buy_iron"}:
     cyl_delta = 0
@@ -2984,7 +3060,7 @@ def _compute_impact(*, customer_money: int, customer_cyl_12: int, customer_cyl_4
   return {
     "gross_paid": paid,
     "applied_credit": 0,
-    "unpaid": total - paid,
+    "unpaid": money_delta,
     "new_balance": new_balance,
     "cyl_balance_before": cyl_before,
     "cyl_balance_after": cyl_after,
@@ -3114,6 +3190,18 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     )
 
   happened_at = normalize_happened_at(payload.happened_at)
+  paid_amount = payload.paid_amount or 0
+  money_delta = _money_delta_for_mode(payload.order_mode, payload.price_total, paid_amount)
+  cyl_delta = payload.cylinders_installed - payload.cylinders_received
+  if payload.order_mode in {"sell_iron", "buy_iron"}:
+    cyl_delta = 0
+  current_money = sum_customer_money(session, customer_id=payload.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+  next_money = current_money + money_delta
+  next_cyl_12 = current_cyl_12 + (cyl_delta if payload.gas_type == "12kg" else 0)
+  next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
+
   txn = CustomerTransaction(
     customer_id=payload.customer_id,
     system_id=payload.system_id,
@@ -3125,10 +3213,10 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     installed=payload.cylinders_installed,
     received=payload.cylinders_received,
     total=payload.price_total,
-    paid=payload.paid_amount or 0,
-    debt_cash=payload.debt_cash,
-    debt_cylinders_12=payload.debt_cylinders_12,
-    debt_cylinders_48=payload.debt_cylinders_48,
+    paid=paid_amount,
+    debt_cash=next_money,
+    debt_cylinders_12=next_cyl_12,
+    debt_cylinders_48=next_cyl_48,
     note=payload.note,
     request_id=payload.request_id,
     is_reversed=False,
@@ -3180,31 +3268,46 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   )
   existing.is_reversed = True
   session.add(existing)
+  session.flush()
 
   # create new order with merged payload
   new_data = existing.model_dump()
   for field, value in payload.model_dump(exclude_unset=True).items():
     new_data[field] = value
   happened_at = normalize_happened_at(new_data.get("happened_at") or existing.happened_at)
+  paid_amount = new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid
+  total_amount = new_data.get("price_total") or existing.total
+  mode = new_data.get("order_mode") or existing.mode or "replacement"
+  gas_type = new_data.get("gas_type") or existing.gas_type
+  installed = new_data.get("cylinders_installed") or existing.installed
+  received = new_data.get("cylinders_received") or existing.received
+
+  money_delta = _money_delta_for_mode(mode, total_amount, paid_amount)
+  cyl_delta = installed - received
+  if mode in {"sell_iron", "buy_iron"}:
+    cyl_delta = 0
+  current_money = sum_customer_money(session, customer_id=existing.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="48kg")
+  next_money = current_money + money_delta
+  next_cyl_12 = current_cyl_12 + (cyl_delta if gas_type == "12kg" else 0)
+  next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
+
   txn = CustomerTransaction(
     customer_id=new_data.get("customer_id") or existing.customer_id,
     system_id=new_data.get("system_id") or existing.system_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
     kind="order",
-    mode=new_data.get("order_mode") or existing.mode,
-    gas_type=new_data.get("gas_type") or existing.gas_type,
-    installed=new_data.get("cylinders_installed") or existing.installed,
-    received=new_data.get("cylinders_received") or existing.received,
-    total=new_data.get("price_total") or existing.total,
-    paid=new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid,
-    debt_cash=new_data.get("debt_cash") if new_data.get("debt_cash") is not None else existing.debt_cash,
-    debt_cylinders_12=new_data.get("debt_cylinders_12")
-    if new_data.get("debt_cylinders_12") is not None
-    else existing.debt_cylinders_12,
-    debt_cylinders_48=new_data.get("debt_cylinders_48")
-    if new_data.get("debt_cylinders_48") is not None
-    else existing.debt_cylinders_48,
+    mode=mode,
+    gas_type=gas_type,
+    installed=installed,
+    received=received,
+    total=total_amount,
+    paid=paid_amount,
+    debt_cash=next_money,
+    debt_cylinders_12=next_cyl_12,
+    debt_cylinders_48=next_cyl_48,
     note=new_data.get("note") if new_data.get("note") is not None else existing.note,
     is_reversed=False,
   )
@@ -3277,6 +3380,8 @@ def list_prices(session: Session = Depends(get_session)) -> list[PriceOut]:
       gas_type=row.gas_type,
       selling_price=row.sell_price,
       buying_price=row.buy_price,
+      selling_iron_price=row.sell_iron_price,
+      buying_iron_price=row.buy_iron_price,
       effective_from=row.effective_from,
       created_at=row.created_at,
     )
@@ -3291,6 +3396,8 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     gas_type=payload.gas_type,
     sell_price=payload.selling_price,
     buy_price=payload.buying_price,
+    sell_iron_price=payload.selling_iron_price,
+    buy_iron_price=payload.buying_iron_price,
     effective_from=effective_from,
     created_at=datetime.now(timezone.utc),
   )
@@ -3302,6 +3409,8 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     gas_type=row.gas_type,
     selling_price=row.sell_price,
     buying_price=row.buy_price,
+    selling_iron_price=row.sell_iron_price,
+    buying_iron_price=row.buy_iron_price,
     effective_from=row.effective_from,
     created_at=row.created_at,
   )
@@ -3711,7 +3820,48 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   systems = {s.id: s for s in session.exec(select(System)).all()}
   categories = {c.id: c.name for c in session.exec(select(ExpenseCategory)).all()}
 
-  events: list[tuple[datetime, DailyReportV2Event]] = []
+  events: list[DailyReportV2Event] = []
+
+  # system init entries (opening balances)
+  system_init_rows = [row for row in ledger_rows if row.source_type == "system_init"]
+  if system_init_rows:
+    by_source: dict[str, list[LedgerEntry]] = defaultdict(list)
+    for row in system_init_rows:
+      by_source[row.source_id].append(row)
+    for source_id, rows in by_source.items():
+      base = min(rows, key=lambda r: r.happened_at)
+      event = DailyReportV2Event(
+        event_type="init",
+        effective_at=base.happened_at,
+        created_at=base.happened_at,
+        source_id=source_id,
+        label=None,
+        label_short=None,
+        order_mode=None,
+        gas_type=None,
+        customer_id=None,
+        customer_name=None,
+        customer_description=None,
+        system_name=None,
+        system_type=None,
+        expense_type=None,
+        reason="System initialization",
+        buy12=None,
+        return12=None,
+        buy48=None,
+        return48=None,
+        total_cost=None,
+        paid_now=None,
+        order_total=None,
+        order_paid=None,
+        order_installed=None,
+        order_received=None,
+        cash_before=None,
+        cash_after=None,
+        inventory_before=None,
+        inventory_after=None,
+      )
+      events.append(event)
 
   # group return transactions by group_id
   customer_txns = session.exec(
@@ -3726,11 +3876,22 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       grouped_returns[txn.group_id].append(txn)
     else:
       other_txns.append(txn)
+  return_group_txn_ids: dict[str, list[str]] = {
+    group_id: [t.id for t in txns] for group_id, txns in grouped_returns.items()
+  }
 
   for txn in other_txns:
     source_key = ("customer_txn", txn.id)
     entry_rows = ledger_by_source.get(source_key, [])
-    event_type = "order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "customer_adjust"
+    event_type = (
+      "order"
+      if txn.kind == "order"
+      else "collection_money"
+      if txn.kind == "payment"
+      else "collection_payout"
+      if txn.kind == "payout"
+      else "customer_adjust"
+    )
     if txn.kind == "adjust":
       event_type = "customer_adjust"
     customer = customers.get(txn.customer_id)
@@ -3768,7 +3929,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((txn.happened_at, event))
+    events.append(event)
 
   for group_id, txns in grouped_returns.items():
     base = min(txns, key=lambda t: t.happened_at)
@@ -3807,7 +3968,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((base.happened_at, event))
+    events.append(event)
 
   # inventory adjustments
   adjustments = session.exec(
@@ -3847,7 +4008,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((adj.happened_at, event))
+    events.append(event)
 
   # company transactions
   company_txns = session.exec(
@@ -3857,8 +4018,8 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   ).all()
   for txn in company_txns:
     event_type = "refill"
-    buy12 = txn.buy12 + txn.new12
-    buy48 = txn.buy48 + txn.new48
+    buy12 = txn.buy12
+    buy48 = txn.buy48
     return12 = txn.return12
     return48 = txn.return48
     total_cost = txn.total
@@ -3872,6 +4033,17 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       total_cost = txn.paid
       paid_now = txn.paid
     elif txn.kind == "buy_iron":
+      event_type = "company_buy_iron"
+      buy12 = txn.new12
+      buy48 = txn.new48
+      return12 = 0
+      return48 = 0
+    elif (
+      txn.kind == "refill"
+      and (txn.new12 or txn.new48)
+      and not (txn.buy12 or txn.buy48 or txn.return12 or txn.return48)
+    ):
+      # Legacy data: new shells stored as a refill with no swap quantities.
       event_type = "company_buy_iron"
       buy12 = txn.new12
       buy48 = txn.new48
@@ -3908,7 +4080,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((txn.happened_at, event))
+    events.append(event)
 
   # expenses and deposits
   expenses = session.exec(
@@ -3952,7 +4124,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((expense.happened_at, event))
+    events.append(event)
 
   cash_adjustments = session.exec(
     select(CashAdjustment)
@@ -3991,10 +4163,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       inventory_before=None,
       inventory_after=None,
     )
-    events.append((adjustment.happened_at, event))
+    events.append(event)
 
   # sort and apply running balances for cash/inventory
-  events.sort(key=lambda pair: pair[0])
+  events.sort(key=lambda ev: (ev.effective_at, ev.created_at))
   running_cash = cash_start
   running_company = company_start
   running_company_12 = company_12kg_start
@@ -4003,20 +4175,27 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   running_empty = {"12kg": inventory_start.empty12, "48kg": inventory_start.empty48}
   event_rows: list[DailyReportV2Event] = []
 
-  for happened_at, event in events:
+  for event in events:
     key = (None, None)
     if event.source_id:
-      if event.event_type in {"order", "collection_money", "collection_empty", "customer_adjust"}:
+      if event.event_type in {"order", "collection_money", "collection_payout", "collection_empty", "customer_adjust"}:
         key = ("customer_txn", event.source_id)
       elif event.event_type in {"refill", "company_payment", "company_buy_iron"}:
         key = ("company_txn", event.source_id)
+      elif event.event_type == "init":
+        key = ("system_init", event.source_id)
       elif event.event_type in {"expense", "bank_deposit"}:
         key = ("expense", event.source_id)
       elif event.event_type == "cash_adjust":
         key = ("cash_adjust", event.source_id)
       elif event.event_type == "adjust":
         key = ("inventory_adjust", event.source_id)
-    entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []
+    entry_rows: list[LedgerEntry] = []
+    if event.event_type == "collection_empty" and event.source_id in return_group_txn_ids:
+      for txn_id in return_group_txn_ids[event.source_id]:
+        entry_rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
+    else:
+      entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []
     cash_delta = sum(row.amount for row in entry_rows if row.account == "cash")
     company_delta = sum(row.amount for row in entry_rows if row.account == "company_money_debts")
     company_12_delta = sum(
@@ -4074,7 +4253,8 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       event.inventory_before = inv_before
       event.inventory_after = inv_after
 
-    event_rows.append(event)
+    if event.event_type != "customer_adjust":
+      event_rows.append(event)
 
   return DailyReportV2Day(
     date=business_date.isoformat(),
@@ -4194,6 +4374,8 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             gas_type="12kg",
             sell_price=payload.sell_price_12,
             buy_price=payload.buy_price_12,
+            sell_iron_price=payload.sell_iron_price_12,
+            buy_iron_price=payload.buy_iron_price_12,
             effective_from=now,
             created_at=now,
         ),
@@ -4201,6 +4383,8 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             gas_type="48kg",
             sell_price=payload.sell_price_48,
             buy_price=payload.buy_price_48,
+            sell_iron_price=payload.sell_iron_price_48,
+            buy_iron_price=payload.buy_iron_price_48,
             effective_from=now,
             created_at=now,
         ),
@@ -4553,6 +4737,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import uuid4
 
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel
 
 GasType = Literal["12kg", "48kg"]
@@ -4561,6 +4746,14 @@ OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
 
 def new_id(prefix: str = "") -> str:
   return f"{prefix}{uuid4()}"
+
+
+def _non_negative(value: Optional[int], field_name: str) -> Optional[int]:
+  if value is None:
+    return value
+  if value < 0:
+    raise ValueError(f"{field_name}_must_be_non_negative")
+  return value
 
 
 class CustomerCreate(SQLModel):
@@ -4690,6 +4883,10 @@ class SystemInitialize(SQLModel):
   sell_price_48: int
   buy_price_12: int = 0
   buy_price_48: int = 0
+  sell_iron_price_12: int = 0
+  sell_iron_price_48: int = 0
+  buy_iron_price_12: int = 0
+  buy_iron_price_48: int = 0
   full_12: int
   empty_12: int
   full_48: int
@@ -4736,6 +4933,11 @@ class OrderCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("cylinders_installed", "cylinders_received", "price_total", "paid_amount")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class OrderUpdate(SQLModel):
   customer_id: Optional[str] = None
@@ -4751,6 +4953,11 @@ class OrderUpdate(SQLModel):
   debt_cylinders_12: Optional[int] = None
   debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
+
+  @field_validator("cylinders_installed", "cylinders_received", "price_total", "paid_amount")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class OrderOut(SQLModel):
@@ -4778,7 +4985,7 @@ class OrderOut(SQLModel):
 
 class CollectionCreate(SQLModel):
   customer_id: str
-  action_type: Literal["payment", "return"]
+  action_type: Literal["payment", "payout", "return"]
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
@@ -4790,9 +4997,14 @@ class CollectionCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("amount_money", "qty_12kg", "qty_48kg")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class CollectionUpdate(SQLModel):
-  action_type: Optional[Literal["payment", "return"]] = None
+  action_type: Optional[Literal["payment", "payout", "return"]] = None
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
@@ -4803,11 +5015,16 @@ class CollectionUpdate(SQLModel):
   happened_at: Optional[datetime] = None
   note: Optional[str] = None
 
+  @field_validator("amount_money", "qty_12kg", "qty_48kg")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class CollectionEvent(SQLModel):
   id: str
   customer_id: str
-  action_type: Literal["payment", "return"]
+  action_type: Literal["payment", "payout", "return"]
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None
@@ -4824,6 +5041,8 @@ class PriceCreate(SQLModel):
   gas_type: GasType
   selling_price: int
   buying_price: int = 0
+  selling_iron_price: int = 0
+  buying_iron_price: int = 0
   effective_from: Optional[datetime] = None
 
 
@@ -4832,6 +5051,8 @@ class PriceOut(SQLModel):
   gas_type: GasType
   selling_price: int
   buying_price: int
+  selling_iron_price: int
+  buying_iron_price: int
   effective_from: datetime
   created_at: datetime
 
@@ -4898,6 +5119,11 @@ class CompanyCylinderSettleCreate(SQLModel):
   note: Optional[str] = None
   request_id: Optional[str] = None
 
+  @field_validator("quantity")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class CompanyCylinderSettleOut(SQLModel):
   id: str
@@ -4938,6 +5164,11 @@ class CompanyBuyIronCreate(SQLModel):
   time: Optional[str] = None
   time_of_day: Optional[Literal["morning", "evening"]] = None
   at: Optional[str] = None
+
+  @field_validator("new12", "new48", "total_cost", "paid_now")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class CompanyBuyIronOut(SQLModel):
@@ -5050,6 +5281,20 @@ class InventoryRefillCreate(SQLModel):
   new48: int = 0
   request_id: Optional[str] = None
 
+  @field_validator(
+    "buy12",
+    "return12",
+    "buy48",
+    "return48",
+    "total_cost",
+    "paid_now",
+    "new12",
+    "new48",
+  )
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
+
 
 class InventoryRefillSummary(SQLModel):
   refill_id: str
@@ -5082,6 +5327,20 @@ class InventoryRefillUpdate(SQLModel):
   note: Optional[str] = None
   new12: int = 0
   new48: int = 0
+
+  @field_validator(
+    "buy12",
+    "return12",
+    "buy48",
+    "return48",
+    "total_cost",
+    "paid_now",
+    "new12",
+    "new48",
+  )
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class InventoryRefillDetails(SQLModel):
@@ -5316,6 +5575,14 @@ def sum_company_cylinders(
   )
 
 
+def snapshot_company_debts(session: Session, *, up_to: Optional[datetime] = None) -> dict[str, int]:
+  return {
+    "debt_cash": sum_company_money(session, up_to=up_to),
+    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to),
+    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to),
+  }
+
+
 def sum_customer_money(session: Session, *, customer_id: str, up_to: Optional[datetime] = None) -> int:
   return sum_ledger(
     session,
@@ -5436,7 +5703,8 @@ def _insert_ledger_entries(
 def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
   gas = txn.gas_type
   lines: list[LedgerLine] = []
-  money_delta = txn.total - txn.paid
+  is_buy_iron = txn.kind == "order" and (txn.mode or "") == "buy_iron"
+  money_delta = txn.paid - txn.total if is_buy_iron else txn.total - txn.paid
 
   if txn.kind == "order":
     mode = txn.mode or "replacement"
@@ -5506,7 +5774,7 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         LedgerLine(
           account=ACCOUNT_CASH,
           unit=UNIT_MONEY,
-          amount=txn.paid,
+          amount=-txn.paid if is_buy_iron else txn.paid,
         )
       )
 
@@ -5524,6 +5792,24 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
           account=ACCOUNT_CUST_MONEY,
           unit=UNIT_MONEY,
           amount=-txn.paid,
+          customer_id=txn.customer_id,
+        )
+      )
+
+  elif txn.kind == "payout":
+    if txn.paid:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CASH,
+          unit=UNIT_MONEY,
+          amount=-txn.paid,
+        )
+      )
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CUST_MONEY,
+          unit=UNIT_MONEY,
+          amount=txn.paid,
           customer_id=txn.customer_id,
         )
       )

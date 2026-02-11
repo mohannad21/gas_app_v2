@@ -15,7 +15,7 @@ from app.schemas import (
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.ledger import snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
 from app.utils.time import business_date_start_utc
 
@@ -115,6 +115,10 @@ def settle_company_cylinders(
   )
   session.add(txn)
   post_company_transaction(session, txn)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  txn.debt_cash = snapshot["debt_cash"]
+  txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+  txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.commit()
   session.refresh(txn)
 
@@ -132,8 +136,8 @@ def settle_company_cylinders(
 def create_company_payment(
   payload: CompanyPaymentCreate, session: Session = Depends(get_session)
 ) -> CompanyPaymentOut:
-  if payload.amount <= 0:
-    raise HTTPException(status_code=400, detail="amount_must_be_positive")
+  if payload.amount == 0:
+    raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
 
   if payload.request_id:
     existing = session.exec(

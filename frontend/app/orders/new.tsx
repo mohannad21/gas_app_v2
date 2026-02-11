@@ -29,6 +29,7 @@ import { usePriceSettings } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
+import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { GasType, OrderCreateInput } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
 
@@ -170,14 +171,11 @@ export default function NewOrderScreen() {
   const received = Number(watch("cylinders_received")) || 0;
   const totalAmount = Number(watch("price_total")) || 0;
   const paidInput = Number(watch("paid_amount")) || 0;
-  const cylinderResult =
-    currentAction === "replacement" || currentAction === "return" ? installed - received : 0;
-  const moneyDelta =
-    currentAction === "buy_iron"
-      ? paidInput - totalAmount
-      : currentAction === "payment" && paymentDirection === "payout"
-        ? paidInput
-        : totalAmount - paidInput;
+  const cylinderResult = calcCustomerCylinderDelta(currentAction, installed, received);
+  const baseMoneyDelta = calcCustomerMoneyDelta(currentAction, totalAmount, paidInput);
+  const paymentDelta =
+    paymentDirection === "payout" ? calcMoneyUiResult(paidInput, 0) : calcMoneyUiResult(0, paidInput);
+  const moneyDelta = currentAction === "payment" ? paymentDelta : baseMoneyDelta;
   const canEditInstalled = currentAction === "replacement" || isSellIron;
   const canEditReceived = currentAction === "replacement" || isBuyIron || isReturn;
   const canEditTotal = currentAction === "replacement";
@@ -187,6 +185,8 @@ export default function NewOrderScreen() {
   const unpaid = moneyDelta;
   const moneyDeltaAbs = Math.abs(unpaid);
   const moneyDeltaIsOutflow = unpaid < 0;
+  const moneyResultLabel =
+    unpaid > 0 ? "Customer owes (debt)" : unpaid < 0 ? "Customer credit" : "Settled";
   const inventoryInitBlocked = inventoryLatest.data === null;
   const inventoryPromptedRef = useRef(false);
   const [initModalVisible, setInitModalVisible] = useState(false);
@@ -274,8 +274,7 @@ export default function NewOrderScreen() {
   const hasReturnDebt12 = cylinder12Before > 0;
   const hasReturnDebt48 = cylinder48Before > 0;
   const returnTabEnabled = hasReturnDebt12 || hasReturnDebt48;
-  const orderCylinderDelta =
-    currentAction === "replacement" || currentAction === "return" ? cylinderResult : 0;
+  const orderCylinderDelta = cylinderResult;
   const orderCylinderAfter12 =
     selectedGas === "12kg" ? cylinder12Before + orderCylinderDelta : cylinder12Before;
   const orderCylinderAfter48 =
@@ -307,7 +306,6 @@ export default function NewOrderScreen() {
     };
 
     if (isPayment) {
-      const paymentDelta = paymentDirection === "payout" ? paidInput : -paidInput;
       const paymentAfter = balanceBefore + paymentDelta;
       if (paidInput <= 0) {
         return [formatMoneyDebtLine(balanceBefore)];
@@ -334,10 +332,13 @@ export default function NewOrderScreen() {
     ];
   }, [
     balanceAfter,
+    balanceBefore,
     isPayment,
     isReturn,
     orderCylinderAfter12,
     orderCylinderAfter48,
+    paidInput,
+    paymentDelta,
     paymentDirection,
     selectedCustomerEntry,
     formatMoneyAmount,
@@ -832,13 +833,12 @@ export default function NewOrderScreen() {
     }
     const total = Number(values.price_total) || 0;
     const paid = Number(values.paid_amount) || 0;
-    const moneyDeltaValue = orderMode === "buy_iron" ? paid - total : total - paid;
+    const moneyDeltaValue = calcCustomerMoneyDelta(orderMode, total, paid);
     const balanceBeforeValue = selectedCustomerEntry?.money_balance ?? 0;
     const balanceAfterValue = balanceBeforeValue + moneyDeltaValue;
     const balanceStatus =
       balanceAfterValue < 0 ? "Credit" : balanceAfterValue > 0 ? "Debt" : "Settled";
-    const cylDelta =
-      orderMode === "replacement" ? installedCount - receivedCount : 0;
+    const cylDelta = calcCustomerCylinderDelta(orderMode, installedCount, receivedCount);
     const balanceBeforeCyl =
       gasType === "12kg"
         ? selectedCustomerEntry?.cylinder_balance_12kg ?? 0
@@ -2276,7 +2276,7 @@ Resulting ${balanceStatus}: ${Math.abs(
             </View>
 
             <View style={[styles.amountCell, styles.amountCellResult]}>
-              <Text style={styles.fieldName}>Money Result</Text>
+              <Text style={styles.fieldName}>{moneyResultLabel}</Text>
               <View style={styles.stackAlign}>
                 <TextInput
                   style={[
@@ -2303,18 +2303,19 @@ Resulting ${balanceStatus}: ${Math.abs(
                           ? Math.max(0, -balanceBefore)
                           : Math.max(0, balanceBefore);
                       const isPaid = owed > 0 && paidInput === owed;
-                      const actionLabel = paymentDirection === "payout"
-                        ? isPaid
-                          ? "Didnt payout"
-                          : "Payout all"
-                        : isPaid
-                          ? "Didnt receive"
-                          : "Receive all";
+                      const actionLabel =
+                        paymentDirection === "payout"
+                          ? isPaid
+                            ? "Paid out"
+                            : "Payout all"
+                          : isPaid
+                            ? "Received"
+                            : "Receive all";
                       return (
                         <Pressable
                           style={[
                             styles.inlineActionButton,
-                            isPaid ? null : styles.inlineActionButtonSuccess,
+                            isPaid ? styles.inlineActionButtonSuccess : null,
                           ]}
                           onPress={() => {
                             if (owed <= 0) return;

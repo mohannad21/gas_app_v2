@@ -1,3 +1,10 @@
+import {
+  calcCompanyCylinderUiResult,
+  calcCustomerCylinderDelta,
+  calcCustomerMoneyDelta,
+  calcMoneyUiResult,
+} from "@/lib/ledgerMath";
+
 export type DaySummaryTotals = {
   newDebt: { cash: number; cyl12: number; cyl48: number };
   collections: { cash: number; cyl12: number; cyl48: number };
@@ -51,11 +58,10 @@ export function summarizeOrderEvents(events: any[]) {
     if (String(ev?.event_type ?? ev?.type ?? ev?.source_type) !== "order") return;
     const orderMode = String(ev?.order_mode ?? "replacement");
     const isReplacement = orderMode === "replacement";
-    const isBuyIron = orderMode === "buy_iron";
     const isSaleOrder = orderMode !== "buy_iron";
     const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
     const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
-    const missing = installed - received;
+    const missing = calcCustomerCylinderDelta(orderMode, installed, received);
     const customerKey =
       (typeof ev?.customer_id === "string" && ev.customer_id) ||
       (typeof ev?.customer_name === "string" && ev.customer_name) ||
@@ -78,7 +84,7 @@ export function summarizeOrderEvents(events: any[]) {
       summary.total += orderTotal;
       summary.paid += orderPaid;
     }
-    const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
+    const moneyDelta = calcCustomerMoneyDelta(orderMode, orderTotal, orderPaid);
     perCustomerMoney.set(customerKey, (perCustomerMoney.get(customerKey) ?? 0) + moneyDelta);
   });
   perCustomerCyl12.forEach((net) => {
@@ -115,16 +121,15 @@ export function summarizeDayNet(events: any[]) {
     if (eventType === "order") {
       const orderMode = String(ev?.order_mode ?? "replacement");
       const isReplacement = orderMode === "replacement";
-      const isBuyIron = orderMode === "buy_iron";
       const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
       const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
-      const missing = installed - received;
+      const missing = calcCustomerCylinderDelta(orderMode, installed, received);
       if (isReplacement && ev?.gas_type === "12kg") addNet(perCustomerCyl12, customerKey, missing);
       if (isReplacement && ev?.gas_type === "48kg") addNet(perCustomerCyl48, customerKey, missing);
 
       const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
       const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
-      const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
+      const moneyDelta = calcCustomerMoneyDelta(orderMode, orderTotal, orderPaid);
       addNet(perCustomerMoney, customerKey, moneyDelta);
       return;
     }
@@ -250,13 +255,12 @@ export function scanDaySummary(events: any[]): DaySummaryTotals {
     if (eventType === "order") {
       const orderMode = String(ev?.order_mode ?? "replacement");
       const isReplacement = orderMode === "replacement";
-      const isBuyIron = orderMode === "buy_iron";
       const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
       const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
       const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;
       const received = typeof ev?.order_received === "number" ? ev.order_received : 0;
-      const moneyDelta = isBuyIron ? orderPaid - orderTotal : orderTotal - orderPaid;
-      const cylDelta = isReplacement ? installed - received : 0;
+      const moneyDelta = calcCustomerMoneyDelta(orderMode, orderTotal, orderPaid);
+      const cylDelta = calcCustomerCylinderDelta(orderMode, installed, received);
       if (moneyDelta === 0 && cylDelta === 0) return;
       if (ev?.gas_type === "12kg") summary.newDebt.cyl12 += cylDelta;
       if (ev?.gas_type === "48kg") summary.newDebt.cyl48 += cylDelta;
@@ -319,8 +323,8 @@ export function scanDaySummary(events: any[]): DaySummaryTotals {
       const ret12 = typeof ev?.return12 === "number" ? ev.return12 : 0;
       const buy48 = typeof ev?.buy48 === "number" ? ev.buy48 : 0;
       const ret48 = typeof ev?.return48 === "number" ? ev.return48 : 0;
-      if (buy12 || ret12) summary.business.cyl12 += buy12 - ret12;
-      if (buy48 || ret48) summary.business.cyl48 += buy48 - ret48;
+      if (buy12 || ret12) summary.business.cyl12 += calcCompanyCylinderUiResult(buy12, ret12);
+      if (buy48 || ret48) summary.business.cyl48 += calcCompanyCylinderUiResult(buy48, ret48);
       return;
     }
 
@@ -439,7 +443,7 @@ export function summarizeRefillEvents(events: any[]) {
     summary.total += totalCost;
     summary.paid += paidNow;
   });
-  summary.unpaid = summary.total - summary.paid;
+  summary.unpaid = calcMoneyUiResult(summary.total, summary.paid);
   return summary;
 }
 

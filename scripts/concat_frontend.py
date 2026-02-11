@@ -148,15 +148,14 @@ def iter_files(base: Path) -> list[Path]:
 
 def collect_frontend_files() -> list[Path]:
     files: set[Path] = set()
-    for rel_dir in FRONTEND_DIRS:
-        base = FRONTEND_ROOT / rel_dir
-        if base.exists():
-            files.update(iter_files(base))
+    
+    # Scan the entire frontend root instead of specific subfolders
+    if FRONTEND_ROOT.exists():
+        files.update(iter_files(FRONTEND_ROOT))
 
+    # Keep this for individual files explicitly defined
     for file_path in FRONTEND_FILES:
-        if not file_path.exists():
-            raise SystemExit(f"Missing frontend file: {file_path}")
-        if is_text_file(file_path):
+        if file_path.exists() and is_text_file(file_path):
             files.add(file_path)
 
     return sorted(files)

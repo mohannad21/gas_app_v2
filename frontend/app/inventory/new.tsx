@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
+import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
 import {
   useAdjustInventory,
   useInventoryAdjustments,
@@ -30,7 +31,7 @@ import { useDailyReportsV2 } from "@/hooks/useReports";
 import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
 import { formatDateLocale, formatTimeHM, toDateKey } from "@/lib/date";
 
-type InventoryTab = "refill" | "buy" | "cash" | "inventory";
+type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
 
 function getLocalDateString() {
   const now = new Date();
@@ -655,6 +656,264 @@ function CashAdjustForm({
   );
 }
 
+function CompanyPaymentForm({
+  visible,
+  date,
+  accessoryId,
+  companyBalance,
+  onCreate,
+  onSaved,
+  onCancel,
+}: {
+  visible: boolean;
+  date: string;
+  accessoryId?: string;
+  companyBalance: number;
+  onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [payDate, setPayDate] = useState(() => date);
+  const [payTime, setPayTime] = useState(() => getNowTime());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
+  const [paymentDirection, setPaymentDirection] = useState<"pay" | "receive">("pay");
+
+  useEffect(() => {
+    if (!visible) return;
+    setAmount("");
+    setNote("");
+    setPayDate(date);
+    setPayTime(getNowTime());
+  }, [visible, date]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (companyBalance > 0) {
+      setPaymentDirection("pay");
+    } else if (companyBalance < 0) {
+      setPaymentDirection("receive");
+    }
+  }, [companyBalance, visible]);
+
+  const amountValue = Number(amount) || 0;
+  const totalDue = Math.abs(companyBalance);
+  const remainingDue = Math.max(totalDue - amountValue, 0);
+  const resultValue = totalDue - amountValue;
+  const payDisabled = companyBalance <= 0;
+  const receiveDisabled = companyBalance >= 0;
+  const tableDisabled = companyBalance === 0;
+  const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
+
+  const save = async () => {
+    if (amountValue <= 0) {
+      Alert.alert("Missing amount", "Enter a payment amount.");
+      return;
+    }
+    try {
+      await onCreate({
+        date: payDate,
+        time: payTime,
+        amount: normalizedAmount,
+        note: note.trim() || undefined,
+      });
+      onSaved();
+    } catch (err: any) {
+      Alert.alert("Payment failed", err?.response?.data?.detail ?? "Failed to save payment.");
+    }
+  };
+
+  const stepValue = (delta: number) => {
+    const current = Number(amount) || 0;
+    setAmount(String(Math.max(current + delta, 0)));
+  };
+
+  return (
+    <View style={[styles.hubForm, styles.hubSectionCard]}>
+      <Text style={styles.modalLabel}>Date & time</Text>
+      <View style={styles.row}>
+        <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
+          <Text style={styles.dateText}>{payDate}</Text>
+          <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
+        </Pressable>
+        <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
+          <Text style={styles.dateText}>{payTime}</Text>
+          <Ionicons name="time-outline" size={16} color="#0a7ea4" />
+        </Pressable>
+      </View>
+      {totalDue > 0 ? (
+        <View style={styles.alertBox}>
+          <Text style={styles.alertText}>
+            {companyBalance > 0
+              ? `You pay company ${remainingDue.toFixed(0)}`
+              : `Company pays you ${remainingDue.toFixed(0)}`}
+          </Text>
+        </View>
+      ) : null}
+      <Text style={styles.modalLabel}>Payment direction</Text>
+      <View style={styles.modeRow}>
+        <Pressable
+          onPress={() => {
+            if (receiveDisabled) return;
+            setPaymentDirection("receive");
+          }}
+          disabled={receiveDisabled}
+          style={[
+            styles.modeButton,
+            paymentDirection === "receive" && styles.modeButtonActive,
+            receiveDisabled && styles.modeButtonDisabled,
+          ]}
+        >
+          <Text
+            style={[
+              styles.modeText,
+              paymentDirection === "receive" && styles.modeTextActive,
+              receiveDisabled && styles.modeTextDisabled,
+            ]}
+          >
+            Receive
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (payDisabled) return;
+            setPaymentDirection("pay");
+          }}
+          disabled={payDisabled}
+          style={[
+            styles.modeButton,
+            paymentDirection === "pay" && styles.modeButtonActive,
+            payDisabled && styles.modeButtonDisabled,
+          ]}
+        >
+          <Text
+            style={[
+              styles.modeText,
+              paymentDirection === "pay" && styles.modeTextActive,
+              payDisabled && styles.modeTextDisabled,
+            ]}
+          >
+            Pay
+          </Text>
+        </Pressable>
+      </View>
+      <View style={[styles.fieldBox, tableDisabled && styles.sectionDisabled]} pointerEvents={tableDisabled ? "none" : "auto"}>
+        <View style={styles.amountsRow}>
+          <View style={[styles.amountCell, styles.paymentCell]}>
+            <Text style={styles.fieldName}>Total</Text>
+            <TextInput
+              style={[styles.modalInput, styles.amountInput, styles.inputReadOnly]}
+              value="0"
+              editable={false}
+              placeholder="0"
+            />
+          </View>
+          <View style={[styles.amountCell, styles.paymentCell]}>
+            <Text style={styles.fieldName}>Paid</Text>
+            <View style={styles.stepperStack}>
+              <Pressable style={styles.stepperTiny} onPress={() => stepValue(50)}>
+                <Ionicons name="add" size={10} color="#0a7ea4" />
+              </Pressable>
+              <View style={styles.amountGroup}>
+                <Pressable style={styles.stepperBtnSmall} onPress={() => stepValue(-1)}>
+                  <Ionicons name="remove" size={10} color="#0a7ea4" />
+                </Pressable>
+                <TextInput
+                  style={[styles.modalInput, styles.amountInput]}
+                  placeholder="0"
+                  keyboardType="number-pad"
+                  value={amount}
+                  onChangeText={setAmount}
+                  inputAccessoryViewID={accessoryId}
+                />
+                <Pressable style={styles.stepperBtnSmall} onPress={() => stepValue(1)}>
+                  <Ionicons name="add" size={10} color="#0a7ea4" />
+                </Pressable>
+              </View>
+              <Pressable style={styles.stepperTiny} onPress={() => stepValue(-50)}>
+                <Ionicons name="remove" size={10} color="#0a7ea4" />
+              </Pressable>
+            </View>
+            <View style={[styles.inlineActionRow, styles.paymentActionRow]}>
+              <Pressable
+                style={[
+                  styles.inlineActionButton,
+                  amountValue === 0 ? styles.inlineActionButtonSuccess : null,
+                ]}
+                onPress={() => {
+                  if (amountValue === 0) {
+                    setAmount(totalDue.toFixed(0));
+                  } else {
+                    setAmount("0");
+                  }
+                }}
+              >
+                <Text style={styles.inlineActionText}>
+                  {paymentDirection === "receive" ? "Receive all" : "Pay all"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+          <View style={[styles.amountCell, styles.paymentCell]}>
+            <Text style={styles.fieldName}>Result</Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                styles.amountInput,
+                styles.inputReadOnly,
+                styles.resultInputLight,
+                resultValue > 0 ? styles.negativeValue : resultValue < 0 ? styles.positiveValue : null,
+              ]}
+              value={resultValue.toFixed(0)}
+              editable={false}
+              placeholder="0"
+            />
+          </View>
+        </View>
+      </View>
+      <Text style={styles.modalLabel}>Note</Text>
+      <TextInput
+        style={styles.modalInput}
+        placeholder="Optional note"
+        value={note}
+        onChangeText={setNote}
+        inputAccessoryViewID={accessoryId}
+      />
+
+      <View style={styles.modalActions}>
+        <Pressable style={styles.modalBtn} onPress={onCancel}>
+          <Text style={styles.modalBtnText}>Cancel</Text>
+        </Pressable>
+        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save} disabled={tableDisabled}>
+          <Text style={styles.modalBtnTextPrimary}>
+            {paymentDirection === "receive" ? "Receive" : "Pay"}
+          </Text>
+        </Pressable>
+      </View>
+      <CalendarModal
+        visible={calendarOpen}
+        value={payDate}
+        onSelect={(next) => {
+          setPayDate(next);
+          setCalendarOpen(false);
+        }}
+        onClose={() => setCalendarOpen(false)}
+      />
+      <TimePickerModal
+        visible={timeOpen}
+        value={payTime}
+        onSelect={(next) => {
+          setPayTime(next);
+          setTimeOpen(false);
+        }}
+        onClose={() => setTimeOpen(false)}
+      />
+    </View>
+  );
+}
+
 export default function InventoryNewScreen() {
   const params = useLocalSearchParams<{
     tab?: string | string[];
@@ -668,7 +927,15 @@ export default function InventoryNewScreen() {
   const cashId = Array.isArray(params.cashId) ? params.cashId[0] : params.cashId;
 
   const resolveTab = (): InventoryTab => {
-    if (tabParam === "cash" || tabParam === "inventory" || tabParam === "refill" || tabParam === "buy") return tabParam;
+    if (
+      tabParam === "cash" ||
+      tabParam === "inventory" ||
+      tabParam === "refill" ||
+      tabParam === "buy" ||
+      tabParam === "return" ||
+      tabParam === "payment"
+    )
+      return tabParam;
     if (cashId) return "cash";
     if (adjustId) return "inventory";
     return "refill";
@@ -713,10 +980,26 @@ export default function InventoryNewScreen() {
   const updateInventoryAdjust = useUpdateInventoryAdjustment();
   const createCashAdjust = useCreateCashAdjustment();
   const updateCashAdjust = useUpdateCashAdjustment();
+  const createCompanyPayment = useCreateCompanyPayment();
+  const reportRow = dailyReportQuery.data?.[0] ?? null;
+  const companyBalance = reportRow?.company_end ?? 0;
+  const company12Balance = reportRow?.company_12kg_end ?? 0;
+  const company48Balance = reportRow?.company_48kg_end ?? 0;
+  const paymentTabDisabled = reportRow ? companyBalance === 0 : false;
+  const returnTabDisabled = reportRow ? company12Balance >= 0 && company48Balance >= 0 : false;
 
   useEffect(() => {
     setActiveTab(resolveTab());
   }, [tabParam, refillId, adjustId, cashId]);
+
+  useEffect(() => {
+    if (activeTab === "payment" && paymentTabDisabled) {
+      setActiveTab("refill");
+    }
+    if (activeTab === "return" && returnTabDisabled) {
+      setActiveTab("refill");
+    }
+  }, [activeTab, paymentTabDisabled, returnTabDisabled]);
 
   return (
     <SafeAreaView style={styles.hubSafeArea}>
@@ -729,27 +1012,49 @@ export default function InventoryNewScreen() {
           <Text style={styles.hubTitle}>Inventory</Text>
         </View>
         <View style={styles.modeRow}>
-          {(["refill", "buy", "cash", "inventory"] as const).map((tab) => {
+          {(["refill", "return", "payment", "buy", "cash", "inventory"] as const).map((tab) => {
             const label =
               tab === "refill"
                 ? "Refill"
+                : tab === "return"
+                  ? "Return"
+                  : tab === "payment"
+                    ? "Payment"
                 : tab === "buy"
                   ? "Buy"
                   : tab === "cash"
                     ? "Adjust Cash"
                     : "Adjust Inventory";
+            const disabled =
+              tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled : false;
             return (
               <Pressable
                 key={tab}
-                onPress={() => setActiveTab(tab)}
-                style={[styles.modeButton, activeTab === tab && styles.modeButtonActive]}
+                onPress={() => {
+                  if (disabled) return;
+                  setActiveTab(tab);
+                }}
+                disabled={disabled}
+                style={[
+                  styles.modeButton,
+                  activeTab === tab && styles.modeButtonActive,
+                  disabled && styles.modeButtonDisabled,
+                ]}
               >
-                <Text style={[styles.modeText, activeTab === tab && styles.modeTextActive]}>{label}</Text>
+                <Text
+                  style={[
+                    styles.modeText,
+                    activeTab === tab && styles.modeTextActive,
+                    disabled && styles.modeTextDisabled,
+                  ]}
+                >
+                  {label}
+                </Text>
               </Pressable>
             );
           })}
         </View>
-        {activeTab === "refill" || activeTab === "buy" ? (
+        {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
           <RefillForm
             visible
             onClose={() => router.back()}
@@ -758,7 +1063,7 @@ export default function InventoryNewScreen() {
             editEntry={activeTab === "refill" ? editRefill : null}
             showHeader={false}
             useCard={false}
-            mode={activeTab}
+            mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
             containerStyle={styles.hubFormContainer}
             scrollStyle={styles.hubScroll}
           />
@@ -768,7 +1073,19 @@ export default function InventoryNewScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            {activeTab === "cash" ? (
+            {activeTab === "payment" ? (
+              <CompanyPaymentForm
+                visible
+                date={businessDate}
+                accessoryId={accessoryId}
+                companyBalance={companyBalance}
+                onCreate={async (payload) => {
+                  await createCompanyPayment.mutateAsync(payload);
+                }}
+                onSaved={() => router.back()}
+                onCancel={() => router.back()}
+              />
+            ) : activeTab === "cash" ? (
               <CashAdjustForm
                 visible
                 entry={editingCashAdjust}
@@ -854,12 +1171,19 @@ const styles = StyleSheet.create({
   modeButtonActive: {
     backgroundColor: "#0a7ea4",
   },
+  modeButtonDisabled: {
+    backgroundColor: "#e2e8f0",
+    opacity: 0.5,
+  },
   modeText: {
     fontWeight: "700",
     color: "#1f2937",
   },
   modeTextActive: {
     color: "#fff",
+  },
+  modeTextDisabled: {
+    color: "#94a3b8",
   },
   hubContent: {
     gap: 12,
@@ -879,13 +1203,14 @@ const styles = StyleSheet.create({
   hubSectionCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 12,
-    gap: 8,
+    padding: 8,
+    gap: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
   },
   modalLabel: {
     marginTop: 10,
+    marginBottom: 4,
     fontSize: 12,
     fontWeight: "700",
     color: "#1c1c1c",
@@ -898,6 +1223,140 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7f7f8",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+  },
+  inputReadOnly: {
+    backgroundColor: "#eef2f6",
+    color: "#8a8a8a",
+  },
+  resultInputLight: {
+    backgroundColor: "#f8f8f8",
+  },
+  fieldBox: {
+    marginTop: 6,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    gap: 4,
+  },
+  amountsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 6,
+  },
+  totalsRow: {
+    marginTop: 12,
+  },
+  actionRow: {
+    marginTop: 2,
+  },
+  amountCell: {
+    flex: 1,
+    gap: 6,
+    alignItems: "center",
+  },
+  paymentCell: {
+    flex: 1,
+  },
+  amountCellResult: {
+    flex: 0.7,
+  },
+  fieldName: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textAlign: "center",
+    alignSelf: "center",
+    textTransform: "uppercase",
+  },
+  amountGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  amountInput: {
+    width: 75,
+    minWidth: 75,
+    textAlign: "center",
+    paddingHorizontal: 6,
+  },
+  stepperStack: {
+    alignItems: "center",
+    gap: 2,
+  },
+  stepperBtnSmall: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperTiny: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: -2,
+  },
+  inlineActionRow: {
+    marginTop: 8,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentActionRow: {
+    marginTop: 20,
+  },
+  inlineActionButton: {
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    backgroundColor: "#dc2626",
+    minWidth: 110,
+    alignSelf: "center",
+  },
+  inlineActionButtonSuccess: {
+    backgroundColor: "#16a34a",
+  },
+  inlineActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  positiveValue: {
+    color: "#15803d",
+    fontWeight: "700",
+  },
+  negativeValue: {
+    color: "#b91c1c",
+    fontWeight: "700",
+  },
+  alertBox: {
+    backgroundColor: "#fdecea",
+    borderColor: "#f5c6cb",
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 10,
+    gap: 4,
+  },
+  alertText: {
+    color: "#b00020",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  sectionDisabled: {
+    opacity: 0.45,
   },
   modalActions: {
     flexDirection: "row",
