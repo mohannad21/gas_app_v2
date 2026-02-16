@@ -1,5 +1,7 @@
-﻿let moneyDecimals = 2;
-let currencyCode = "ILS";
+import { DEFAULT_CURRENCY_CODE } from "@/constants/currency";
+
+let moneyDecimals = 2;
+let currencyCode = DEFAULT_CURRENCY_CODE;
 
 export function setMoneyDecimals(value?: number) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -32,3 +34,4 @@ export function fromMinorUnits(value?: number | null) {
   const factor = 10 ** moneyDecimals;
   return value / factor;
 }
+
