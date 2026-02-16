@@ -35,7 +35,7 @@ from app.schemas import (
   ReportInventoryState,
   ReportInventoryTotals,
 )
-from app.services.ledger import sum_ledger
+from app.services.ledger import boundary_from_entries, sum_ledger
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -1737,6 +1737,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   money_decimals = settings.money_decimals if settings else 2
 
   events: list[DailyReportV2Event] = []
+  stable_row_key = lambda row: (row.happened_at, row.created_at, row.id)
 
   # system init entries (opening balances)
   system_init_rows = [row for row in ledger_rows if row.source_type == "system_init"]
@@ -1745,7 +1746,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     for row in system_init_rows:
       by_source[row.source_id].append(row)
     for source_id, rows in by_source.items():
-      base = min(rows, key=lambda r: r.happened_at)
+      base = min(rows, key=stable_row_key)
       event = DailyReportV2Event(
         event_type="init",
         effective_at=base.happened_at,
@@ -1798,7 +1799,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   }
   return_group_latest: dict[str, CustomerTransaction] = {}
   for group_id, txns in grouped_returns.items():
-    return_group_latest[group_id] = max(txns, key=lambda t: (t.happened_at, t.created_at))
+    return_group_latest[group_id] = max(txns, key=stable_row_key)
 
   for txn in other_txns:
     source_key = ("customer_txn", txn.id)
@@ -1853,7 +1854,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events.append(event)
 
   for group_id, txns in grouped_returns.items():
-    base = min(txns, key=lambda t: t.happened_at)
+    base = min(txns, key=stable_row_key)
     qty_12 = sum(t.received for t in txns if t.gas_type == "12kg")
     qty_48 = sum(t.received for t in txns if t.gas_type == "48kg")
     customer = customers.get(base.customer_id)
@@ -2087,8 +2088,44 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     )
     events.append(event)
 
+  def _event_source_key(event: DailyReportV2Event) -> Optional[tuple[str, str]]:
+    if not event.source_id:
+      return None
+    if event.event_type in {"order", "collection_money", "collection_payout", "collection_empty", "customer_adjust"}:
+      return ("customer_txn", event.source_id)
+    if event.event_type in {"refill", "company_payment", "company_buy_iron"}:
+      return ("company_txn", event.source_id)
+    if event.event_type == "init":
+      return ("system_init", event.source_id)
+    if event.event_type in {"expense", "bank_deposit"}:
+      return ("expense", event.source_id)
+    if event.event_type == "cash_adjust":
+      return ("cash_adjust", event.source_id)
+    if event.event_type == "adjust":
+      return ("inventory_adjust", event.source_id)
+    return None
+
+  def _ledger_entries_for_event(event: DailyReportV2Event) -> list[LedgerEntry]:
+    if event.event_type == "collection_empty" and event.source_id in return_group_txn_ids:
+      rows: list[LedgerEntry] = []
+      for txn_id in return_group_txn_ids[event.source_id]:
+        rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
+      return rows
+    source_key = _event_source_key(event)
+    return ledger_by_source.get(source_key, []) if source_key else []
+
+  event_entries: dict[int, list[LedgerEntry]] = {}
+  event_sort_ids: dict[int, str] = {}
+  for event in events:
+    rows = _ledger_entries_for_event(event)
+    event_entries[id(event)] = rows
+    boundary = boundary_from_entries(rows)
+    event_sort_ids[id(event)] = boundary.entry_id if boundary else (event.source_id or event.event_type or "")
+
   # sort and apply running balances for cash/inventory
-  events.sort(key=lambda ev: (ev.effective_at, ev.created_at, ev.source_id or ""))
+  events.sort(
+    key=lambda ev: (ev.effective_at, ev.created_at, event_sort_ids.get(id(ev), ev.source_id or ""))
+  )
   running_cash = cash_start
   running_company = company_start
   running_company_12 = company_12kg_start
@@ -2098,26 +2135,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   event_rows: list[DailyReportV2Event] = []
 
   for event in events:
-    key = (None, None)
-    if event.source_id:
-      if event.event_type in {"order", "collection_money", "collection_payout", "collection_empty", "customer_adjust"}:
-        key = ("customer_txn", event.source_id)
-      elif event.event_type in {"refill", "company_payment", "company_buy_iron"}:
-        key = ("company_txn", event.source_id)
-      elif event.event_type == "init":
-        key = ("system_init", event.source_id)
-      elif event.event_type in {"expense", "bank_deposit"}:
-        key = ("expense", event.source_id)
-      elif event.event_type == "cash_adjust":
-        key = ("cash_adjust", event.source_id)
-      elif event.event_type == "adjust":
-        key = ("inventory_adjust", event.source_id)
-    entry_rows: list[LedgerEntry] = []
-    if event.event_type == "collection_empty" and event.source_id in return_group_txn_ids:
-      for txn_id in return_group_txn_ids[event.source_id]:
-        entry_rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
-    else:
-      entry_rows = ledger_by_source.get(key, []) if key != (None, None) else []
+    entry_rows = event_entries.get(id(event), [])
     cash_delta = sum(row.amount for row in entry_rows if row.account == "cash")
     company_delta = sum(row.amount for row in entry_rows if row.account == "company_money_debts")
     company_12_delta = sum(
@@ -2195,10 +2213,13 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     notes = _notes_for_event(event, customer_debt=customer_debt, money_decimals=money_decimals)
     _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
 
-    if event.event_type not in {"customer_adjust", "init"}:
+    if event.event_type != "init":
       event_rows.append(event)
 
-  event_rows.sort(key=lambda ev: (ev.effective_at, ev.created_at, ev.id or ""), reverse=True)
+  event_rows.sort(
+    key=lambda ev: (ev.effective_at, ev.created_at, event_sort_ids.get(id(ev), ev.id or ev.source_id or "")),
+    reverse=True,
+  )
 
   return DailyReportV2Day(
     date=business_date.isoformat(),

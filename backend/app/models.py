@@ -5,6 +5,7 @@ from uuid import uuid4
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
+from app.constants import DEFAULT_CURRENCY_CODE
 
 def _utcnow() -> datetime:
   return datetime.now(timezone.utc)
@@ -279,7 +280,7 @@ class SystemSettings(SQLModel, table=True):
 
   id: str = Field(default="system", primary_key=True)
   is_setup_completed: bool = Field(default=False)
-  currency_code: str = Field(default="ILS")
+  currency_code: str = Field(default=DEFAULT_CURRENCY_CODE)
   money_decimals: int = Field(default=2)
   created_at: datetime = Field(
     default_factory=_utcnow,

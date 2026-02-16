@@ -33,24 +33,7 @@ import {
 } from "@/lib/reports/utils";
 import { buildHappenedAt, formatWeekdayShort, toDateKey } from "@/lib/date";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
-
-const getEventColor = (eventType: string) => {
-  const palette: Record<string, string> = {
-    order: "#0a7ea4",
-    refill: "#f97316",
-    expense: "#16a34a",
-    init: "#8b5cf6",
-    adjust: "#64748b",
-    cash_adjust: "#64748b",
-    collection_money: "#22c55e",
-    collection_payout: "#ef4444",
-    collection_empty: "#14b8a6",
-    company_payment: "#2563eb",
-    company_buy_iron: "#f59e0b",
-    bank_deposit: "#0ea5e9",
-  };
-  return palette[eventType] ?? "#0a7ea4";
-};
+import { getEventColor } from "@/lib/reports/eventColors";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -546,7 +529,7 @@ export default function ReportsScreen() {
                     <>
                       <View style={styles.expandedDivider} />
                       {dayInfo ? (
-                        <V2Timeline date={item.date} events={events} formatMoney={formatMoney} />
+                        <V2Timeline events={events} formatMoney={formatMoney} formatCount={formatCount} />
                       ) : (
                         <Text style={styles.meta}>Loading events...</Text>
                       )}
@@ -953,14 +936,15 @@ function ExpenseModal(props: {
 }
 
 function V2Timeline({
-  date,
   events,
   formatMoney,
+  formatCount,
 }: {
-  date: string;
   events: any[];
   formatMoney: (v: number) => string;
+  formatCount: (v: number) => string;
 }) {
+  const [openEvents, setOpenEvents] = useState<string[]>([]);
   const normalizedEvents = useMemo(() => {
     const merged: any[] = [];
     const initIndex = new Map<string, number>();
@@ -978,7 +962,6 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-      if (eventType === "customer_adjust") return;
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -1001,15 +984,214 @@ function V2Timeline({
     return merged;
   }, [events]);
 
+  const toggleEvent = useCallback((key: string) => {
+    setOpenEvents((prev) => (prev.includes(key) ? prev.filter((entry) => entry !== key) : [...prev, key]));
+  }, []);
+
+  const buildDeltaRow = (boxes: ReactNode[], key: string) => {
+    if (boxes.length === 0) return null;
+    return (
+      <View key={key} style={styles.eventExpandedRow}>
+        {boxes}
+      </View>
+    );
+  };
+
+  const placeholderBox = (key: string) => (
+    <View key={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
+  );
+
   return (
     <View>
-      {normalizedEvents.map((ev) => (
-        <SlimActivityRow
-          key={String(ev?.id ?? ev?.source_id ?? "")}
-          event={ev}
-          formatMoney={formatMoney}
-        />
-      ))}
+      {normalizedEvents.map((ev) => {
+        const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+        const eventKey = String(ev?.id ?? ev?.source_id ?? `${eventType}:${ev?.effective_at ?? ev?.created_at ?? ""}`);
+        const isOpen = openEvents.includes(eventKey);
+
+        const invBefore = ev?.inventory_before ?? null;
+        const invAfter = ev?.inventory_after ?? null;
+        const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+        const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+        const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
+
+        const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
+        const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
+        const empty12Before = typeof invBefore?.empty12 === "number" ? invBefore.empty12 : null;
+        const empty12After = typeof invAfter?.empty12 === "number" ? invAfter.empty12 : null;
+        const full48Before = typeof invBefore?.full48 === "number" ? invBefore.full48 : null;
+        const full48After = typeof invAfter?.full48 === "number" ? invAfter.full48 : null;
+        const empty48Before = typeof invBefore?.empty48 === "number" ? invBefore.empty48 : null;
+        const empty48After = typeof invAfter?.empty48 === "number" ? invAfter.empty48 : null;
+
+        const gasType = ev?.gas_type;
+        const is48 = gasType === "48kg";
+        const gasLabel = is48 ? "48kg" : "12kg";
+
+        const renderCashBox = (key = "cash") =>
+          hasCash ? (
+            <DeltaBox
+              key={key}
+              label="Cash"
+              before={cashBefore ?? 0}
+              after={cashAfter ?? 0}
+              format={formatMoney}
+              smallDelta
+              compact
+            />
+          ) : null;
+        const cashBox = renderCashBox("cash");
+
+        const orderFullBefore = is48 ? full48Before : full12Before;
+        const orderFullAfter = is48 ? full48After : full12After;
+        const orderEmptyBefore = is48 ? empty48Before : empty12Before;
+        const orderEmptyAfter = is48 ? empty48After : empty12After;
+        const orderBoxes =
+          orderFullBefore != null &&
+          orderFullAfter != null &&
+          orderEmptyBefore != null &&
+          orderEmptyAfter != null
+            ? [
+                <DeltaBox
+                  key="order-full"
+                  label={`${gasLabel} F`}
+                  before={orderFullBefore}
+                  after={orderFullAfter}
+                  format={formatCount}
+                  accent={gasColor(gasLabel)}
+                  compact
+                />,
+                <DeltaBox
+                  key="order-empty"
+                  label={`${gasLabel} E`}
+                  before={orderEmptyBefore}
+                  after={orderEmptyAfter}
+                  format={formatCount}
+                  accent={gasColor(gasLabel)}
+                  compact
+                />,
+                cashBox ?? placeholderBox("order-cash"),
+              ]
+            : [];
+
+        const empty12Box =
+          empty12Before != null && empty12After != null ? (
+            <DeltaBox
+              key="empty-12"
+              label="12kg E"
+              before={empty12Before}
+              after={empty12After}
+              format={formatCount}
+              accent={gasColor("12kg")}
+              compact
+            />
+          ) : null;
+        const empty48Box =
+          empty48Before != null && empty48After != null ? (
+            <DeltaBox
+              key="empty-48"
+              label="48kg E"
+              before={empty48Before}
+              after={empty48After}
+              format={formatCount}
+              accent={gasColor("48kg")}
+              compact
+            />
+          ) : null;
+
+        const expandedContent = () => {
+          const row12Boxes: ReactNode[] = [];
+          const row48Boxes: ReactNode[] = [];
+          if (full12Before != null && full12After != null) {
+            row12Boxes.push(
+              <DeltaBox
+                key="row12-full"
+                label="12kg F"
+                before={full12Before}
+                after={full12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (empty12Before != null && empty12After != null) {
+            row12Boxes.push(
+              <DeltaBox
+                key="row12-empty"
+                label="12kg E"
+                before={empty12Before}
+                after={empty12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (full48Before != null && full48After != null) {
+            row48Boxes.push(
+              <DeltaBox
+                key="row48-full"
+                label="48kg F"
+                before={full48Before}
+                after={full48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          if (empty48Before != null && empty48After != null) {
+            row48Boxes.push(
+              <DeltaBox
+                key="row48-empty"
+                label="48kg E"
+                before={empty48Before}
+                after={empty48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          const cashRow = cashBox ? [cashBox] : [];
+
+          if (eventType === "order") {
+            if (orderBoxes.length > 0) {
+              return buildDeltaRow(orderBoxes, "order");
+            }
+          }
+          if (
+            eventType === "collection_empty" ||
+            eventType === "collection_money" ||
+            eventType === "collection_payout"
+          ) {
+            const boxes = [
+              empty12Box ?? placeholderBox("collection-empty-12"),
+              empty48Box ?? placeholderBox("collection-empty-48"),
+              cashBox ?? placeholderBox("collection-cash"),
+            ];
+            return buildDeltaRow(boxes, "collection");
+          }
+          const rows = [row12Boxes, row48Boxes, cashRow].filter((row) => row.length > 0);
+          if (rows.length === 0) {
+            return <Text style={styles.eventExpandedEmpty}>No cash/inventory change for this activity.</Text>;
+          }
+          return (
+            <>
+              {rows.map((row, idx) => buildDeltaRow(row, `row-${idx}`))}
+            </>
+          );
+        };
+
+        return (
+          <View key={eventKey}>
+            <Pressable onPress={() => toggleEvent(eventKey)}>
+              <SlimActivityRow event={ev} formatMoney={formatMoney} />
+            </Pressable>
+            {isOpen ? <View style={styles.eventExpandedPanel}>{expandedContent()}</View> : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -1435,6 +1617,8 @@ const styles = StyleSheet.create({
   adjustSummaryRow: { marginTop: 0 },
   eventCreatedAtText: { marginTop: 6, fontSize: 11, fontWeight: "700", color: "#64748b", fontFamily: FontFamilies.semibold },
   eventExpandedRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  eventExpandedPanel: { paddingHorizontal: 12, paddingBottom: 8 },
+  eventExpandedEmpty: { marginTop: 6, fontSize: 12, color: "#64748b", fontFamily: FontFamilies.semibold },
 
   eventSection: { marginTop: 10 },
   eventSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from app.db import get_session
+from app.constants import DEFAULT_CURRENCY_CODE
 from app.models import (
     CashAdjustment,
     CompanyTransaction,
@@ -46,7 +47,7 @@ def get_system_settings(session: Session = Depends(get_session)) -> SystemSettin
         return SystemSettingsOut(
             id="system",
             is_setup_completed=False,
-            currency_code="USD",
+            currency_code=DEFAULT_CURRENCY_CODE,
             money_decimals=2,
             created_at=datetime.now(timezone.utc)
         )
@@ -140,7 +141,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
 
     # 3. Finalize Settings
     settings.is_setup_completed = True
-    settings.currency_code = payload.currency_code or "USD"
+    settings.currency_code = payload.currency_code or DEFAULT_CURRENCY_CODE
     settings.money_decimals = payload.money_decimals if payload.money_decimals is not None else 2
     
     session.add(settings)

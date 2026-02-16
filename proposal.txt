@@ -210,7 +210,7 @@ Day timeline: ordered events with computed before/after impacts.
 
 Units
 
-money (integer NIS or smallest unit; no floats)
+money (integer in the smallest unit of the canonical currency)
 
 cylinders (integers)
 
@@ -299,6 +299,14 @@ The frontend should not “guess” too much. It should:
 Compute “balanced/unbalanced” from explicit fields (e.g., diff/remaining values).
 
 Render only non-zero actionable deltas.
+
+MUST: Completeness + Expandability (UI Contract)
+- Every event row in the report feed is **expandable**. No supported event type should fall through to “no expansion” (e.g., returning null) without an explicit product decision.
+- Expansion renders **cash + inventory snapshots only** (no full ledger line-item UI):
+  - cash_before, cash_after
+  - inventory_before, inventory_after (full/empty × 12kg/48kg)
+- If snapshots are missing (older server / contract violation), the expanded view MUST render a deterministic placeholder, e.g.:
+  - “No cash/inventory change for this activity.”
 
 6) Core Workflows (End-to-End)
 
@@ -484,7 +492,7 @@ Received X empties | ✅ OK (no money)
 
 Expanded:
 
-cash before→after only if cash impacted (usually not)
+cash before→after (may be unchanged)
 
 show relevant cylinder balance before→after + inventory empty before→after
 
@@ -523,6 +531,8 @@ Expanded:
 cash before→after
 
 customer cash balance before→after
+
+Do not show cylinder inventory boxes, even if snapshots exist.
 
 6.6 Company Refill (Supplier Refill)
 
@@ -678,7 +688,7 @@ Expanded:
 
 inventory before→after for the impacted gas type(s)
 
-no cash unless affected
+cash before→after (may be unchanged)
 
 6.10 Expense / Cash Adjust / Bank Deposit
 
@@ -700,7 +710,7 @@ Collapsed:
 
 Expense: Fuel | Amount -50
 
-Deposit | Amount -500 (or “moved to bank”)
+Deposit | 500 moved to bank (cash decreases; bank increases).
 
 Cash adjust | Δ +200 | Reason: open
 
@@ -827,17 +837,18 @@ If too long, it should:
 
 Expanded ticket rules
 
-Always show cash before→after.
+Render **Cash** DeltaBox using `cash_before` → `cash_after` when present (in v2 these snapshots are required for every event, even if unchanged).
+Render **Inventory** DeltaBoxes using `inventory_before` → `inventory_after` per the event-type expansion rule (§10.2.4).
+If neither cash nor inventory snapshots exist (contract violation / older server), the expanded view MUST render a deterministic placeholder message:
+
+“No cash/inventory change for this activity.”
 
 Show only the involved gas types:
+- For replacement order tickets: show **3 boxes** (12kg F, 12kg E, Cash) or (48kg F, 48kg E, Cash).
+- For empty collection tickets: show empty12, empty48 + Cash (Cash typically unchanged).
+- For late-payment tickets: show **Cash only** (do not show cylinder quantities).
 
-Replacement 48 → show only 48 full/empty before→after (+ cash).
-
-Replacement 12 → show only 12 full/empty before→after (+ cash).
-
-Refill with both → show both 12 and 48 before→after (+ cash).
-
-If you track customer/company status snapshots: show those in expanded as a separate block.
+If you track customer/company status snapshots, show those in expanded as a separate block using server fields only (no client computation).
 
 7.3 Screen Inventory (Recommended)
 
@@ -849,7 +860,7 @@ Daily Report (Timeline)
 
 The “single source of truth” operational screen.
 
-Expand shows ledger evolution and inventory/cash before→after.
+Expand shows cash + inventory before→after only (no full ledger line-items UI).
 
 Add Activity (Quick Actions)
 
@@ -1112,6 +1123,105 @@ cylinders_to_return_48: integer
 is_balanced: boolean (optional but helpful)
 
 This lets the UI render your “✅ OK” rule without recreating accounting logic.
+10.2.1 Daily Report Completeness (MUST)
+
+Definition: a “user-facing activity” is any user-initiated API action that creates one or more ledger entries (i.e., it posts to the ledger).
+- Every **user-facing activity** that posts to the ledger MUST appear in `GET /reports/day_v2` for its business day.
+- Minimum activity set (v2):
+  - order
+  - collection_money
+  - collection_empty
+  - collection_payout
+  - refill
+  - company_payment
+  - company_buy_iron
+  - expense
+  - cash_adjust
+  - adjust
+  - bank_deposit
+  - customer_adjust
+- System-generated events (e.g., init/opening balances) MAY be hidden by default, but MUST be retrievable via `GET /reports/day_v2?include_system=true`.
+
+10.2.2 Daily Report Expandability (MUST)
+- Every event row in the report feed is expandable.
+- Expansion renders **cash + inventory before/after only** (no full ledger line-items UI).
+- If snapshots are missing (older server / contract violation), the expanded view MUST render a deterministic placeholder:
+  - “No cash/inventory change for this activity.”
+
+10.2.3 Server/UI Responsibility Boundary (MUST)
+
+Frontend MUST NOT compute running balances. It only renders server-provided snapshots and status fields.
+
+Server is the source of truth for before/after.
+
+Snapshots (v2 contract)
+- cash_before, cash_after: required on every DayV2 event, even if unchanged.
+- inventory_before, inventory_after: required on every DayV2 event, even if unchanged, with:
+  - full12, empty12, full48, empty48
+
+Status fields (server-authored)
+- status_mode (needs_action | ok | hidden)
+- action_pills[] and remaining_actions (or equivalent server fields that drive the UI status chips)
+
+If you later want optional snapshot fields, that MUST be introduced explicitly as a versioned contract change; otherwise the system will drift between backend optionality and frontend schema requirements.
+
+Failure mode
+- If an older server version omits snapshots for an event, the expanded UI MUST render the deterministic placeholder message:
+  “No cash/inventory change for this activity.”
+  This is considered a contract violation for v2 and should be caught by tests.
+
+10.2.4 Standard Expansion Rendering Rule (Deterministic Fallback)
+
+Every event row is expandable. Expansion must be deterministic and must never silently return null.
+
+Rules
+- order: show only the relevant gas type inventory boxes (12kg or 48kg) + Cash.
+  - Preserve the 3-box baseline for 12kg replacement: 12kg F, 12kg E, Cash.
+- collection_empty: show 12kg E, 48kg E, and Cash (Cash typically unchanged).
+- cash-only event types: show Cash only (no inventory boxes), even though inventory snapshots exist:
+  - collection_money, collection_payout, company_payment, expense, cash_adjust, bank_deposit
+- inventory-involved event types: show any relevant inventory boxes + Cash:
+  - refill, company_buy_iron, adjust, customer_adjust
+- future/unknown event types: render any available inventory boxes + Cash (best-effort), then add an explicit registry entry.
+
+If neither cash nor inventory snapshots exist (should not happen in v2), expanded view must render:
+“No cash/inventory change for this activity.”
+
+10.2.5 Event Registry (v2)
+
+This table is the review checklist: new activity added → does it appear in DayV2 + is it expandable + are snapshots present?
+
+| event_type | user-facing? | cash account affected? | inventory affected? | expected inventory dimensions | notes |
+|---|---:|---:|---:|---|---|
+| order | yes | yes | yes | full{gas}, empty{gas} | Use gas_type to choose 12kg vs 48kg. Cash reflects payment (paid_now). |
+| collection_money | yes | yes | no | — | Late payment: cash-only. Inventory MUST NOT be shown in expansion even if snapshots exist. |
+| collection_payout | yes | yes (cash out) | no | — | Refund/payout: cash decreases. |
+| collection_empty | yes | no (cash unchanged) | yes | empty12, empty48 | Cylinder-only collection: show empties + Cash (Cash unchanged). |
+| refill | yes | yes | yes | full12, empty12, full48, empty48 | Refill impacts inventory and may impact cash/company debt. |
+| company_payment | yes | yes (cash out) | no | — | Cash-only: pay down company payable. |
+| company_buy_iron | yes | yes (cash out) | yes | full12 and/or full48 | Purchase increases full cylinders for purchased gas types; cash decreases. |
+| expense | yes | yes (cash out) | no | — | Cash-only. |
+| cash_adjust | yes | yes | no | — | Cash-only manual adjustment. |
+| adjust | yes | no (cash unchanged) | yes | full12, empty12, full48, empty48 | Inventory-only manual adjustment. |
+| bank_deposit | yes | yes (cash out) | no | — | Cash → bank transfer: cash decreases; bank increases (bank not shown in DayV2 UI). |
+| customer_adjust | yes | conditional | conditional | depends on payload | If amount_money != 0, cash affected. If count_12kg/count_48kg != 0, inventory affected. Snapshots required even if unchanged. |
+
+10.2.6 Determinism Semantics (Tie-breakers) (MUST)
+
+Ledger authoritative ordering key
+- (happened_at, created_at, id)
+
+DayV2 must use a consistent, ledger-derived ordering key for both running-balance assignment and event display:
+- DayV2 authoritative event ordering key: (effective_at, created_at, boundary_ledger_entry_id)
+  - effective_at is derived from the user action time (happened_at).
+  - boundary_ledger_entry_id MUST be stable and ledger-derived.
+
+Tie-breaker definition
+- For a 1:1 event↔ledger mapping, boundary_ledger_entry_id is that event’s ledger entry id.
+- For a grouped event (multiple ledger entries per event), boundary_ledger_entry_id is the boundary entry id of the group, where “boundary” is computed using the ledger ordering key above.
+
+Collision-case requirement
+- If two activities share the same happened_at (and possibly created_at), the computed before/after snapshots MUST be deterministic and test-covered.
 
 10.3 Write APIs (Commands)
 
@@ -1168,6 +1278,36 @@ For each event type, the required fields are present.
 Ordering key is deterministic.
 
 Computed action fields match ledger-derived truth.
+
+10.5.1 Definition of Done (DoD) — Test Matrix (MUST)
+
+Backend DoD
+- For each activity in the **Event Registry (v2)**: create one instance and assert it appears in `GET /reports/day_v2` with the snapshot fields required for expansion:
+  - cash_before, cash_after
+  - inventory_before, inventory_after
+- Determinism test: create ≥2 activities with identical timestamps (same `happened_at` and `created_at`) and assert:
+  - stable ordering
+  - stable before/after snapshots across repeated runs
+
+Frontend DoD
+- Add a parameterized RTL test that expands at least one example of each category and asserts DeltaBoxes render (or placeholder renders):
+  - customer activity (e.g., order or collection_money)
+  - company activity (e.g., company_payment or company_buy_iron)
+  - pure inventory activity (e.g., adjust)
+  - pure cash activity (e.g., expense or cash_adjust)
+- Tests MUST be deterministic (avoid snapshot-only assertions for this behavior).
+10.6 System Settings Contract (Currency Defaults)
+
+Currency is read from system settings, with one canonical default until user configuration exists.
+
+- `GET /system/settings` MUST return:
+  - currency_code (ISO 4217, e.g., "USD")
+  - money_decimals (e.g., 2)
+- There MUST be exactly one canonical default currency on the server (e.g., `DEFAULT_CURRENCY_CODE`), used whenever settings are missing/uninitialized.
+- The frontend MUST initialize its currency formatting from `GET /system/settings` only (no conflicting client-side fallback constants).
+
+Future readiness
+- When the settings/config page is implemented, it should update `currency_code` via a dedicated endpoint (e.g., `PUT /system/settings`) without requiring cleanup of conflicting defaults.
 
 
 11) Technical Approach & Architecture

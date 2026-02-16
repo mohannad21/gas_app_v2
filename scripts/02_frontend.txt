@@ -4773,24 +4773,7 @@ import {
 } from "@/lib/reports/utils";
 import { buildHappenedAt, formatWeekdayShort, toDateKey } from "@/lib/date";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
-
-const getEventColor = (eventType: string) => {
-  const palette: Record<string, string> = {
-    order: "#0a7ea4",
-    refill: "#f97316",
-    expense: "#16a34a",
-    init: "#8b5cf6",
-    adjust: "#64748b",
-    cash_adjust: "#64748b",
-    collection_money: "#22c55e",
-    collection_payout: "#ef4444",
-    collection_empty: "#14b8a6",
-    company_payment: "#2563eb",
-    company_buy_iron: "#f59e0b",
-    bank_deposit: "#0ea5e9",
-  };
-  return palette[eventType] ?? "#0a7ea4";
-};
+import { getEventColor } from "@/lib/reports/eventColors";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -5286,7 +5269,7 @@ export default function ReportsScreen() {
                     <>
                       <View style={styles.expandedDivider} />
                       {dayInfo ? (
-                        <V2Timeline date={item.date} events={events} formatMoney={formatMoney} />
+                        <V2Timeline events={events} formatMoney={formatMoney} formatCount={formatCount} />
                       ) : (
                         <Text style={styles.meta}>Loading events...</Text>
                       )}
@@ -5693,14 +5676,15 @@ function ExpenseModal(props: {
 }
 
 function V2Timeline({
-  date,
   events,
   formatMoney,
+  formatCount,
 }: {
-  date: string;
   events: any[];
   formatMoney: (v: number) => string;
+  formatCount: (v: number) => string;
 }) {
+  const [openEvents, setOpenEvents] = useState<string[]>([]);
   const normalizedEvents = useMemo(() => {
     const merged: any[] = [];
     const initIndex = new Map<string, number>();
@@ -5741,15 +5725,270 @@ function V2Timeline({
     return merged;
   }, [events]);
 
+  const toggleEvent = useCallback((key: string) => {
+    setOpenEvents((prev) => (prev.includes(key) ? prev.filter((entry) => entry !== key) : [...prev, key]));
+  }, []);
+
+  const buildDeltaRow = (boxes: ReactNode[]) => {
+    if (boxes.length === 0) return null;
+    return <View style={styles.eventExpandedRow}>{boxes}</View>;
+  };
+
+  const placeholderBox = (key: string) => (
+    <View key={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
+  );
+
   return (
     <View>
-      {normalizedEvents.map((ev) => (
-        <SlimActivityRow
-          key={`${date}-ev-${ev?.id ?? ev?.source_id ?? ""}`}
-          event={ev}
-          formatMoney={formatMoney}
-        />
-      ))}
+      {normalizedEvents.map((ev) => {
+        const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+        const eventKey = String(ev?.id ?? ev?.source_id ?? `${eventType}:${ev?.effective_at ?? ev?.created_at ?? ""}`);
+        const isOpen = openEvents.includes(eventKey);
+
+        const invBefore = ev?.inventory_before ?? null;
+        const invAfter = ev?.inventory_after ?? null;
+        const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
+        const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
+        const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
+
+        const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
+        const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
+        const empty12Before = typeof invBefore?.empty12 === "number" ? invBefore.empty12 : null;
+        const empty12After = typeof invAfter?.empty12 === "number" ? invAfter.empty12 : null;
+        const full48Before = typeof invBefore?.full48 === "number" ? invBefore.full48 : null;
+        const full48After = typeof invAfter?.full48 === "number" ? invAfter.full48 : null;
+        const empty48Before = typeof invBefore?.empty48 === "number" ? invBefore.empty48 : null;
+        const empty48After = typeof invAfter?.empty48 === "number" ? invAfter.empty48 : null;
+
+        const gasType = ev?.gas_type;
+        const is48 = gasType === "48kg";
+        const gasLabel = is48 ? "48kg" : "12kg";
+
+        const renderCashBox = (key = "cash") =>
+          hasCash ? (
+            <DeltaBox
+              key={key}
+              label="Cash"
+              before={cashBefore ?? 0}
+              after={cashAfter ?? 0}
+              format={formatMoney}
+              smallDelta
+              compact
+            />
+          ) : null;
+        const cashBox = renderCashBox("cash");
+
+        const orderFullBefore = is48 ? full48Before : full12Before;
+        const orderFullAfter = is48 ? full48After : full12After;
+        const orderEmptyBefore = is48 ? empty48Before : empty12Before;
+        const orderEmptyAfter = is48 ? empty48After : empty12After;
+        const orderBoxes =
+          orderFullBefore != null &&
+          orderFullAfter != null &&
+          orderEmptyBefore != null &&
+          orderEmptyAfter != null
+            ? [
+                <DeltaBox
+                  key="order-full"
+                  label={`${gasLabel} F`}
+                  before={orderFullBefore}
+                  after={orderFullAfter}
+                  format={formatCount}
+                  accent={gasColor(gasLabel)}
+                  compact
+                />,
+                <DeltaBox
+                  key="order-empty"
+                  label={`${gasLabel} E`}
+                  before={orderEmptyBefore}
+                  after={orderEmptyAfter}
+                  format={formatCount}
+                  accent={gasColor(gasLabel)}
+                  compact
+                />,
+                cashBox ?? placeholderBox("order-cash"),
+              ]
+            : [];
+
+        const empty12Box =
+          empty12Before != null && empty12After != null ? (
+            <DeltaBox
+              key="empty-12"
+              label="12kg E"
+              before={empty12Before}
+              after={empty12After}
+              format={formatCount}
+              accent={gasColor("12kg")}
+              compact
+            />
+          ) : null;
+        const empty48Box =
+          empty48Before != null && empty48After != null ? (
+            <DeltaBox
+              key="empty-48"
+              label="48kg E"
+              before={empty48Before}
+              after={empty48After}
+              format={formatCount}
+              accent={gasColor("48kg")}
+              compact
+            />
+          ) : null;
+
+        const refillRow12 =
+          full12Before != null &&
+          full12After != null &&
+          empty12Before != null &&
+          empty12After != null
+            ? [
+                <DeltaBox
+                  key="refill-12-full"
+                  label="12kg F"
+                  before={full12Before}
+                  after={full12After}
+                  format={formatCount}
+                  accent={gasColor("12kg")}
+                  compact
+                />,
+                <DeltaBox
+                  key="refill-12-empty"
+                  label="12kg E"
+                  before={empty12Before}
+                  after={empty12After}
+                  format={formatCount}
+                  accent={gasColor("12kg")}
+                  compact
+                />,
+              ]
+            : [];
+        const refillRow48 =
+          full48Before != null &&
+          full48After != null &&
+          empty48Before != null &&
+          empty48After != null
+            ? [
+                <DeltaBox
+                  key="refill-48-full"
+                  label="48kg F"
+                  before={full48Before}
+                  after={full48After}
+                  format={formatCount}
+                  accent={gasColor("48kg")}
+                  compact
+                />,
+                <DeltaBox
+                  key="refill-48-empty"
+                  label="48kg E"
+                  before={empty48Before}
+                  after={empty48After}
+                  format={formatCount}
+                  accent={gasColor("48kg")}
+                  compact
+                />,
+              ]
+            : [];
+
+        const adjustRow12 =
+          full12Before != null &&
+          full12After != null &&
+          empty12Before != null &&
+          empty12After != null
+            ? [
+                <DeltaBox
+                  key="adjust-12-full"
+                  label="12kg F"
+                  before={full12Before}
+                  after={full12After}
+                  format={formatCount}
+                  accent={gasColor("12kg")}
+                  compact
+                />,
+                <DeltaBox
+                  key="adjust-12-empty"
+                  label="12kg E"
+                  before={empty12Before}
+                  after={empty12After}
+                  format={formatCount}
+                  accent={gasColor("12kg")}
+                  compact
+                />,
+              ]
+            : [];
+        const adjustRow48 =
+          full48Before != null &&
+          full48After != null &&
+          empty48Before != null &&
+          empty48After != null
+            ? [
+                <DeltaBox
+                  key="adjust-48-full"
+                  label="48kg F"
+                  before={full48Before}
+                  after={full48After}
+                  format={formatCount}
+                  accent={gasColor("48kg")}
+                  compact
+                />,
+                <DeltaBox
+                  key="adjust-48-empty"
+                  label="48kg E"
+                  before={empty48Before}
+                  after={empty48After}
+                  format={formatCount}
+                  accent={gasColor("48kg")}
+                  compact
+                />,
+              ]
+            : [];
+
+        const expandedContent = () => {
+          if (eventType === "order") {
+            return buildDeltaRow(orderBoxes);
+          }
+          if (
+            eventType === "collection_empty" ||
+            eventType === "collection_money" ||
+            eventType === "collection_payout"
+          ) {
+            const boxes = [
+              empty12Box ?? placeholderBox("collection-empty-12"),
+              empty48Box ?? placeholderBox("collection-empty-48"),
+              cashBox ?? placeholderBox("collection-cash"),
+            ];
+            return buildDeltaRow(boxes);
+          }
+          if (eventType === "refill") {
+            return (
+              <>
+                {buildDeltaRow(refillRow12)}
+                {buildDeltaRow(refillRow48)}
+                {buildDeltaRow(cashBox ? [cashBox] : [])}
+              </>
+            );
+          }
+          if (eventType === "adjust") {
+            return (
+              <>
+                {buildDeltaRow(adjustRow12)}
+                {buildDeltaRow(adjustRow48)}
+              </>
+            );
+          }
+          if (eventType === "expense" || eventType === "cash_adjust" || eventType === "bank_deposit") {
+            return buildDeltaRow(cashBox ? [cashBox] : []);
+          }
+          return null;
+        };
+
+        return (
+          <View key={eventKey}>
+            <Pressable onPress={() => toggleEvent(eventKey)}>
+              <SlimActivityRow event={ev} formatMoney={formatMoney} />
+            </Pressable>
+            {isOpen ? <View style={styles.eventExpandedPanel}>{expandedContent()}</View> : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -6175,6 +6414,7 @@ const styles = StyleSheet.create({
   adjustSummaryRow: { marginTop: 0 },
   eventCreatedAtText: { marginTop: 6, fontSize: 11, fontWeight: "700", color: "#64748b", fontFamily: FontFamilies.semibold },
   eventExpandedRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  eventExpandedPanel: { paddingHorizontal: 12, paddingBottom: 8 },
 
   eventSection: { marginTop: 10 },
   eventSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
@@ -20148,7 +20388,8 @@ FILE: frontend/components/reports/SlimActivityRow.tsx
 import { StyleSheet, Text, View } from "react-native";
 
 import { Level3Tokens } from "@/constants/level3";
-import { formatTimeHM } from "@/lib/date";
+import { FontFamilies, FontSizes } from "@/constants/typography";
+import { getEventColor } from "@/lib/reports/eventColors";
 import { DailyReportV2Event } from "@/types/domain";
 
 type SlimActivityRowProps = {
@@ -20156,63 +20397,62 @@ type SlimActivityRowProps = {
   formatMoney?: (value: number) => string;
 };
 
-const getEventColor = (eventType: string) => {
-  const palette: Record<string, string> = {
-    order: "#0a7ea4",
-    refill: "#f97316",
-    expense: "#16a34a",
-    init: "#8b5cf6",
-    adjust: "#64748b",
-    cash_adjust: "#64748b",
-    collection_money: "#22c55e",
-    collection_payout: "#ef4444",
-    collection_empty: "#14b8a6",
-    company_payment: "#2563eb",
-    company_buy_iron: "#f59e0b",
-    bank_deposit: "#0ea5e9",
-  };
-  return palette[eventType] ?? "#0a7ea4";
-};
+const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) => `₪${formatMoney(amount)}`;
 
-const capitalize = (value: string) => (value ? value[0].toUpperCase() + value.slice(1) : value);
+const buildNoteText = (note: any, formatMoney: (v: number) => string) => {
+  if (!note) return null;
+  const after = Number(note.remaining_after ?? 0);
+  if (!after) return null;
+  const before = Number(note.remaining_before ?? 0);
+  const withBefore = Number.isFinite(before) && before > 0;
 
-const buildActionText = (action: any, formatMoney: (v: number) => string) => {
-  if (!action) return null;
-  const amount = Number(action.amount ?? 0);
-  const qty = Number(action.qty ?? 0);
-  const gas = action.gas_type ? `${action.gas_type}kg` : "";
-  const empties = qty === 1 ? "empty" : "empties";
-
-  if (action.kind === "money" && amount) {
-    const moneyValue = `${formatMoney(amount)}₪`;
-    if (action.direction === "customer->dist") return `Customer pays ${moneyValue}`;
-    if (action.direction === "dist->customer") return `Pay customer ${moneyValue}`;
-    if (action.direction === "dist->company") return `Pay company ${moneyValue}`;
-    if (action.direction === "company->dist") return `Company pays ${moneyValue}`;
+  if (note.kind === "money") {
+    const amountText = formatMoneyValue(after, formatMoney);
+    if (note.direction === "customer_pays_you") {
+      return withBefore
+        ? `Customer still owes you ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `Customer pays you ${amountText}`;
+    }
+    if (note.direction === "you_pay_company") {
+      return withBefore
+        ? `You still owe company ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `You pay company ${amountText}`;
+    }
   }
 
-  if (action.kind === "empty_12" || action.kind === "empty_48") {
-    if (!qty) return null;
-    if (action.direction === "customer->dist") return `Customer returns ${qty}x${gas} ${empties}`;
-    if (action.direction === "dist->company") return `Return ${qty}x${gas} ${empties} to company`;
+  const formatCyl = (qty: number, gas: string, unit: "empty" | "full") =>
+    `${qty}x${gas} ${unit}${qty === 1 ? "" : "s"}`;
+
+  if (note.kind === "cyl_12" || note.kind === "cyl_48") {
+    const gas = note.kind === "cyl_12" ? "12kg" : "48kg";
+    const qtyText = formatCyl(after, gas, "empty");
+    if (note.direction === "customer_returns_you") {
+      return withBefore ? `Customer still owes you ${qtyText} (was ${before})` : `Customer returns ${qtyText}`;
+    }
+    if (note.direction === "you_return_company") {
+      return withBefore ? `You still owe company ${qtyText} (was ${before})` : `You return company ${qtyText}`;
+    }
   }
 
-  if (action.kind === "full_12" || action.kind === "full_48") {
-    if (!qty) return null;
-    if (action.direction === "dist->customer") return `Deliver ${qty}x${gas} full to customer`;
-    if (action.direction === "company->dist") return `Company delivers ${qty}x${gas} full`;
+  if (note.kind === "cyl_full_12" || note.kind === "cyl_full_48") {
+    const gas = note.kind === "cyl_full_12" ? "12kg" : "48kg";
+    const qtyText = formatCyl(after, gas, "full");
+    if (note.direction === "you_deliver_customer") {
+      return `You deliver customer ${qtyText}`;
+    }
+    if (note.direction === "company_delivers_you") {
+      return `Company delivers you ${qtyText}`;
+    }
   }
 
-  if (action.text) return String(action.text);
   return null;
 };
 
-const formatGasMetric = (label: string, qty12?: number | null, qty48?: number | null) => {
+const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
   const parts: string[] = [];
   if (qty12 && qty12 !== 0) parts.push(`${qty12}x12kg`);
   if (qty48 && qty48 !== 0) parts.push(`${qty48}x48kg`);
-  if (parts.length === 0) return null;
-  return `${label} ${parts.join(" | ")}`;
+  return parts.length > 0 ? parts.join(" | ") : null;
 };
 
 const formatOrderMetric = (event: DailyReportV2Event) => {
@@ -20232,42 +20472,89 @@ const formatOrderMetric = (event: DailyReportV2Event) => {
   return null;
 };
 
+const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => string) => {
+  if (event.hero_primary) return event.hero_primary;
+  if (event.hero_text) return event.hero_text;
+  if (event.event_type === "order") {
+    return formatOrderMetric(event);
+  }
+  if (event.event_type === "refill") {
+    const parts = formatGasSummary(event.buy12, event.buy48);
+    return parts ? `Bought ${parts}` : null;
+  }
+  if (event.event_type === "company_buy_iron") {
+    const parts = formatGasSummary(event.buy12, event.buy48);
+    return parts ? `Bought ${parts}` : null;
+  }
+  if (event.event_type === "collection_money") {
+    const amount = Number(event.money_received ?? event.money?.amount ?? 0);
+    return amount ? `Collected ${formatMoneyValue(amount, formatMoney)}` : "Collected";
+  }
+  if (event.event_type === "collection_empty") {
+    const parts = formatGasSummary(event.return12, event.return48);
+    return parts ? `Returned ${parts} empties` : "Returned empties";
+  }
+  if (event.event_type === "expense") {
+    return event.expense_type ?? "Expense";
+  }
+  if (event.event_type === "cash_adjust") {
+    return "Cash Adjustment";
+  }
+  if (event.event_type === "bank_deposit") {
+    return "Deposit";
+  }
+  return event.label ?? null;
+};
+
+const splitDisplayName = (value: string | null | undefined) => {
+  if (!value) return { name: "", desc: "" };
+  const separators = [" — ", " - "];
+  for (const sep of separators) {
+    const idx = value.indexOf(sep);
+    if (idx > 0) {
+      return { name: value.slice(0, idx), desc: value.slice(idx + sep.length) };
+    }
+  }
+  return { name: value, desc: "" };
+};
+
 export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const eventType = String(event?.event_type ?? "event");
-  const time = formatTimeHM(event?.effective_at ?? event?.created_at, { hour12: false });
   const label = event?.label ?? eventType;
   const counterparty = event?.counterparty;
-  const counterpartyDisplay = event?.counterparty_display ?? counterparty?.display ?? counterparty?.display_name;
-  const primaryTitle =
-    counterparty?.type && counterparty?.type !== "none" ? counterpartyDisplay ?? label : label;
+  const isCustomer = counterparty?.type === "customer";
+  const isCompany = counterparty?.type === "company";
 
-  let metricText: string | null = null;
-  if (eventType === "order") {
-    metricText = formatOrderMetric(event);
-  } else if (eventType === "refill") {
-    metricText = formatGasMetric("Bought", event.buy12, event.buy48);
-  } else if (eventType === "company_buy_iron") {
-    metricText = formatGasMetric("Bought", event.buy12, event.buy48);
-  } else if (eventType === "collection_empty") {
-    metricText = formatGasMetric("Returned", event.return12, event.return48);
-  }
+  const headerNameRaw = event.display_name
+    ? event.display_name
+    : isCustomer
+    ? event.customer_name ?? counterparty?.display_name ?? "Customer"
+    : isCompany
+    ? "Company"
+    : event.expense_type ?? label;
 
-  const systemSegment =
-    event?.order_mode === "replacement" && event?.system?.display_name
-      ? `System: ${event.system.display_name}`
-      : null;
-  const sublineSegments = [label, time, systemSegment].filter(Boolean);
-  const sublineText = sublineSegments.join(" · ");
+  const headerDescBase = event.display_description ?? (isCustomer ? event.customer_description : event.reason);
+  const { name: headerName, desc: headerDescFromName } = splitDisplayName(headerNameRaw);
+  const headerDesc = headerDescFromName || headerDescBase || "";
 
-  const money = event?.money;
+  const heroAction = buildHeroAction(event, fmtMoney) ?? label;
+  const moneyAmount = typeof event?.money_delta === "number" ? event.money_delta : Number(event?.money_amount ?? 0);
+  const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
   const moneyText =
-    money && money.verb !== "none" && money.amount
-      ? `${capitalize(money.verb)} ${fmtMoney(money.amount)}`
+    moneyDirection !== "none" && moneyAmount
+      ? `${moneyDirection === "in" || moneyDirection === "received" ? "+" : "-"}${formatMoneyValue(
+          moneyAmount,
+          fmtMoney
+        )}`
       : null;
 
-  const actions = Array.isArray(event?.action_pills) ? event.action_pills : [];
-  const showOk = event?.is_ok === true;
+  const notes = Array.isArray(event?.notes) ? event.notes : [];
+  const showOk = event?.status === "atomic_ok" && event?.event_type !== "expense";
+  const showSettled = event?.status === "balance_settled";
+  const showNotes = notes.length > 0;
+  const showStatus = showOk || showSettled;
+  const okLabel = showSettled ? "✅ Balance settled" : "✅ OK";
   const dotColor = getEventColor(eventType);
 
   return (
@@ -20277,48 +20564,62 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
-        <View style={styles.mainRow}>
-          <View style={styles.mainTextBlock}>
-            <Text style={styles.primaryText} numberOfLines={1}>
-              {primaryTitle}
-            </Text>
-            {metricText ? (
-              <Text style={styles.metricText} numberOfLines={1}>
-                {metricText}
-              </Text>
-            ) : null}
-          </View>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerName} numberOfLines={1}>
+            {headerName}
+            {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
+          </Text>
           {moneyText ? (
-            <Text style={styles.moneyText} numberOfLines={1}>
+            <Text
+              style={[
+                styles.moneyText,
+                moneyDirection === "in" || moneyDirection === "received" ? styles.moneyIn : styles.moneyOut,
+              ]}
+              numberOfLines={1}
+            >
               {moneyText}
             </Text>
           ) : null}
         </View>
 
-        {sublineText ? (
-          <View style={styles.subLineRow}>
-            <Text style={styles.sublineText} numberOfLines={1}>
-              {sublineText}
-            </Text>
-            {showOk ? <Text style={styles.okText}>✅ OK</Text> : null}
+        <Text style={styles.heroText} numberOfLines={1}>
+          {heroAction}
+        </Text>
+
+        {event.context_line || (showStatus && !showNotes) ? (
+          <View style={styles.contextRow}>
+            {event.context_line ? (
+              <Text style={styles.contextText} numberOfLines={1}>
+                {event.context_line}
+              </Text>
+            ) : (
+              <View style={styles.contextSpacer} />
+            )}
+            {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
           </View>
-        ) : showOk ? (
-          <Text style={styles.okText}>✅ OK</Text>
         ) : null}
 
-        {actions.length > 0 ? (
-          <View style={styles.pillRow}>
-            {actions.map((action, index) => {
-              const text = buildActionText(action, fmtMoney);
-              if (!text) return null;
-              const tone = action?.severity === "danger" ? styles.pillDanger : styles.pillWarning;
-              const toneText = action?.severity === "danger" ? styles.pillDangerText : styles.pillWarningText;
-              return (
-                <View key={`pill-${index}`} style={[styles.pill, tone]}>
-                  <Text style={[styles.pillText, toneText]}>{text}</Text>
-                </View>
-              );
-            })}
+        {showNotes ? (
+          <View style={styles.statusRow}>
+            <View style={styles.pillRow}>
+              {notes.map((note, index) => {
+                const text = buildNoteText(note, fmtMoney);
+                if (!text) return null;
+                return (
+                  <View key={`note-${index}`} style={[styles.pill, styles.pillWarning]}>
+                    <Text
+                      style={[styles.pillText, styles.pillWarningText]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {text}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            {showStatus ? <Text style={styles.okText}>{okLabel}</Text> : null}
           </View>
         ) : null}
       </View>
@@ -20350,51 +20651,71 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
-  mainRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  mainTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 999,
   },
-  primaryText: {
-    fontSize: Level3Tokens.typography.heroSize,
-    color: Level3Tokens.colors.textPrimary,
-    fontFamily: Level3Tokens.typography.heroFamily,
-  },
-  metricText: {
-    fontSize: Level3Tokens.typography.heroSize,
-    color: Level3Tokens.colors.textSecondary,
-    fontFamily: Level3Tokens.typography.heroFamily,
-  },
-  moneyText: {
-    fontSize: Level3Tokens.typography.moneySize,
-    color: Level3Tokens.colors.money,
-    fontFamily: Level3Tokens.typography.moneyFamily,
-    textAlign: "right",
-  },
-  subLineRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
-  sublineText: {
-    fontSize: Level3Tokens.typography.contextSize,
+  headerName: {
+    flex: 1,
+    fontSize: FontSizes.xxl,
+    color: Level3Tokens.colors.textPrimary,
+    fontFamily: FontFamilies.semibold,
+  },
+  headerDesc: {
+    fontSize: FontSizes.md,
     color: Level3Tokens.colors.textMuted,
-    fontFamily: Level3Tokens.typography.contextFamily,
+    fontFamily: FontFamilies.regular,
+  },
+  heroText: {
+    fontSize: FontSizes.lg,
+    color: Level3Tokens.colors.textSecondary,
+    fontFamily: FontFamilies.medium,
+  },
+  contextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  contextText: {
+    fontSize: FontSizes.sm,
+    color: Level3Tokens.colors.textMuted,
+    fontFamily: FontFamilies.regular,
     flex: 1,
   },
+  contextSpacer: {
+    flex: 1,
+  },
+  moneyText: {
+    fontSize: FontSizes.xxl,
+    color: Level3Tokens.colors.money,
+    fontFamily: FontFamilies.bold,
+    textAlign: "right",
+  },
+  moneyIn: {
+    color: "#0f766e",
+  },
+  moneyOut: {
+    color: "#b91c1c",
+  },
   okText: {
-    fontSize: Level3Tokens.typography.contextSize,
+    fontSize: FontSizes.md,
     color: Level3Tokens.colors.settledText,
-    fontFamily: Level3Tokens.typography.moneyFamily,
+    fontFamily: FontFamilies.semibold,
+  },
+  statusRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
   },
   pillRow: {
     flexDirection: "row",
@@ -20408,8 +20729,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillText: {
-    fontSize: Level3Tokens.typography.chipSize,
-    fontFamily: Level3Tokens.typography.chipFamily,
+    fontSize: FontSizes.md,
+    fontFamily: FontFamilies.medium,
   },
   pillWarning: {
     backgroundColor: "#fff7ed",
@@ -20426,6 +20747,8 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
   },
 });
+
+
 
 FILE: frontend/components/Toast.tsx
 import { useEffect, useState } from "react";
@@ -20503,6 +20826,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+FILE: frontend/constants/currency.ts
+export const DEFAULT_CURRENCY_CODE = "USD";
 
 FILE: frontend/constants/gas.ts
 import { GasType } from "@/types/domain";
@@ -20671,6 +20997,10 @@ export const level3Fixtures: DailyReportV2Event[] = [
     order_received: 1,
     hero: { text: "Replace 12kg" },
     money: { verb: "received", amount: 150 },
+    hero_primary: "Installed 1x12kg",
+    money_delta: 150,
+    context_line: "Replace ? 09:00 ? System: Kitchen",
+    status: "atomic_ok",
     counterparty: {
       type: "customer",
       display_name: "Alpha Cafe",
@@ -20697,6 +21027,18 @@ export const level3Fixtures: DailyReportV2Event[] = [
     order_received: 1,
     hero: { text: "Replace 12kg" },
     money: { verb: "received", amount: 50 },
+    hero_primary: "Installed 2x12kg",
+    money_delta: 50,
+    context_line: "Replace ? 09:30 ? System: Kitchen",
+    status: "needs_action",
+    notes: [
+      {
+        kind: "money",
+        direction: "customer_pays_you",
+        remaining_after: 100,
+        remaining_before: 150,
+      },
+    ],
     counterparty: {
       type: "customer",
       display_name: "Alpha Cafe",
@@ -20742,6 +21084,17 @@ export const level3Fixtures: DailyReportV2Event[] = [
     order_received: 2,
     hero: { text: "Replace 12kg" },
     money: { verb: "none", amount: 0 },
+    hero_primary: "Installed 1x12kg",
+    money_delta: 0,
+    context_line: "Replace ? 10:00 ? System: Stove",
+    status: "needs_action",
+    notes: [
+      {
+        kind: "cyl_full_12",
+        direction: "you_deliver_customer",
+        remaining_after: 1,
+      },
+    ],
     counterparty: {
       type: "customer",
       display_name: "Beta Market",
@@ -21456,7 +21809,10 @@ export function useDailyReportScreen(rangeDays = 30) {
   const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
 
   useEffect(() => {
-    const wanted = new Set<string>([...v2Expanded, ...((v2Query.data ?? []) as any[]).map((row) => row.date)]);
+    const wanted = new Set<string>(v2Expanded);
+    if (v2Rows[0]?.date) {
+      wanted.add(v2Rows[0].date);
+    }
     if (wanted.size === 0) return;
 
     const missing = Array.from(wanted).filter((date) => !(date in v2DayByDate));
@@ -21480,7 +21836,7 @@ export function useDailyReportScreen(rangeDays = 30) {
     return () => {
       cancelled = true;
     };
-  }, [v2Expanded, v2DayByDate, v2Query.data]);
+  }, [v2Expanded, v2DayByDate, v2Rows]);
 
   useEffect(() => {
     if (!v2Query.data) return;
@@ -22875,6 +23231,9 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
             amount: fromMinorUnits(ev.money.amount),
           }
         : ev.money,
+      money_amount: ev.money_amount != null ? fromMinorUnits(ev.money_amount) : ev.money_amount,
+      money_delta: ev.money_delta != null ? ev.money_delta : ev.money_delta,
+      money_received: ev.money_received != null ? fromMinorUnits(ev.money_received) : ev.money_received,
       open_actions: Array.isArray(ev.open_actions)
         ? ev.open_actions.map((action) =>
             action?.category === "money" && action.amount != null
@@ -22882,6 +23241,13 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
               : action
           )
         : ev.open_actions,
+      remaining_actions: Array.isArray(ev.remaining_actions)
+        ? ev.remaining_actions.map((action) =>
+            action?.category === "money" && action.amount != null
+              ? { ...action, amount: fromMinorUnits(action.amount) }
+              : action
+          )
+        : ev.remaining_actions,
       action_pills: Array.isArray(ev.action_pills)
         ? ev.action_pills.map((action) =>
             action?.category === "money" && action.amount != null
@@ -23302,8 +23668,10 @@ export function calcMoneyUiResult(total: number, paid: number): number {
 }
 
 FILE: frontend/lib/money.ts
-﻿let moneyDecimals = 2;
-let currencyCode = "ILS";
+import { DEFAULT_CURRENCY_CODE } from "@/constants/currency";
+
+let moneyDecimals = 2;
+let currencyCode = DEFAULT_CURRENCY_CODE;
 
 export function setMoneyDecimals(value?: number) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -23335,6 +23703,27 @@ export function fromMinorUnits(value?: number | null) {
   if (value == null || !Number.isFinite(value)) return 0;
   const factor = 10 ** moneyDecimals;
   return value / factor;
+}
+
+
+FILE: frontend/lib/reports/eventColors.ts
+export const EVENT_COLOR_MAP: Record<string, string> = {
+  order: "#0a7ea4",
+  refill: "#f97316",
+  expense: "#16a34a",
+  init: "#8b5cf6",
+  adjust: "#64748b",
+  cash_adjust: "#64748b",
+  collection_money: "#22c55e",
+  collection_payout: "#ef4444",
+  collection_empty: "#14b8a6",
+  company_payment: "#2563eb",
+  company_buy_iron: "#f59e0b",
+  bank_deposit: "#0ea5e9",
+};
+
+export function getEventColor(eventType: string): string {
+  return EVENT_COLOR_MAP[eventType] ?? "#0a7ea4";
 }
 
 FILE: frontend/lib/reports/smartTicket.ts
@@ -24717,24 +25106,58 @@ export const Level3ActionSchema = z.object({
 });
 export type Level3Action = z.infer<typeof Level3ActionSchema>;
 
+export const ActivityNoteSchema = z.object({
+  kind: z.enum(["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"]),
+  direction: z.enum([
+    "customer_pays_you",
+    "you_pay_company",
+    "customer_returns_you",
+    "you_return_company",
+    "you_deliver_customer",
+    "company_delivers_you",
+  ]),
+  remaining_after: z.number(),
+  remaining_before: z.number().nullish(),
+});
+export type ActivityNote = z.infer<typeof ActivityNoteSchema>;
+
 export const DailyReportV2EventSchema = z.object({
   event_type: z.string(),
   id: z.string().nullish(),
   effective_at: z.string(),
   created_at: z.string(),
   source_id: z.string().nullish(),
+  display_name: z.string().nullish(),
+  display_description: z.string().nullish(),
+  time_display: z.string().nullish(),
+  event_kind: z.string().nullish(),
+  activity_type: z.string().nullish(),
+  hero_primary: z.string().nullish(),
+  money_delta: z.number().nullish(),
+  status: z.enum(["atomic_ok", "needs_action", "balance_settled"]).nullish(),
+  context_line: z.string().nullish(),
+  notes: z.array(ActivityNoteSchema).nullish(),
   label: z.string().nullish(),
   label_short: z.string().nullish(),
   is_balanced: z.boolean().nullish(),
   action_lines: z.array(z.string()).nullish(),
   status_mode: z.enum(["atomic", "settlement"]).nullish(),
   is_ok: z.boolean().nullish(),
+  is_atomic_ok: z.boolean().nullish(),
+  status_badge: z.enum(["OK", "Balance settled"]).nullish(),
   action_pills: z.array(Level3ActionSchema).nullish(),
+  remaining_actions: z.array(Level3ActionSchema).nullish(),
+  has_other_outstanding_cylinders: z.boolean().nullish(),
+  has_other_outstanding_cash: z.boolean().nullish(),
   counterparty: Level3CounterpartySchema.nullish(),
   counterparty_display: z.string().nullish(),
   system: Level3SystemSchema.nullish(),
   hero: Level3HeroSchema.nullish(),
+  hero_text: z.string().nullish(),
   money: Level3MoneySchema.nullish(),
+  money_amount: z.number().nullish(),
+  money_direction: z.enum(["in", "out", "none"]).nullish(),
+  money_received: z.number().nullish(),
   settlement: Level3SettlementSchema.nullish(),
   open_actions: z.array(Level3ActionSchema).nullish(),
   order_mode: OrderModeSchema.nullish(),

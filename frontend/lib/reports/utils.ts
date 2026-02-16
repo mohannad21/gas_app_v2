@@ -449,7 +449,7 @@ export function summarizeRefillEvents(events: any[]) {
 
 export function summarizeEventTypes(events: any[]) {
   const map = new Map<string, number>();
-  const hiddenTypes = new Set(["init", "init_credit", "init_return", "init_balance", "cash_init", "customer_adjust"]);
+  const hiddenTypes = new Set(["init", "init_credit", "init_return", "init_balance", "cash_init"]);
   events.forEach((ev) => {
     const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
     if (hiddenTypes.has(eventType)) return;
