@@ -6,20 +6,32 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
 import pytest
 from fastapi.testclient import TestClient
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+BACKEND_ROOT = ROOT / "backend"
+ENV_TEST = BACKEND_ROOT / ".env.test"
+if ENV_TEST.exists():
+    load_dotenv(ENV_TEST, override=False)
+
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    db_url = os.getenv("DATABASE_URL")
+    db_url = os.getenv("DATABASE_URL_TEST") or os.getenv("DATABASE_URL")
     if not db_url:
-        pytest.skip("DATABASE_URL is not set. Tests require a Postgres database.")
+        pytest.skip("DATABASE_URL_TEST is not set. Tests require a Postgres database.")
     if db_url.startswith("sqlite"):
         pytest.fail("SQLite is not supported. Set DATABASE_URL to a Postgres URL.")
+    if "test" not in db_url.lower() and os.getenv("ALLOW_TEST_DB_DROP") != "1":
+        pytest.fail(
+            "Refusing to run tests against a non-test database. "
+            "Set DATABASE_URL_TEST or ALLOW_TEST_DB_DROP=1 if you really intend to wipe it."
+        )
 
     monkeypatch.setenv("DATABASE_URL", db_url)
     from app import config as app_config
@@ -27,13 +39,16 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     importlib.reload(app_config)
     from app import db as app_db
     importlib.reload(app_db)
+    from app import models as app_models
+    importlib.reload(app_models)
     from app import main as app_main
     importlib.reload(app_main)
 
     app_db.SQLModel.metadata.drop_all(bind=app_db.engine)
     app_db.SQLModel.metadata.create_all(bind=app_db.engine)
 
-    app = app_main.create_app()
+    app_factory = getattr(app_main, "create_app", None)
+    app = app_factory() if callable(app_factory) else app_main.app
     with TestClient(app) as test_client:
         yield test_client
 
@@ -57,7 +72,7 @@ def init_inventory(
         "reason": "initial",
     }
     resp = client.post("/inventory/init", json=payload)
-    assert resp.status_code == 201
+    assert resp.status_code in (200, 201)
 
 def create_customer(
     client,

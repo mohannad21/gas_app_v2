@@ -539,10 +539,42 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
       cash_after: ev.cash_after != null ? fromMinorUnits(ev.cash_after) : ev.cash_after,
       company_before: ev.company_before != null ? fromMinorUnits(ev.company_before) : ev.company_before,
       company_after: ev.company_after != null ? fromMinorUnits(ev.company_after) : ev.company_after,
+      customer_money_before: ev.customer_money_before != null ? fromMinorUnits(ev.customer_money_before) : ev.customer_money_before,
+      customer_money_after: ev.customer_money_after != null ? fromMinorUnits(ev.customer_money_after) : ev.customer_money_after,
       total_cost: ev.total_cost != null ? fromMinorUnits(ev.total_cost) : ev.total_cost,
       paid_now: ev.paid_now != null ? fromMinorUnits(ev.paid_now) : ev.paid_now,
       order_total: ev.order_total != null ? fromMinorUnits(ev.order_total) : ev.order_total,
       order_paid: ev.order_paid != null ? fromMinorUnits(ev.order_paid) : ev.order_paid,
+      money: ev.money
+        ? {
+            ...ev.money,
+            amount: fromMinorUnits(ev.money.amount),
+          }
+        : ev.money,
+      money_amount: ev.money_amount != null ? fromMinorUnits(ev.money_amount) : ev.money_amount,
+      money_delta: ev.money_delta != null ? ev.money_delta : ev.money_delta,
+      money_received: ev.money_received != null ? fromMinorUnits(ev.money_received) : ev.money_received,
+      open_actions: Array.isArray(ev.open_actions)
+        ? ev.open_actions.map((action) =>
+            action?.category === "money" && action.amount != null
+              ? { ...action, amount: fromMinorUnits(action.amount) }
+              : action
+          )
+        : ev.open_actions,
+      remaining_actions: Array.isArray(ev.remaining_actions)
+        ? ev.remaining_actions.map((action) =>
+            action?.category === "money" && action.amount != null
+              ? { ...action, amount: fromMinorUnits(action.amount) }
+              : action
+          )
+        : ev.remaining_actions,
+      action_pills: Array.isArray(ev.action_pills)
+        ? ev.action_pills.map((action) =>
+            action?.category === "money" && action.amount != null
+              ? { ...action, amount: fromMinorUnits(action.amount) }
+              : action
+          )
+        : ev.action_pills,
     })),
   };
 }

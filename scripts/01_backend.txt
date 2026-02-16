@@ -508,6 +508,41 @@ def downgrade() -> None:
     op.drop_column("price_catalog", "buy_iron_price")
     op.drop_column("price_catalog", "sell_iron_price")
 
+FILE: backend/alembic/versions_v2/e1c2d3f4a5b6_add_ledger_created_at.py
+"""add created_at to ledger_entries"""
+from __future__ import annotations
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = "e1c2d3f4a5b6"
+down_revision = "d9f1a2b3c4d5"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column("ledger_entries", sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
+    op.execute(sa.text("UPDATE ledger_entries SET created_at = happened_at WHERE created_at IS NULL"))
+    op.alter_column(
+        "ledger_entries",
+        "created_at",
+        nullable=False,
+        server_default=sa.text("now()"),
+    )
+    op.create_index(
+        "ix_ledger_entries_happened_created_id",
+        "ledger_entries",
+        ["happened_at", "created_at", "id"],
+    )
+
+
+def downgrade() -> None:
+    op.drop_index("ix_ledger_entries_happened_created_id", table_name="ledger_entries")
+    op.drop_column("ledger_entries", "created_at")
+
 FILE: backend/alembic.ini
 [alembic]
 script_location = alembic
@@ -989,6 +1024,10 @@ class LedgerEntry(SQLModel, table=True):
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True),
   )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   source_type: str = Field(index=True)
@@ -1507,13 +1546,14 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
     raise HTTPException(status_code=404, detail="Collection not found")
   base = txns[0]
 
-  now = datetime.now(timezone.utc)
   for txn in txns:
+    reversal_happened_at = txn.happened_at
+    reversal_day = txn.day
     reversal = CustomerTransaction(
       customer_id=txn.customer_id,
       system_id=txn.system_id,
-      happened_at=now,
-      day=derive_day(now),
+      happened_at=reversal_happened_at,
+      day=reversal_day,
       kind=txn.kind,
       gas_type=txn.gas_type,
       installed=txn.installed,
@@ -1716,7 +1756,7 @@ from app.schemas import (
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
 from app.utils.time import business_date_start_utc
 
@@ -1815,8 +1855,9 @@ def settle_company_cylinders(
     is_reversed=False,
   )
   session.add(txn)
-  post_company_transaction(session, txn)
-  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  entries = post_company_transaction(session, txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
   txn.debt_cash = snapshot["debt_cash"]
   txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
@@ -2490,7 +2531,7 @@ from app.schemas import (
   InventoryRefillUpdate,
   InventorySnapshot,
 )
-from app.services.ledger import snapshot_company_debts, sum_inventory
+from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.utils.time import business_date_start_utc
 
@@ -2555,6 +2596,13 @@ def _time_of_day(value: datetime) -> str:
 def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
   if new12 != 0 or new48 != 0:
     raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
+
+
+def _validate_inventory_adjustment_reason(reason: str, *, delta_full: int, delta_empty: int) -> None:
+  if reason not in {"count_correction", "shrinkage", "damage"}:
+    raise HTTPException(status_code=422, detail="invalid_adjustment_reason")
+  if reason in {"shrinkage", "damage"} and (delta_full > 0 or delta_empty > 0):
+    raise HTTPException(status_code=422, detail="adjustment_reason_disallows_positive_delta")
 
 
 @router.get("/latest", response_model=InventorySnapshot)
@@ -2625,6 +2673,11 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
 
+  _validate_inventory_adjustment_reason(
+    payload.reason,
+    delta_full=payload.delta_full,
+    delta_empty=payload.delta_empty,
+  )
   happened_at = normalize_happened_at(payload.happened_at)
   adj = InventoryAdjustment(
     gas_type=payload.gas_type,
@@ -2681,14 +2734,15 @@ def update_inventory_adjustment(
   if not existing or existing.is_reversed:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = InventoryAdjustment(
     gas_type=existing.gas_type,
     delta_full=existing.delta_full,
     delta_empty=existing.delta_empty,
     note=f"Reversal of {existing.id}",
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     reversed_id=existing.id,
     is_reversed=True,
   )
@@ -2709,14 +2763,20 @@ def update_inventory_adjustment(
   data = payload.model_dump(exclude_unset=True)
   new_full = data.get("delta_full", existing.delta_full)
   new_empty = data.get("delta_empty", existing.delta_empty)
-  new_note = data.get("note", existing.note)
+  next_reason = data.get("reason") or existing.note
+  if not next_reason:
+    raise HTTPException(status_code=422, detail="adjustment_reason_required")
+  _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
+  new_note = data.get("note")
+  if new_note is None:
+    new_note = next_reason
   new_adj = InventoryAdjustment(
     gas_type=existing.gas_type,
     delta_full=new_full,
     delta_empty=new_empty,
     note=new_note,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     is_reversed=False,
   )
   session.add(new_adj)
@@ -2800,8 +2860,9 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     is_reversed=False,
   )
   session.add(txn)
-  post_company_transaction(session, txn)
-  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  entries = post_company_transaction(session, txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
   txn.debt_cash = snapshot["debt_cash"]
   txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
@@ -2874,10 +2935,11 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     raise HTTPException(status_code=404, detail="Refill not found")
 
   _reject_new_shells_for_refill(payload.new12, payload.new48)
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CompanyTransaction(
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind=existing.kind,
     buy12=existing.buy12,
     return12=existing.return12,
@@ -2909,8 +2971,8 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   session.add(existing)
 
   new_txn = CompanyTransaction(
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind="refill",
     buy12=payload.buy12,
     return12=payload.return12,
@@ -2927,8 +2989,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     is_reversed=False,
   )
   session.add(new_txn)
-  post_company_transaction(session, new_txn)
-  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at)
+  entries = post_company_transaction(session, new_txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at, boundary=boundary)
   new_txn.debt_cash = snapshot["debt_cash"]
   new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
@@ -3235,12 +3298,13 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
   # reverse existing
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CustomerTransaction(
     customer_id=existing.customer_id,
     system_id=existing.system_id,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind="order",
     mode=existing.mode,
     gas_type=existing.gas_type,
@@ -3418,7 +3482,7 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
 FILE: backend/app/routers/reports.py
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -3441,6 +3505,13 @@ from app.schemas import (
   DailyReportV2Card,
   DailyReportV2Day,
   DailyReportV2Event,
+  Level3Action,
+  Level3Counterparty,
+  Level3Hero,
+  Level3Money,
+  Level3Settlement,
+  Level3SettlementComponents,
+  Level3System,
   ReportInventoryState,
   ReportInventoryTotals,
 )
@@ -3555,6 +3626,738 @@ def _sum_company_cyl_at_day_end(session: Session, day: date, gas_type: str) -> i
     unit="count",
     day_to=day,
   )
+
+
+_EVENT_LABELS: dict[str, str] = {
+  "refill": "Refill",
+  "company_buy_iron": "Buy Iron",
+  "collection_money": "Late Pay",
+  "collection_empty": "Return Emp",
+  "company_payment": "Pay Company",
+  "expense": "Expense",
+  "bank_deposit": "Deposit",
+  "adjust": "Inventory Adjust",
+  "cash_adjust": "Cash Adjust",
+  "collection_payout": "Customer Payout",
+  "customer_adjust": "Customer Adjust",
+  "init": "System Init",
+}
+
+_ORDER_LABELS: dict[str, str] = {
+  "replacement": "Replace",
+  "sell_iron": "Sell Full",
+  "buy_iron": "Buy Empty",
+}
+
+
+def _titleize_event_type(event_type: str) -> str:
+  return " ".join(part.capitalize() for part in event_type.split("_"))
+
+
+def _event_label(event: DailyReportV2Event) -> str:
+  if event.event_type == "order":
+    if event.order_mode:
+      return _ORDER_LABELS.get(event.order_mode, "Order")
+    return "Order"
+  return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
+
+
+def _safe_int(value: Optional[int]) -> int:
+  if value is None:
+    return 0
+  return int(value)
+
+
+def _event_is_balanced(event: DailyReportV2Event) -> bool:
+  if event.event_type == "order":
+    total = _safe_int(event.order_total)
+    paid = _safe_int(event.order_paid)
+    if event.order_mode == "replacement":
+      installed = _safe_int(event.order_installed)
+      received = _safe_int(event.order_received)
+      return installed == received and total == paid
+    if event.order_mode in {"sell_iron", "buy_iron"}:
+      return total == paid
+    return True
+  if event.event_type == "refill":
+    buy12 = _safe_int(event.buy12)
+    return12 = _safe_int(event.return12)
+    buy48 = _safe_int(event.buy48)
+    return48 = _safe_int(event.return48)
+    total_cost = _safe_int(event.total_cost)
+    paid_now = _safe_int(event.paid_now)
+    return buy12 == return12 and buy48 == return48 and total_cost == paid_now
+  if event.event_type in {
+    "collection_money",
+    "collection_empty",
+    "collection_payout",
+    "company_payment",
+    "company_buy_iron",
+    "expense",
+    "bank_deposit",
+    "adjust",
+    "cash_adjust",
+    "customer_adjust",
+    "init",
+  }:
+    return True
+  return True
+
+
+def _event_action_lines(event: DailyReportV2Event) -> list[str]:
+  lines: list[str] = []
+  if event.event_type == "order" and event.order_mode == "replacement":
+    installed = _safe_int(event.order_installed)
+    received = _safe_int(event.order_received)
+    if installed > received:
+      diff = installed - received
+      gas = event.gas_type or "12kg"
+      lines.append(f"Return {diff}x{gas}")
+    total = _safe_int(event.order_total)
+    paid = _safe_int(event.order_paid)
+    if total != paid:
+      diff = total - paid
+      if diff > 0:
+        lines.append(f"Collect {diff}")
+    return lines
+  if event.event_type == "order" and event.order_mode == "sell_iron":
+    total = _safe_int(event.order_total)
+    paid = _safe_int(event.order_paid)
+    if total != paid:
+      diff = total - paid
+      if diff > 0:
+        lines.append(f"Collect {diff}")
+    return lines
+  if event.event_type == "order" and event.order_mode == "buy_iron":
+    total = _safe_int(event.order_total)
+    paid = _safe_int(event.order_paid)
+    if total != paid:
+      diff = abs(total - paid)
+      if diff > 0:
+        lines.append(f"Pay customer {diff}")
+    return lines
+  if event.event_type == "refill":
+    buy12 = _safe_int(event.buy12)
+    return12 = _safe_int(event.return12)
+    if buy12 > return12:
+      diff = buy12 - return12
+      lines.append(f"Return {diff}x12kg to company")
+    buy48 = _safe_int(event.buy48)
+    return48 = _safe_int(event.return48)
+    if buy48 > return48:
+      diff = buy48 - return48
+      lines.append(f"Return {diff}x48kg to company")
+    total_cost = _safe_int(event.total_cost)
+    paid_now = _safe_int(event.paid_now)
+    if total_cost != paid_now:
+      diff = abs(total_cost - paid_now)
+      if diff > 0:
+        lines.append(f"Pay company {diff}")
+    return lines
+  return lines
+
+
+def _apply_ticket_fields(event: DailyReportV2Event) -> None:
+  if not event.id:
+    event.id = event.source_id or f"{event.event_type}:{event.effective_at.isoformat()}"
+  event.label = _event_label(event)
+  event.label_short = event.label
+  event.is_balanced = _event_is_balanced(event)
+  event.action_lines = _event_action_lines(event)
+
+
+def _level3_counterparty(event: DailyReportV2Event) -> Level3Counterparty:
+  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout"}:
+    display_name = event.customer_name or "Customer"
+    display = display_name
+    if event.customer_description:
+      display = f"{display_name} — {event.customer_description}"
+    return Level3Counterparty(
+      type="customer",
+      display_name=display_name,
+      description=event.customer_description,
+      display=display,
+    )
+  if event.event_type in {"refill", "company_payment", "company_buy_iron"}:
+    return Level3Counterparty(type="company", display_name="Company", description=None, display="Company")
+  return Level3Counterparty(type="none", display_name=None, description=None, display=None)
+
+
+def _level3_system(event: DailyReportV2Event) -> Optional[Level3System]:
+  if event.event_type == "order" and event.order_mode == "replacement":
+    if event.system_name:
+      return Level3System(display_name=event.system_name)
+  return None
+
+
+def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
+  gas = f" {event.gas_type}" if event.gas_type else ""
+  if event.event_type == "order":
+    if event.order_mode == "replacement":
+      return Level3Hero(text=f"Replace{gas}".strip())
+    if event.order_mode == "sell_iron":
+      return Level3Hero(text=f"Sell Full{gas}".strip())
+    if event.order_mode == "buy_iron":
+      return Level3Hero(text=f"Buy Empty{gas}".strip())
+    return Level3Hero(text="Order")
+  if event.event_type == "collection_money":
+    return Level3Hero(text="Late Pay")
+  if event.event_type == "collection_empty":
+    return Level3Hero(text="Late Return")
+  if event.event_type == "refill":
+    return Level3Hero(text="Refill")
+  if event.event_type == "company_payment":
+    return Level3Hero(text="Pay Company")
+  if event.event_type == "company_buy_iron":
+    return Level3Hero(text="Buy Iron")
+  if event.event_type == "expense":
+    if event.expense_type:
+      return Level3Hero(text=f"Expense: {event.expense_type}")
+    return Level3Hero(text="Expense")
+  if event.event_type == "adjust":
+    return Level3Hero(text="Inventory Adjust")
+  if event.event_type == "cash_adjust":
+    return Level3Hero(text="Cash Adjust")
+  if event.event_type == "bank_deposit":
+    return Level3Hero(text="Bank Deposit")
+  if event.event_type == "collection_payout":
+    return Level3Hero(text="Customer Payout")
+  if event.event_type == "init":
+    return Level3Hero(text="System Init")
+  return Level3Hero(text=_titleize_event_type(event.event_type))
+
+
+def _cash_delta(event: DailyReportV2Event) -> int:
+  if event.cash_before is None or event.cash_after is None:
+    return 0
+  return int(event.cash_after - event.cash_before)
+
+
+def _level3_money(event: DailyReportV2Event) -> Level3Money:
+  verb: Literal["received", "paid", "none"] = "none"
+  amount = 0
+
+  if event.event_type == "order":
+    paid = _safe_int(event.order_paid)
+    if paid:
+      verb = "paid" if event.order_mode == "buy_iron" else "received"
+      amount = abs(paid)
+  elif event.event_type == "refill":
+    paid = _safe_int(event.paid_now)
+    if paid:
+      verb = "paid"
+      amount = abs(paid)
+  elif event.event_type in {"company_payment", "company_buy_iron"}:
+    paid = _safe_int(event.paid_now or event.total_cost)
+    if paid:
+      verb = "paid"
+      amount = abs(paid)
+  elif event.event_type == "expense":
+    total = _safe_int(event.total_cost)
+    if total:
+      verb = "paid"
+      amount = abs(total)
+  elif event.event_type == "bank_deposit":
+    total = _safe_int(event.total_cost)
+    if total:
+      verb = "received"
+      amount = abs(total)
+  elif event.event_type == "cash_adjust":
+    total = _safe_int(event.total_cost)
+    if total > 0:
+      verb = "received"
+      amount = abs(total)
+    elif total < 0:
+      verb = "paid"
+      amount = abs(total)
+  elif event.event_type in {"collection_money", "collection_payout"}:
+    delta = _cash_delta(event)
+    if delta > 0:
+      verb = "received"
+      amount = abs(delta)
+    elif delta < 0:
+      verb = "paid"
+      amount = abs(delta)
+
+  return Level3Money(verb=verb, amount=amount)
+
+
+def _level3_settlement(
+  event: DailyReportV2Event,
+  *,
+  customer_debt: Optional[tuple[int, int, int]] = None,
+) -> Level3Settlement:
+  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout"}:
+    if customer_debt is not None:
+      debt_cash, debt_12, debt_48 = customer_debt
+      money = debt_cash == 0
+      cyl12 = debt_12 == 0
+      cyl48 = debt_48 == 0
+      is_settled = money and cyl12 and cyl48
+      return Level3Settlement(
+        scope="customer",
+        is_settled=is_settled,
+        components=Level3SettlementComponents(money=money, cyl12=cyl12, cyl48=cyl48),
+      )
+    money = True
+    cyl12 = True
+    cyl48 = True
+    if event.event_type == "order":
+      money = _safe_int(event.order_total) == _safe_int(event.order_paid)
+      if event.order_mode == "replacement":
+        installed = _safe_int(event.order_installed)
+        received = _safe_int(event.order_received)
+        if event.gas_type == "12kg":
+          cyl12 = installed == received
+        elif event.gas_type == "48kg":
+          cyl48 = installed == received
+    is_settled = money and cyl12 and cyl48
+    return Level3Settlement(
+      scope="customer",
+      is_settled=is_settled,
+      components=Level3SettlementComponents(money=money, cyl12=cyl12, cyl48=cyl48),
+    )
+
+  if event.event_type in {"refill", "company_payment", "company_buy_iron"}:
+    money = True
+    cyl12 = True
+    cyl48 = True
+    if isinstance(event.company_after, int):
+      money = event.company_after == 0
+    if isinstance(event.company_12kg_after, int):
+      cyl12 = event.company_12kg_after == 0
+    if isinstance(event.company_48kg_after, int):
+      cyl48 = event.company_48kg_after == 0
+    is_settled = money and cyl12 and cyl48
+    return Level3Settlement(
+      scope="company",
+      is_settled=is_settled,
+      components=Level3SettlementComponents(money=money, cyl12=cyl12, cyl48=cyl48),
+    )
+
+  return Level3Settlement(scope="none", is_settled=True, components=None)
+
+
+def _customer_actions_from_debt(debt_cash: int, debt_12: int, debt_48: int) -> list[Level3Action]:
+  actions: list[Level3Action] = []
+  if debt_cash > 0:
+    actions.append(Level3Action(category="money", direction="customer_pays", amount=debt_cash))
+  elif debt_cash < 0:
+    actions.append(Level3Action(category="money", direction="pay_customer", amount=abs(debt_cash)))
+  if debt_12 > 0:
+    actions.append(
+      Level3Action(
+        category="cylinders",
+        direction="customer_returns_empty",
+        gas_type="12",
+        qty=debt_12,
+        unit="empty",
+      )
+    )
+  elif debt_12 < 0:
+    actions.append(
+      Level3Action(
+        category="cylinders",
+        direction="deliver_full_to_customer",
+        gas_type="12",
+        qty=abs(debt_12),
+        unit="full",
+      )
+    )
+  if debt_48 > 0:
+    actions.append(
+      Level3Action(
+        category="cylinders",
+        direction="customer_returns_empty",
+        gas_type="48",
+        qty=debt_48,
+        unit="empty",
+      )
+    )
+  elif debt_48 < 0:
+    actions.append(
+      Level3Action(
+        category="cylinders",
+        direction="deliver_full_to_customer",
+        gas_type="48",
+        qty=abs(debt_48),
+        unit="full",
+      )
+    )
+  return actions
+
+
+def _company_actions_from_debt(
+  company_money: Optional[int],
+  company_cyl_12: Optional[int],
+  company_cyl_48: Optional[int],
+) -> list[Level3Action]:
+  actions: list[Level3Action] = []
+  if isinstance(company_money, int):
+    if company_money > 0:
+      actions.append(Level3Action(category="money", direction="pay_company", amount=company_money))
+    elif company_money < 0:
+      actions.append(Level3Action(category="money", direction="company_pays", amount=abs(company_money)))
+  if isinstance(company_cyl_12, int):
+    if company_cyl_12 < 0:
+      actions.append(
+        Level3Action(
+          category="cylinders",
+          direction="return_empty_to_company",
+          gas_type="12",
+          qty=abs(company_cyl_12),
+          unit="empty",
+        )
+      )
+    elif company_cyl_12 > 0:
+      actions.append(
+        Level3Action(
+          category="cylinders",
+          direction="company_delivers_full_to_you",
+          gas_type="12",
+          qty=company_cyl_12,
+          unit="full",
+        )
+      )
+  if isinstance(company_cyl_48, int):
+    if company_cyl_48 < 0:
+      actions.append(
+        Level3Action(
+          category="cylinders",
+          direction="return_empty_to_company",
+          gas_type="48",
+          qty=abs(company_cyl_48),
+          unit="empty",
+        )
+      )
+    elif company_cyl_48 > 0:
+      actions.append(
+        Level3Action(
+          category="cylinders",
+          direction="company_delivers_full_to_you",
+          gas_type="48",
+          qty=company_cyl_48,
+          unit="full",
+        )
+      )
+  return actions
+
+
+def _apply_level3_fields(
+  event: DailyReportV2Event,
+  *,
+  customer_debt: Optional[tuple[int, int, int]] = None,
+) -> None:
+  event.counterparty = _level3_counterparty(event)
+  event.counterparty_display = event.counterparty.display if event.counterparty else None
+  event.system = _level3_system(event)
+  event.hero = _level3_hero(event)
+  event.money = _level3_money(event)
+  event.settlement = _level3_settlement(event, customer_debt=customer_debt)
+  if event.counterparty and event.counterparty.type == "customer" and customer_debt is not None:
+    event.open_actions = _customer_actions_from_debt(*customer_debt)
+  elif event.counterparty and event.counterparty.type == "company":
+    event.open_actions = _company_actions_from_debt(
+      event.company_after,
+      event.company_12kg_after,
+      event.company_48kg_after,
+    )
+  else:
+    event.open_actions = []
+
+
+def _status_mode(event: DailyReportV2Event) -> Literal["atomic", "settlement"]:
+  if event.event_type in {
+    "collection_money",
+    "collection_empty",
+    "collection_payout",
+    "company_payment",
+  }:
+    return "settlement"
+  return "atomic"
+
+
+def _gas_short(gas_type: Optional[str]) -> Optional[str]:
+  if not gas_type:
+    return None
+  if gas_type.startswith("12"):
+    return "12"
+  if gas_type.startswith("48"):
+    return "48"
+  return None
+
+
+def _format_money(amount: int) -> str:
+  return f"₪{amount}"
+
+
+def _empty_word(qty: int) -> str:
+  return "empty" if qty == 1 else "empties"
+
+
+def _pill(
+  *,
+  category: Literal["money", "cylinders"],
+  kind: Literal["money", "empty_12", "empty_48", "full_12", "full_48"],
+  direction: Literal["customer->dist", "dist->customer", "dist->company", "company->dist"],
+  severity: Literal["warning", "danger"],
+  text: str,
+  amount: Optional[int] = None,
+  gas_type: Optional[str] = None,
+  qty: Optional[int] = None,
+  unit: Optional[str] = None,
+) -> Level3Action:
+  return Level3Action(
+    category=category,
+    direction=direction,
+    amount=amount,
+    gas_type=gas_type,
+    qty=qty,
+    unit=unit,
+    kind=kind,
+    severity=severity,
+    text=text,
+  )
+
+
+def _money_pill(direction: Literal["customer->dist", "dist->customer", "dist->company", "company->dist"], amount: int) -> Level3Action:
+  if direction == "customer->dist":
+    return _pill(
+      category="money",
+      kind="money",
+      direction=direction,
+      severity="warning",
+      text=f"Customer pays {_format_money(amount)}",
+      amount=amount,
+    )
+  if direction == "dist->customer":
+    return _pill(
+      category="money",
+      kind="money",
+      direction=direction,
+      severity="warning",
+      text=f"Pay customer {_format_money(amount)}",
+      amount=amount,
+    )
+  if direction == "dist->company":
+    return _pill(
+      category="money",
+      kind="money",
+      direction=direction,
+      severity="danger",
+      text=f"Pay company {_format_money(amount)}",
+      amount=amount,
+    )
+  return _pill(
+    category="money",
+    kind="money",
+    direction="company->dist",
+    severity="danger",
+    text=f"Company pays {_format_money(amount)}",
+    amount=amount,
+  )
+
+
+def _empty_pill(
+  *,
+  direction: Literal["customer->dist", "dist->company"],
+  gas: Literal["12", "48"],
+  qty: int,
+) -> Level3Action:
+  gas_label = f"{gas}kg"
+  empties = _empty_word(qty)
+  if direction == "customer->dist":
+    return _pill(
+      category="cylinders",
+      kind=f"empty_{gas}",
+      direction=direction,
+      severity="warning",
+      text=f"Customer returns {qty}×{gas_label} {empties}",
+      gas_type=gas,
+      qty=qty,
+      unit="empty",
+    )
+  return _pill(
+    category="cylinders",
+    kind=f"empty_{gas}",
+    direction="dist->company",
+    severity="danger",
+    text=f"Return {qty}×{gas_label} {empties} to company",
+    gas_type=gas,
+    qty=qty,
+    unit="empty",
+  )
+
+
+def _full_pill(
+  *,
+  direction: Literal["dist->customer", "company->dist"],
+  gas: Literal["12", "48"],
+  qty: int,
+) -> Level3Action:
+  gas_label = f"{gas}kg"
+  if direction == "dist->customer":
+    return _pill(
+      category="cylinders",
+      kind=f"full_{gas}",
+      direction=direction,
+      severity="warning",
+      text=f"Deliver {qty}×{gas_label} full to customer",
+      gas_type=gas,
+      qty=qty,
+      unit="full",
+    )
+  return _pill(
+    category="cylinders",
+    kind=f"full_{gas}",
+    direction="company->dist",
+    severity="danger",
+    text=f"Company delivers {qty}×{gas_label} full",
+    gas_type=gas,
+    qty=qty,
+    unit="full",
+  )
+
+
+def _customer_pills_from_debt(debt_cash: int, debt_12: int, debt_48: int) -> list[Level3Action]:
+  actions: list[Level3Action] = []
+  if debt_cash > 0:
+    actions.append(_money_pill("customer->dist", debt_cash))
+  elif debt_cash < 0:
+    actions.append(_money_pill("dist->customer", abs(debt_cash)))
+  if debt_12 > 0:
+    actions.append(_empty_pill(direction="customer->dist", gas="12", qty=debt_12))
+  elif debt_12 < 0:
+    actions.append(_full_pill(direction="dist->customer", gas="12", qty=abs(debt_12)))
+  if debt_48 > 0:
+    actions.append(_empty_pill(direction="customer->dist", gas="48", qty=debt_48))
+  elif debt_48 < 0:
+    actions.append(_full_pill(direction="dist->customer", gas="48", qty=abs(debt_48)))
+  return actions
+
+
+def _company_pills_from_debt(
+  company_money: Optional[int],
+  company_cyl_12: Optional[int],
+  company_cyl_48: Optional[int],
+) -> list[Level3Action]:
+  actions: list[Level3Action] = []
+  if isinstance(company_money, int):
+    if company_money > 0:
+      actions.append(_money_pill("dist->company", company_money))
+    elif company_money < 0:
+      actions.append(_money_pill("company->dist", abs(company_money)))
+  if isinstance(company_cyl_12, int):
+    if company_cyl_12 < 0:
+      actions.append(_empty_pill(direction="dist->company", gas="12", qty=abs(company_cyl_12)))
+    elif company_cyl_12 > 0:
+      actions.append(_full_pill(direction="company->dist", gas="12", qty=company_cyl_12))
+  if isinstance(company_cyl_48, int):
+    if company_cyl_48 < 0:
+      actions.append(_empty_pill(direction="dist->company", gas="48", qty=abs(company_cyl_48)))
+    elif company_cyl_48 > 0:
+      actions.append(_full_pill(direction="company->dist", gas="48", qty=company_cyl_48))
+  return actions
+
+
+def _atomic_action_pills(event: DailyReportV2Event) -> list[Level3Action]:
+  actions: list[Level3Action] = []
+
+  if event.event_type == "order":
+    total = _safe_int(event.order_total)
+    paid = _safe_int(event.order_paid)
+    diff = total - paid
+    gas = _gas_short(event.gas_type)
+
+    if event.order_mode == "replacement":
+      installed = _safe_int(event.order_installed)
+      received = _safe_int(event.order_received)
+      if installed > received:
+        if gas:
+          actions.append(_empty_pill(direction="customer->dist", gas=gas, qty=installed - received))
+      elif received > installed:
+        if gas:
+          actions.append(_full_pill(direction="dist->customer", gas=gas, qty=received - installed))
+      if diff > 0:
+        actions.append(_money_pill("customer->dist", diff))
+      elif diff < 0:
+        actions.append(_money_pill("dist->customer", abs(diff)))
+      return actions
+
+    if event.order_mode == "sell_iron":
+      if diff > 0:
+        actions.append(_money_pill("customer->dist", diff))
+      elif diff < 0:
+        actions.append(_money_pill("dist->customer", abs(diff)))
+      return actions
+
+    if event.order_mode == "buy_iron":
+      if diff > 0:
+        actions.append(_money_pill("dist->customer", diff))
+      elif diff < 0:
+        actions.append(_money_pill("customer->dist", abs(diff)))
+      return actions
+
+  if event.event_type == "refill":
+    buy12 = _safe_int(event.buy12)
+    return12 = _safe_int(event.return12)
+    buy48 = _safe_int(event.buy48)
+    return48 = _safe_int(event.return48)
+    if buy12 > return12:
+      actions.append(_empty_pill(direction="dist->company", gas="12", qty=buy12 - return12))
+    elif return12 > buy12:
+      actions.append(_full_pill(direction="company->dist", gas="12", qty=return12 - buy12))
+    if buy48 > return48:
+      actions.append(_empty_pill(direction="dist->company", gas="48", qty=buy48 - return48))
+    elif return48 > buy48:
+      actions.append(_full_pill(direction="company->dist", gas="48", qty=return48 - buy48))
+    total_cost = _safe_int(event.total_cost)
+    paid_now = _safe_int(event.paid_now)
+    diff = total_cost - paid_now
+    if diff > 0:
+      actions.append(_money_pill("dist->company", diff))
+    elif diff < 0:
+      actions.append(_money_pill("company->dist", abs(diff)))
+    return actions
+
+  if event.event_type == "company_buy_iron":
+    total_cost = _safe_int(event.total_cost)
+    paid_now = _safe_int(event.paid_now)
+    diff = total_cost - paid_now
+    if diff > 0:
+      actions.append(_money_pill("dist->company", diff))
+    elif diff < 0:
+      actions.append(_money_pill("company->dist", abs(diff)))
+    return actions
+
+  if event.event_type in {"expense", "adjust", "cash_adjust", "bank_deposit"}:
+    return actions
+
+  return actions
+
+
+def _apply_status_fields(
+  event: DailyReportV2Event,
+  *,
+  customer_debt: Optional[tuple[int, int, int]] = None,
+) -> None:
+  mode = _status_mode(event)
+  event.status_mode = mode
+  if mode == "settlement":
+    if event.counterparty and event.counterparty.type == "customer" and customer_debt is not None:
+      event.action_pills = _customer_pills_from_debt(*customer_debt)
+    elif event.counterparty and event.counterparty.type == "company":
+      event.action_pills = _company_pills_from_debt(
+        event.company_after,
+        event.company_12kg_after,
+        event.company_48kg_after,
+      )
+    else:
+      event.action_pills = []
+    event.is_ok = len(event.action_pills) == 0
+    return
+  event.action_pills = _atomic_action_pills(event)
+  event.is_ok = len(event.action_pills) == 0
 
 
 def _sum_company_cyl_before_day(session: Session, day: date, gas_type: str) -> int:
@@ -3869,6 +4672,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     .where(CustomerTransaction.day == business_date)
     .where(CustomerTransaction.is_reversed == False)  # noqa: E712
   ).all()
+  customer_txn_by_id = {txn.id: txn for txn in customer_txns}
   grouped_returns: dict[str, list[CustomerTransaction]] = defaultdict(list)
   other_txns: list[CustomerTransaction] = []
   for txn in customer_txns:
@@ -3879,6 +4683,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   return_group_txn_ids: dict[str, list[str]] = {
     group_id: [t.id for t in txns] for group_id, txns in grouped_returns.items()
   }
+  return_group_latest: dict[str, CustomerTransaction] = {}
+  for group_id, txns in grouped_returns.items():
+    return_group_latest[group_id] = max(txns, key=lambda t: (t.happened_at, t.created_at))
 
   for txn in other_txns:
     source_key = ("customer_txn", txn.id)
@@ -3954,9 +4761,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       expense_type=None,
       reason=base.note,
       buy12=None,
-      return12=None,
+      return12=qty_12,
       buy48=None,
-      return48=None,
+      return48=qty_48,
       total_cost=None,
       paid_now=None,
       order_total=None,
@@ -4113,7 +4920,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       return12=None,
       buy48=None,
       return48=None,
-      total_cost=expense.amount if expense.kind == "expense" else None,
+      total_cost=expense.amount,
       paid_now=None,
       order_total=None,
       order_paid=None,
@@ -4166,7 +4973,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events.append(event)
 
   # sort and apply running balances for cash/inventory
-  events.sort(key=lambda ev: (ev.effective_at, ev.created_at))
+  events.sort(key=lambda ev: (ev.effective_at, ev.created_at, ev.source_id or ""))
   running_cash = cash_start
   running_company = company_start
   running_company_12 = company_12kg_start
@@ -4253,8 +5060,28 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       event.inventory_before = inv_before
       event.inventory_after = inv_after
 
-    if event.event_type != "customer_adjust":
+    customer_debt: Optional[tuple[int, int, int]] = None
+    if event.event_type == "collection_empty" and event.source_id in return_group_latest:
+      txn = return_group_latest[event.source_id]
+      customer_debt = (txn.debt_cash, txn.debt_cylinders_12, txn.debt_cylinders_48)
+    elif event.source_id and event.event_type in {
+      "order",
+      "collection_money",
+      "collection_payout",
+      "customer_adjust",
+    }:
+      txn = customer_txn_by_id.get(event.source_id)
+      if txn:
+        customer_debt = (txn.debt_cash, txn.debt_cylinders_12, txn.debt_cylinders_48)
+
+    _apply_ticket_fields(event)
+    _apply_level3_fields(event, customer_debt=customer_debt)
+    _apply_status_fields(event, customer_debt=customer_debt)
+
+    if event.event_type not in {"customer_adjust", "init"}:
       event_rows.append(event)
+
+  event_rows.sort(key=lambda ev: (ev.effective_at, ev.id or ""), reverse=True)
 
   return DailyReportV2Day(
     date=business_date.isoformat(),
@@ -4742,6 +5569,7 @@ from sqlmodel import Field, SQLModel
 
 GasType = Literal["12kg", "48kg"]
 OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
+InventoryAdjustReason = Literal["count_correction", "shrinkage", "damage"]
 
 
 def new_id(prefix: str = "") -> str:
@@ -5002,6 +5830,13 @@ class CollectionCreate(SQLModel):
   def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
     return _non_negative(value, info.field_name)
 
+  @field_validator("system_id")
+  @classmethod
+  def _validate_system_id(cls, value: Optional[str]) -> Optional[str]:
+    if value is not None:
+      raise ValueError("system_not_allowed")
+    return value
+
 
 class CollectionUpdate(SQLModel):
   action_type: Optional[Literal["payment", "payout", "return"]] = None
@@ -5019,6 +5854,13 @@ class CollectionUpdate(SQLModel):
   @classmethod
   def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
     return _non_negative(value, info.field_name)
+
+  @field_validator("system_id")
+  @classmethod
+  def _validate_system_id(cls, value: Optional[str]) -> Optional[str]:
+    if value is not None:
+      raise ValueError("system_not_allowed")
+    return value
 
 
 class CollectionEvent(SQLModel):
@@ -5231,7 +6073,7 @@ class InventoryAdjustCreate(SQLModel):
   gas_type: GasType
   delta_full: int = 0
   delta_empty: int = 0
-  reason: str
+  reason: InventoryAdjustReason
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -5239,7 +6081,7 @@ class InventoryAdjustCreate(SQLModel):
 class InventoryAdjustUpdate(SQLModel):
   delta_full: Optional[int] = None
   delta_empty: Optional[int] = None
-  reason: Optional[str] = None
+  reason: Optional[InventoryAdjustReason] = None
   note: Optional[str] = None
 
 
@@ -5419,13 +6261,83 @@ class DailyReportV2Card(SQLModel):
   recalculated: bool = False
 
 
+class Level3Counterparty(SQLModel):
+  type: Literal["customer", "company", "none"]
+  display_name: Optional[str] = None
+  description: Optional[str] = None
+  display: Optional[str] = None
+
+
+class Level3System(SQLModel):
+  display_name: str
+
+
+class Level3Hero(SQLModel):
+  text: str
+
+
+class Level3Money(SQLModel):
+  verb: Literal["received", "paid", "none"]
+  amount: int
+
+
+class Level3SettlementComponents(SQLModel):
+  money: bool
+  cyl12: bool
+  cyl48: bool
+
+
+class Level3Settlement(SQLModel):
+  scope: Literal["customer", "company", "none"]
+  is_settled: bool
+  components: Optional[Level3SettlementComponents] = None
+
+
+class Level3Action(SQLModel):
+  category: Literal["money", "cylinders"]
+  direction: Literal[
+    "customer_pays",
+    "pay_customer",
+    "pay_company",
+    "company_pays",
+    "customer_returns_empty",
+    "return_empty_to_company",
+    "deliver_full_to_customer",
+    "company_delivers_full_to_you",
+    "customer->dist",
+    "dist->customer",
+    "dist->company",
+    "company->dist",
+  ]
+  amount: Optional[int] = None
+  gas_type: Optional[Literal["12", "48"]] = None
+  qty: Optional[int] = None
+  unit: Optional[Literal["empty", "full"]] = None
+  kind: Optional[Literal["money", "empty_12", "empty_48", "full_12", "full_48"]] = None
+  severity: Optional[Literal["warning", "danger"]] = None
+  text: Optional[str] = None
+
+
 class DailyReportV2Event(SQLModel):
   event_type: str
+  id: Optional[str] = None
   effective_at: datetime
   created_at: datetime
   source_id: Optional[str] = None
   label: Optional[str] = None
   label_short: Optional[str] = None
+  is_balanced: Optional[bool] = None
+  action_lines: list[str] = Field(default_factory=list)
+  status_mode: Optional[Literal["atomic", "settlement"]] = None
+  is_ok: Optional[bool] = None
+  action_pills: list[Level3Action] = Field(default_factory=list)
+  counterparty: Optional[Level3Counterparty] = None
+  counterparty_display: Optional[str] = None
+  system: Optional[Level3System] = None
+  hero: Optional[Level3Hero] = None
+  money: Optional[Level3Money] = None
+  settlement: Optional[Level3Settlement] = None
+  open_actions: list[Level3Action] = Field(default_factory=list)
   order_mode: Optional[OrderMode] = None
   gas_type: Optional[GasType] = None
   customer_id: Optional[str] = None
@@ -5493,6 +6405,7 @@ class DailyReportV2Day(SQLModel):
 FILE: backend/app/services/ledger.py
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
@@ -5502,11 +6415,42 @@ from sqlalchemy import func
 from app.models import LedgerEntry
 
 
+@dataclass(frozen=True)
+class LedgerBoundary:
+  happened_at: datetime
+  created_at: datetime
+  entry_id: str
+
+
+def boundary_from_entries(entries: list[LedgerEntry]) -> Optional[LedgerBoundary]:
+  if not entries:
+    return None
+  max_entry = max(entries, key=lambda entry: (entry.happened_at, entry.created_at, entry.id))
+  return LedgerBoundary(
+    happened_at=max_entry.happened_at,
+    created_at=max_entry.created_at,
+    entry_id=max_entry.id,
+  )
+
+
+def boundary_for_source(session: Session, *, source_type: str, source_id: str) -> Optional[LedgerBoundary]:
+  row = session.exec(
+    select(LedgerEntry)
+    .where(LedgerEntry.source_type == source_type)
+    .where(LedgerEntry.source_id == source_id)
+    .order_by(LedgerEntry.happened_at.desc(), LedgerEntry.created_at.desc(), LedgerEntry.id.desc())
+  ).first()
+  if not row:
+    return None
+  return LedgerBoundary(happened_at=row.happened_at, created_at=row.created_at, entry_id=row.id)
+
+
 def sum_ledger(
   session: Session,
   *,
   account: str,
   up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
   day_from: Optional[date] = None,
   day_to: Optional[date] = None,
   gas_type: Optional[str] = None,
@@ -5524,7 +6468,20 @@ def sum_ledger(
     stmt = stmt.where(LedgerEntry.unit == unit)
   if customer_id is not None:
     stmt = stmt.where(LedgerEntry.customer_id == customer_id)
-  if up_to is not None:
+  if boundary is not None:
+    boundary_up_to = boundary.happened_at
+    up_to = boundary_up_to
+    stmt = stmt.where(
+      (LedgerEntry.happened_at < boundary_up_to)
+      | (
+        (LedgerEntry.happened_at == boundary_up_to)
+        & (
+          (LedgerEntry.created_at < boundary.created_at)
+          | ((LedgerEntry.created_at == boundary.created_at) & (LedgerEntry.id <= boundary.entry_id))
+        )
+      )
+    )
+  elif up_to is not None:
     stmt = stmt.where(LedgerEntry.happened_at <= up_to)
   if day_from is not None:
     stmt = stmt.where(LedgerEntry.day >= day_from)
@@ -5556,8 +6513,19 @@ def sum_bank(session: Session, *, up_to: Optional[datetime] = None) -> int:
   return sum_ledger(session, account="bank", unit="money", up_to=up_to)
 
 
-def sum_company_money(session: Session, *, up_to: Optional[datetime] = None) -> int:
-  return sum_ledger(session, account="company_money_debts", unit="money", up_to=up_to)
+def sum_company_money(
+  session: Session,
+  *,
+  up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
+) -> int:
+  return sum_ledger(
+    session,
+    account="company_money_debts",
+    unit="money",
+    up_to=up_to,
+    boundary=boundary,
+  )
 
 
 def sum_company_cylinders(
@@ -5565,6 +6533,7 @@ def sum_company_cylinders(
   *,
   gas_type: str,
   up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
 ) -> int:
   return sum_ledger(
     session,
@@ -5572,14 +6541,20 @@ def sum_company_cylinders(
     gas_type=gas_type,
     unit="count",
     up_to=up_to,
+    boundary=boundary,
   )
 
 
-def snapshot_company_debts(session: Session, *, up_to: Optional[datetime] = None) -> dict[str, int]:
+def snapshot_company_debts(
+  session: Session,
+  *,
+  up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
+) -> dict[str, int]:
   return {
-    "debt_cash": sum_company_money(session, up_to=up_to),
-    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to),
-    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to),
+    "debt_cash": sum_company_money(session, up_to=up_to, boundary=boundary),
+    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to, boundary=boundary),
+    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to, boundary=boundary),
   }
 
 
@@ -7873,6 +8848,7 @@ httpx = "^0.25.2"
 
 [tool.pytest.ini_options]
 testpaths = ["../tests/backend"]
+pythonpath = ["..", "../tests/backend"]
 
 [build-system]
 requires = ["poetry-core"]
@@ -7883,12 +8859,4 @@ FILE: backend/tests/__init__.py
 
 FILE: backend/tests/backend/__init__.py
 
-
-FILE: backend/tmp_list_sys.py
-from app.db import get_session
-from app.models import System
-from sqlmodel import select
-session = next(get_session())
-for sys in session.exec(select(System)):
-    print(sys.id, sys.name)
 

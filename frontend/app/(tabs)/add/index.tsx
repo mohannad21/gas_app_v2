@@ -1944,7 +1944,7 @@ function InventoryAdjustForm({
           </View>
           {baseFull12 !== undefined && baseEmpty12 !== undefined && (deltaFull12 || deltaEmpty12) ? (
             <Text style={styles.impactLabel}>
-              {baseFull12} -> {baseFull12 + deltaFull12} | {baseEmpty12} -> {baseEmpty12 + deltaEmpty12}
+              {baseFull12} {"to"} {baseFull12 + deltaFull12} | {baseEmpty12} {"to"} {baseEmpty12 + deltaEmpty12}
             </Text>
           ) : null}
         </View>
@@ -2013,19 +2013,20 @@ function InventoryAdjustForm({
           </View>
           {baseFull48 !== undefined && baseEmpty48 !== undefined && (deltaFull48 || deltaEmpty48) ? (
             <Text style={styles.impactLabel}>
-              {baseFull48} -> {baseFull48 + deltaFull48} | {baseEmpty48} -> {baseEmpty48 + deltaEmpty48}
+              {baseFull48} {"to"} {baseFull48 + deltaFull48} | {baseEmpty48} {"to"} {baseEmpty48 + deltaEmpty48}
             </Text>
           ) : null}
         </View>
       </View>
 
-      <Text style={styles.modalLabel}>Reason</Text>
+      <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
       <TextInput
         style={styles.modalInput}
-        placeholder="Required"
+        placeholder="count_correction"
         value={reason}
         onChangeText={setReason}
       />
+      <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
 
       <View style={styles.modalActions}>
         <Pressable style={styles.modalBtn} onPress={onCancel}>
@@ -2163,7 +2164,7 @@ function CashAdjustForm({
 
       {cashBefore !== null && deltaValue ? (
         <Text style={styles.impactLabel}>
-          Impact: {cashBefore} NIS -> {cashBefore + deltaValue} NIS
+          Impact: {cashBefore} NIS {"to"} {cashBefore + deltaValue} NIS
         </Text>
       ) : null}
 
@@ -2590,6 +2591,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7f7f8",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+  },
+  modalHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#64748b",
   },
   modalActions: {
     flexDirection: "row",
@@ -3647,3 +3653,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+

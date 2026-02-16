@@ -196,13 +196,14 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
     raise HTTPException(status_code=404, detail="Collection not found")
   base = txns[0]
 
-  now = datetime.now(timezone.utc)
   for txn in txns:
+    reversal_happened_at = txn.happened_at
+    reversal_day = txn.day
     reversal = CustomerTransaction(
       customer_id=txn.customer_id,
       system_id=txn.system_id,
-      happened_at=now,
-      day=derive_day(now),
+      happened_at=reversal_happened_at,
+      day=reversal_day,
       kind=txn.kind,
       gas_type=txn.gas_type,
       installed=txn.installed,

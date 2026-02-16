@@ -1,6 +1,7 @@
 module.exports = {
   preset: "jest-expo",
   roots: ["<rootDir>/../tests/frontend"],
+  moduleDirectories: ["node_modules", "<rootDir>/node_modules"],
   setupFiles: ["<rootDir>/../tests/frontend/test/jest.setup.js"],
   setupFilesAfterEnv: ["@testing-library/jest-native/extend-expect"],
   moduleNameMapper: {

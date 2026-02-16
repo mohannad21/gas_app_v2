@@ -1,0 +1,188 @@
+﻿[
+  {
+    "name": "replacement-balanced-12",
+    "expectOk": true,
+    "ctx": {
+      "eventType": "order",
+      "isReplacementOrder": true,
+      "installed": 2,
+      "received": 2,
+      "orderTotal": 100,
+      "orderPaid": 100,
+      "ev": { "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Installed: 2 | Paid: 100 | \u2705 OK"]
+  },
+  {
+    "name": "replacement-unbalanced-12",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "order",
+      "isReplacementOrder": true,
+      "installed": 3,
+      "received": 1,
+      "orderTotal": 200,
+      "orderPaid": 150,
+      "ev": { "is_balanced": false, "action_lines": ["Return 2x12kg", "Collect 50"] }
+    },
+    "expected": [
+      "Installed: 3 | Received: 1",
+      "Total: 200 | Paid: 150",
+      "Return 2x12kg",
+      "Collect 50"
+    ]
+  },
+  {
+    "name": "sell-full-balanced",
+    "expectOk": true,
+    "ctx": {
+      "eventType": "order",
+      "isSellIronOrder": true,
+      "orderQty": 2,
+      "orderTotal": 120,
+      "orderPaid": 120,
+      "ev": { "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Sold: 2 | Paid: 120 | \u2705 OK"]
+  },
+  {
+    "name": "sell-full-unbalanced",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "order",
+      "isSellIronOrder": true,
+      "orderQty": 2,
+      "orderTotal": 120,
+      "orderPaid": 100,
+      "ev": { "is_balanced": false, "action_lines": ["Collect 20"] }
+    },
+    "expected": [
+      "Sold: 2 | Total: 120 | Paid: 100",
+      "Collect 20"
+    ]
+  },
+  {
+    "name": "buy-empty-balanced",
+    "expectOk": true,
+    "ctx": {
+      "eventType": "order",
+      "isBuyIronOrder": true,
+      "orderQty": 2,
+      "orderTotal": 200,
+      "orderPaid": 200,
+      "ev": { "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Bought: 2 | Paid: -200 | \u2705 OK"]
+  },
+  {
+    "name": "buy-empty-unbalanced",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "order",
+      "isBuyIronOrder": true,
+      "orderQty": 2,
+      "orderTotal": 200,
+      "orderPaid": 150,
+      "ev": { "is_balanced": false, "action_lines": ["Pay customer 50"] }
+    },
+    "expected": [
+      "Bought: 2 | Total: -200 | Paid: -150",
+      "Pay customer 50"
+    ]
+  },
+  {
+    "name": "collection-empty-12-only",
+    "expectOk": true,
+    "forbid": ["48kg"],
+    "ctx": {
+      "eventType": "collection_empty",
+      "collectionEmpty12Display": 2,
+      "collectionEmpty48Display": 0,
+      "ev": { "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Received: 2x12kg | \u2705 OK"]
+  },
+  {
+    "name": "collection-money",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "collection_money",
+      "paymentAmount": 100,
+      "customerMoneyBefore": 300,
+      "customerMoneyAfter": 200,
+      "ev": { "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Paid: +100 | Customer: 300 -> 200"]
+  },
+  {
+    "name": "company-payment",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "company_payment",
+      "paymentAmount": 250,
+      "ev": { "company_before": 1000, "company_after": 750, "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Paid: -250 | Company: 1000 -> 750"]
+  },
+  {
+    "name": "refill-balanced-mixed",
+    "expectOk": true,
+    "ctx": {
+      "eventType": "refill",
+      "buy12": 50,
+      "buy48": 20,
+      "ev": {
+        "return12": 50,
+        "return48": 20,
+        "paid_now": 2500,
+        "is_balanced": true,
+        "action_lines": []
+      }
+    },
+    "expected": ["Bought: 50x12kg | 20x48kg | Paid: -2500 | \u2705 OK"]
+  },
+  {
+    "name": "refill-unbalanced-12",
+    "expectOk": false,
+    "forbid": ["48kg Bought"],
+    "ctx": {
+      "eventType": "refill",
+      "buy12": 10,
+      "buy48": 0,
+      "ev": {
+        "return12": 8,
+        "return48": 0,
+        "total_cost": 200,
+        "paid_now": 150,
+        "is_balanced": false,
+        "action_lines": ["Return 2x12kg to company", "Pay company 50"]
+      }
+    },
+    "expected": [
+      "12kg Bought: 10 | Returned: 8",
+      "Total: 200 | Paid: -150",
+      "Return 2x12kg to company",
+      "Pay company 50"
+    ]
+  },
+  {
+    "name": "company-buy-iron",
+    "expectOk": true,
+    "ctx": {
+      "eventType": "company_buy_iron",
+      "buy12": 10,
+      "buy48": 5,
+      "ev": { "paid_now": 800, "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Bought: 10x12kg | 5x48kg | Paid: -800 | \u2705 OK"]
+  },
+  {
+    "name": "expense",
+    "expectOk": false,
+    "ctx": {
+      "eventType": "expense",
+      "ev": { "expense_type": "Fuel", "total_cost": 300, "is_balanced": true, "action_lines": [] }
+    },
+    "expected": ["Fuel -300"]
+  }
+]

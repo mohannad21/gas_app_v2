@@ -1,0 +1,1537 @@
+1) Executive Summary
+
+This project is a lightweight, distributor-first operations system for managing LPG cylinder business workflows end-to-end: customer orders, cylinder exchanges, inventory movements, supplier (company) refills, cash flow, and day-by-day reporting. The core design principle is ledger-first accounting: every real-world action posts canonical ledger entries, and all “balances” (inventory, customer status, company status, cash) are derived deterministically from the ledger.
+
+The product targets one outcome: fast daily operation with high correctness. Users should be able to record actions (replacement, sell full, buy empty, refills, payments, adjustments, expenses) in seconds, and later audit them via an expandable daily timeline that shows before/after impacts without overwhelming the user during scanning. The system is designed to minimize cognitive load in the field while preserving full traceability for reconciliation.
+
+2) Background & Problem Statement
+Background
+
+As a gas cylinder distributor, daily operations are a mix of physical inventory exchanges (full vs empty cylinders across 12kg and 48kg), customer settlements, and supplier interactions. These actions happen continuously and often under time pressure. Small recording errors compound quickly: inventory counts drift, customer debts become unclear, and supplier balances become disputed. The result is time lost reconciling, money left uncollected, and operational uncertainty (“Do we actually have enough empties?” / “Who still needs to pay?”).
+
+Problem Statement
+
+The current pain points are:
+
+High-frequency transactions with low tolerance for mistakes
+Orders, exchanges, refills, late payments, and returns happen throughout the day. The UI must be extremely fast and error-resistant.
+
+Semantic confusion around debts/credits and sign conventions
+Cylinder “debt/credit” and cash “debt/credit” can be confusing, especially when mixing actions like replacement vs buy/sell iron. If the system displays too many fields or uses ambiguous labels (e.g., “Result”), users lose trust.
+
+Data inconsistency risks between client and server
+If the client computes snapshots or totals independently, discrepancies can appear (especially with edits, backdating, or identical timestamps). The backend must be authoritative and deterministic.
+
+Edits/backdating can corrupt historical reporting
+Operational reality requires corrections. If an update flow reverses and reposts using “now” instead of the original event time/day, daily reports become inaccurate.
+
+Reconciliation must be possible without exposing complexity upfront
+The daily report view must be “scan-first” with minimal data by default, but it must allow expanding any ticket to see ledger before/after impacts for audits and dispute resolution.
+
+3) Goals & Non-Goals
+Goals
+
+Ledger-first correctness
+
+Every action posts ledger entries as the source of truth.
+
+All balances and “before/after” snapshots are derived from the ledger.
+
+Deterministic ordering and tie-breakers prevent nondeterministic snapshots.
+
+Fast and user-friendly daily operations
+
+Recording an event should be quick and require minimal fields.
+
+The UI should hide irrelevant zeros and present only actionable information.
+
+“Scan-first” daily timeline with expandable details.
+
+Clear, action-oriented semantics
+
+Replace confusing financial language with operational verbs where appropriate (e.g., “return”, “pay”).
+
+Standardized labels per event type and per counterparty (customer vs company).
+
+Avoid generic labels like “Result” without context.
+
+Safe editing and backdating
+
+Update flows preserve intended happened_at/day semantics.
+
+Changes remain auditable (reversal + repost or equivalent), without breaking historical reports.
+
+Guardrails for risky operations
+
+Inventory adjustments require reasons and constraints to prevent misuse (e.g., accidentally modeling purchases via adjustment).
+
+Validations prevent negative quantities and inconsistent payloads.
+
+Non-Goals (for this phase)
+
+Full accounting/invoicing system (invoices, tax/VAT reporting, receivables aging reports beyond basic)
+
+Multi-warehouse / multi-driver advanced fleet optimization (route planning, dispatch optimization)
+
+Payments integrations (card terminals, online payment gateways) unless explicitly added later
+
+Complex ERP integrations (supplier APIs, accounting software sync) unless later required
+
+Advanced forecasting/ML (demand forecasting, optimization) beyond operational reporting
+
+4) Users & Key Use Cases
+Users
+
+Distributor/Driver (Primary User)
+
+Needs speed, clarity, and correctness while working in the field.
+
+Cares most about: installed cylinders and paid amounts, plus quick visibility into what still needs action.
+
+Admin/Owner (Operational Manager)
+
+Reviews daily performance, resolves disputes, controls corrections/adjustments.
+
+Needs reliable reporting and audit trails.
+
+Accountant/Back-office (Optional Role)
+
+Focuses on cash movement, expenses, company settlements, reconciliation.
+
+Needs exports and consistent historical records.
+
+Key Use Cases
+
+Customer Replacement Order
+
+Record installed full cylinders and received empties (12kg or 48kg).
+
+Record payment (paid now) and keep outstanding actions visible only if something is missing.
+
+Sell Full Cylinders to Customer
+
+Record sold quantity (no “received empties” emphasis).
+
+Record paid and total; show remaining payment only if not settled.
+
+Buy Empty Cylinders from Customer
+
+Record bought empties quantity.
+
+Record paid; show remaining amount to pay customer only if incomplete.
+
+Customer Late Payment
+
+Record a payment without involving cylinders.
+
+Show customer money status before→after (collapsed), ledger cash before→after (expanded).
+
+Customer Returns Empties
+
+Record returned empties by gas type.
+
+Reflect cylinder status improvement and show only what changed.
+
+Company Refill
+
+Record bought full cylinders and returned empties (often both 12kg and 48kg).
+
+Record paid amount; show “✅ OK” when settled and balanced; otherwise show the missing actions (“return X empties”, “pay Y”).
+
+Company Buy Iron (New Shells)
+
+Record shells bought (no “returned” field clutter).
+
+Record payment; show only the bought quantities and paid unless something remains.
+
+Company Payment (Settlement)
+
+Record payment to company.
+
+Show company money status before→after (collapsed), detailed ledger impact (expanded).
+
+Inventory Adjustment (Corrections Only)
+
+Apply controlled corrections with reason (count correction/shrinkage/damage).
+
+Guardrails prevent using adjustments as disguised purchases.
+
+Expenses / Cash Adjust / Bank Deposit
+
+Track cash-out (expenses), correction entries, and deposits.
+
+Keep daily cash narrative consistent and auditable.
+
+
+5) Domain Model & Source-of-Truth (Core Accounting Semantics)
+5.1 Core Principle: Ledger-First, Server-Authoritative
+
+The ledger is the single source of truth. Every business action (“event”) must post one or more ledger entries that represent canonical deltas. All derived states—cash balance, inventory, customer status, company status, daily report timelines—are computed from the ledger, not from UI-calculated snapshots.
+
+Why this matters
+
+Prevents client/server drift.
+
+Makes edits auditable (reverse + repost).
+
+Enables deterministic reporting “as of” an exact boundary.
+
+5.2 Primary Domain Entities (Conceptual)
+
+Event / Transaction (Source)
+
+Represents a user action (Order, Refill, Payment, Adjustment, Expense, etc.).
+
+Has: id, event_type, happened_at, day (business date), created_at, note, created_by, is_reversed, reversed_id.
+
+LedgerEntry (Atomic accounting record)
+
+Represents one atomic delta to one account/unit.
+
+Has: id, source_type, source_id, account, unit, gas_type?, delta, happened_at, day, created_at.
+
+Constraints:
+
+Must be append-only (except reversals).
+
+Must support deterministic ordering and “boundary snapshots”.
+
+Derived Snapshots (Views, not truth)
+
+Inventory snapshot: full/empty by gas type.
+
+Customer balance snapshot: money + cylinders owed/credit by gas type.
+
+Company balance snapshot: money + cylinders owed/credit by gas type.
+
+Day timeline: ordered events with computed before/after impacts.
+
+5.3 Canonical Units & Accounts
+
+Units
+
+money (integer NIS or smallest unit; no floats)
+
+cylinders (integers)
+
+Gas types: 12kg, 48kg
+
+Core accounts (examples)
+
+cash or wallet_cash (distributor cash on hand)
+
+inventory_full_12, inventory_empty_12, inventory_full_48, inventory_empty_48
+
+customer_money_balance (per customer)
+
+customer_cylinder_balance_12/48 (per customer)
+
+company_money_balance (global)
+
+company_cylinder_balance_12/48 (global)
+
+Implementation detail: whether you store separate accounts for “debt” vs “credit” or store a signed net note is internal—but the UI must never expose ambiguous sign semantics. The UI speaks in actions: pay / return.
+
+5.4 Sign Semantics (Internal) vs Action Semantics (UI)
+
+Internally, ledger deltas can be signed:
+
+Positive could mean “increase debt” or “increase asset”, depending on the account.
+
+This is fine—as long as every UI label is derived from context.
+
+UI action semantics should be normalized:
+
+If a cylinder gap exists → display: “Return X x 12kg” or “Return X x 48kg”
+
+If a money gap exists → display: “Pay Y”
+
+Avoid “owes / credit / debt” language in collapsed tickets, because it is cognitively expensive.
+
+5.5 Deterministic “As-Of” Boundaries
+
+To guarantee correct snapshots when timestamps collide:
+
+Ordering key for both reporting and boundaries:
+
+happened_at ascending
+
+created_at ascending
+
+id ascending
+
+Snapshot computation must accept a boundary (not only happened_at):
+
+Include entries strictly before boundary time, plus ties broken by created_at and id.
+
+This ensures:
+
+Two events with identical happened_at produce different “after” snapshots.
+
+Day timeline “before/after” fields remain stable across environments.
+
+5.6 Edit Semantics: Reverse + Repost (Preserving Business Time)
+
+Edits must not rewrite history implicitly.
+
+Rule
+
+When updating an event, the system:
+
+creates a reversal event with equal/opposite ledger entries
+
+posts a new event with updated payload
+
+Both reversal and repost must preserve the original happened_at/day semantics (unless the user explicitly changes the effective time).
+
+This ensures daily reporting remains historically accurate.
+
+5.7 Ticket Rendering Semantics (Report View Contract)
+
+Each event in day_v2 (or equivalent API) should provide enough structured fields to render:
+
+A collapsed ticket (minimal, hide zeros, show ✅ OK when balanced)
+
+An expanded ticket (cash + relevant gas type before/after ledger snapshots)
+
+The frontend should not “guess” too much. It should:
+
+Compute “balanced/unbalanced” from explicit fields (e.g., diff/remaining values).
+
+Render only non-zero actionable deltas.
+
+6) Core Workflows (End-to-End)
+
+Below is the end-to-end flow from user action → backend posting → ledger → snapshots → daily report ticket rendering. I’ll define workflows in terms of: Inputs → Posting → Derived Effects → Ticket UX.
+
+6.1 Customer Order — Replacement (Swap)
+
+Goal: Deliver full cylinders, receive empties, optionally take payment.
+
+Input (UI)
+
+Customer, system
+
+Gas type (12kg or 48kg)
+
+Installed (full delivered)
+
+Received (empties received)
+
+Total price
+
+Paid now
+
+happened_at + note
+
+Backend posting
+
+Inventory:
+
+full decreases by installed
+
+empty increases by received
+
+Customer cylinder balance:
+
+If installed > received → customer still must return (gap)
+
+If received > installed → customer over-returned (rare; still supported)
+
+Cash:
+
+cash increases by paid now
+
+Customer money balance:
+
+total - paid now becomes a remaining “pay” action if non-zero
+
+Derived snapshot
+
+Inventory before/after
+
+Cash before/after
+
+Customer cylinder and money status before/after
+
+Daily ticket UX
+
+Collapsed:
+
+Always show Installed and Paid
+
+If balanced (no missing cylinders, no missing money): Installed X | Paid Y | ✅ OK
+
+If unbalanced: add action lines like:
+
+Return N x 12kg
+
+Pay M
+
+Expanded:
+
+Show cash before→after
+
+Show only the gas type involved (12kg or 48kg) full/empty before→after
+
+6.2 Customer Order — Sell Full
+
+Goal: Customer buys full cylinders; empties not required in this mode.
+
+Input
+
+Customer/system
+
+Gas type
+
+Sold quantity
+
+Total price
+
+Paid now
+
+happened_at + note
+
+Backend posting
+
+Inventory: full decreases by sold
+
+Cash: increases by paid now
+
+Customer money: remaining pay action if total != paid
+
+Daily ticket UX
+
+Collapsed:
+
+Sold X (12kg/48kg) | Paid Y | ✅ OK if fully paid
+
+If not paid: Sold X | Total T | Paid P | Pay (T-P)
+
+No received/return fields.
+
+Expanded:
+
+cash before→after
+
+inventory full of that gas type before→after (empty likely unchanged)
+
+6.3 Customer Order — Buy Empty
+
+Goal: Distributor buys empties from customer (cash outflow).
+
+Input
+
+Customer/system
+
+Gas type
+
+Bought empties quantity
+
+Total (should represent payment to customer)
+
+Paid now (cash paid out)
+
+happened_at + note
+
+Backend posting
+
+Inventory: empty increases by bought empties
+
+Cash: decreases by paid now
+
+If not fully paid, remaining action is: “Pay customer remaining”
+
+Daily ticket UX
+
+Collapsed:
+
+If fully paid: Bought X empties | Paid -Y | ✅ OK
+
+If not: Bought X | Total -T | Paid -P | Pay remaining (T-P) (display as positive action amount)
+
+Expanded:
+
+cash before→after
+
+empty inventory of that gas type before→after
+
+6.4 Customer Return — Empties Only
+
+Goal: Customer returns empties without a delivery event (reduces cylinder gap).
+
+Input
+
+Customer/system
+
+Gas type
+
+Returned empties quantity
+
+happened_at + note
+
+Backend posting
+
+Inventory: empty increases by returned qty
+
+Customer cylinder balance: reduces pending “return” action
+
+Daily ticket UX
+
+Collapsed:
+
+Received X empties | ✅ OK (no money)
+
+Expanded:
+
+cash before→after only if cash impacted (usually not)
+
+show relevant cylinder balance before→after + inventory empty before→after
+
+6.5 Customer Payment — Late Payment
+
+Goal: Customer pays money owed.
+
+Input
+
+Customer
+
+Amount paid
+
+happened_at + note
+
+Backend posting
+
+Cash increases by amount
+
+Customer money balance reduces accordingly
+
+Daily ticket UX
+
+Collapsed:
+
+Paid Y | Customer money status: Before → After
+
+No cylinder fields.
+
+Additional rule (MUST-MATCH UI):
+Do not show cylinder quantities/details on late payment tickets, even if the customer still owes cylinders overall.
+If needed, allow a minimal non-numeric indicator (optional) that cylinders are still outstanding.
+
+Expanded:
+
+cash before→after
+
+customer cash balance before→after
+
+6.6 Company Refill (Supplier Refill)
+
+Goal: Get full cylinders from company and return empties; pay partially/fully.
+
+Input
+
+Bought full 12kg/48kg
+
+Returned empties 12kg/48kg
+
+Total cost
+
+Paid now
+
+happened_at + note
+
+Backend posting
+
+Inventory:
+
+full increases by bought qty
+
+empty decreases by returned qty
+
+Company cylinder status:
+
+If bought > returned → pending action: “Return N empties to company”
+
+Cash:
+
+decreases by paid now
+
+Company money status:
+
+If total > paid → pending action: “Pay company remaining”
+
+Daily ticket UX
+
+Collapsed (balanced):
+
+Single line including both types if present:
+
+Bought: 50x12kg | 20x48kg | Paid -2500 | ✅ OK
+
+Collapsed (unbalanced):
+
+Show only non-zero actionable deltas:
+
+Return N x 12kg to company
+
+Return M x 48kg to company
+
+Pay company K
+
+Expanded:
+
+cash before→after
+
+inventory full/empty before→after for 12/48 (only those involved)
+
+6.7 Company Buy Iron (New Shells)
+
+Goal: Buy shells; operationally only “bought” is relevant.
+
+Input
+
+Bought shells 12kg/48kg (non-zero where applicable)
+
+Total cost
+
+Paid now
+
+happened_at + note
+
+Backend posting
+
+Inventory increases appropriately (depending on your chosen representation: shells as full, or separate “shell stock”)
+
+Cash decreases by paid now
+
+Company money status reflects remaining pay action if any
+
+Daily ticket UX
+
+Collapsed:
+
+Bought shells: X (12kg) | Paid -Y | ✅ OK if settled
+
+If not settled: add Pay company K
+
+Do not show “returned”.
+
+Expanded:
+
+cash before→after
+
+relevant inventory before→after
+
+6.8 Company Payment
+
+Goal: Pay company outstanding balance.
+
+Input
+
+Paid amount
+
+happened_at + note
+
+Backend posting
+
+Cash decreases by amount
+
+Company money status reduces accordingly
+
+Daily ticket UX
+
+Collapsed:
+
+Paid -Y | Company money status: Before → After
+
+Expanded:
+
+cash before→after
+
+company cash balance before→after
+
+6.9 Inventory Adjustment (Corrections Only)
+
+Goal: Correct physical count drift with explicit reason + constraints.
+
+Input
+
+Reason enum: count_correction / shrinkage / damage
+
+Deltas: full/empty for 12/48 (non-zero where applicable)
+
+happened_at + note
+
+Backend posting
+
+Inventory accounts adjusted directly.
+
+No implicit company/customer ledger movement unless explicitly modeled.
+
+Daily ticket UX
+
+Collapsed:
+
+Reason: shrinkage | Δ Full12: -1 (only non-zero deltas)
+
+Expanded:
+
+inventory before→after for the impacted gas type(s)
+
+no cash unless affected
+
+6.10 Expense / Cash Adjust / Bank Deposit
+
+Goal: Track cash movements not tied to orders/refills.
+
+Input
+
+Amount, category/note, happened_at
+
+Backend posting
+
+Cash increases/decreases appropriately.
+
+Optional categorization for expenses.
+
+Daily ticket UX
+
+Collapsed:
+
+Expense: Fuel | Amount -50
+
+Deposit | Amount -500 (or “moved to bank”)
+
+Cash adjust | Δ +200 | Reason: open
+
+Do not display ✅ OK / ✅ Balance settled for Expense / Deposit / Cash Adjust entries.
+
+Expanded:
+
+cash before→after
+
+
+7) UX Principles & Screen Inventory
+7.1 UX Principles (Global)
+
+Scan-first, details on demand
+
+The default view must be scannable in seconds.
+
+Expand reveals “accounting truth” (before/after ledger & inventory), but collapsed shows only what drives action: installed and paid + any non-zero “must pay/return”.
+
+Action verbs, not accounting nouns
+
+Avoid “debt/credit/owes” in collapsed tickets. Use:
+
+Pay (money pending)
+
+Return (cylinders pending)
+
+✅ OK (balanced / nothing to do)
+
+If you want the accounting words, keep them only in expanded (or behind an “Explain” tooltip).
+
+Hide zeros and redundancy
+
+Never show “Result: 0”.
+
+Never show fields that don’t apply to the event type (e.g., “returned” on buy-iron, cylinders on payments).
+
+Prefer “Sold X” / “Bought X” labels over “installed/received” for sell/buy modes.
+
+Consistency across the whole app
+
+Same visual grammar everywhere:
+
+Header: label + counterparty + time
+
+Primary row: Installed/Sold/Bought + Paid
+
+Only if needed: Pay/Return action chips
+
+Expand: before→after blocks for cash and the relevant gas type(s)
+
+Deterministic ordering
+
+Users must trust that “before/after” is correct.
+
+Timeline order must be stable:
+
+happened_at asc → created_at asc → id asc
+
+Ordering (CRITICAL DISTINCTION)
+
+Canonical ordering key (for correctness + boundaries):
+happened_at asc, created_at asc, id asc
+
+Display order (for the timeline UI):
+The API may return newest-first or oldest-first, but it must include canonical key fields so ordering is deterministic.
+Backend uses canonical order for snapshot/boundary math regardless of display order.
+
+Make the “most important” fields visually dominant
+
+Installed and Paid are large, left-to-right, same position in every ticket.
+
+Secondary numbers (total, received, etc.) are smaller or in expanded view.
+
+7.2 Ticket Design Rules for Daily Report (Your spec, made implementable)
+
+Collapsed ticket rules
+
+Always show:
+
+Event label (Replace / Sell Full / Buy Empty / Refill / Buy Iron / Payment / Expense / Adjustment)
+
+Gas type badge(s) if applicable (12kg/48kg)
+
+Installed/Sold/Bought (whichever applies)
+
+Paid (always, even if 0; but you can show Paid: — if truly irrelevant)
+
+Only show action chips if non-zero:
+
+Pay X (if remaining money != 0)
+
+Return N x 12kg (if cylinder gap != 0)
+
+If there are no action chips: show ✅ OK on the same line.
+
+7.2.x Status Badge Rules (MUST-MATCH UI)
+
+We have two status concepts:
+
+A) Atomic OK (status_mode="atomic")
+Meaning: this event itself has no pending actions (no money gap, no cylinder gap caused by THIS event).
+Display label: "✅ OK" (or "OK" if emojis are removed globally).
+
+B) Balance Settled (status_mode="settlement")
+Meaning: a settlement-type event (late pay / late return) caused the CUSTOMER'S balance to become fully settled (money + cylinders).
+Display label: "✅ Balance settled".
+
+Placement (CRITICAL):
+Status must render bottom-right on the SAME ROW as the last left-side line.
+If notes/action-pill row exists: status is right-aligned on that row.
+If no notes/action-pill row exists: status is right-aligned on the context row.
+Status must NOT appear on a new standalone row.
+
+Exception:
+Expense (and optionally bank deposit / cash adjust) MUST NOT show ✅ OK or ✅ Balance settled.
+(These entries are informational; "OK" creates noise.)
+
+Action pills / notes line-fitting rule (MUST-MATCH UI)
+All pill/chip text is single-line only.
+If too long, it should:
+1) auto-shrink the font (e.g., adjustsFontSizeToFit + minimumFontScale),
+2) then ellipsize if still too long.
+
+Expanded ticket rules
+
+Always show cash before→after.
+
+Show only the involved gas types:
+
+Replacement 48 → show only 48 full/empty before→after (+ cash).
+
+Replacement 12 → show only 12 full/empty before→after (+ cash).
+
+Refill with both → show both 12 and 48 before→after (+ cash).
+
+If you track customer/company status snapshots: show those in expanded as a separate block.
+
+7.3 Screen Inventory (Recommended)
+
+You can treat this as the “product surface area” list.
+
+A) Daily Operations
+
+Daily Report (Timeline)
+
+The “single source of truth” operational screen.
+
+Expand shows ledger evolution and inventory/cash before→after.
+
+Add Activity (Quick Actions)
+
+Entry point for: Order, Refill, Customer Payment, Company Payment, Expense, Adjustments.
+
+Optimized for speed and minimal errors.
+
+Inventory
+
+Current inventory snapshot.
+
+Adjustment flow (corrections only) with strong guardrails.
+
+Cash / Wallet
+
+Current cash snapshot.
+
+Bank deposit, cash adjustments, expense entry.
+
+B) Customer Management
+5. Customers List + Search
+6. Customer Detail
+
+Status summary: pay/return actions pending.
+
+History (filterable).
+
+Customer Systems (if relevant)
+
+Attach orders to a system.
+
+C) Company / Supplier
+8. Company Balance
+
+“Pay company” and “Return empties” visibility.
+
+Refill History
+
+Buy Iron / Shell Purchase History
+
+D) Reporting
+11. Day Report
+12. Range Report (Week/Month)
+
+Aggregated totals (money in/out, cylinders moved) and “open actions”.
+
+E) Admin / Settings
+13. Users / Roles
+14. Catalog/config (gas types, prices, etc.)
+
+8) Data Integrity & Consistency Strategy
+8.1 Invariants (Must Always Hold)
+
+Ledger is authoritative
+
+Snapshots shown in UI are derived; backend recalculates after posting.
+
+Deterministic “as-of” boundaries
+
+Any snapshot taken “after event X” must be computed using:
+
+boundary = (happened_at, created_at, id) not happened_at alone.
+
+Edits never rewrite time by accident
+
+Reverse + repost must preserve happened_at/day semantics unless explicitly changed by the user.
+
+No negative physical quantities
+
+Payload validations enforce >= 0 for quantities like installed/received/buy/return/new shells (unless a field is explicitly a delta adjustment).
+
+Inventory adjustments are not purchases
+
+Adjustments are correction-only (reason enum). If purchase-like behavior is needed, it must be a separate event type with ledger semantics.
+
+Sign semantics never leak to the user
+
+UI derives action chips (“Pay/Return”) from net deltas; it does not show “-200 means you owe…” without context.
+
+8.2 Validation Layering
+
+Frontend validation
+
+Required fields present, basic bounds.
+
+Prevent obvious mistakes (empty reason, negative values).
+
+Backend validation (hard enforcement)
+
+All physical quantities >= 0.
+
+Adjustment reason policy enforced.
+
+Business consistency checks where applicable:
+
+Buy iron should not accept refill-style fields.
+
+Refill should reject “new shells” fields.
+
+8.3 Consistency & Drift Controls
+
+Snapshot recompute after each post/update
+
+Backend recalculates relevant balances (customer/company/cash/inventory) and returns them.
+
+Regression tests for tricky cases
+
+Same-timestamp event ordering.
+
+Update backdating correctness.
+
+Reversal correctness (net-zero over reverse+repost vs original).
+
+Database migrations aligned with code
+
+If code depends on ordering fields (e.g., created_at), schema must enforce not-null + indexes.
+
+8.4 Observability & Audit
+
+Every ledger entry has a source_type/source_id.
+
+Reports show the event ID and allow drill-down.
+
+“Deleted” is modeled as reversal rather than hard delete.
+
+9) Technical Architecture
+9.1 High-Level Components
+
+Mobile client (Expo/React Native)
+
+Data entry + daily operations UI.
+
+Offline tolerance optional (if you want it later), but consistent server snapshots remain the truth.
+
+Backend API (FastAPI / SQLModel style)
+
+Routes per domain: orders, inventory, company, cash, reports.
+
+Posting services produce ledger entries.
+
+Reporting services query ledger and derive events timeline.
+
+Database (PostgreSQL)
+
+Transaction tables (sources) + ledger_entries.
+
+Indexes to support day timeline and boundary queries.
+
+Alembic migrations for schema evolution.
+
+9.2 Backend Modules (Recommended boundaries)
+
+routers/
+
+request/response only, minimal logic
+
+schemas/
+
+Pydantic validation + field validators
+
+services/posting/
+
+the only place allowed to write ledger entries
+
+services/ledger/
+
+sum/snapshot/boundary helpers
+
+services/reports/
+
+day_v2 timeline assembly
+
+models/
+
+database models
+
+9.3 Frontend Modules (Recommended boundaries)
+
+lib/api.ts
+
+typed API client only
+
+types/domain.ts
+
+Zod schemas + shared types
+
+components/tickets/
+
+SmartTicket (collapsed/expanded rendering rules)
+
+screens/
+
+orchestrate data fetching and compose components
+
+state/query
+
+React Query caches; invalidate on post/update
+
+9.4 Performance Considerations
+
+Day report should fetch a single endpoint: GET /reports/day_v2?date=...
+
+Ticket expansion should not require extra round trips if the payload already includes before/after snapshots.
+
+If payload becomes heavy, support:
+
+collapsed list: lightweight
+
+expanded: lazy load GET /reports/event/{id}
+
+10) API Contracts & Versioning
+10.1 Contract Principles
+
+Version reports explicitly
+
+Reports are fragile because UI depends on shape and semantics.
+
+Use /reports/day_v2 (already) and freeze semantics.
+
+Do not reuse fields with different meaning
+
+Example: “new shells” must not mean “full cylinders” in refills.
+
+If semantics differ, use different event types or distinct fields.
+
+Server returns computed fields
+
+Each event includes computed deltas or action-friendly fields so UI doesn’t guess.
+
+10.2 Day Timeline Contract (Proposed shape)
+
+GET /reports/day_v2?date=YYYY-MM-DD
+
+Returns:
+
+events[] ordered by (happened_at, created_at, id)
+
+Each event includes:
+
+identity: event_type, source_type, source_id
+
+time: happened_at, created_at, day
+
+label: stable string (e.g., "Sell Full", "Refill")
+
+primary quantities (event-dependent)
+
+computed action fields (UI-ready)
+
+before/after snapshots for expansion
+
+UI-ready computed fields (strongly recommended)
+
+money_to_pay: integer (positive means “Pay X”, zero hides)
+
+cylinders_to_return_12: integer (positive means “Return N x 12kg”, zero hides)
+
+cylinders_to_return_48: integer
+
+is_balanced: boolean (optional but helpful)
+
+This lets the UI render your “✅ OK” rule without recreating accounting logic.
+
+10.3 Write APIs (Commands)
+
+Each “event” has a create/update endpoint. All follow the same pattern:
+
+Accept input payload with explicit happened_at
+
+Backend normalizes day
+
+Backend posts ledger entries
+
+Backend returns:
+
+created/updated event
+
+boundary info (if relevant)
+
+updated snapshots (customer/company/inventory/cash)
+
+Examples:
+
+POST /orders
+
+PUT /orders/{id}
+
+POST /inventory/refill
+
+PUT /inventory/refill/{id}
+
+POST /company/payment
+
+POST /inventory/adjust
+
+POST /cash/adjust
+
+POST /expenses
+
+10.4 Versioning Policy
+
+Non-breaking changes: add optional fields, add new event types, add new endpoints.
+
+Breaking changes: renaming fields, changing sign conventions, changing meaning of an event type.
+
+Must bump report version: day_v3.
+
+Maintain at least one previous report version during migration.
+
+10.5 Compatibility Tests (Contract tests)
+
+Add automated tests that assert:
+
+For each event type, the required fields are present.
+
+Ordering key is deterministic.
+
+Computed action fields match ledger-derived truth.
+
+
+11) Technical Approach & Architecture
+11.1 Approach Summary
+
+Event-sourced accounting: business activities (orders/refills/payments/adjustments) are the sources; the ledger is the canonical accounting record derived from them.
+
+Server-authoritative reporting: the backend constructs the daily timeline and returns UI-ready fields (labels + “pay/return” actions + before/after snapshots). The frontend renders; it does not re-implement accounting.
+
+Deterministic snapshot boundaries: every “state after event” is computed with a stable boundary key (happened_at, created_at, id) to avoid same-timestamp ambiguity.
+
+11.2 Key Architecture Decisions
+
+Single daily timeline endpoint
+
+GET /reports/day_v2?date=... returns ordered events with:
+
+label (human-friendly)
+
+minimal “collapsed display data”
+
+expansion payload (before→after snapshots)
+
+optional computed action fields (money_to_pay, cylinders_to_return_12/48, is_balanced)
+
+SmartTicket rendering driven by backend contract
+
+Frontend “SmartTicket” renders by event_type + mode + computed fields.
+
+Goal: remove duplicated sign logic and edge-case divergence.
+
+Posting services are the only ledger writers
+
+Routers validate + call posting services.
+
+Posting returns ledger entries for that source (used to compute boundary snapshots deterministically).
+
+Edits use reverse + repost
+
+Update flow:
+
+reverse existing source entries (same happened_at/day)
+
+create new source event (with updated payload)
+
+post ledger entries
+
+recompute snapshot “after” via boundary
+
+Guardrails are enforced server-side
+
+Non-negative quantities.
+
+Adjustments: reason enum + disallow positive deltas for shrinkage/damage.
+
+“New shells” semantics canonicalized (refill forbids, buy_iron uses).
+
+11.3 Logical Components
+
+Backend
+
+routers/*: API surfaces
+
+services/posting.py: business-to-ledger mapping, reversal logic
+
+services/ledger.py: sums/snapshots/boundaries
+
+services/reports.py: day_v2 event assembly (labels + computed action fields)
+
+models.py: source tables + ledger_entries
+
+schemas.py: Pydantic validators and enums
+
+alembic/versions_v2: migrations
+
+Frontend
+
+lib/api.ts: typed client
+
+types/domain.ts: Zod schemas
+
+components/reports/SmartTicket.tsx: collapsed/expanded rendering rules
+
+app/(tabs)/reports/*: timeline screen
+
+hooks/*: data fetching / caching
+
+11.4 Data Model (Architecture-relevant fields)
+
+ledger_entries
+
+id (uuid)
+
+happened_at (effective time)
+
+created_at (write time)
+
+day (business date)
+
+source_type, source_id
+
+account, unit, delta
+
+indexes supporting:
+
+day queries
+
+boundary queries: (happened_at, created_at, id)
+
+11.5 Quality Gates
+
+Contract tests for /reports/day_v2 per event type.
+
+Regression tests:
+
+same timestamp events → correct “after” snapshot
+
+updates preserve original day reporting
+
+Lint/typecheck in frontend.
+
+Migration upgrade on clean DB and existing DB.
+
+12) Implementation Plan (Phases)
+Phase 0 — Alignment & Spec Freeze (1–2 days)
+
+Outputs
+
+Final “Ticket Spec” doc:
+
+event types → collapsed fields → action verbs → expansion blocks
+
+label dictionary (exact strings)
+
+ordering rule
+
+Confirm which event types exist in your codebase and which are in scope.
+
+Exit criteria
+
+Team agrees on: minimal data, hide zeros, ✅ OK logic, wording (pay/return), and expand content.
+
+Phase 1 — Backend Contract Hardening (3–7 days)
+
+Work
+
+Ensure /reports/day_v2 returns:
+
+stable ordering keys: happened_at, created_at, id
+
+normalized label for each event
+
+computed fields for UI:
+
+money_action: { direction: "pay_company"|"pay_customer"|..., amount } (or simpler numeric fields)
+
+cylinder_actions: { gas_type, action: "return_to_company"|"return_to_distributor"|..., qty }
+
+is_balanced
+
+Add/confirm validations:
+
+non-negative quantities
+
+adjustment reason policy
+
+Add contract + regression tests.
+
+Exit criteria
+
+Backend can fully drive UI rendering without frontend guessing.
+
+Tests cover the tricky scenarios.
+
+Phase 2 — Frontend SmartTicket + Daily Report UX (5–10 days)
+
+Work
+
+Implement SmartTicket:
+
+collapsed: show only installed/sold/bought + paid + non-zero action chips + ✅ OK
+
+expanded: show before→after blocks (cash always; gas type selective)
+
+Update day report screen:
+
+grouping by day (if needed)
+
+stable sort using backend ordering (no client reorder)
+
+expand/collapse state
+
+Replace all “Result” labels with action verbs.
+
+Exit criteria
+
+Manual QA: distributor can scan day timeline quickly and understand what actions remain.
+
+Phase 3 — Consistency Pass Across Other Screens (3–7 days)
+
+Work
+
+Align labels/wording in:
+
+customer detail
+
+dashboard chips
+
+add/edit flows
+
+Ensure “pay/return” language matches timeline.
+
+Remove remaining “owes/debt/credit” from primary UI (keep for expanded if desired).
+
+Exit criteria
+
+Same concepts have the same words everywhere.
+
+Phase 4 — Operational Readiness (2–5 days)
+
+Work
+
+Run migrations + smoke tests in a staging-like environment.
+
+Performance check (day report load time, payload size).
+
+Add logging for posting/report generation errors.
+
+Prepare release notes.
+
+Exit criteria
+
+Upgrade path validated; basic monitoring in place.
+
+14) Rollout & Risk Management
+14.1 Rollout Strategy
+
+Feature flag the new timeline rendering
+
+Backend can keep /reports/day_v2 stable.
+
+Frontend toggles SmartTicket vs old ticket renderer.
+
+Enables safe staged rollout to internal users first.
+
+Dual-run verification (short window)
+
+For a subset of days, render both old and new summaries (internally) and compare:
+
+totals
+
+“pay/return” actions
+
+cash before/after continuity
+
+Staged deployment
+
+Backend first (contract fields additive).
+
+Frontend next (consumes new fields).
+
+Finally enable feature flag.
+
+14.2 Key Risks & Mitigations
+
+Risk A: Same-timestamp ordering bugs
+
+Mitigation: enforce (happened_at, created_at, id) ordering in DB queries and tests.
+
+Risk B: UI action text wrong (semantic drift)
+
+Mitigation: backend emits computed action fields; frontend only formats strings.
+
+Risk C: Update flows corrupt reporting day
+
+Mitigation: regression tests for “create on day1, edit on day2 → remains on day1”.
+
+Risk D: Adjustment misuse
+
+Mitigation: server-side enforcement + UI copy + restricted reasons.
+
+Risk E: Migration drift
+
+Mitigation: “upgrade head on clean DB” CI step; migration review checklist.
+
+Risk F: Payload size / performance
+
+Mitigation:
+
+keep collapsed payload small
+
+make expansion optional or lazy-load if needed
+
+index day queries
+
+14.3 Operational Monitoring (Minimum viable)
+
+Log posting errors with source_type/source_id.
+
+Track report generation latency.
+
+Add a “data integrity diagnostic” endpoint (optional) for quick checks:
+
+last N ledger entries
+
+snapshots at boundaries
+
+15) Deliverables
+15.1 Product / UX Deliverables
+
+Ticket Spec (final):
+
+per event type: label, collapsed fields, action chips rules, expansion blocks
+
+Label dictionary (exact strings)
+
+Screen inventory map (what screens exist and ownership)
+
+15.2 Engineering Deliverables (Backend)
+
+Enhanced /reports/day_v2 contract:
+
+stable ordering keys
+
+labels
+
+computed action fields
+
+expansion payload (before/after snapshots)
+
+Validations in schemas/services
+
+Deterministic boundary snapshot logic (if not already)
+
+Alembic migrations aligned with code (including indexes)
+
+Test suite:
+
+contract tests (per event type)
+
+regressions: same timestamp, backdating update
+
+15.3 Engineering Deliverables (Frontend)
+
+SmartTicket component
+
+Updated Daily Report screen:
+
+expand/collapse UI
+
+hide zeros / ✅ OK logic
+
+Refactored terminology across relevant screens
+
+Lint/typecheck passing (or a dedicated warning backlog ticket)
+
+15.4 Release Deliverables
+
+Rollout plan + feature flag
+
+Migration/runbook:
+
+upgrade steps
+
+rollback strategy
+
+Release notes (user-facing summary of what changed)

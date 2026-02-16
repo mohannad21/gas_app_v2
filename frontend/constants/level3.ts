@@ -1,0 +1,41 @@
+import { FontFamilies, FontSizes } from "./typography";
+
+export const Level3Tokens = {
+  spacing: {
+    rowX: 12,
+    rowY: 10,
+    topGap: 10,
+    sublineGap: 4,
+    actionGap: 6,
+    chipGap: 6,
+    chipPadX: 8,
+    chipPadY: 4,
+  },
+  typography: {
+    heroSize: FontSizes.lg,
+    heroFamily: FontFamilies.semibold,
+    contextSize: FontSizes.xs,
+    contextFamily: FontFamilies.medium,
+    moneySize: FontSizes.sm,
+    moneyFamily: FontFamilies.semibold,
+    timeSize: FontSizes.xs,
+    timeFamily: FontFamilies.semibold,
+    chipSize: FontSizes.xs,
+    chipFamily: FontFamilies.medium,
+  },
+  colors: {
+    rowBg: "#ffffff",
+    border: "#e2e8f0",
+    textPrimary: "#0f172a",
+    textSecondary: "#475569",
+    textMuted: "#64748b",
+    money: "#0f172a",
+    settledBg: "#f0fdf4",
+    settledBorder: "#86efac",
+    settledText: "#166534",
+    actionChipBg: "#fff7ed",
+    actionChipBorder: "#fdba74",
+    actionChipText: "#9a3412",
+    actionLabel: "#7c2d12",
+  },
+};

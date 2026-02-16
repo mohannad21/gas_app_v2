@@ -236,6 +236,10 @@ class LedgerEntry(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True),
+  )
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   source_type: str = Field(index=True)
   source_id: str = Field(index=True)

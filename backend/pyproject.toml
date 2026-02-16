@@ -25,6 +25,7 @@ httpx = "^0.25.2"
 
 [tool.pytest.ini_options]
 testpaths = ["../tests/backend"]
+pythonpath = ["..", "../tests/backend"]
 
 [build-system]
 requires = ["poetry-core"]

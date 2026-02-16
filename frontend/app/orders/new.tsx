@@ -187,6 +187,8 @@ export default function NewOrderScreen() {
   const moneyDeltaIsOutflow = unpaid < 0;
   const moneyResultLabel =
     unpaid > 0 ? "Customer owes (debt)" : unpaid < 0 ? "Customer credit" : "Settled";
+  const cylinderResultLabel =
+    cylinderResult > 0 ? "Customer owes (debt)" : cylinderResult < 0 ? "Customer credit" : "Settled";
   const inventoryInitBlocked = inventoryLatest.data === null;
   const inventoryPromptedRef = useRef(false);
   const [initModalVisible, setInitModalVisible] = useState(false);
@@ -1739,7 +1741,7 @@ Resulting ${balanceStatus}: ${Math.abs(
             </View>
 
             <View style={[styles.amountCell, styles.amountCellResult]}>
-              <Text style={styles.fieldName}>Result</Text>
+              <Text style={styles.fieldName}>{cylinderResultLabel}</Text>
               <TextInput
                 style={[styles.input, styles.inputReadOnly]}
                 value={cylinderResult.toString()}

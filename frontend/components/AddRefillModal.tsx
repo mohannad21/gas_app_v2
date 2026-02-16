@@ -360,6 +360,8 @@ export function RefillForm({
   const paidNowValue = Number(paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
   const moneyResultIsOutflow = moneyResult > 0;
+  const moneyResultLabel =
+    moneyResult > 0 ? "You owe company (debt)" : moneyResult < 0 ? "Company owes you (credit)" : "Settled";
 
   const availableEmpty12 = base?.empty12 ?? 0;
   const availableEmpty48 = base?.empty48 ?? 0;
@@ -1180,7 +1182,7 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Result</Text>
+                        <Text style={styles.fieldName}>Line total</Text>
                       </View>
                       <TextInput
                         style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
@@ -1241,7 +1243,7 @@ export function RefillForm({
                         </View>
                         <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                           <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Result</Text>
+                            <Text style={styles.fieldName}>Line total</Text>
                           </View>
                           <TextInput
                             style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
@@ -1282,7 +1284,7 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Result</Text>
+                        <Text style={styles.fieldName}>Line total</Text>
                       </View>
                       <TextInput
                         style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
@@ -1343,7 +1345,7 @@ export function RefillForm({
                         </View>
                         <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                           <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Result</Text>
+                            <Text style={styles.fieldName}>Line total</Text>
                           </View>
                           <TextInput
                             style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
@@ -1425,7 +1427,7 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Result</Text>
+                        <Text style={styles.fieldName}>{moneyResultLabel}</Text>
                       </View>
                       <TextInput
                         style={[

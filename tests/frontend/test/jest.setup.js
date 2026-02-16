@@ -16,17 +16,29 @@ const renderList = ({ data = [], renderItem, keyExtractor }) =>
 
 const RenderList = (props) => renderList(props);
 
-jest.mock("react-native/Libraries/Lists/FlatList", () => ({
-  __esModule: true,
-  default: RenderList,
-}));
+jest.mock(
+  "react-native/Libraries/Lists/FlatList",
+  () => ({
+    __esModule: true,
+    default: RenderList,
+  }),
+  { virtual: true }
+);
 
-jest.mock("react-native/Libraries/Lists/VirtualizedList", () => ({
-  VirtualizedList: RenderList,
-  default: RenderList,
-}));
+jest.mock(
+  "react-native/Libraries/Lists/VirtualizedList",
+  () => ({
+    VirtualizedList: RenderList,
+    default: RenderList,
+  }),
+  { virtual: true }
+);
 
-jest.mock("@react-native/virtualized-lists/Lists/VirtualizedList", () => ({
-  VirtualizedList: RenderList,
-  default: RenderList,
-}));
+jest.mock(
+  "@react-native/virtualized-lists/Lists/VirtualizedList",
+  () => ({
+    VirtualizedList: RenderList,
+    default: RenderList,
+  }),
+  { virtual: true }
+);

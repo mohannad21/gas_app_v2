@@ -236,12 +236,13 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
   # reverse existing
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CustomerTransaction(
     customer_id=existing.customer_id,
     system_id=existing.system_id,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind="order",
     mode=existing.mode,
     gas_type=existing.gas_type,

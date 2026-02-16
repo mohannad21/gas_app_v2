@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
@@ -9,11 +10,42 @@ from sqlalchemy import func
 from app.models import LedgerEntry
 
 
+@dataclass(frozen=True)
+class LedgerBoundary:
+  happened_at: datetime
+  created_at: datetime
+  entry_id: str
+
+
+def boundary_from_entries(entries: list[LedgerEntry]) -> Optional[LedgerBoundary]:
+  if not entries:
+    return None
+  max_entry = max(entries, key=lambda entry: (entry.happened_at, entry.created_at, entry.id))
+  return LedgerBoundary(
+    happened_at=max_entry.happened_at,
+    created_at=max_entry.created_at,
+    entry_id=max_entry.id,
+  )
+
+
+def boundary_for_source(session: Session, *, source_type: str, source_id: str) -> Optional[LedgerBoundary]:
+  row = session.exec(
+    select(LedgerEntry)
+    .where(LedgerEntry.source_type == source_type)
+    .where(LedgerEntry.source_id == source_id)
+    .order_by(LedgerEntry.happened_at.desc(), LedgerEntry.created_at.desc(), LedgerEntry.id.desc())
+  ).first()
+  if not row:
+    return None
+  return LedgerBoundary(happened_at=row.happened_at, created_at=row.created_at, entry_id=row.id)
+
+
 def sum_ledger(
   session: Session,
   *,
   account: str,
   up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
   day_from: Optional[date] = None,
   day_to: Optional[date] = None,
   gas_type: Optional[str] = None,
@@ -31,7 +63,20 @@ def sum_ledger(
     stmt = stmt.where(LedgerEntry.unit == unit)
   if customer_id is not None:
     stmt = stmt.where(LedgerEntry.customer_id == customer_id)
-  if up_to is not None:
+  if boundary is not None:
+    boundary_up_to = boundary.happened_at
+    up_to = boundary_up_to
+    stmt = stmt.where(
+      (LedgerEntry.happened_at < boundary_up_to)
+      | (
+        (LedgerEntry.happened_at == boundary_up_to)
+        & (
+          (LedgerEntry.created_at < boundary.created_at)
+          | ((LedgerEntry.created_at == boundary.created_at) & (LedgerEntry.id <= boundary.entry_id))
+        )
+      )
+    )
+  elif up_to is not None:
     stmt = stmt.where(LedgerEntry.happened_at <= up_to)
   if day_from is not None:
     stmt = stmt.where(LedgerEntry.day >= day_from)
@@ -63,8 +108,19 @@ def sum_bank(session: Session, *, up_to: Optional[datetime] = None) -> int:
   return sum_ledger(session, account="bank", unit="money", up_to=up_to)
 
 
-def sum_company_money(session: Session, *, up_to: Optional[datetime] = None) -> int:
-  return sum_ledger(session, account="company_money_debts", unit="money", up_to=up_to)
+def sum_company_money(
+  session: Session,
+  *,
+  up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
+) -> int:
+  return sum_ledger(
+    session,
+    account="company_money_debts",
+    unit="money",
+    up_to=up_to,
+    boundary=boundary,
+  )
 
 
 def sum_company_cylinders(
@@ -72,6 +128,7 @@ def sum_company_cylinders(
   *,
   gas_type: str,
   up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
 ) -> int:
   return sum_ledger(
     session,
@@ -79,14 +136,20 @@ def sum_company_cylinders(
     gas_type=gas_type,
     unit="count",
     up_to=up_to,
+    boundary=boundary,
   )
 
 
-def snapshot_company_debts(session: Session, *, up_to: Optional[datetime] = None) -> dict[str, int]:
+def snapshot_company_debts(
+  session: Session,
+  *,
+  up_to: Optional[datetime] = None,
+  boundary: Optional[LedgerBoundary] = None,
+) -> dict[str, int]:
   return {
-    "debt_cash": sum_company_money(session, up_to=up_to),
-    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to),
-    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to),
+    "debt_cash": sum_company_money(session, up_to=up_to, boundary=boundary),
+    "debt_cylinders_12": sum_company_cylinders(session, gas_type="12kg", up_to=up_to, boundary=boundary),
+    "debt_cylinders_48": sum_company_cylinders(session, gas_type="48kg", up_to=up_to, boundary=boundary),
   }
 
 

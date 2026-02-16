@@ -1,4 +1,4 @@
-from tests.conftest import init_inventory, iso_at
+from conftest import init_inventory, iso_at
 
 
 def _get_daily_v2(client, day: str) -> dict:

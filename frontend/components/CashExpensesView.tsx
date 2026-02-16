@@ -313,7 +313,7 @@ export default function CashExpensesView({
             <View style={styles.walletTransition}>
               <Text style={styles.walletTransitionLabel}>Wallet:</Text>
               <Text style={styles.walletTransitionValue}>
-                {cashValue.toFixed(0)} -> {walletAfter.toFixed(0)}
+                {`${cashValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
               </Text>
             </View>
           </View>
@@ -346,3 +346,4 @@ export default function CashExpensesView({
     </View>
   );
 }
+

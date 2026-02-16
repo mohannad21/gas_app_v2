@@ -15,7 +15,7 @@ from app.schemas import (
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
 from app.utils.time import business_date_start_utc
 
@@ -114,8 +114,9 @@ def settle_company_cylinders(
     is_reversed=False,
   )
   session.add(txn)
-  post_company_transaction(session, txn)
-  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  entries = post_company_transaction(session, txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
   txn.debt_cash = snapshot["debt_cash"]
   txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]

@@ -409,7 +409,7 @@ function InventoryAdjustForm({
           </View>
           {baseFull12 !== undefined && baseEmpty12 !== undefined && (deltaFull12 || deltaEmpty12) ? (
             <Text style={styles.impactLabel}>
-              {baseFull12} -> {baseFull12 + deltaFull12} | {baseEmpty12} -> {baseEmpty12 + deltaEmpty12}
+              {baseFull12} {"to"} {baseFull12 + deltaFull12} | {baseEmpty12} {"to"} {baseEmpty12 + deltaEmpty12}
             </Text>
           ) : null}
         </View>
@@ -478,14 +478,20 @@ function InventoryAdjustForm({
           </View>
           {baseFull48 !== undefined && baseEmpty48 !== undefined && (deltaFull48 || deltaEmpty48) ? (
             <Text style={styles.impactLabel}>
-              {baseFull48} -> {baseFull48 + deltaFull48} | {baseEmpty48} -> {baseEmpty48 + deltaEmpty48}
+              {baseFull48} {"to"} {baseFull48 + deltaFull48} | {baseEmpty48} {"to"} {baseEmpty48 + deltaEmpty48}
             </Text>
           ) : null}
         </View>
       </View>
 
-      <Text style={styles.modalLabel}>Reason</Text>
-      <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
+      <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
+      <TextInput
+        style={styles.modalInput}
+        placeholder="count_correction"
+        value={reason}
+        onChangeText={setReason}
+      />
+      <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
 
       <View style={styles.modalActions}>
         <Pressable style={styles.modalBtn} onPress={onCancel}>
@@ -619,7 +625,7 @@ function CashAdjustForm({
 
       {cashBefore !== null && deltaValue ? (
         <Text style={styles.impactLabel}>
-          Impact: {cashBefore} NIS -> {cashBefore + deltaValue} NIS
+          Impact: {cashBefore} NIS {"to"} {cashBefore + deltaValue} NIS
         </Text>
       ) : null}
 
@@ -702,6 +708,8 @@ function CompanyPaymentForm({
   const totalDue = Math.abs(companyBalance);
   const remainingDue = Math.max(totalDue - amountValue, 0);
   const resultValue = totalDue - amountValue;
+  const companyMoneyResultLabel =
+    resultValue > 0 ? "You owe company (debt)" : resultValue < 0 ? "Company owes you (credit)" : "Settled";
   const payDisabled = companyBalance <= 0;
   const receiveDisabled = companyBalance >= 0;
   const tableDisabled = companyBalance === 0;
@@ -857,7 +865,7 @@ function CompanyPaymentForm({
             </View>
           </View>
           <View style={[styles.amountCell, styles.paymentCell]}>
-            <Text style={styles.fieldName}>Result</Text>
+            <Text style={styles.fieldName}>{companyMoneyResultLabel}</Text>
             <TextInput
               style={[
                 styles.modalInput,
@@ -1224,6 +1232,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
+  modalHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#64748b",
+  },
   inputReadOnly: {
     backgroundColor: "#eef2f6",
     color: "#8a8a8a",
@@ -1578,3 +1591,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+

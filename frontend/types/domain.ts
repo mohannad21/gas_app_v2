@@ -472,22 +472,134 @@ export const DailyReportV2CardSchema = z.object({
 });
 export type DailyReportV2Card = z.infer<typeof DailyReportV2CardSchema>;
 
+export const Level3CounterpartySchema = z.object({
+  type: z.enum(["customer", "company", "none"]),
+  display_name: z.string().nullish(),
+  description: z.string().nullish(),
+  display: z.string().nullish(),
+});
+export type Level3Counterparty = z.infer<typeof Level3CounterpartySchema>;
+
+export const Level3SystemSchema = z.object({
+  display_name: z.string(),
+});
+export type Level3System = z.infer<typeof Level3SystemSchema>;
+
+export const Level3HeroSchema = z.object({
+  text: z.string(),
+});
+export type Level3Hero = z.infer<typeof Level3HeroSchema>;
+
+export const Level3MoneySchema = z.object({
+  verb: z.enum(["received", "paid", "none"]),
+  amount: z.number(),
+});
+export type Level3Money = z.infer<typeof Level3MoneySchema>;
+
+export const Level3SettlementComponentsSchema = z.object({
+  money: z.boolean(),
+  cyl12: z.boolean(),
+  cyl48: z.boolean(),
+});
+export type Level3SettlementComponents = z.infer<typeof Level3SettlementComponentsSchema>;
+
+export const Level3SettlementSchema = z.object({
+  scope: z.enum(["customer", "company", "none"]),
+  is_settled: z.boolean(),
+  components: Level3SettlementComponentsSchema.nullish(),
+});
+export type Level3Settlement = z.infer<typeof Level3SettlementSchema>;
+
+export const Level3ActionSchema = z.object({
+  category: z.enum(["money", "cylinders"]),
+  direction: z.enum([
+    "customer_pays",
+    "pay_customer",
+    "pay_company",
+    "company_pays",
+    "customer_returns_empty",
+    "return_empty_to_company",
+    "deliver_full_to_customer",
+    "company_delivers_full_to_you",
+    "customer->dist",
+    "dist->customer",
+    "dist->company",
+    "company->dist",
+  ]),
+  amount: z.number().nullish(),
+  gas_type: z.enum(["12", "48"]).nullish(),
+  qty: z.number().nullish(),
+  unit: z.enum(["empty", "full"]).nullish(),
+  kind: z.enum(["money", "empty_12", "empty_48", "full_12", "full_48"]).nullish(),
+  severity: z.enum(["warning", "danger"]).nullish(),
+  text: z.string().nullish(),
+});
+export type Level3Action = z.infer<typeof Level3ActionSchema>;
+
+export const ActivityNoteSchema = z.object({
+  kind: z.enum(["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"]),
+  direction: z.enum([
+    "customer_pays_you",
+    "you_pay_company",
+    "customer_returns_you",
+    "you_return_company",
+    "you_deliver_customer",
+    "company_delivers_you",
+  ]),
+  remaining_after: z.number(),
+  remaining_before: z.number().nullish(),
+});
+export type ActivityNote = z.infer<typeof ActivityNoteSchema>;
+
 export const DailyReportV2EventSchema = z.object({
   event_type: z.string(),
+  id: z.string().nullish(),
   effective_at: z.string(),
   created_at: z.string(),
   source_id: z.string().nullish(),
+  display_name: z.string().nullish(),
+  display_description: z.string().nullish(),
+  time_display: z.string().nullish(),
+  event_kind: z.string().nullish(),
+  activity_type: z.string().nullish(),
+  hero_primary: z.string().nullish(),
+  money_delta: z.number().nullish(),
+  status: z.enum(["atomic_ok", "needs_action", "balance_settled"]).nullish(),
+  context_line: z.string().nullish(),
+  notes: z.array(ActivityNoteSchema).nullish(),
   label: z.string().nullish(),
   label_short: z.string().nullish(),
+  is_balanced: z.boolean().nullish(),
+  action_lines: z.array(z.string()).nullish(),
+  status_mode: z.enum(["atomic", "settlement"]).nullish(),
+  is_ok: z.boolean().nullish(),
+  is_atomic_ok: z.boolean().nullish(),
+  status_badge: z.enum(["OK", "Balance settled"]).nullish(),
+  action_pills: z.array(Level3ActionSchema).nullish(),
+  remaining_actions: z.array(Level3ActionSchema).nullish(),
+  has_other_outstanding_cylinders: z.boolean().nullish(),
+  has_other_outstanding_cash: z.boolean().nullish(),
+  counterparty: Level3CounterpartySchema.nullish(),
+  counterparty_display: z.string().nullish(),
+  system: Level3SystemSchema.nullish(),
+  hero: Level3HeroSchema.nullish(),
+  hero_text: z.string().nullish(),
+  money: Level3MoneySchema.nullish(),
+  money_amount: z.number().nullish(),
+  money_direction: z.enum(["in", "out", "none"]).nullish(),
+  money_received: z.number().nullish(),
+  settlement: Level3SettlementSchema.nullish(),
+  open_actions: z.array(Level3ActionSchema).nullish(),
   order_mode: OrderModeSchema.nullish(),
   gas_type: GasTypeSchema.nullish(),
   customer_id: z.string().nullish(),
   customer_name: z.string().nullish(),
   customer_description: z.string().nullish(),
-  system_name: z.string().nullish(),
-  system_type: z.string().nullish(),
-  expense_type: z.string().nullish(),
-  reason: z.string().nullish(),
+    system_name: z.string().nullish(),
+    system_type: z.string().nullish(),
+    expense_type: z.string().nullish(),
+    reason: z.string().nullish(),
+    note: z.string().nullish(),
   buy12: z.number().nullish(),
   return12: z.number().nullish(),
   buy48: z.number().nullish(),
@@ -498,14 +610,16 @@ export const DailyReportV2EventSchema = z.object({
   paid_now: z.number().nullish(),
   order_total: z.number().nullish(),
   order_paid: z.number().nullish(),
-  order_installed: z.number().nullish(),
-  order_received: z.number().nullish(),
-  unit_price_buy_12: z.number().nullish(),
-  unit_price_buy_48: z.number().nullish(),
-  cash_before: z.number(),
-  cash_after: z.number(),
-  company_before: z.number().nullish(),
-  company_after: z.number().nullish(),
+    order_installed: z.number().nullish(),
+    order_received: z.number().nullish(),
+    unit_price_buy_12: z.number().nullish(),
+    unit_price_buy_48: z.number().nullish(),
+    cash_before: z.number(),
+    cash_after: z.number(),
+    customer_money_before: z.number().nullish(),
+    customer_money_after: z.number().nullish(),
+    company_before: z.number().nullish(),
+    company_after: z.number().nullish(),
   company_12kg_before: z.number().nullish(),
   company_12kg_after: z.number().nullish(),
   company_48kg_before: z.number().nullish(),
@@ -637,30 +751,3 @@ export const BankDepositSchema = z.object({
   note: z.string().nullish(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;
-
-export const CompanyCylinderPaymentCreateSchema = z.object({
-  date: z.string(),
-  time: z.string().optional(),
-  time_of_day: z.enum(["morning", "evening"]).optional(),
-  effective_at: z.string().optional(),
-  gas_type: GasTypeSchema,
-  quantity: z.number(),
-  amount: z.number(),
-  note: z.string().nullish().optional(),
-});
-export type CompanyCylinderPaymentCreate = z.infer<typeof CompanyCylinderPaymentCreateSchema>;
-
-export const CompanyCylinderPaymentDetailsSchema = z.object({
-  id: z.string(),
-  business_date: z.string(),
-  effective_at: z.string(),
-  gas_type: GasTypeSchema,
-  quantity: z.number(),
-  amount: z.number(),
-  note: z.string().nullish(),
-  is_deleted: z.boolean().optional(),
-  deleted_at: z.string().nullish(),
-  created_at: z.string(),
-  created_by: z.string().nullish(),
-});
-export type CompanyCylinderPaymentDetails = z.infer<typeof CompanyCylinderPaymentDetailsSchema>;

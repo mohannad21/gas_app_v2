@@ -295,7 +295,7 @@ function DayTimeline({
                   ) : null}
                   {debt ? (
                     <View style={[styles.chip, styles.chipWarning]}>
-                      <Text style={styles.chipText}>Debt +{formatMoney(debt)}</Text>
+                      <Text style={styles.chipText}>Customer owes (debt) +{formatMoney(debt)}</Text>
                     </View>
                   ) : null}
                 </View>

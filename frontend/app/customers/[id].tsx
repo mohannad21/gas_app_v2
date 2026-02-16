@@ -207,7 +207,7 @@ export default function CustomerDetailsScreen() {
           })}
         </View>
         <Text style={styles.balanceNote}>
-          Positive = customer owes you (debt). Negative = you owe customer (credit).
+          Positive = Customer owes (debt). Negative = Customer credit.
         </Text>
       </View>
 

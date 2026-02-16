@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel
 
 GasType = Literal["12kg", "48kg"]
 OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
+InventoryAdjustReason = Literal["count_correction", "shrinkage", "damage"]
 
 
 def new_id(prefix: str = "") -> str:
@@ -269,6 +270,13 @@ class CollectionCreate(SQLModel):
   def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
     return _non_negative(value, info.field_name)
 
+  @field_validator("system_id")
+  @classmethod
+  def _validate_system_id(cls, value: Optional[str]) -> Optional[str]:
+    if value is not None:
+      raise ValueError("system_not_allowed")
+    return value
+
 
 class CollectionUpdate(SQLModel):
   action_type: Optional[Literal["payment", "payout", "return"]] = None
@@ -286,6 +294,13 @@ class CollectionUpdate(SQLModel):
   @classmethod
   def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
     return _non_negative(value, info.field_name)
+
+  @field_validator("system_id")
+  @classmethod
+  def _validate_system_id(cls, value: Optional[str]) -> Optional[str]:
+    if value is not None:
+      raise ValueError("system_not_allowed")
+    return value
 
 
 class CollectionEvent(SQLModel):
@@ -498,7 +513,7 @@ class InventoryAdjustCreate(SQLModel):
   gas_type: GasType
   delta_full: int = 0
   delta_empty: int = 0
-  reason: str
+  reason: InventoryAdjustReason
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -506,7 +521,7 @@ class InventoryAdjustCreate(SQLModel):
 class InventoryAdjustUpdate(SQLModel):
   delta_full: Optional[int] = None
   delta_empty: Optional[int] = None
-  reason: Optional[str] = None
+  reason: Optional[InventoryAdjustReason] = None
   note: Optional[str] = None
 
 
@@ -686,13 +701,116 @@ class DailyReportV2Card(SQLModel):
   recalculated: bool = False
 
 
+class Level3Counterparty(SQLModel):
+  type: Literal["customer", "company", "none"]
+  display_name: Optional[str] = None
+  description: Optional[str] = None
+  display: Optional[str] = None
+
+
+class Level3System(SQLModel):
+  display_name: str
+
+
+class Level3Hero(SQLModel):
+  text: str
+
+
+class Level3Money(SQLModel):
+  verb: Literal["received", "paid", "none"]
+  amount: int
+
+
+class Level3SettlementComponents(SQLModel):
+  money: bool
+  cyl12: bool
+  cyl48: bool
+
+
+class Level3Settlement(SQLModel):
+  scope: Literal["customer", "company", "none"]
+  is_settled: bool
+  components: Optional[Level3SettlementComponents] = None
+
+
+class Level3Action(SQLModel):
+  category: Literal["money", "cylinders"]
+  direction: Literal[
+    "customer_pays",
+    "pay_customer",
+    "pay_company",
+    "company_pays",
+    "customer_returns_empty",
+    "return_empty_to_company",
+    "deliver_full_to_customer",
+    "company_delivers_full_to_you",
+    "customer->dist",
+    "dist->customer",
+    "dist->company",
+    "company->dist",
+  ]
+  amount: Optional[int] = None
+  gas_type: Optional[Literal["12", "48"]] = None
+  qty: Optional[int] = None
+  unit: Optional[Literal["empty", "full"]] = None
+  kind: Optional[Literal["money", "empty_12", "empty_48", "full_12", "full_48"]] = None
+  severity: Optional[Literal["warning", "danger"]] = None
+  text: Optional[str] = None
+
+
+class ActivityNote(SQLModel):
+  kind: Literal["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"]
+  direction: Literal[
+    "customer_pays_you",
+    "you_pay_company",
+    "customer_returns_you",
+    "you_return_company",
+    "you_deliver_customer",
+    "company_delivers_you",
+  ]
+  remaining_after: int
+  remaining_before: Optional[int] = None
+
+
 class DailyReportV2Event(SQLModel):
   event_type: str
+  id: Optional[str] = None
   effective_at: datetime
   created_at: datetime
   source_id: Optional[str] = None
+  display_name: Optional[str] = None
+  display_description: Optional[str] = None
+  time_display: Optional[str] = None
+  event_kind: Optional[str] = None
+  activity_type: Optional[str] = None
+  hero_primary: Optional[str] = None
+  money_delta: Optional[int] = None
+  status: Optional[Literal["atomic_ok", "needs_action", "balance_settled"]] = None
+  context_line: Optional[str] = None
+  notes: list[ActivityNote] = Field(default_factory=list)
   label: Optional[str] = None
   label_short: Optional[str] = None
+  is_balanced: Optional[bool] = None
+  action_lines: list[str] = Field(default_factory=list)
+  status_mode: Optional[Literal["atomic", "settlement"]] = None
+  is_ok: Optional[bool] = None
+  is_atomic_ok: Optional[bool] = None
+  status_badge: Optional[Literal["OK", "Balance settled"]] = None
+  action_pills: list[Level3Action] = Field(default_factory=list)
+  remaining_actions: list[Level3Action] = Field(default_factory=list)
+  has_other_outstanding_cylinders: Optional[bool] = None
+  has_other_outstanding_cash: Optional[bool] = None
+  counterparty: Optional[Level3Counterparty] = None
+  counterparty_display: Optional[str] = None
+  system: Optional[Level3System] = None
+  hero: Optional[Level3Hero] = None
+  hero_text: Optional[str] = None
+  money: Optional[Level3Money] = None
+  money_amount: Optional[int] = None
+  money_direction: Optional[Literal["in", "out", "none"]] = None
+  money_received: Optional[int] = None
+  settlement: Optional[Level3Settlement] = None
+  open_actions: list[Level3Action] = Field(default_factory=list)
   order_mode: Optional[OrderMode] = None
   gas_type: Optional[GasType] = None
   customer_id: Optional[str] = None

@@ -53,7 +53,10 @@ export function useDailyReportScreen(rangeDays = 30) {
   const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
 
   useEffect(() => {
-    const wanted = new Set<string>([...v2Expanded, ...((v2Query.data ?? []) as any[]).map((row) => row.date)]);
+    const wanted = new Set<string>(v2Expanded);
+    if (v2Rows[0]?.date) {
+      wanted.add(v2Rows[0].date);
+    }
     if (wanted.size === 0) return;
 
     const missing = Array.from(wanted).filter((date) => !(date in v2DayByDate));
@@ -77,7 +80,7 @@ export function useDailyReportScreen(rangeDays = 30) {
     return () => {
       cancelled = true;
     };
-  }, [v2Expanded, v2DayByDate, v2Query.data]);
+  }, [v2Expanded, v2DayByDate, v2Rows]);
 
   useEffect(() => {
     if (!v2Query.data) return;

@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app.models import CustomerTransaction, LedgerEntry
 from app.services.ledger import sum_ledger
 from app.utils.time import business_date_from_utc
-from tests.conftest import create_customer, create_order, create_system, init_inventory
+from conftest import create_customer, create_order, create_system, init_inventory
 
 
 def _post_collection(client, payload: dict) -> dict:

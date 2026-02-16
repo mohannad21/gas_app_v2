@@ -24,7 +24,6 @@ import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 import {
-  formatEventType,
   formatSigned,
   getInitInventoryAfter,
   summarizeEventTypes,
@@ -32,8 +31,8 @@ import {
   summarizeOrderEvents,
   summarizeRefillEvents,
 } from "@/lib/reports/utils";
-import { buildHappenedAt, formatDateTimeYMDHM, formatWeekdayShort, toDateKey } from "@/lib/date";
-import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
+import { buildHappenedAt, formatWeekdayShort, toDateKey } from "@/lib/date";
+import SlimActivityRow from "@/components/reports/SlimActivityRow";
 
 const getEventColor = (eventType: string) => {
   const palette: Record<string, string> = {
@@ -154,25 +153,31 @@ export default function ReportsScreen() {
       const company48Credit = Math.max(companyTotals.cyl48, 0);
       const company48Debt = Math.max(-companyTotals.cyl48, 0);
 
-      if (companyCashDebt > 0) pushLine("cash company: debts", companyCashDebt, formatMoney, "#b91c1c");
-      if (companyCashCredit > 0) pushLine("cash company: credits", companyCashCredit, formatMoney, "#16a34a");
-      if (company12Debt > 0) pushLine("12kg company: debts", company12Debt, formatCount, "#b91c1c");
-      if (company12Credit > 0) pushLine("12kg company: credit", company12Credit, formatCount, "#16a34a");
-      if (company48Debt > 0) pushLine("48kg company: debts", company48Debt, formatCount, "#b91c1c");
-      if (company48Credit > 0) pushLine("48kg company: credit", company48Credit, formatCount, "#16a34a");
+      if (companyCashDebt > 0)
+        pushLine("company cash debt (you owe)", companyCashDebt, formatMoney, "#b91c1c");
+      if (companyCashCredit > 0)
+        pushLine("company cash credit", companyCashCredit, formatMoney, "#16a34a");
+      if (company12Debt > 0)
+        pushLine("12kg short empties (you owe)", company12Debt, formatCount, "#b91c1c");
+      if (company12Credit > 0)
+        pushLine("12kg shell credit at company", company12Credit, formatCount, "#16a34a");
+      if (company48Debt > 0)
+        pushLine("48kg short empties (you owe)", company48Debt, formatCount, "#b91c1c");
+      if (company48Credit > 0)
+        pushLine("48kg shell credit at company", company48Credit, formatCount, "#16a34a");
 
       if (customerNet.newDebtCash > 0)
-        pushLine("cash customer: debts", customerNet.newDebtCash, formatMoney, "#b91c1c");
+        pushLine("customer owes (debt) cash", customerNet.newDebtCash, formatMoney, "#b91c1c");
       if (customerNet.collectedCash > 0)
-        pushLine("cash customer: credits", customerNet.collectedCash, formatMoney, "#16a34a");
+        pushLine("customer credit cash", customerNet.collectedCash, formatMoney, "#16a34a");
       if (customerNet.newDebt12 > 0)
-        pushLine("12kg customer: debts", customerNet.newDebt12, formatCount, "#b91c1c");
+        pushLine("customer owes (debt) 12kg", customerNet.newDebt12, formatCount, "#b91c1c");
       if (customerNet.collected12 > 0)
-        pushLine("12kg customer: credit", customerNet.collected12, formatCount, "#16a34a");
+        pushLine("customer credit 12kg", customerNet.collected12, formatCount, "#16a34a");
       if (customerNet.newDebt48 > 0)
-        pushLine("48kg customer: debts", customerNet.newDebt48, formatCount, "#b91c1c");
+        pushLine("customer owes (debt) 48kg", customerNet.newDebt48, formatCount, "#b91c1c");
       if (customerNet.collected48 > 0)
-        pushLine("48kg customer: credit", customerNet.collected48, formatCount, "#16a34a");
+        pushLine("customer credit 48kg", customerNet.collected48, formatCount, "#16a34a");
 
       return lines;
     }
@@ -200,12 +205,18 @@ export default function ReportsScreen() {
     );
 
     // Company balances (daily delta)
-    if (companyCashDebtDelta > 0) pushLine("cash company: debts", companyCashDebtDelta, formatMoney, "#b91c1c");
-    if (companyCashCreditDelta > 0) pushLine("cash company: credits", companyCashCreditDelta, formatMoney, "#16a34a");
-    if (company12DebtDelta > 0) pushLine("12kg company: debts", company12DebtDelta, formatCount, "#b91c1c");
-    if (company12CreditDelta > 0) pushLine("12kg company: credit", company12CreditDelta, formatCount, "#16a34a");
-    if (company48DebtDelta > 0) pushLine("48kg company: debts", company48DebtDelta, formatCount, "#b91c1c");
-    if (company48CreditDelta > 0) pushLine("48kg company: credit", company48CreditDelta, formatCount, "#16a34a");
+    if (companyCashDebtDelta > 0)
+      pushLine("company cash debt (you owe)", companyCashDebtDelta, formatMoney, "#b91c1c");
+    if (companyCashCreditDelta > 0)
+      pushLine("company cash credit", companyCashCreditDelta, formatMoney, "#16a34a");
+    if (company12DebtDelta > 0)
+      pushLine("12kg short empties (you owe)", company12DebtDelta, formatCount, "#b91c1c");
+    if (company12CreditDelta > 0)
+      pushLine("12kg shell credit at company", company12CreditDelta, formatCount, "#16a34a");
+    if (company48DebtDelta > 0)
+      pushLine("48kg short empties (you owe)", company48DebtDelta, formatCount, "#b91c1c");
+    if (company48CreditDelta > 0)
+      pushLine("48kg shell credit at company", company48CreditDelta, formatCount, "#16a34a");
 
     // Customer balances (daily delta; derived from previous day)
     const customerCashDebtDelta = prevRow
@@ -227,15 +238,18 @@ export default function ReportsScreen() {
       ? delta(row.customer_48kg_receivable, prevRow?.customer_48kg_receivable ?? 0)
       : 0;
 
-    if (customerCashDebtDelta > 0) pushLine("cash customer: debts", customerCashDebtDelta, formatMoney, "#b91c1c");
+    if (customerCashDebtDelta > 0)
+      pushLine("customer owes (debt) cash", customerCashDebtDelta, formatMoney, "#b91c1c");
     if (customerCashCreditDelta > 0)
-      pushLine("cash customer: credits", customerCashCreditDelta, formatMoney, "#16a34a");
-    if (customer12DebtDelta > 0) pushLine("12kg customer: debts", customer12DebtDelta, formatCount, "#b91c1c");
+      pushLine("customer credit cash", customerCashCreditDelta, formatMoney, "#16a34a");
+    if (customer12DebtDelta > 0)
+      pushLine("customer owes (debt) 12kg", customer12DebtDelta, formatCount, "#b91c1c");
     if (customer12CreditDelta > 0)
-      pushLine("12kg customer: credit", customer12CreditDelta, formatCount, "#16a34a");
-    if (customer48DebtDelta > 0) pushLine("48kg customer: debts", customer48DebtDelta, formatCount, "#b91c1c");
+      pushLine("customer credit 12kg", customer12CreditDelta, formatCount, "#16a34a");
+    if (customer48DebtDelta > 0)
+      pushLine("customer owes (debt) 48kg", customer48DebtDelta, formatCount, "#b91c1c");
     if (customer48CreditDelta > 0)
-      pushLine("48kg customer: credit", customer48CreditDelta, formatCount, "#16a34a");
+      pushLine("customer credit 48kg", customer48CreditDelta, formatCount, "#16a34a");
 
     return lines;
   };
@@ -532,12 +546,7 @@ export default function ReportsScreen() {
                     <>
                       <View style={styles.expandedDivider} />
                       {dayInfo ? (
-                        <V2Timeline
-                          date={item.date}
-                          events={events}
-                          formatMoney={formatMoney}
-                          formatCount={formatCount}
-                        />
+                        <V2Timeline date={item.date} events={events} formatMoney={formatMoney} />
                       ) : (
                         <Text style={styles.meta}>Loading events...</Text>
                       )}
@@ -947,18 +956,14 @@ function V2Timeline({
   date,
   events,
   formatMoney,
-  formatCount,
 }: {
   date: string;
   events: any[];
   formatMoney: (v: number) => string;
-  formatCount: (v: number) => string;
 }) {
-  const [openEvents, setOpenEvents] = useState<string[]>([]);
-
   const normalizedEvents = useMemo(() => {
     const merged: any[] = [];
-    const initMap = new Map<string, any>();
+    const initIndex = new Map<string, number>();
 
     const mergeInventory = (target: any, source: any) => {
       if (!source) return target;
@@ -979,753 +984,32 @@ function V2Timeline({
         return;
       }
       const key = `init:${ev?.effective_at ?? ev?.created_at ?? ""}`;
-      const existing = initMap.get(key);
-      if (!existing) {
-        initMap.set(key, { ...ev });
+      const existingIndex = initIndex.get(key);
+      if (existingIndex == null) {
+        initIndex.set(key, merged.length);
+        merged.push({ ...ev });
         return;
       }
+      const existing = merged[existingIndex];
+      if (!existing) return;
       existing.inventory_before = mergeInventory(existing.inventory_before, ev?.inventory_before);
       existing.inventory_after = mergeInventory(existing.inventory_after, ev?.inventory_after);
       if (!existing.gas_type) {
         existing.gas_type = ev?.gas_type;
       }
     });
-
-    merged.push(...initMap.values());
     return merged;
   }, [events]);
 
-  const sortedEvents = useMemo(() => {
-    const getTime = (value?: string) => {
-      if (!value) return 0;
-      const parsed = Date.parse(value);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    };
-    const getEffectiveTime = (ev: any) => getTime(ev?.effective_at ?? ev?.delivered_at ?? ev?.created_at);
-    const getCreatedTime = (ev: any) => getTime(ev?.created_at);
-    return [...normalizedEvents].sort((a, b) => {
-      const aTime = getEffectiveTime(a);
-      const bTime = getEffectiveTime(b);
-      if (aTime !== bTime) return bTime - aTime;
-      return getCreatedTime(b) - getCreatedTime(a);
-    });
-  }, [normalizedEvents]);
-
-  const getOrderQtyLabel = (ev: any) => {
-    const gasType = ev?.gas_type;
-    if (!gasType) return null;
-    const before =
-      gasType === "12kg" ? ev?.inventory_before?.full12 : gasType === "48kg" ? ev?.inventory_before?.full48 : null;
-    const after =
-      gasType === "12kg" ? ev?.inventory_after?.full12 : gasType === "48kg" ? ev?.inventory_after?.full48 : null;
-    if (typeof before !== "number" || typeof after !== "number") return null;
-    const qty = Math.abs(after - before);
-    if (!qty) return null;
-    return `${qty} x ${gasType}`;
-  };
-
-  const renderInventorySection = (
-    label: string,
-    accent: string,
-    before: { full?: number | null; empty?: number | null },
-    after: { full?: number | null; empty?: number | null },
-    missing?: number | null,
-    showSingle?: boolean
-  ) => {
-    const showFull = typeof before.full === "number" && typeof after.full === "number";
-    const showEmpty = typeof before.empty === "number" && typeof after.empty === "number";
-    const showMissing = typeof missing === "number";
-    if (!showFull && !showEmpty && !showMissing) return null;
-    const deltaFull = showFull ? (after.full ?? 0) - (before.full ?? 0) : 0;
-    const deltaEmpty = showEmpty ? (after.empty ?? 0) - (before.empty ?? 0) : 0;
-    const hasPair = showFull && showEmpty;
-    const pairMatch = hasPair && Math.abs(deltaFull) === Math.abs(deltaEmpty);
-    const pairValueStyle = hasPair ? (pairMatch ? styles.deltaValueGood : styles.deltaValueBad) : undefined;
-    const missingOk = typeof missing === "number" ? missing <= 0 : null;
-    const badgeTone = missingOk == null ? undefined : missingOk ? "good" : "bad";
-    return (
-      <View style={styles.eventSection}>
-        <View style={styles.eventSectionHeader}>
-          <View style={[styles.eventSectionDot, { backgroundColor: accent }]} />
-          <Text style={styles.eventSectionTitle}>{label}</Text>
-        </View>
-        <View style={styles.inventoryRow}>
-          {showFull ? (
-            <DeltaBox
-              label="Full"
-              before={before.full ?? 0}
-              after={after.full ?? 0}
-              format={formatCount}
-              accent={accent}
-              compact
-              badgeTone={badgeTone}
-              singleValue={showSingle ? (after.full ?? 0) : undefined}
-            />
-          ) : null}
-          {showEmpty ? (
-            <DeltaBox
-              label="Empty"
-              before={before.empty ?? 0}
-              after={after.empty ?? 0}
-              format={formatCount}
-              accent={accent}
-              compact
-              badgeTone={badgeTone}
-              singleValue={showSingle ? (after.empty ?? 0) : undefined}
-            />
-          ) : null}
-          {showMissing ? (
-            <ValueBox
-              label="Missing"
-              value={missing && missing > 0 ? formatCount(missing) : "OK"}
-              valueStyle={missing && missing > 0 ? styles.valueBoxValueBad : styles.valueBoxValueOk}
-              compact
-            />
-          ) : null}
-        </View>
-      </View>
-    );
-  };
-
-  const renderExpandedRow = (slots: { full?: ReactNode; empty?: ReactNode; cash?: ReactNode }) => (
-    <View style={styles.eventExpandedRow}>
-      {slots.full ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
-      {slots.empty ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
-      {slots.cash ?? <View style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />}
-    </View>
-  );
-
   return (
     <View>
-      {sortedEvents.map((ev, idx) => {
-        const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-        const eventTitle = ev?.label_short ?? formatEventType(eventType, ev?.order_mode ?? null);
-        const eventKey = `${date}-ev-${idx}-${ev?.source_id ?? ev?.id ?? ""}`;
-        const isOpenEvent = openEvents.includes(eventKey);
-        const eventTimeRaw = ev?.effective_at ?? ev?.delivered_at ?? ev?.created_at ?? "";
-        const eventTime = formatDateTimeYMDHM(eventTimeRaw);
-        const createdAtTime = formatDateTimeYMDHM(ev?.created_at ?? "");
-        const hasDescription =
-          typeof ev?.customer_description === "string" && ev.customer_description.trim().length > 0;
-        const gasTypeLabel = ev?.gas_type ?? "";
-        const orderMode = String(ev?.order_mode ?? "replacement");
-        const orderModeKey = orderMode.toLowerCase();
-        const isReplacementOrder = eventType === "order" && orderModeKey === "replacement";
-        const isBuyIronOrder =
-          eventType === "order" && (orderModeKey === "buy_iron" || orderModeKey === "buying" || orderModeKey === "buy");
-        const isSellIronOrder =
-          eventType === "order" &&
-          (orderModeKey === "sell_iron" || orderModeKey === "selling" || orderModeKey === "sell");
-        const isPaymentOrder =
-          eventType === "order" && (orderModeKey === "payment" || orderModeKey === "pay");
-        const isReturnOrder =
-          eventType === "order" &&
-          (orderModeKey === "return" || orderModeKey === "return_empty" || orderModeKey === "return_iron");
-        const isUnknownOrder =
-          eventType === "order" &&
-          !isReplacementOrder &&
-          !isBuyIronOrder &&
-          !isSellIronOrder &&
-          !isPaymentOrder &&
-          !isReturnOrder;
-        const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
-        const orderPaid =
-          typeof ev?.order_paid === "number"
-            ? ev.order_paid
-            : typeof ev?.cash_before === "number" && typeof ev?.cash_after === "number"
-              ? ev.cash_after - ev.cash_before
-              : 0;
-        const collectionAmount = Number(
-          ev?.collection_amount ??
-            ev?.amount_money ??
-            ev?.amount ??
-            ev?.order_paid ??
-            0
-        );
-        const collectionQty12 = Number(ev?.collection_qty_12kg ?? ev?.qty_12kg ?? 0);
-        const collectionQty48 = Number(ev?.collection_qty_48kg ?? ev?.qty_48kg ?? 0);
-        const orderMoneyDelta = calcCustomerMoneyDelta(orderMode, orderTotal, orderPaid);
-        const orderUnpaid = Math.max(orderMoneyDelta, 0);
-        const orderCredit = Math.max(-orderMoneyDelta, 0);
-        const orderMissingCyl =
-          isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
-            ? Math.max(calcCustomerCylinderDelta(orderMode, ev.order_installed, ev.order_received), 0)
-            : 0;
-        const orderCylCredit =
-          isReplacementOrder && typeof ev?.order_installed === "number" && typeof ev?.order_received === "number"
-            ? Math.max(-calcCustomerCylinderDelta(orderMode, ev.order_installed, ev.order_received), 0)
-            : 0;
-        const installed =
-          typeof ev?.order_installed === "number"
-            ? ev.order_installed
-            : typeof ev?.cylinders_installed === "number"
-              ? ev.cylinders_installed
-              : 0;
-        const received =
-          typeof ev?.order_received === "number"
-            ? ev.order_received
-            : typeof ev?.cylinders_received === "number"
-              ? ev.cylinders_received
-              : 0;
-        const refillTotal = typeof ev?.total_cost === "number" ? ev.total_cost : 0;
-        const refillPaid = typeof ev?.paid_now === "number" ? ev.paid_now : 0;
-        const refillResult = calcMoneyUiResult(refillTotal, refillPaid);
-        const refillUnpaid = Math.max(refillResult, 0);
-        const refillCreditCash = Math.max(-refillResult, 0);
-        const refillCredit12 =
-          typeof ev?.buy12 === "number" && typeof ev?.return12 === "number"
-            ? Math.max(ev.return12 - ev.buy12, 0)
-            : 0;
-        const refillCredit48 =
-          typeof ev?.buy48 === "number" && typeof ev?.return48 === "number"
-            ? Math.max(ev.return48 - ev.buy48, 0)
-            : 0;
-
-        const invBefore = ev?.inventory_before ?? {};
-        const invAfter = ev?.inventory_after ?? {};
-        const showInv12 =
-          invBefore.full12 != null ||
-          invBefore.empty12 != null ||
-          invAfter.full12 != null ||
-          invAfter.empty12 != null;
-        const showInv48 =
-          invBefore.full48 != null ||
-          invBefore.empty48 != null ||
-          invAfter.full48 != null ||
-          invAfter.empty48 != null;
-        const adj12Full =
-          typeof invBefore?.full12 === "number" && typeof invAfter?.full12 === "number"
-            ? invAfter.full12 - invBefore.full12
-            : 0;
-        const adj12Empty =
-          typeof invBefore?.empty12 === "number" && typeof invAfter?.empty12 === "number"
-            ? invAfter.empty12 - invBefore.empty12
-            : 0;
-        const adj48Full =
-          typeof invBefore?.full48 === "number" && typeof invAfter?.full48 === "number"
-            ? invAfter.full48 - invBefore.full48
-            : 0;
-        const adj48Empty =
-          typeof invBefore?.empty48 === "number" && typeof invAfter?.empty48 === "number"
-            ? invAfter.empty48 - invBefore.empty48
-            : 0;
-        const orderMissing = orderMissingCyl > 0 ? orderMissingCyl : null;
-        const cashBeforeNum = Number(ev?.cash_before);
-        const cashAfterNum = Number(ev?.cash_after);
-        const cashDelta =
-          Number.isFinite(cashBeforeNum) && Number.isFinite(cashAfterNum)
-            ? cashAfterNum - cashBeforeNum
-            : null;
-        const paymentAmount =
-          typeof cashDelta === "number"
-            ? Math.abs(cashDelta)
-            : typeof ev?.collection_amount === "number"
-              ? Math.abs(ev.collection_amount)
-              : typeof ev?.amount_money === "number"
-                ? Math.abs(ev.amount_money)
-                : 0;
-        const expenseAmount =
-          typeof ev?.amount === "number"
-            ? ev.amount
-            : typeof ev?.amount_money === "number"
-              ? ev.amount_money
-              : typeof ev?.collection_amount === "number"
-                ? ev.collection_amount
-                : typeof cashDelta === "number"
-                  ? Math.abs(cashDelta)
-                  : 0;
-        const expenseCashBadgeTone =
-          typeof cashDelta === "number" ? (cashDelta <= 0 ? "bad" : "good") : undefined;
-        const invEmpty12Before =
-          typeof invBefore?.empty12 === "number"
-            ? invBefore.empty12
-            : Number(ev?.inv12_empty_before ?? 0);
-        const invEmpty12After =
-          typeof invAfter?.empty12 === "number"
-            ? invAfter.empty12
-            : Number(ev?.inv12_empty_after ?? 0);
-        const invEmpty48Before =
-          typeof invBefore?.empty48 === "number"
-            ? invBefore.empty48
-            : Number(ev?.inv48_empty_before ?? 0);
-        const invEmpty48After =
-          typeof invAfter?.empty48 === "number"
-            ? invAfter.empty48
-            : Number(ev?.inv48_empty_after ?? 0);
-        const hasInvEmpty12 = Number.isFinite(invEmpty12Before) && Number.isFinite(invEmpty12After);
-        const hasInvEmpty48 = Number.isFinite(invEmpty48Before) && Number.isFinite(invEmpty48After);
-        const collectionEmpty12Delta = hasInvEmpty12 ? invEmpty12After - invEmpty12Before : 0;
-        const collectionEmpty48Delta = hasInvEmpty48 ? invEmpty48After - invEmpty48Before : 0;
-        const collectionEmpty12Display = hasInvEmpty12 ? collectionEmpty12Delta : collectionQty12;
-        const collectionEmpty48Display = hasInvEmpty48 ? collectionEmpty48Delta : collectionQty48;
-        const collectionEmptyGasType =
-          ev?.gas_type ??
-          (Math.abs(collectionEmpty12Delta) > 0
-            ? "12kg"
-            : Math.abs(collectionEmpty48Delta) > 0
-              ? "48kg"
-              : collectionQty12
-                ? "12kg"
-                : collectionQty48
-                  ? "48kg"
-                  : "12kg");
-        const collectionEmptyBefore = collectionEmptyGasType === "48kg" ? invEmpty48Before : invEmpty12Before;
-        const collectionEmptyAfter = collectionEmptyGasType === "48kg" ? invEmpty48After : invEmpty12After;
-        const collectionEmptyDelta =
-          Number.isFinite(collectionEmptyBefore) && Number.isFinite(collectionEmptyAfter)
-            ? collectionEmptyAfter - collectionEmptyBefore
-            : 0;
-        const showCollectionEmptyBox =
-          eventType === "collection_empty" &&
-          (Math.abs(collectionEmptyDelta) > 0 || collectionQty12 > 0 || collectionQty48 > 0);
-        const orderPaidForCash = typeof orderPaid === "number" ? orderPaid : 0;
-        const orderUnpaidForCash =
-          typeof orderTotal === "number" && typeof orderPaidForCash === "number"
-            ? Math.max(calcMoneyUiResult(orderTotal, orderPaidForCash), 0)
-            : null;
-        const cashBadgeTone =
-          typeof cashDelta === "number" && typeof orderTotal === "number"
-            ? Math.abs(cashDelta) < orderTotal
-              ? "bad"
-              : "good"
-            : undefined;
-        const refillCashBadgeTone =
-          typeof cashDelta === "number" && typeof ev?.total_cost === "number"
-            ? Math.abs(cashDelta) < ev.total_cost
-              ? "bad"
-              : "good"
-            : undefined;
-        const refillMissing12 =
-          eventType === "refill" && (typeof ev?.buy12 === "number" || typeof ev?.return12 === "number")
-            ? Math.max((ev?.buy12 ?? 0) - (ev?.return12 ?? 0), 0)
-            : null;
-        const refillMissing48 =
-          eventType === "refill" && (typeof ev?.buy48 === "number" || typeof ev?.return48 === "number")
-            ? Math.max((ev?.buy48 ?? 0) - (ev?.return48 ?? 0), 0)
-            : null;
-
-          const isOrderLike =
-            eventType === "order" ||
-            eventType === "collection_money" ||
-            eventType === "collection_payout" ||
-            eventType === "collection_empty" ||
-            eventType === "refill" ||
-            eventType === "expense" ||
-            eventType === "adjust";
-
-        return (
-          <Pressable
-            key={`${date}-ev-${idx}`}
-            onPress={() => {
-              setOpenEvents((prev) =>
-                prev.includes(eventKey) ? prev.filter((key) => key !== eventKey) : [...prev, eventKey]
-              );
-            }}
-            style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}
-          >
-            <View style={styles.eventHeader}>
-              {isOrderLike ? (
-                <>
-                  <View style={[styles.eventHeaderLeft, eventType === "adjust" && styles.adjustHeaderLeft]}>
-                    {eventType !== "refill" && eventType !== "expense" && eventType !== "adjust" ? (
-                      <>
-                        <Text style={[styles.eventCustomerName, styles.eventCustomerNameTight]}>
-                          {ev?.customer_name ?? "Unknown"}
-                        </Text>
-                        {hasDescription ? (
-                          <Text style={[styles.eventMetaSmall, styles.eventMetaSmallTight]}>
-                            {ev.customer_description}
-                          </Text>
-                        ) : null}
-                        {eventType === "order" ? (
-                          <Text style={[styles.eventMetaSmall, !hasDescription && styles.eventMetaSmallTight]}>
-                            {(ev?.system_name ?? "System")} | {getOrderQtyLabel(ev) ?? ev?.gas_type ?? "N/A"}
-                          </Text>
-                        ) : null}
-                      </>
-                    ) : null}
-                    {eventType === "refill" ? (
-                      <Text style={[styles.eventCustomerName, styles.eventCustomerNameTight, styles.refillTitle]}>
-                        Company
-                      </Text>
-                    ) : null}
-                    {eventType === "adjust" ? (
-                      <Text
-                        style={[
-                          styles.eventCustomerName,
-                          styles.eventCustomerNameTight,
-                          styles.refillTitle,
-                          styles.adjustTitleTight,
-                        ]}
-                      >
-                        Company
-                      </Text>
-                    ) : null}
-                    {eventType === "adjust" ? (
-                      <>
-                        <Text style={[styles.eventSummaryLine, styles.eventSummaryLineTight]}>
-                          <Text style={{ color: gasColor("12kg") }}>12kg</Text>
-                          {`: empty ${formatSigned(adj12Empty)} | full ${formatSigned(adj12Full)}`}
-                        </Text>
-                        <Text style={[styles.eventSummaryLine, styles.eventSummaryLineTight]}>
-                          <Text style={{ color: gasColor("48kg") }}>48kg</Text>
-                          {`: empty ${formatSigned(adj48Empty)} | full ${formatSigned(adj48Full)}`}
-                        </Text>
-                      </>
-                    ) : null}
-                    {eventType === "expense" ? (
-                      <>
-                        <Text style={[styles.eventCustomerName, styles.eventCustomerNameTight, styles.expenseTitle]}>
-                          {String(ev?.expense_type ?? "expense")}
-                        </Text>
-                        <Text style={[styles.eventSummaryLine, styles.eventSummaryLineTight]}>
-                          {formatMoney(expenseAmount)}
-                        </Text>
-                      </>
-                    ) : null}
-                  </View>
-                  <View style={styles.eventHeaderRightStack}>
-                    <View style={styles.eventTimePill}>
-                      <Text style={styles.eventTimeText}>{eventTime}</Text>
-                    </View>
-                    {eventType === "expense" ? null : null}
-                    <View style={[styles.eventTypePill, { backgroundColor: getEventColor(eventType) }]}>
-                      <Text style={styles.eventTypePillText}>{eventTitle}</Text>
-                    </View>
-                  </View>
-                </>
-              ) : (
-                <>
-                  {eventType !== "expense" ? (
-                    <View style={[styles.eventTypePill, { backgroundColor: getEventColor(eventType) }]}>
-                      <Text style={styles.eventTypePillText}>{eventTitle}</Text>
-                    </View>
-                  ) : (
-                    <View />
-                  )}
-                  <View style={styles.eventHeaderRight}>
-                    <View style={styles.eventTimePill}>
-                      <Text style={styles.eventTimeText}>{eventTime}</Text>
-                    </View>
-                    {eventType === "expense" ? (
-                      <View style={[styles.eventTypePill, { backgroundColor: getEventColor(eventType) }]}>
-                        <Text style={styles.eventTypePillText}>{eventTitle}</Text>
-                      </View>
-                    ) : null}
-                    {eventType === "expense" ? null : null}
-                  </View>
-                </>
-              )}
-            </View>
-
-            {eventType === "expense" || eventType === "adjust" ? null : ev?.reason && (eventType !== "order" || String(ev.reason).toLowerCase() !== "order") ? (
-              <View style={styles.eventMetaBlock}>
-                <Text style={styles.eventMetaSmall}>{ev.reason}</Text>
-              </View>
-            ) : null}
-
-            {eventType === "order" ? (
-              <>
-                <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    <Text style={{ color: gasColor(ev?.gas_type ?? "12kg") }}>
-                      {ev?.gas_type ?? "12kg"}
-                    </Text>
-                    {` installed ${formatCount(installed)} | received ${formatCount(received)}`}
-                  </Text>
-                  {(orderMissingCyl > 0 || orderCylCredit > 0) ? (
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
-                      {orderMissingCyl > 0 ? `missing ${formatCount(orderMissingCyl)}` : null}
-                      {orderMissingCyl > 0 && orderCylCredit > 0 ? " | " : null}
-                      {orderCylCredit > 0 ? `credit ${formatCount(orderCylCredit)}` : null}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={[styles.eventSummaryRow, styles.eventSummaryRowTight]}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    total {formatMoney(orderTotal)} | paid {formatMoney(orderPaidForCash ?? 0)}
-                  </Text>
-                  {(orderUnpaid > 0 || orderCredit > 0) ? (
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
-                      {orderUnpaid > 0 ? `unpaid ${formatMoney(orderUnpaid)}` : null}
-                      {orderUnpaid > 0 && orderCredit > 0 ? " | " : null}
-                      {orderCredit > 0 ? `credit ${formatMoney(orderCredit)}` : null}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            ) : null}
-
-            {eventType === "collection_money" ? (
-                <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    customer paid {formatMoney(paymentAmount)}
-                  </Text>
-                </View>
-              ) : null}
-  
-            {eventType === "collection_payout" ? (
-                <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    you paid customer {formatMoney(paymentAmount)}
-                  </Text>
-                </View>
-              ) : null}
-
-            {eventType === "collection_empty" ? (
-                <View style={styles.eventSummaryRow}>
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                     received {formatCount(collectionEmpty12Display)} x{" "}
-                      <Text style={{ color: gasColor("12kg") }}>12kg</Text>
-                    {" | "}received {formatCount(collectionEmpty48Display)} x{" "}
-                    <Text style={{ color: gasColor("48kg") }}>48kg</Text>
-                  </Text>
-                </View>
-              ) : null}
-
-            {eventType === "company_payment" ? (
-              <View style={styles.eventSummaryRow}>
-                <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                  you paid {formatMoney(paymentAmount)}
-                </Text>
-              </View>
-            ) : null}
-
-            {eventType === "refill" ? (
-              <>
-                <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    <Text style={{ color: gasColor("12kg") }}>12kg</Text>
-                    {` bought ${formatCount(ev?.buy12 ?? 0)} | returned ${formatCount(ev?.return12 ?? 0)}`}
-                  </Text>
-                  {(refillMissing12 > 0 || refillCredit12 > 0) ? (
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
-                      {refillMissing12 > 0 ? `missing ${formatCount(refillMissing12)}` : null}
-                      {refillMissing12 > 0 && refillCredit12 > 0 ? " | " : null}
-                      {refillCredit12 > 0 ? `credit ${formatCount(refillCredit12)}` : null}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.eventSummaryRow}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    <Text style={{ color: gasColor("48kg") }}>48kg</Text>
-                    {` bought ${formatCount(ev?.buy48 ?? 0)} | returned ${formatCount(ev?.return48 ?? 0)}`}
-                  </Text>
-                  {(refillMissing48 > 0 || refillCredit48 > 0) ? (
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
-                      {refillMissing48 > 0 ? `missing ${formatCount(refillMissing48)}` : null}
-                      {refillMissing48 > 0 && refillCredit48 > 0 ? " | " : null}
-                      {refillCredit48 > 0 ? `credit ${formatCount(refillCredit48)}` : null}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={[styles.eventSummaryRow, styles.eventSummaryRowTight]}>
-                  <Text style={[styles.eventSummaryLine, styles.eventSummaryLeft]}>
-                    total {formatMoney(refillTotal)} | paid {formatMoney(refillPaid)}
-                  </Text>
-                  {(refillUnpaid > 0 || refillCreditCash > 0) ? (
-                    <Text style={[styles.eventSummaryLine, styles.eventSummaryAlert, styles.eventSummaryRight]}>
-                      {refillUnpaid > 0 ? `unpaid ${formatMoney(refillUnpaid)}` : null}
-                      {refillUnpaid > 0 && refillCreditCash > 0 ? " | " : null}
-                      {refillCreditCash > 0 ? `credit ${formatMoney(refillCreditCash)}` : null}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            ) : null}
-
-            {eventType === "adjust" ? null : null}
-
-            {isOpenEvent ? (
-              <>
-                {eventType === "order" ? (
-                  renderExpandedRow({
-                    full:
-                      isReplacementOrder || isSellIronOrder || isUnknownOrder ? (
-                        <DeltaBox
-                          label={`${ev?.gas_type ?? "12kg"} F`}
-                          before={ev?.gas_type === "48kg" ? invBefore.full48 ?? 0 : invBefore.full12 ?? 0}
-                          after={ev?.gas_type === "48kg" ? invAfter.full48 ?? 0 : invAfter.full12 ?? 0}
-                          format={formatCount}
-                          accent={gasColor(ev?.gas_type ?? "12kg")}
-                          compact
-                        />
-                      ) : null,
-                    empty:
-                      isReplacementOrder || isBuyIronOrder || isReturnOrder || isUnknownOrder ? (
-                        <DeltaBox
-                          label={`${ev?.gas_type ?? "12kg"} E`}
-                          before={ev?.gas_type === "48kg" ? invBefore.empty48 ?? 0 : invBefore.empty12 ?? 0}
-                          after={ev?.gas_type === "48kg" ? invAfter.empty48 ?? 0 : invAfter.empty12 ?? 0}
-                          format={formatCount}
-                          accent={gasColor(ev?.gas_type ?? "12kg")}
-                          compact
-                        />
-                      ) : null,
-                    cash:
-                      !isReturnOrder ? (
-                        <DeltaBox
-                          label="Cash"
-                          before={ev?.cash_before ?? 0}
-                          after={ev?.cash_after ?? 0}
-                          format={formatMoney}
-                          smallDelta
-                          compact
-                          badgeTone={cashBadgeTone}
-                        />
-                      ) : null,
-                  })
-                ) : null}
-
-                {eventType === "collection_money" || eventType === "collection_payout" || eventType === "collection_empty" ? (
-                    renderExpandedRow({
-                      empty:
-                        showCollectionEmptyBox ? (
-                          <DeltaBox
-                          label={`${collectionEmptyGasType} E`}
-                          before={collectionEmptyBefore}
-                          after={collectionEmptyAfter}
-                          format={formatCount}
-                          accent={gasColor(collectionEmptyGasType)}
-                          compact
-                        />
-                        ) : null,
-                      cash:
-                        eventType === "collection_money" || eventType === "collection_payout" ? (
-                          <DeltaBox
-                            label="Cash"
-                            before={ev?.cash_before ?? 0}
-                            after={ev?.cash_after ?? 0}
-                          format={formatMoney}
-                          smallDelta
-                          compact
-                          badgeTone={cashBadgeTone}
-                        />
-                      ) : null,
-                  })
-                ) : null}
-
-                {eventType === "refill" ? (
-                  <>
-                    <View style={styles.eventExpandedRow}>
-                      <DeltaBox
-                        label="12kg F"
-                        before={invBefore.full12 ?? 0}
-                        after={invAfter.full12 ?? 0}
-                        format={formatCount}
-                        accent={gasColor("12kg")}
-                        compact
-                      />
-                      <DeltaBox
-                        label="12kg E"
-                        before={invBefore.empty12 ?? 0}
-                        after={invAfter.empty12 ?? 0}
-                        format={formatCount}
-                        accent={gasColor("12kg")}
-                        compact
-                      />
-                    </View>
-                    <View style={styles.eventExpandedRow}>
-                      <DeltaBox
-                        label="48kg F"
-                        before={invBefore.full48 ?? 0}
-                        after={invAfter.full48 ?? 0}
-                        format={formatCount}
-                        accent={gasColor("48kg")}
-                        compact
-                      />
-                      <DeltaBox
-                        label="48kg E"
-                        before={invBefore.empty48 ?? 0}
-                        after={invAfter.empty48 ?? 0}
-                        format={formatCount}
-                        accent={gasColor("48kg")}
-                        compact
-                      />
-                    </View>
-                    <View style={styles.eventExpandedRow}>
-                      <DeltaBox
-                        label="Cash"
-                        before={ev?.cash_before ?? 0}
-                        after={ev?.cash_after ?? 0}
-                        format={formatMoney}
-                        smallDelta
-                        compact
-                        badgeTone={refillCashBadgeTone}
-                      />
-                    </View>
-                  </>
-                ) : null}
-
-                {eventType === "adjust" ? (
-                  <>
-                    {eventType === "adjust" ? (
-                      <View style={styles.eventExpandedRow}>
-                        <DeltaBox
-                          label="12kg F"
-                          before={invBefore.full12 ?? 0}
-                          after={invAfter.full12 ?? 0}
-                          format={formatCount}
-                          accent={gasColor("12kg")}
-                          compact
-                        />
-                        <DeltaBox
-                          label="12kg E"
-                          before={invBefore.empty12 ?? 0}
-                          after={invAfter.empty12 ?? 0}
-                          format={formatCount}
-                          accent={gasColor("12kg")}
-                          compact
-                        />
-                      </View>
-                    ) : null}
-                    {eventType === "adjust" ? (
-                      <View style={styles.eventExpandedRow}>
-                        <DeltaBox
-                          label="48kg F"
-                          before={invBefore.full48 ?? 0}
-                          after={invAfter.full48 ?? 0}
-                          format={formatCount}
-                          accent={gasColor("48kg")}
-                          compact
-                        />
-                        <DeltaBox
-                          label="48kg E"
-                          before={invBefore.empty48 ?? 0}
-                          after={invAfter.empty48 ?? 0}
-                          format={formatCount}
-                          accent={gasColor("48kg")}
-                          compact
-                        />
-                      </View>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {eventType === "expense" ? (
-                  renderExpandedRow({
-                    cash: (
-                      <DeltaBox
-                        label="Cash"
-                        before={ev?.cash_before ?? 0}
-                        after={ev?.cash_after ?? 0}
-                        format={formatMoney}
-                        smallDelta
-                        compact
-                        badgeTone={expenseCashBadgeTone}
-                      />
-                    ),
-                  })
-                ) : null}
-
-                {createdAtTime ? (
-                  <Text style={styles.eventCreatedAtText}>created {createdAtTime}</Text>
-                ) : null}
-              </>
-            ) : null}
-          </Pressable>
-        );
-      })}
+      {normalizedEvents.map((ev) => (
+        <SlimActivityRow
+          key={String(ev?.id ?? ev?.source_id ?? "")}
+          event={ev}
+          formatMoney={formatMoney}
+        />
+      ))}
     </View>
   );
 }
@@ -2135,6 +1419,7 @@ const styles = StyleSheet.create({
   eventMetaSmall: { fontSize: 12, fontWeight: "700", color: "#64748b", marginTop: 0, lineHeight: 14, fontFamily: FontFamilies.semibold },
   eventMetaSmallTight: { marginTop: 2 },
   eventMetaRight: { textAlign: "right" },
+  eventSummaryBlock: { marginTop: 4 },
   eventSummaryLine: { marginTop: 0, fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
   eventSummaryLineTight: { marginTop: 2 },
   eventSummaryLeft: { flex: 1 },
@@ -2142,6 +1427,7 @@ const styles = StyleSheet.create({
   eventSummaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginTop: 2 },
   eventSummaryRowTight: { marginTop: 0 },
   eventSummaryAlert: { color: "#b91c1c", marginTop: 0, fontFamily: FontFamilies.semibold },
+  eventSummaryOk: { color: "#16a34a", marginTop: 0, fontFamily: FontFamilies.semibold },
   expenseTitle: { color: "#166534" },
   refillTitle: { color: "#0a7ea4" },
   adjustTitleTight: { marginBottom: 0 },

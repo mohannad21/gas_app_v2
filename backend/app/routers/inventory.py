@@ -16,7 +16,7 @@ from app.schemas import (
   InventoryRefillUpdate,
   InventorySnapshot,
 )
-from app.services.ledger import snapshot_company_debts, sum_inventory
+from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.utils.time import business_date_start_utc
 
@@ -81,6 +81,13 @@ def _time_of_day(value: datetime) -> str:
 def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
   if new12 != 0 or new48 != 0:
     raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
+
+
+def _validate_inventory_adjustment_reason(reason: str, *, delta_full: int, delta_empty: int) -> None:
+  if reason not in {"count_correction", "shrinkage", "damage"}:
+    raise HTTPException(status_code=422, detail="invalid_adjustment_reason")
+  if reason in {"shrinkage", "damage"} and (delta_full > 0 or delta_empty > 0):
+    raise HTTPException(status_code=422, detail="adjustment_reason_disallows_positive_delta")
 
 
 @router.get("/latest", response_model=InventorySnapshot)
@@ -151,6 +158,11 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
 
+  _validate_inventory_adjustment_reason(
+    payload.reason,
+    delta_full=payload.delta_full,
+    delta_empty=payload.delta_empty,
+  )
   happened_at = normalize_happened_at(payload.happened_at)
   adj = InventoryAdjustment(
     gas_type=payload.gas_type,
@@ -207,14 +219,15 @@ def update_inventory_adjustment(
   if not existing or existing.is_reversed:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = InventoryAdjustment(
     gas_type=existing.gas_type,
     delta_full=existing.delta_full,
     delta_empty=existing.delta_empty,
     note=f"Reversal of {existing.id}",
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     reversed_id=existing.id,
     is_reversed=True,
   )
@@ -235,14 +248,20 @@ def update_inventory_adjustment(
   data = payload.model_dump(exclude_unset=True)
   new_full = data.get("delta_full", existing.delta_full)
   new_empty = data.get("delta_empty", existing.delta_empty)
-  new_note = data.get("note", existing.note)
+  next_reason = data.get("reason") or existing.note
+  if not next_reason:
+    raise HTTPException(status_code=422, detail="adjustment_reason_required")
+  _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
+  new_note = data.get("note")
+  if new_note is None:
+    new_note = next_reason
   new_adj = InventoryAdjustment(
     gas_type=existing.gas_type,
     delta_full=new_full,
     delta_empty=new_empty,
     note=new_note,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     is_reversed=False,
   )
   session.add(new_adj)
@@ -326,8 +345,9 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     is_reversed=False,
   )
   session.add(txn)
-  post_company_transaction(session, txn)
-  snapshot = snapshot_company_debts(session, up_to=txn.happened_at)
+  entries = post_company_transaction(session, txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
   txn.debt_cash = snapshot["debt_cash"]
   txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
@@ -400,10 +420,11 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     raise HTTPException(status_code=404, detail="Refill not found")
 
   _reject_new_shells_for_refill(payload.new12, payload.new48)
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CompanyTransaction(
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind=existing.kind,
     buy12=existing.buy12,
     return12=existing.return12,
@@ -435,8 +456,8 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   session.add(existing)
 
   new_txn = CompanyTransaction(
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind="refill",
     buy12=payload.buy12,
     return12=payload.return12,
@@ -453,8 +474,9 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     is_reversed=False,
   )
   session.add(new_txn)
-  post_company_transaction(session, new_txn)
-  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at)
+  entries = post_company_transaction(session, new_txn)
+  boundary = boundary_from_entries(entries)
+  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at, boundary=boundary)
   new_txn.debt_cash = snapshot["debt_cash"]
   new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
   new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
