@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import text
+from sqlmodel import Session, select
+
 from conftest import init_inventory
 from conftest import create_customer, create_system, create_order
+from app.db import engine
+from app.models import CashAdjustment, LedgerEntry
 
 
 def test_cash_replay_ordering_tiebreak(client) -> None:
@@ -23,6 +28,120 @@ def test_cash_replay_ordering_tiebreak(client) -> None:
     assert events[0]["cash_before"] == 0
     assert events[0]["cash_after"] == 10
     assert events[1]["cash_before"] == 10
+    assert events[1]["cash_after"] == 30
+
+
+def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
+    day = date(2025, 6, 2)
+    happened_at = datetime(2025, 6, 2, 9, 0, tzinfo=timezone.utc)
+
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": happened_at.isoformat(), "delta_cash": 10, "reason": "adjust-a"},
+    )
+    assert resp.status_code == 201
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": happened_at.isoformat(), "delta_cash": 20, "reason": "adjust-b"},
+    )
+    assert resp.status_code == 201
+
+    with Session(engine) as session:
+        adjustments = session.exec(select(CashAdjustment)).all()
+        adj_a = next(adj for adj in adjustments if adj.note == "adjust-a")
+        adj_b = next(adj for adj in adjustments if adj.note == "adjust-b")
+        old_a = adj_a.id
+        old_b = adj_b.id
+
+        session.exec(
+            text(
+                """
+                update cash_adjustments
+                set id = :new_id,
+                    happened_at = :ts,
+                    created_at = :ts,
+                    day = :day
+                where id = :old_id
+                """
+            ),
+            {"new_id": "adjust-a", "ts": happened_at, "day": happened_at.date(), "old_id": old_a},
+        )
+        session.exec(
+            text(
+                """
+                update cash_adjustments
+                set id = :new_id,
+                    happened_at = :ts,
+                    created_at = :ts,
+                    day = :day
+                where id = :old_id
+                """
+            ),
+            {"new_id": "adjust-b", "ts": happened_at, "day": happened_at.date(), "old_id": old_b},
+        )
+
+        entry_a = session.exec(
+            select(LedgerEntry)
+            .where(LedgerEntry.source_type == "cash_adjust")
+            .where(LedgerEntry.source_id == old_a)
+        ).first()
+        entry_b = session.exec(
+            select(LedgerEntry)
+            .where(LedgerEntry.source_type == "cash_adjust")
+            .where(LedgerEntry.source_id == old_b)
+        ).first()
+        assert entry_a is not None
+        assert entry_b is not None
+
+        session.exec(
+            text(
+                """
+                update ledger_entries
+                set id = :new_id,
+                    source_id = :new_source,
+                    happened_at = :ts,
+                    created_at = :ts,
+                    day = :day
+                where id = :old_id
+                """
+            ),
+            {
+                "new_id": "ledger-z",
+                "new_source": "adjust-a",
+                "ts": happened_at,
+                "day": happened_at.date(),
+                "old_id": entry_a.id,
+            },
+        )
+        session.exec(
+            text(
+                """
+                update ledger_entries
+                set id = :new_id,
+                    source_id = :new_source,
+                    happened_at = :ts,
+                    created_at = :ts,
+                    day = :day
+                where id = :old_id
+                """
+            ),
+            {
+                "new_id": "ledger-a",
+                "new_source": "adjust-b",
+                "ts": happened_at,
+                "day": happened_at.date(),
+                "old_id": entry_b.id,
+            },
+        )
+        session.commit()
+
+    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert resp.status_code == 200
+    events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
+    assert [event["reason"] for event in events] == ["adjust-b", "adjust-a"]
+    assert events[0]["cash_before"] == 0
+    assert events[0]["cash_after"] == 20
+    assert events[1]["cash_before"] == 20
     assert events[1]["cash_after"] == 30
 
 
