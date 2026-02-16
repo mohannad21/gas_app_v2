@@ -202,3 +202,32 @@ def test_daily_audit_summary_cash_in_net_zero(client) -> None:
     audit = resp.json()["audit_summary"]
     assert audit["cash_in"] == 1000
     assert audit["new_debt"] == 0
+
+
+def test_customer_adjust_visible_in_day_v2(client) -> None:
+    day = date(2025, 9, 1)
+    customer_id = create_customer(client, name="Adjust Customer")
+
+    resp = client.post(
+        "/customer-adjustments",
+        json={
+            "customer_id": customer_id,
+            "amount_money": 100,
+            "count_12kg": 0,
+            "count_48kg": 0,
+            "reason": "manual adjust",
+            "happened_at": f"{day.isoformat()}T10:00:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = [event for event in report.json()["events"] if event["event_type"] == "customer_adjust"]
+    assert len(events) == 1
+    event = events[0]
+    assert isinstance(event["cash_before"], int)
+    assert isinstance(event["cash_after"], int)
+    assert event["cash_before"] == event["cash_after"]
+    assert "inventory_before" in event
+    assert "inventory_after" in event

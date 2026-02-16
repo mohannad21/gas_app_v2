@@ -2213,7 +2213,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     notes = _notes_for_event(event, customer_debt=customer_debt, money_decimals=money_decimals)
     _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
 
-    if event.event_type not in {"customer_adjust", "init"}:
+    if event.event_type != "init":
       event_rows.append(event)
 
   event_rows.sort(

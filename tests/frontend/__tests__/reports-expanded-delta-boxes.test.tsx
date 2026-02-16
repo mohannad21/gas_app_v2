@@ -34,6 +34,30 @@ const orderEvent = {
   inventory_after: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
 };
 
+const companyPaymentEvent = {
+  event_type: "company_payment",
+  effective_at: "2025-01-01T09:00:00Z",
+  created_at: "2025-01-01T09:00:00Z",
+  source_id: "cp-1",
+  cash_before: 900,
+  cash_after: 800,
+  company_before: 100,
+  company_after: 50,
+};
+
+const companyBuyIronEvent = {
+  event_type: "company_buy_iron",
+  effective_at: "2025-01-01T10:00:00Z",
+  created_at: "2025-01-01T10:00:00Z",
+  source_id: "cbi-1",
+  buy12: 2,
+  buy48: 0,
+  cash_before: 800,
+  cash_after: 700,
+  inventory_before: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
+  inventory_after: { full12: 11, empty12: 3, full48: 0, empty48: 0 },
+};
+
 const dayDetail = {
   date: "2025-01-01",
   cash_start: 1000,
@@ -43,7 +67,7 @@ const dayDetail = {
   inventory_start: { full12: 10, empty12: 2, full48: 6, empty48: 1 },
   inventory_end: { full12: 9, empty12: 3, full48: 6, empty48: 1 },
   audit_summary: { cash_in: 0, new_debt: 0, inv_delta_12: 0, inv_delta_48: 0 },
-  events: [orderEvent],
+  events: [orderEvent, companyPaymentEvent, companyBuyIronEvent],
 };
 
 jest.mock("@/hooks/useReports", () => ({
@@ -92,6 +116,24 @@ describe("ReportsScreen expanded DeltaBox", () => {
     expect(queryByText("12kg F")).toBeNull();
 
     fireEvent.press(getByText("Installed 1x12kg"));
+
+    await waitFor(() => expect(getByText("12kg F")).toBeTruthy());
+    expect(getByText("12kg E")).toBeTruthy();
+    expect(getByText("Cash")).toBeTruthy();
+  });
+
+  it("expands company events with cash and inventory boxes", async () => {
+    const { getByText } = render(<ReportsScreen />);
+
+    fireEvent.press(getByText(/2025-01-01/));
+
+    await waitFor(() => expect(getByText("Pay Company")).toBeTruthy());
+    fireEvent.press(getByText("Pay Company"));
+
+    await waitFor(() => expect(getByText("Cash")).toBeTruthy());
+
+    await waitFor(() => expect(getByText("Bought 2x12kg")).toBeTruthy());
+    fireEvent.press(getByText("Bought 2x12kg"));
 
     await waitFor(() => expect(getByText("12kg F")).toBeTruthy());
     expect(getByText("12kg E")).toBeTruthy();

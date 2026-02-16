@@ -962,7 +962,6 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-      if (eventType === "customer_adjust") return;
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -989,9 +988,13 @@ function V2Timeline({
     setOpenEvents((prev) => (prev.includes(key) ? prev.filter((entry) => entry !== key) : [...prev, key]));
   }, []);
 
-  const buildDeltaRow = (boxes: ReactNode[]) => {
+  const buildDeltaRow = (boxes: ReactNode[], key: string) => {
     if (boxes.length === 0) return null;
-    return <View style={styles.eventExpandedRow}>{boxes}</View>;
+    return (
+      <View key={key} style={styles.eventExpandedRow}>
+        {boxes}
+      </View>
+    );
   };
 
   const placeholderBox = (key: string) => (
@@ -1095,115 +1098,67 @@ function V2Timeline({
             />
           ) : null;
 
-        const refillRow12 =
-          full12Before != null &&
-          full12After != null &&
-          empty12Before != null &&
-          empty12After != null
-            ? [
-                <DeltaBox
-                  key="refill-12-full"
-                  label="12kg F"
-                  before={full12Before}
-                  after={full12After}
-                  format={formatCount}
-                  accent={gasColor("12kg")}
-                  compact
-                />,
-                <DeltaBox
-                  key="refill-12-empty"
-                  label="12kg E"
-                  before={empty12Before}
-                  after={empty12After}
-                  format={formatCount}
-                  accent={gasColor("12kg")}
-                  compact
-                />,
-              ]
-            : [];
-        const refillRow48 =
-          full48Before != null &&
-          full48After != null &&
-          empty48Before != null &&
-          empty48After != null
-            ? [
-                <DeltaBox
-                  key="refill-48-full"
-                  label="48kg F"
-                  before={full48Before}
-                  after={full48After}
-                  format={formatCount}
-                  accent={gasColor("48kg")}
-                  compact
-                />,
-                <DeltaBox
-                  key="refill-48-empty"
-                  label="48kg E"
-                  before={empty48Before}
-                  after={empty48After}
-                  format={formatCount}
-                  accent={gasColor("48kg")}
-                  compact
-                />,
-              ]
-            : [];
-
-        const adjustRow12 =
-          full12Before != null &&
-          full12After != null &&
-          empty12Before != null &&
-          empty12After != null
-            ? [
-                <DeltaBox
-                  key="adjust-12-full"
-                  label="12kg F"
-                  before={full12Before}
-                  after={full12After}
-                  format={formatCount}
-                  accent={gasColor("12kg")}
-                  compact
-                />,
-                <DeltaBox
-                  key="adjust-12-empty"
-                  label="12kg E"
-                  before={empty12Before}
-                  after={empty12After}
-                  format={formatCount}
-                  accent={gasColor("12kg")}
-                  compact
-                />,
-              ]
-            : [];
-        const adjustRow48 =
-          full48Before != null &&
-          full48After != null &&
-          empty48Before != null &&
-          empty48After != null
-            ? [
-                <DeltaBox
-                  key="adjust-48-full"
-                  label="48kg F"
-                  before={full48Before}
-                  after={full48After}
-                  format={formatCount}
-                  accent={gasColor("48kg")}
-                  compact
-                />,
-                <DeltaBox
-                  key="adjust-48-empty"
-                  label="48kg E"
-                  before={empty48Before}
-                  after={empty48After}
-                  format={formatCount}
-                  accent={gasColor("48kg")}
-                  compact
-                />,
-              ]
-            : [];
-
         const expandedContent = () => {
+          const row12Boxes: ReactNode[] = [];
+          const row48Boxes: ReactNode[] = [];
+          if (full12Before != null && full12After != null) {
+            row12Boxes.push(
+              <DeltaBox
+                key="row12-full"
+                label="12kg F"
+                before={full12Before}
+                after={full12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (empty12Before != null && empty12After != null) {
+            row12Boxes.push(
+              <DeltaBox
+                key="row12-empty"
+                label="12kg E"
+                before={empty12Before}
+                after={empty12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (full48Before != null && full48After != null) {
+            row48Boxes.push(
+              <DeltaBox
+                key="row48-full"
+                label="48kg F"
+                before={full48Before}
+                after={full48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          if (empty48Before != null && empty48After != null) {
+            row48Boxes.push(
+              <DeltaBox
+                key="row48-empty"
+                label="48kg E"
+                before={empty48Before}
+                after={empty48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          const cashRow = cashBox ? [cashBox] : [];
+
           if (eventType === "order") {
-            return buildDeltaRow(orderBoxes);
+            if (orderBoxes.length > 0) {
+              return buildDeltaRow(orderBoxes, "order");
+            }
           }
           if (
             eventType === "collection_empty" ||
@@ -1215,29 +1170,17 @@ function V2Timeline({
               empty48Box ?? placeholderBox("collection-empty-48"),
               cashBox ?? placeholderBox("collection-cash"),
             ];
-            return buildDeltaRow(boxes);
+            return buildDeltaRow(boxes, "collection");
           }
-          if (eventType === "refill") {
-            return (
-              <>
-                {buildDeltaRow(refillRow12)}
-                {buildDeltaRow(refillRow48)}
-                {buildDeltaRow(cashBox ? [cashBox] : [])}
-              </>
-            );
+          const rows = [row12Boxes, row48Boxes, cashRow].filter((row) => row.length > 0);
+          if (rows.length === 0) {
+            return <Text style={styles.eventExpandedEmpty}>No cash/inventory change for this activity.</Text>;
           }
-          if (eventType === "adjust") {
-            return (
-              <>
-                {buildDeltaRow(adjustRow12)}
-                {buildDeltaRow(adjustRow48)}
-              </>
-            );
-          }
-          if (eventType === "expense" || eventType === "cash_adjust" || eventType === "bank_deposit") {
-            return buildDeltaRow(cashBox ? [cashBox] : []);
-          }
-          return null;
+          return (
+            <>
+              {rows.map((row, idx) => buildDeltaRow(row, `row-${idx}`))}
+            </>
+          );
         };
 
         return (
@@ -1675,6 +1618,7 @@ const styles = StyleSheet.create({
   eventCreatedAtText: { marginTop: 6, fontSize: 11, fontWeight: "700", color: "#64748b", fontFamily: FontFamilies.semibold },
   eventExpandedRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   eventExpandedPanel: { paddingHorizontal: 12, paddingBottom: 8 },
+  eventExpandedEmpty: { marginTop: 6, fontSize: 12, color: "#64748b", fontFamily: FontFamilies.semibold },
 
   eventSection: { marginTop: 10 },
   eventSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
