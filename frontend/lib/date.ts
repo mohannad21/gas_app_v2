@@ -105,3 +105,4 @@ export const formatDateTimeYMDHM = (value: DateInput) => {
   const minutes = pad2(date.getMinutes());
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 };
+

@@ -71,3 +71,4 @@ export function useInventoryActivity(date: string, includeDeleted?: boolean) {
     cashAdjustmentsQuery,
   };
 }
+

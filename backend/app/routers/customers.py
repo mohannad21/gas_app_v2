@@ -200,3 +200,4 @@ def delete_customer(customer_id: str, session: Session = Depends(get_session)) -
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="customer_has_transactions")
   session.delete(customer)
   session.commit()
+

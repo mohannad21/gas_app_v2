@@ -23,3 +23,4 @@ def acquire_inventory_lock(session: Session, gas_type: str) -> None:
 def acquire_inventory_locks(session: Session, gas_types: list[str]) -> None:
   for gas_type in sorted(set(gas_types)):
     acquire_inventory_lock(session, gas_type)
+

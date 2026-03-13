@@ -16,3 +16,4 @@ export function useDailyReportDayV2(date: string) {
     enabled: !!date,
   });
 }
+

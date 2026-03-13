@@ -349,3 +349,4 @@ export const level3Fixtures: DailyReportV2Event[] = [
     action_pills: [],
   },
 ];
+

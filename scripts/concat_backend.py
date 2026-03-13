@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
 BACKEND_ROOT = REPO_ROOT / "backend"
-OUTPUT_PATH = SCRIPTS_DIR / "01_backend.txt"
+OUTPUT_PATH = SCRIPTS_DIR / "backend.txt"
 
 EXCLUDE_DIRS = {
     ".git",

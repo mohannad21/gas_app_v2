@@ -8,3 +8,4 @@ export function useCompanyBalances() {
     queryFn: () => getCompanyBalances(),
   });
 }
+

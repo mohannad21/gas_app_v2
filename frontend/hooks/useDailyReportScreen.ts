@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { getDailyReportV2 } from "@/lib/api";
@@ -31,6 +32,7 @@ const getLocalDateString = () => {
 
 export function useDailyReportScreen(rangeDays = 30) {
   const customersQuery = useCustomers();
+  const companyBalancesQuery = useCompanyBalances();
 
   const today = getLocalDateString();
   const v2From = useMemo(() => {
@@ -54,9 +56,6 @@ export function useDailyReportScreen(rangeDays = 30) {
 
   useEffect(() => {
     const wanted = new Set<string>(v2Expanded);
-    if (v2Rows[0]?.date) {
-      wanted.add(v2Rows[0].date);
-    }
     if (wanted.size === 0) return;
 
     const missing = Array.from(wanted).filter((date) => !(date in v2DayByDate));
@@ -137,10 +136,9 @@ export function useDailyReportScreen(rangeDays = 30) {
   }, [customersQuery.data]);
 
   const companySummary: CompanySummary = useMemo(() => {
-    const latest = v2Rows[0];
-    const net12 = Number(latest?.company_12kg_end ?? 0);
-    const net48 = Number(latest?.company_48kg_end ?? 0);
-    const cashNet = Number(latest?.company_end ?? 0);
+    const net12 = Number(companyBalancesQuery.data?.company_cyl_12 ?? 0);
+    const net48 = Number(companyBalancesQuery.data?.company_cyl_48 ?? 0);
+    const cashNet = Number(companyBalancesQuery.data?.company_money ?? 0);
     return {
       give12: Math.max(-net12, 0),
       receive12: Math.max(net12, 0),
@@ -149,7 +147,7 @@ export function useDailyReportScreen(rangeDays = 30) {
       payCash: Math.max(cashNet, 0),
       receiveCash: Math.max(-cashNet, 0),
     };
-  }, [v2Rows]);
+  }, [companyBalancesQuery.data]);
 
   return {
     v2Query,
@@ -160,7 +158,9 @@ export function useDailyReportScreen(rangeDays = 30) {
     setV2DayByDate,
     balanceSummary,
     companySummary,
+    companyBalancesQuery,
     refetchV2: v2Query.refetch,
     refetchCustomers: customersQuery.refetch,
   };
 }
+

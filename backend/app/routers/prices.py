@@ -53,3 +53,4 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     effective_from=row.effective_from,
     created_at=row.created_at,
   )
+

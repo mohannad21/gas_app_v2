@@ -45,3 +45,4 @@ app.include_router(company.router)
 app.include_router(cash.router)
 app.include_router(expenses.router)
 app.include_router(reports.router)
+

@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { DailyReportV2Event } from "@/types/domain";
 
@@ -12,7 +13,8 @@ type SlimActivityRowProps = {
 
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) => `₪${formatMoney(amount)}`;
 
-const buildNoteText = (note: any, formatMoney: (v: number) => string) => {
+// Fallback-only adapter for older payloads that still send note objects instead of balance transitions.
+const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
   if (!note) return null;
   const after = Number(note.remaining_after ?? 0);
   if (!after) return null;
@@ -26,10 +28,30 @@ const buildNoteText = (note: any, formatMoney: (v: number) => string) => {
         ? `Customer still owes you ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
         : `Customer pays you ${amountText}`;
     }
+    if (note.direction === "you_pay_customer") {
+      return withBefore
+        ? `You still owe customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `You pay customer ${amountText}`;
+    }
+    if (note.direction === "you_paid_customer_earlier") {
+      return `Paid earlier ${amountText} to customer`;
+    }
+    if (note.direction === "customer_paid_earlier") {
+      return `Paid earlier ${amountText}`;
+    }
+    if (note.direction === "customer_extra_paid") {
+      return `Extra ${amountText}`;
+    }
     if (note.direction === "you_pay_company") {
       return withBefore
         ? `You still owe company ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
         : `You pay company ${amountText}`;
+    }
+    if (note.direction === "you_paid_earlier") {
+      return `Paid earlier ${amountText} to company`;
+    }
+    if (note.direction === "company_pays_you") {
+      return `Company owes you ${amountText}`;
     }
   }
 
@@ -45,6 +67,9 @@ const buildNoteText = (note: any, formatMoney: (v: number) => string) => {
     if (note.direction === "you_return_company") {
       return withBefore ? `You still owe company ${qtyText} (was ${before})` : `You return company ${qtyText}`;
     }
+    if (note.direction === "you_returned_earlier") {
+      return `Returned earlier ${qtyText}`;
+    }
   }
 
   if (note.kind === "cyl_full_12" || note.kind === "cyl_full_48") {
@@ -54,7 +79,7 @@ const buildNoteText = (note: any, formatMoney: (v: number) => string) => {
       return `You deliver customer ${qtyText}`;
     }
     if (note.direction === "company_delivers_you") {
-      return `Company delivers you ${qtyText}`;
+      return `Extra ${qtyText}`;
     }
   }
 
@@ -131,6 +156,20 @@ const splitDisplayName = (value: string | null | undefined) => {
   return { name: value, desc: "" };
 };
 
+const transitionIntentForEvent = (event: DailyReportV2Event) => {
+  if (event.event_type === "order") return "customer_order" as const;
+  if (event.event_type === "collection_money") return "customer_payment" as const;
+  if (event.event_type === "collection_payout") return "customer_payout" as const;
+  if (event.event_type === "collection_empty") return "customer_return" as const;
+  if (event.event_type === "customer_adjust") return "customer_adjust" as const;
+  if (event.event_type === "company_payment") return "company_payment" as const;
+  if (event.event_type === "company_buy_iron") return "company_buy_iron" as const;
+  if (event.event_type === "refill") {
+    return event.label === "Company Settle" ? ("company_settle" as const) : ("company_refill" as const);
+  }
+  return "generic" as const;
+};
+
 export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const eventType = String(event?.event_type ?? "event");
@@ -162,11 +201,17 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
         )}`
       : null;
 
-  const notes = Array.isArray(event?.notes) ? event.notes : [];
+  const transitionLines = formatBalanceTransitions(event?.balance_transitions, {
+    mode: "transition",
+    collapseAllSettled: true,
+    intent: transitionIntentForEvent(event),
+    formatMoney: fmtMoney,
+  });
+  const notes = transitionLines.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
   const showOk = event?.status === "atomic_ok" && event?.event_type !== "expense";
   const showSettled = event?.status === "balance_settled";
-  const showNotes = notes.length > 0;
-  const showStatus = showOk || showSettled;
+  const showNotes = transitionLines.length > 0 || notes.length > 0;
+  const showStatus = (showOk || showSettled) && transitionLines.length === 0;
   const okLabel = showSettled ? "✅ Balance settled" : "✅ OK";
   const dotColor = getEventColor(eventType);
 
@@ -216,7 +261,8 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
           <View style={styles.statusRow}>
             <View style={styles.pillRow}>
               {notes.map((note, index) => {
-                const text = buildNoteText(note, fmtMoney);
+                if (transitionLines.length > 0) return null;
+                const text = buildLegacyNoteText(note, fmtMoney);
                 if (!text) return null;
                 return (
                   <View key={`note-${index}`} style={[styles.pill, styles.pillWarning]}>
@@ -231,6 +277,18 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
                   </View>
                 );
               })}
+              {transitionLines.map((text, index) => (
+                <View key={`transition-${index}`} style={[styles.pill, styles.pillWarning]}>
+                  <Text
+                    style={[styles.pillText, styles.pillWarningText]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    {text}
+                  </Text>
+                </View>
+              ))}
             </View>
             {showStatus ? <Text style={styles.okText}>{okLabel}</Text> : null}
           </View>
@@ -360,5 +418,6 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
   },
 });
+
 
 

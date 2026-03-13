@@ -93,32 +93,24 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
   )
 
 
-@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_expense(
-  date: str = Query(...),
-  expense_type: str = Query(...),
+  expense_id: str,
   session: Session = Depends(get_session),
 ) -> None:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  category = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == expense_type)).first()
-  if not category:
-    return
-  expense = session.exec(
-    select(Expense)
-    .where(Expense.day == day)
-    .where(Expense.category_id == category.id)
-    .where(Expense.is_reversed == False)  # noqa: E712
-  ).first()
+  expense = session.get(Expense, expense_id)
   if not expense:
+    raise HTTPException(status_code=404, detail="expense_not_found")
+  if expense.kind != "expense":
+    raise HTTPException(status_code=404, detail="expense_not_found")
+  if expense.is_reversed:
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = expense.happened_at
+  reversal_day = expense.day
   reversal = Expense(
     request_id=None,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind=expense.kind,
     category_id=expense.category_id,
     amount=expense.amount,
@@ -142,3 +134,4 @@ def delete_expense(
   expense.is_reversed = True
   session.add(expense)
   session.commit()
+

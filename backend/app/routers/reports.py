@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.db import get_session
@@ -21,7 +21,10 @@ from app.models import (
 )
 from app.schemas import (
   DailyAuditSummary,
+  BalanceTransition,
   DailyReportV2Card,
+  DailyReportV2CashMath,
+  DailyReportV2Math,
   DailyReportV2Day,
   DailyReportV2Event,
   ActivityNote,
@@ -47,66 +50,6 @@ def _date_range(start: date, end: date) -> list[date]:
   return [start + timedelta(days=offset) for offset in range(days + 1)]
 
 
-def _sum_customer_totals(session: Session) -> dict[str, int]:
-  rows = session.exec(
-    select(LedgerEntry.customer_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
-    .where(LedgerEntry.account == "cust_money_debts")
-    .group_by(LedgerEntry.customer_id)
-  ).all()
-  money_receivable = 0
-  money_payable = 0
-  for cust_id, total in rows:
-    if cust_id is None:
-      continue
-    total = int(total or 0)
-    if total > 0:
-      money_receivable += total
-    elif total < 0:
-      money_payable += abs(total)
-
-  cyl12_rows = session.exec(
-    select(LedgerEntry.customer_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
-    .where(LedgerEntry.account == "cust_cylinders_debts")
-    .where(LedgerEntry.gas_type == "12kg")
-    .group_by(LedgerEntry.customer_id)
-  ).all()
-  cyl48_rows = session.exec(
-    select(LedgerEntry.customer_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
-    .where(LedgerEntry.account == "cust_cylinders_debts")
-    .where(LedgerEntry.gas_type == "48kg")
-    .group_by(LedgerEntry.customer_id)
-  ).all()
-
-  cyl_receivable_12 = cyl_payable_12 = 0
-  for cust_id, total in cyl12_rows:
-    if cust_id is None:
-      continue
-    total = int(total or 0)
-    if total > 0:
-      cyl_receivable_12 += total
-    elif total < 0:
-      cyl_payable_12 += abs(total)
-
-  cyl_receivable_48 = cyl_payable_48 = 0
-  for cust_id, total in cyl48_rows:
-    if cust_id is None:
-      continue
-    total = int(total or 0)
-    if total > 0:
-      cyl_receivable_48 += total
-    elif total < 0:
-      cyl_payable_48 += abs(total)
-
-  return {
-    "money_receivable": money_receivable,
-    "money_payable": money_payable,
-    "cyl_receivable_12": cyl_receivable_12,
-    "cyl_payable_12": cyl_payable_12,
-    "cyl_receivable_48": cyl_receivable_48,
-    "cyl_payable_48": cyl_payable_48,
-  }
-
-
 def _sum_inventory_at_day_end(session: Session, day: date) -> ReportInventoryTotals:
   full12 = sum_ledger(session, account="inv", gas_type="12kg", state="full", unit="count", day_to=day)
   empty12 = sum_ledger(session, account="inv", gas_type="12kg", state="empty", unit="count", day_to=day)
@@ -127,6 +70,15 @@ def _sum_cash_at_day_end(session: Session, day: date) -> int:
 def _sum_cash_before_day(session: Session, day: date) -> int:
   prev = day - timedelta(days=1)
   return _sum_cash_at_day_end(session, prev)
+
+
+def _sum_bank_at_day_end(session: Session, day: date) -> int:
+  return sum_ledger(session, account="bank", unit="money", day_to=day)
+
+
+def _sum_bank_before_day(session: Session, day: date) -> int:
+  prev = day - timedelta(days=1)
+  return _sum_bank_at_day_end(session, prev)
 
 
 def _sum_company_at_day_end(session: Session, day: date) -> int:
@@ -185,8 +137,8 @@ def _event_label(event: DailyReportV2Event) -> str:
     if event.order_mode:
       return _ORDER_LABELS.get(event.order_mode, "Order")
     return "Order"
-  if event.event_type == "refill" and _is_company_return_only_refill(event):
-    return "Return Emp"
+  if event.event_type == "refill" and _is_company_settle_only_refill(event):
+    return "Company Settle"
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
 
 
@@ -194,6 +146,227 @@ def _safe_int(value: Optional[int]) -> int:
   if value is None:
     return 0
   return int(value)
+
+
+CustomerLedgerState = tuple[int, int, int]
+
+
+def _seed_customer_states_before_day(
+  session: Session,
+  *,
+  customer_ids: set[str],
+  day: date,
+) -> dict[str, CustomerLedgerState]:
+  if not customer_ids:
+    return {}
+
+  prev = day - timedelta(days=1)
+  seeded: dict[str, list[int]] = {customer_id: [0, 0, 0] for customer_id in customer_ids}
+  rows = session.exec(
+    select(
+      LedgerEntry.customer_id,
+      LedgerEntry.account,
+      LedgerEntry.gas_type,
+      func.coalesce(func.sum(LedgerEntry.amount), 0),
+    )
+    .where(LedgerEntry.customer_id.in_(list(customer_ids)))
+    .where(LedgerEntry.day <= prev)
+    .where(
+      or_(
+        and_(LedgerEntry.account == "cust_money_debts", LedgerEntry.unit == "money"),
+        and_(
+          LedgerEntry.account == "cust_cylinders_debts",
+          LedgerEntry.unit == "count",
+          LedgerEntry.state == "empty",
+        ),
+      )
+    )
+    .group_by(LedgerEntry.customer_id, LedgerEntry.account, LedgerEntry.gas_type)
+  ).all()
+
+  for customer_id, account, gas_type, amount in rows:
+    if not customer_id:
+      continue
+    state = seeded.setdefault(customer_id, [0, 0, 0])
+    if account == "cust_money_debts":
+      state[0] = int(amount or 0)
+    elif account == "cust_cylinders_debts" and gas_type == "12kg":
+      state[1] = int(amount or 0)
+    elif account == "cust_cylinders_debts" and gas_type == "48kg":
+      state[2] = int(amount or 0)
+
+  return {
+    customer_id: (state[0], state[1], state[2])
+    for customer_id, state in seeded.items()
+  }
+
+
+def _customer_state_delta_from_entries(entries: list[LedgerEntry]) -> CustomerLedgerState:
+  return (
+    sum(row.amount for row in entries if row.account == "cust_money_debts"),
+    sum(
+      row.amount
+      for row in entries
+      if row.account == "cust_cylinders_debts" and row.gas_type == "12kg"
+    ),
+    sum(
+      row.amount
+      for row in entries
+      if row.account == "cust_cylinders_debts" and row.gas_type == "48kg"
+    ),
+  )
+
+
+def _add_customer_state(state: CustomerLedgerState, delta: CustomerLedgerState) -> CustomerLedgerState:
+  return (
+    state[0] + delta[0],
+    state[1] + delta[1],
+    state[2] + delta[2],
+  )
+
+
+def _balance_transition(
+  *,
+  scope: Literal["customer", "company"],
+  component: Literal["money", "cyl_12", "cyl_48"],
+  before: int,
+  after: int,
+  display_name: Optional[str] = None,
+  display_description: Optional[str] = None,
+  intent: Optional[str] = None,
+) -> BalanceTransition:
+  return BalanceTransition(
+    scope=scope,
+    component=component,
+    before=int(before or 0),
+    after=int(after or 0),
+    display_name=display_name,
+    display_description=display_description,
+    intent=intent,
+  )
+
+
+def _append_transition(
+  transitions: list[BalanceTransition],
+  *,
+  scope: Literal["customer", "company"],
+  component: Literal["money", "cyl_12", "cyl_48"],
+  before: int,
+  after: int,
+  include_static: bool = False,
+  display_name: Optional[str] = None,
+  display_description: Optional[str] = None,
+  intent: Optional[str] = None,
+) -> None:
+  if before == after and (after == 0 or not include_static):
+    return
+  transitions.append(
+    _balance_transition(
+      scope=scope,
+      component=component,
+      before=before,
+      after=after,
+      display_name=display_name,
+      display_description=display_description,
+      intent=intent,
+    )
+  )
+
+
+def _customer_balance_transitions(
+  *,
+  before: CustomerLedgerState,
+  after: CustomerLedgerState,
+  include_static: bool = False,
+  display_name: Optional[str] = None,
+  display_description: Optional[str] = None,
+  intent: Optional[str] = None,
+) -> list[BalanceTransition]:
+  transitions: list[BalanceTransition] = []
+  _append_transition(
+    transitions,
+    scope="customer",
+    component="money",
+    before=before[0],
+    after=after[0],
+    include_static=include_static,
+    display_name=display_name,
+    display_description=display_description,
+    intent=intent,
+  )
+  _append_transition(
+    transitions,
+    scope="customer",
+    component="cyl_12",
+    before=before[1],
+    after=after[1],
+    include_static=include_static,
+    display_name=display_name,
+    display_description=display_description,
+    intent=intent,
+  )
+  _append_transition(
+    transitions,
+    scope="customer",
+    component="cyl_48",
+    before=before[2],
+    after=after[2],
+    include_static=include_static,
+    display_name=display_name,
+    display_description=display_description,
+    intent=intent,
+  )
+  return transitions
+
+
+def _event_order_key(
+  event: DailyReportV2Event,
+  *,
+  event_sort_ids: dict[int, str],
+) -> tuple[datetime, datetime, str]:
+  return (
+    event.effective_at,
+    event.created_at,
+    event_sort_ids.get(id(event), event.id or event.source_id or event.event_type or ""),
+  )
+
+
+def _company_balance_transitions(
+  *,
+  money_before: int,
+  money_after: int,
+  cyl12_before: int,
+  cyl12_after: int,
+  cyl48_before: int,
+  cyl48_after: int,
+  include_static: bool = False,
+) -> list[BalanceTransition]:
+  transitions: list[BalanceTransition] = []
+  _append_transition(
+    transitions,
+    scope="company",
+    component="money",
+    before=money_before,
+    after=money_after,
+    include_static=include_static,
+  )
+  _append_transition(
+    transitions,
+    scope="company",
+    component="cyl_12",
+    before=cyl12_before,
+    after=cyl12_after,
+    include_static=include_static,
+  )
+  _append_transition(
+    transitions,
+    scope="company",
+    component="cyl_48",
+    before=cyl48_before,
+    after=cyl48_after,
+    include_static=include_static,
+  )
+  return transitions
 
 
 def _is_company_return_only_refill(event: DailyReportV2Event) -> bool:
@@ -209,6 +382,25 @@ def _is_company_return_only_refill(event: DailyReportV2Event) -> bool:
   no_buys = buy12 == 0 and buy48 == 0
   no_money = total_cost == 0 and paid_now == 0
   return has_returns and no_buys and no_money
+
+
+def _is_company_receive_only_refill(event: DailyReportV2Event) -> bool:
+  if event.event_type != "refill":
+    return False
+  buy12 = _safe_int(event.buy12)
+  buy48 = _safe_int(event.buy48)
+  return12 = _safe_int(event.return12)
+  return48 = _safe_int(event.return48)
+  total_cost = _safe_int(event.total_cost)
+  paid_now = _safe_int(event.paid_now)
+  has_buys = buy12 > 0 or buy48 > 0
+  no_returns = return12 == 0 and return48 == 0
+  no_money = total_cost == 0 and paid_now == 0
+  return has_buys and no_returns and no_money
+
+
+def _is_company_settle_only_refill(event: DailyReportV2Event) -> bool:
+  return _is_company_return_only_refill(event) or _is_company_receive_only_refill(event)
 
 
 def _event_is_balanced(event: DailyReportV2Event) -> bool:
@@ -310,7 +502,7 @@ def _apply_ticket_fields(event: DailyReportV2Event) -> None:
 
 
 def _level3_counterparty(event: DailyReportV2Event) -> Level3Counterparty:
-  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout"}:
+  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout", "customer_adjust"}:
     display_name = event.customer_name or "Customer"
     display = display_name
     if event.customer_description:
@@ -348,6 +540,8 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
   if event.event_type == "collection_empty":
     return Level3Hero(text="Late Return")
   if event.event_type == "refill":
+    if _is_company_settle_only_refill(event):
+      return Level3Hero(text="Company Settle")
     return Level3Hero(text="Refill")
   if event.event_type == "company_payment":
     return Level3Hero(text="Pay Company")
@@ -365,6 +559,8 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
     return Level3Hero(text="Bank Deposit")
   if event.event_type == "collection_payout":
     return Level3Hero(text="Customer Payout")
+  if event.event_type == "customer_adjust":
+    return Level3Hero(text="Customer Adjust")
   if event.event_type == "init":
     return Level3Hero(text="System Init")
   return Level3Hero(text=_titleize_event_type(event.event_type))
@@ -401,10 +597,8 @@ def _level3_money(event: DailyReportV2Event) -> Level3Money:
       verb = "paid"
       amount = abs(total)
   elif event.event_type == "bank_deposit":
-    total = _safe_int(event.total_cost)
-    if total:
-      verb = "received"
-      amount = abs(total)
+    verb = "none"
+    amount = 0
   elif event.event_type == "cash_adjust":
     total = _safe_int(event.total_cost)
     if total > 0:
@@ -428,11 +622,11 @@ def _level3_money(event: DailyReportV2Event) -> Level3Money:
 def _level3_settlement(
   event: DailyReportV2Event,
   *,
-  customer_debt: Optional[tuple[int, int, int]] = None,
+  customer_after: Optional[CustomerLedgerState] = None,
 ) -> Level3Settlement:
-  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout"}:
-    if customer_debt is not None:
-      debt_cash, debt_12, debt_48 = customer_debt
+  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout", "customer_adjust"}:
+    if customer_after is not None:
+      debt_cash, debt_12, debt_48 = customer_after
       money = debt_cash == 0
       cyl12 = debt_12 == 0
       cyl48 = debt_48 == 0
@@ -495,6 +689,10 @@ def _event_kind(event: DailyReportV2Event) -> str:
   if event.event_type == "collection_empty":
     return "late_return"
   if event.event_type == "refill":
+    if _is_company_receive_only_refill(event):
+      return "company_settle_receive_full"
+    if _is_company_return_only_refill(event):
+      return "company_settle_return_empty"
     return "refill"
   if event.event_type == "company_payment":
     return "company_payment"
@@ -543,6 +741,14 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
         parts.append(f"{event.return48}x48kg")
       if parts:
         return f"Returned {' | '.join(parts)} empties to company"
+    if _is_company_receive_only_refill(event):
+      parts: list[str] = []
+      if event.buy12:
+        parts.append(f"{event.buy12}x12kg")
+      if event.buy48:
+        parts.append(f"{event.buy48}x48kg")
+      if parts:
+        return f"Received {' | '.join(parts)} full from company"
     parts: list[str] = []
     if event.buy12:
       parts.append(f"{event.buy12}x12kg")
@@ -582,10 +788,15 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
     if amount:
       return f"Paid customer {_format_money_major(amount, money_decimals)}"
     return "Paid customer"
+  if event.event_type == "customer_adjust":
+    return "Adjusted customer balance"
   if event.event_type == "expense":
     return event.expense_type or "Expense"
   if event.event_type == "bank_deposit":
-    return "Deposit"
+    amount = _safe_int(event.total_cost)
+    if amount:
+      return f"Transferred {_format_money_major(amount, money_decimals)} to bank"
+    return "Transferred to bank"
   if event.event_type == "cash_adjust":
     return "Cash Adjust"
   if event.event_type == "adjust":
@@ -605,6 +816,10 @@ def _activity_type(event: DailyReportV2Event) -> str:
   if event.event_type == "collection_empty":
     return "return_empty"
   if event.event_type == "refill":
+    if _is_company_receive_only_refill(event):
+      return "company_settle_receive_full"
+    if _is_company_return_only_refill(event):
+      return "company_settle_return_empty"
     return "refill"
   if event.event_type == "company_payment":
     return "company_payment"
@@ -618,6 +833,8 @@ def _activity_type(event: DailyReportV2Event) -> str:
     return "inventory_adjust"
   if event.event_type == "cash_adjust":
     return "cash_adjust"
+  if event.event_type == "customer_adjust":
+    return "customer_adjust"
   return event.event_type
 
 
@@ -676,7 +893,7 @@ def _apply_ui_fields(
   event.notes = notes
 
   if event.status_mode == "settlement":
-    event.status = "balance_settled" if len(notes) == 0 else "needs_action"
+    event.status = "balance_settled" if event.is_ok else "needs_action"
   else:
     if event.is_atomic_ok and len(notes) == 0:
       event.status = "atomic_ok"
@@ -799,7 +1016,7 @@ def _company_actions_from_debt(
 def _apply_level3_fields(
   event: DailyReportV2Event,
   *,
-  customer_debt: Optional[tuple[int, int, int]] = None,
+  customer_after: Optional[CustomerLedgerState] = None,
 ) -> None:
   event.counterparty = _level3_counterparty(event)
   event.counterparty_display = event.counterparty.display if event.counterparty else None
@@ -811,9 +1028,9 @@ def _apply_level3_fields(
     event.money_received = event.money.amount
   else:
     event.money_received = None
-  event.settlement = _level3_settlement(event, customer_debt=customer_debt)
-  if event.counterparty and event.counterparty.type == "customer" and customer_debt is not None:
-    event.open_actions = _customer_actions_from_debt(*customer_debt)
+  event.settlement = _level3_settlement(event, customer_after=customer_after)
+  if event.counterparty and event.counterparty.type == "customer" and customer_after is not None:
+    event.open_actions = _customer_actions_from_debt(*customer_after)
   elif event.counterparty and event.counterparty.type == "company":
     event.open_actions = _company_actions_from_debt(
       event.company_after,
@@ -829,10 +1046,11 @@ def _status_mode(event: DailyReportV2Event) -> Literal["atomic", "settlement"]:
     "collection_money",
     "collection_empty",
     "collection_payout",
+    "customer_adjust",
     "company_payment",
   }:
     return "settlement"
-  if event.event_type == "refill" and _is_company_return_only_refill(event):
+  if event.event_type == "refill" and _is_company_settle_only_refill(event):
     return "settlement"
   return "atomic"
 
@@ -1110,7 +1328,8 @@ def _atomic_action_pills(event: DailyReportV2Event) -> list[Level3Action]:
 def _remaining_actions_for_event(
   event: DailyReportV2Event,
   *,
-  customer_debt: Optional[tuple[int, int, int]] = None,
+  customer_before: Optional[CustomerLedgerState] = None,
+  customer_after: Optional[CustomerLedgerState] = None,
 ) -> list[Level3Action]:
   if event.event_type == "order" and event.order_mode == "replacement":
     actions: list[Level3Action] = []
@@ -1120,6 +1339,19 @@ def _remaining_actions_for_event(
     gas = _gas_short(event.gas_type)
     installed = _safe_int(event.order_installed)
     received = _safe_int(event.order_received)
+
+    if customer_after is not None:
+      after_cash, after_12, after_48 = customer_after
+      after_cyl = after_12 if gas == "12" else after_48 if gas == "48" else 0
+      if after_cyl > 0 and gas:
+        actions.append(_empty_pill(direction="customer->dist", gas=gas, qty=after_cyl))
+      elif after_cyl < 0 and gas:
+        actions.append(_full_pill(direction="dist->customer", gas=gas, qty=abs(after_cyl)))
+      if after_cash > 0:
+        actions.append(_money_pill("customer->dist", after_cash))
+      elif after_cash < 0:
+        actions.append(_money_pill("dist->customer", abs(after_cash)))
+      return actions
 
     if installed > received and gas:
       actions.append(_empty_pill(direction="customer->dist", gas=gas, qty=installed - received))
@@ -1132,99 +1364,37 @@ def _remaining_actions_for_event(
       actions.append(_money_pill("dist->customer", abs(diff)))
     return actions
 
-  if event.event_type == "refill" and _is_company_return_only_refill(event):
-    actions: list[Level3Action] = []
-    if isinstance(event.company_12kg_after, int) and event.company_12kg_after < 0:
-      actions.append(_empty_pill(direction="dist->company", gas="12", qty=abs(event.company_12kg_after)))
-    if isinstance(event.company_48kg_after, int) and event.company_48kg_after < 0:
-      actions.append(_empty_pill(direction="dist->company", gas="48", qty=abs(event.company_48kg_after)))
-    return actions
-
   if event.event_type == "refill":
-    actions: list[Level3Action] = []
-    buy12 = _safe_int(event.buy12)
-    return12 = _safe_int(event.return12)
-    buy48 = _safe_int(event.buy48)
-    return48 = _safe_int(event.return48)
-    if buy12 > return12:
-      actions.append(_empty_pill(direction="dist->company", gas="12", qty=buy12 - return12))
-    elif return12 > buy12:
-      actions.append(_full_pill(direction="company->dist", gas="12", qty=return12 - buy12))
-    if buy48 > return48:
-      actions.append(_empty_pill(direction="dist->company", gas="48", qty=buy48 - return48))
-    elif return48 > buy48:
-      actions.append(_full_pill(direction="company->dist", gas="48", qty=return48 - buy48))
-    total_cost = _safe_int(event.total_cost)
-    paid_now = _safe_int(event.paid_now)
-    diff = total_cost - paid_now
-    if diff > 0:
-      actions.append(_money_pill("dist->company", diff))
-    return actions
+    actions = _company_pills_from_debt(
+      event.company_after,
+      event.company_12kg_after,
+      event.company_48kg_after,
+    )
+    return [action for action in actions if action.direction != "company->dist"]
 
   if event.event_type == "collection_money":
-    actions: list[Level3Action] = []
-    if customer_debt is None:
-      return actions
-    debt_cash, debt_12, debt_48 = customer_debt
+    if customer_after is None:
+      return []
+    debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cylinders = debt_12 != 0 or debt_48 != 0
-    if debt_cash > 0:
-      paid = 0
-      if isinstance(event.cash_before, int) and isinstance(event.cash_after, int):
-        paid = max(event.cash_after - event.cash_before, 0)
-      was = debt_cash + paid
-      text = f"Customer still owes you {_format_money(debt_cash)} (was {_format_money(was)})"
-      actions.append(
-        _pill(
-          category="money",
-          kind="money",
-          direction="customer->dist",
-          severity="warning",
-          text=text,
-          amount=debt_cash,
-        )
-      )
-    return actions
+    return _customer_pills_from_debt(debt_cash, debt_12, debt_48)
 
   if event.event_type == "collection_empty":
-    actions: list[Level3Action] = []
-    if customer_debt is None:
-      return actions
-    debt_cash, debt_12, debt_48 = customer_debt
+    if customer_after is None:
+      return []
+    debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cash = debt_cash != 0
+    return _customer_pills_from_debt(debt_cash, debt_12, debt_48)
 
-    if debt_12 > 0:
-      returned = _safe_int(event.return12)
-      was = debt_12 + returned
-      text = f"Customer still owes {debt_12}x12kg empty (was {was})"
-      actions.append(
-        _pill(
-          category="cylinders",
-          kind="empty_12",
-          direction="customer->dist",
-          severity="warning",
-          text=text,
-          gas_type="12",
-          qty=debt_12,
-          unit="empty",
-        )
-      )
-    if debt_48 > 0:
-      returned = _safe_int(event.return48)
-      was = debt_48 + returned
-      text = f"Customer still owes {debt_48}x48kg empty (was {was})"
-      actions.append(
-        _pill(
-          category="cylinders",
-          kind="empty_48",
-          direction="customer->dist",
-          severity="warning",
-          text=text,
-          gas_type="48",
-          qty=debt_48,
-          unit="empty",
-        )
-      )
-    return actions
+  if event.event_type == "collection_payout":
+    if customer_after is None:
+      return []
+    return _customer_pills_from_debt(*customer_after)
+
+  if event.event_type == "customer_adjust":
+    if customer_after is None:
+      return []
+    return _customer_pills_from_debt(*customer_after)
 
   if event.event_type == "company_payment":
     actions: list[Level3Action] = []
@@ -1253,9 +1423,16 @@ def _note(
   kind: Literal["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"],
   direction: Literal[
     "customer_pays_you",
+    "you_pay_customer",
+    "you_paid_customer_earlier",
+    "customer_paid_earlier",
+    "customer_extra_paid",
     "you_pay_company",
+    "you_paid_earlier",
+    "company_pays_you",
     "customer_returns_you",
     "you_return_company",
+    "you_returned_earlier",
     "you_deliver_customer",
     "company_delivers_you",
   ],
@@ -1273,7 +1450,8 @@ def _note(
 def _notes_for_event(
   event: DailyReportV2Event,
   *,
-  customer_debt: Optional[tuple[int, int, int]] = None,
+  customer_before: Optional[CustomerLedgerState] = None,
+  customer_after: Optional[CustomerLedgerState] = None,
   money_decimals: int,
 ) -> list[ActivityNote]:
   notes: list[ActivityNote] = []
@@ -1286,26 +1464,84 @@ def _notes_for_event(
     installed = _safe_int(event.order_installed)
     received = _safe_int(event.order_received)
 
-    if installed > received and gas:
-      kind = "cyl_12" if gas == "12" else "cyl_48"
-      notes.append(
-        _note(
-          kind=kind,
-          direction="customer_returns_you",
-          remaining_after=installed - received,
-        )
-      )
-    elif received > installed and gas:
-      kind = "cyl_full_12" if gas == "12" else "cyl_full_48"
-      notes.append(
-        _note(
-          kind=kind,
-          direction="you_deliver_customer",
-          remaining_after=received - installed,
-        )
-      )
+    if gas:
+      if customer_before is not None and customer_after is not None:
+        after_cyl = customer_after[1] if gas == "12" else customer_after[2]
+        before_cyl = customer_before[1] if gas == "12" else customer_before[2]
+        if after_cyl > 0:
+          kind = "cyl_12" if gas == "12" else "cyl_48"
+          remaining_before = before_cyl if before_cyl > 0 else None
+          notes.append(
+            _note(
+              kind=kind,
+              direction="customer_returns_you",
+              remaining_after=after_cyl,
+              remaining_before=remaining_before,
+            )
+          )
+        elif after_cyl < 0:
+          kind = "cyl_full_12" if gas == "12" else "cyl_full_48"
+          notes.append(
+            _note(
+              kind=kind,
+              direction="you_deliver_customer",
+              remaining_after=abs(after_cyl),
+            )
+          )
+      else:
+        if installed > received:
+          kind = "cyl_12" if gas == "12" else "cyl_48"
+          notes.append(
+            _note(
+              kind=kind,
+              direction="customer_returns_you",
+              remaining_after=installed - received,
+            )
+          )
+        elif received > installed:
+          kind = "cyl_full_12" if gas == "12" else "cyl_full_48"
+          notes.append(
+            _note(
+              kind=kind,
+              direction="you_deliver_customer",
+              remaining_after=received - installed,
+            )
+          )
 
-    if diff > 0:
+    if customer_before is not None and customer_after is not None:
+      before_cash = customer_before[0]
+      after_cash = customer_after[0]
+      paid_earlier = max(0, before_cash - max(after_cash, 0))
+      extra_credit = max(0, max(-after_cash, 0) - max(-before_cash, 0))
+
+      if paid_earlier > 0 and after_cash <= 0:
+        notes.append(
+          _note(
+            kind="money",
+            direction="customer_paid_earlier",
+            remaining_after=_money_major(paid_earlier, money_decimals),
+          )
+        )
+      if extra_credit > 0:
+        notes.append(
+          _note(
+            kind="money",
+            direction="customer_extra_paid",
+            remaining_after=_money_major(extra_credit, money_decimals),
+          )
+        )
+
+      if after_cash > 0:
+        remaining_before = _money_major(before_cash, money_decimals) if before_cash > 0 else None
+        notes.append(
+          _note(
+            kind="money",
+            direction="customer_pays_you",
+            remaining_after=_money_major(after_cash, money_decimals),
+            remaining_before=remaining_before,
+          )
+        )
+    elif diff > 0:
       notes.append(
         _note(
           kind="money",
@@ -1316,127 +1552,174 @@ def _notes_for_event(
     return notes
 
   if event.event_type == "refill":
-    if _is_company_return_only_refill(event):
-      if isinstance(event.company_12kg_after, int) and event.company_12kg_after < 0:
-        remaining_before = None
-        if isinstance(event.company_12kg_before, int) and event.company_12kg_before < 0:
-          remaining_before = abs(event.company_12kg_before)
+    if isinstance(event.company_before, int) and isinstance(event.company_after, int):
+      before_money = event.company_before
+      after_money = event.company_after
+      paid_earlier = 0
+      if before_money > 0:
+        if after_money <= 0:
+          paid_earlier = before_money
+        elif after_money < before_money:
+          paid_earlier = before_money - after_money
+      if paid_earlier > 0:
         notes.append(
           _note(
-            kind="cyl_12",
-            direction="you_return_company",
-            remaining_after=abs(event.company_12kg_after),
-            remaining_before=remaining_before,
+            kind="money",
+            direction="you_paid_earlier",
+            remaining_after=_money_major(paid_earlier, money_decimals),
           )
         )
-      if isinstance(event.company_48kg_after, int) and event.company_48kg_after < 0:
-        remaining_before = None
-        if isinstance(event.company_48kg_before, int) and event.company_48kg_before < 0:
-          remaining_before = abs(event.company_48kg_before)
-        notes.append(
-          _note(
-            kind="cyl_48",
-            direction="you_return_company",
-            remaining_after=abs(event.company_48kg_after),
-            remaining_before=remaining_before,
-          )
-        )
-      return notes
 
-    buy12 = _safe_int(event.buy12)
-    return12 = _safe_int(event.return12)
-    buy48 = _safe_int(event.buy48)
-    return48 = _safe_int(event.return48)
-    if buy12 > return12:
-      notes.append(
-        _note(
-          kind="cyl_12",
-          direction="you_return_company",
-          remaining_after=buy12 - return12,
+      credit_before = max(-before_money, 0)
+      credit_after = max(-after_money, 0)
+      extra_credit = max(credit_after - credit_before, 0)
+      if extra_credit > 0:
+        notes.append(
+          _note(
+            kind="money",
+            direction="company_pays_you",
+            remaining_after=_money_major(extra_credit, money_decimals),
+          )
         )
-      )
-    elif return12 > buy12:
-      notes.append(
-        _note(
-          kind="cyl_full_12",
-          direction="company_delivers_you",
-          remaining_after=return12 - buy12,
+
+    for gas, kind, full_kind in (("12", "cyl_12", "cyl_full_12"), ("48", "cyl_48", "cyl_full_48")):
+      before_attr = "company_12kg_before" if gas == "12" else "company_48kg_before"
+      after_attr = "company_12kg_after" if gas == "12" else "company_48kg_after"
+      before = getattr(event, before_attr)
+      after = getattr(event, after_attr)
+      if not isinstance(before, int) or not isinstance(after, int):
+        continue
+
+      returned_earlier = 0
+      if before < 0:
+        if after < 0 and abs(after) < abs(before):
+          returned_earlier = abs(before) - abs(after)
+        elif after >= 0:
+          returned_earlier = abs(before)
+      if returned_earlier > 0:
+        notes.append(
+          _note(
+            kind=kind,
+            direction="you_returned_earlier",
+            remaining_after=returned_earlier,
+          )
         )
-      )
-    if buy48 > return48:
-      notes.append(
-        _note(
-          kind="cyl_48",
-          direction="you_return_company",
-          remaining_after=buy48 - return48,
+
+      credit_before = max(before, 0)
+      credit_after = max(after, 0)
+      extra_full = max(credit_after - credit_before, 0)
+      if extra_full > 0:
+        notes.append(
+          _note(
+            kind=full_kind,
+            direction="company_delivers_you",
+            remaining_after=extra_full,
+          )
         )
-      )
-    elif return48 > buy48:
-      notes.append(
-        _note(
-          kind="cyl_full_48",
-          direction="company_delivers_you",
-          remaining_after=return48 - buy48,
-        )
-      )
-    total_cost = _safe_int(event.total_cost)
-    paid_now = _safe_int(event.paid_now)
-    diff = total_cost - paid_now
-    if diff > 0:
-      notes.append(
-        _note(
-          kind="money",
-          direction="you_pay_company",
-          remaining_after=_money_major(diff, money_decimals),
-        )
-      )
     return notes
 
   if event.event_type == "collection_money":
-    if customer_debt is None:
+    if customer_before is None or customer_after is None:
       return notes
-    debt_cash, debt_12, debt_48 = customer_debt
+    before_cash, _, _ = customer_before
+    debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cylinders = debt_12 != 0 or debt_48 != 0
     if debt_cash > 0:
-      paid = 0
-      if isinstance(event.cash_before, int) and isinstance(event.cash_after, int):
-        paid = max(event.cash_after - event.cash_before, 0)
-      remaining_after = _money_major(debt_cash, money_decimals)
-      remaining_before = _money_major(debt_cash + paid, money_decimals)
       notes.append(
         _note(
           kind="money",
           direction="customer_pays_you",
-          remaining_after=remaining_after,
-          remaining_before=remaining_before,
+          remaining_after=_money_major(debt_cash, money_decimals),
+          remaining_before=_money_major(before_cash, money_decimals) if before_cash > 0 else None,
+        )
+      )
+    elif debt_cash < 0:
+      notes.append(
+        _note(
+          kind="money",
+          direction="you_pay_customer",
+          remaining_after=_money_major(abs(debt_cash), money_decimals),
+          remaining_before=_money_major(abs(before_cash), money_decimals) if before_cash < 0 else None,
         )
       )
     return notes
 
   if event.event_type == "collection_empty":
-    if customer_debt is None:
+    if customer_before is None or customer_after is None:
       return notes
-    debt_cash, debt_12, debt_48 = customer_debt
+    _, before_12, before_48 = customer_before
+    debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cash = debt_cash != 0
 
     if debt_12 > 0:
-      returned = _safe_int(event.return12)
       notes.append(
         _note(
           kind="cyl_12",
           direction="customer_returns_you",
           remaining_after=debt_12,
-          remaining_before=debt_12 + returned,
+          remaining_before=before_12 if before_12 > 0 else None,
+        )
+      )
+    elif debt_12 < 0:
+      notes.append(
+        _note(
+          kind="cyl_full_12",
+          direction="you_deliver_customer",
+          remaining_after=abs(debt_12),
+          remaining_before=abs(before_12) if before_12 < 0 else None,
         )
       )
     if debt_48 > 0:
-      returned = _safe_int(event.return48)
       notes.append(
         _note(
           kind="cyl_48",
           direction="customer_returns_you",
           remaining_after=debt_48,
-          remaining_before=debt_48 + returned,
+          remaining_before=before_48 if before_48 > 0 else None,
+        )
+      )
+    elif debt_48 < 0:
+      notes.append(
+        _note(
+          kind="cyl_full_48",
+          direction="you_deliver_customer",
+          remaining_after=abs(debt_48),
+          remaining_before=abs(before_48) if before_48 < 0 else None,
+        )
+      )
+    return notes
+
+  if event.event_type == "collection_payout":
+    if customer_before is None or customer_after is None:
+      return notes
+    before_cash, _, _ = customer_before
+    debt_cash, debt_12, debt_48 = customer_after
+    event.has_other_outstanding_cylinders = debt_12 != 0 or debt_48 != 0
+    paid_earlier = max(0, max(-before_cash, 0) - max(-debt_cash, 0))
+    if paid_earlier > 0:
+      notes.append(
+        _note(
+          kind="money",
+          direction="you_paid_customer_earlier",
+          remaining_after=_money_major(paid_earlier, money_decimals),
+        )
+      )
+    if debt_cash > 0:
+      notes.append(
+        _note(
+          kind="money",
+          direction="customer_pays_you",
+          remaining_after=_money_major(debt_cash, money_decimals),
+          remaining_before=_money_major(before_cash, money_decimals) if before_cash > 0 else None,
+        )
+      )
+    elif debt_cash < 0:
+      notes.append(
+        _note(
+          kind="money",
+          direction="you_pay_customer",
+          remaining_after=_money_major(abs(debt_cash), money_decimals),
+          remaining_before=_money_major(abs(before_cash), money_decimals) if before_cash < 0 else None,
         )
       )
     return notes
@@ -1462,12 +1745,17 @@ def _notes_for_event(
 def _apply_status_fields(
   event: DailyReportV2Event,
   *,
-  customer_debt: Optional[tuple[int, int, int]] = None,
+  customer_before: Optional[CustomerLedgerState] = None,
+  customer_after: Optional[CustomerLedgerState] = None,
 ) -> None:
   event.is_atomic_ok = event.is_balanced if event.is_balanced is not None else None
   mode = _status_mode(event)
   event.status_mode = mode
-  event.action_pills = _remaining_actions_for_event(event, customer_debt=customer_debt)
+  event.action_pills = _remaining_actions_for_event(
+    event,
+    customer_before=customer_before,
+    customer_after=customer_after,
+  )
   event.is_ok = len(event.action_pills) == 0
 
 
@@ -1499,6 +1787,342 @@ def _daily_deltas(
   rows = session.exec(stmt).all()
   return {row[0]: int(row[1] or 0) for row in rows}
 
+
+def _sold_full_by_day(session: Session, start: date, end: date) -> dict[tuple[date, str], int]:
+  stmt = (
+    select(LedgerEntry.day, LedgerEntry.gas_type, func.coalesce(func.sum(-LedgerEntry.amount), 0))
+    .where(LedgerEntry.account == "inv")
+    .where(LedgerEntry.state == "full")
+    .where(LedgerEntry.unit == "count")
+    .where(LedgerEntry.amount < 0)
+    .where(LedgerEntry.day >= start)
+    .where(LedgerEntry.day <= end)
+    .group_by(LedgerEntry.day, LedgerEntry.gas_type)
+  )
+  rows = session.exec(stmt).all()
+  out: dict[tuple[date, str], int] = {}
+  for day, gas_type, total in rows:
+    if not gas_type:
+      continue
+    out[(day, gas_type)] = int(total or 0)
+  return out
+
+
+def _cash_math_by_day(session: Session, start: date, end: date) -> dict[date, dict[str, int]]:
+  cash_rows = session.exec(
+    select(LedgerEntry.day, LedgerEntry.source_type, LedgerEntry.source_id, LedgerEntry.amount)
+    .where(LedgerEntry.account == "cash")
+    .where(LedgerEntry.unit == "money")
+    .where(LedgerEntry.day >= start)
+    .where(LedgerEntry.day <= end)
+  ).all()
+
+  if not cash_rows:
+    return {}
+
+  customer_ids = {row[2] for row in cash_rows if row[1] == "customer_txn"}
+  expense_ids = {row[2] for row in cash_rows if row[1] == "expense"}
+
+  customer_txns = (
+    {row.id: row for row in session.exec(select(CustomerTransaction).where(CustomerTransaction.id.in_(customer_ids))).all()}
+    if customer_ids
+    else {}
+  )
+  expenses = (
+    {row.id: row for row in session.exec(select(Expense).where(Expense.id.in_(expense_ids))).all()}
+    if expense_ids
+    else {}
+  )
+
+  def resolve_category(source_type: str, source_id: str) -> str:
+    if source_type == "customer_txn":
+      txn = customer_txns.get(source_id)
+      if txn and txn.kind == "order":
+        return "sales"
+      if txn and txn.kind == "payment":
+        return "late"
+      return "other"
+    if source_type == "company_txn":
+      return "company"
+    if source_type == "expense":
+      expense = expenses.get(source_id)
+      if expense and expense.kind == "expense":
+        return "expenses"
+      return "other"
+    if source_type == "cash_adjust":
+      return "adjust"
+    return "other"
+
+  by_day: dict[date, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+  for day, source_type, source_id, amount in cash_rows:
+    category = resolve_category(source_type, source_id)
+    by_day[day][category] += int(amount or 0)
+  return by_day
+
+
+def _customer_day_state_bounds(session: Session, *, customer_id: str, day: date) -> tuple[CustomerLedgerState, CustomerLedgerState]:
+  prev = day - timedelta(days=1)
+  return (
+    (
+      sum_ledger(session, account="cust_money_debts", unit="money", customer_id=customer_id, day_to=prev),
+      sum_ledger(
+        session,
+        account="cust_cylinders_debts",
+        gas_type="12kg",
+        state="empty",
+        unit="count",
+        customer_id=customer_id,
+        day_to=prev,
+      ),
+      sum_ledger(
+        session,
+        account="cust_cylinders_debts",
+        gas_type="48kg",
+        state="empty",
+        unit="count",
+        customer_id=customer_id,
+        day_to=prev,
+      ),
+    ),
+    (
+      sum_ledger(session, account="cust_money_debts", unit="money", customer_id=customer_id, day_to=day),
+      sum_ledger(
+        session,
+        account="cust_cylinders_debts",
+        gas_type="12kg",
+        state="empty",
+        unit="count",
+        customer_id=customer_id,
+        day_to=day,
+      ),
+      sum_ledger(
+        session,
+        account="cust_cylinders_debts",
+        gas_type="48kg",
+        state="empty",
+        unit="count",
+        customer_id=customer_id,
+        day_to=day,
+      ),
+    ),
+  )
+
+
+def _company_day_state_bounds(session: Session, *, day: date) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+  prev = day - timedelta(days=1)
+  return (
+    (
+      sum_ledger(session, account="company_money_debts", unit="money", day_to=prev),
+      sum_ledger(session, account="company_cylinders_debts", gas_type="12kg", unit="count", day_to=prev),
+      sum_ledger(session, account="company_cylinders_debts", gas_type="48kg", unit="count", day_to=prev),
+    ),
+    (
+      sum_ledger(session, account="company_money_debts", unit="money", day_to=day),
+      sum_ledger(session, account="company_cylinders_debts", gas_type="12kg", unit="count", day_to=day),
+      sum_ledger(session, account="company_cylinders_debts", gas_type="48kg", unit="count", day_to=day),
+    ),
+  )
+
+
+def _snapshot_transitions_for_customer(
+  *,
+  session: Session,
+  day: date,
+  customer_id: str,
+  customers: dict[str, Customer],
+  intent: Optional[str] = None,
+) -> list[BalanceTransition]:
+  customer = customers.get(customer_id)
+  name, description = _customer_identity(customer)
+  start_state, end_state = _customer_day_state_bounds(session, customer_id=customer_id, day=day)
+  return _customer_balance_transitions(
+    before=start_state,
+    after=end_state,
+    include_static=True,
+    display_name=name,
+    display_description=description,
+    intent=intent,
+  )
+
+
+def _snapshot_transitions_for_company(
+  *,
+  session: Session,
+  day: date,
+) -> list[BalanceTransition]:
+  start_state, end_state = _company_day_state_bounds(session, day=day)
+  return _company_balance_transitions(
+    money_before=start_state[0],
+    money_after=end_state[0],
+    cyl12_before=start_state[1],
+    cyl12_after=end_state[1],
+    cyl48_before=start_state[2],
+    cyl48_after=end_state[2],
+    include_static=True,
+  )
+
+
+def _snapshot_lines_for_customer(
+  *,
+  session: Session,
+  day: date,
+  customer_id: str,
+  customers: dict[str, Customer],
+  money_decimals: int,
+) -> list[tuple[int, int, int, str]]:
+  prev = day - timedelta(days=1)
+  customer = customers.get(customer_id)
+  name, _ = _customer_identity(customer)
+
+  s_cash = sum_ledger(session, account="cust_money_debts", unit="money", customer_id=customer_id, day_to=prev)
+  e_cash = sum_ledger(session, account="cust_money_debts", unit="money", customer_id=customer_id, day_to=day)
+  s_12 = sum_ledger(
+    session,
+    account="cust_cylinders_debts",
+    gas_type="12kg",
+    state="empty",
+    unit="count",
+    customer_id=customer_id,
+    day_to=prev,
+  )
+  e_12 = sum_ledger(
+    session,
+    account="cust_cylinders_debts",
+    gas_type="12kg",
+    state="empty",
+    unit="count",
+    customer_id=customer_id,
+    day_to=day,
+  )
+  s_48 = sum_ledger(
+    session,
+    account="cust_cylinders_debts",
+    gas_type="48kg",
+    state="empty",
+    unit="count",
+    customer_id=customer_id,
+    day_to=prev,
+  )
+  e_48 = sum_ledger(
+    session,
+    account="cust_cylinders_debts",
+    gas_type="48kg",
+    state="empty",
+    unit="count",
+    customer_id=customer_id,
+    day_to=day,
+  )
+
+  lines: list[tuple[int, int, int, str]] = []
+
+  def add_line(priority: int, sub: int, amount: int, text: str) -> None:
+    if amount <= 0:
+      return
+    lines.append((priority, sub, -amount, text))
+
+  paid_earlier = max(0, s_cash - max(e_cash, 0))
+  if e_cash > 0:
+    add_line(0, 0, e_cash, f"Remaining payment: {name} {_format_money_major(e_cash, money_decimals)}")
+  if paid_earlier > 0:
+    settled = " ✅ Settled" if e_cash == 0 else ""
+    add_line(1, 0, paid_earlier, f"Paid earlier: {name} {_format_money_major(paid_earlier, money_decimals)}{settled}")
+  if e_cash < 0:
+    add_line(2, 0, abs(e_cash), f"Extra paid: {name} {_format_money_major(abs(e_cash), money_decimals)}")
+
+  returned_earlier_12 = max(0, s_12 - max(e_12, 0))
+  if e_12 > 0:
+    add_line(0, 1, e_12, f"Remaining empties: {name} {e_12}x12kg empty")
+  if returned_earlier_12 > 0:
+    settled = " ✅ Settled" if e_12 == 0 else ""
+    add_line(1, 1, returned_earlier_12, f"Returned earlier: {name} {returned_earlier_12}x12kg empty{settled}")
+  if e_12 < 0:
+    add_line(2, 1, abs(e_12), f"Extra empties: {name} {abs(e_12)}x12kg empty")
+
+  returned_earlier_48 = max(0, s_48 - max(e_48, 0))
+  if e_48 > 0:
+    add_line(0, 2, e_48, f"Remaining empties: {name} {e_48}x48kg empty")
+  if returned_earlier_48 > 0:
+    settled = " ✅ Settled" if e_48 == 0 else ""
+    add_line(1, 2, returned_earlier_48, f"Returned earlier: {name} {returned_earlier_48}x48kg empty{settled}")
+  if e_48 < 0:
+    add_line(2, 2, abs(e_48), f"Extra empties: {name} {abs(e_48)}x48kg empty")
+
+  return lines
+
+
+def _snapshot_lines_for_company(
+  *,
+  session: Session,
+  day: date,
+  money_decimals: int,
+) -> list[tuple[int, int, int, str]]:
+  prev = day - timedelta(days=1)
+  s_cash = sum_ledger(session, account="company_money_debts", unit="money", day_to=prev)
+  e_cash = sum_ledger(session, account="company_money_debts", unit="money", day_to=day)
+  s_12 = sum_ledger(
+    session,
+    account="company_cylinders_debts",
+    gas_type="12kg",
+    unit="count",
+    day_to=prev,
+  )
+  e_12 = sum_ledger(
+    session,
+    account="company_cylinders_debts",
+    gas_type="12kg",
+    unit="count",
+    day_to=day,
+  )
+  s_48 = sum_ledger(
+    session,
+    account="company_cylinders_debts",
+    gas_type="48kg",
+    unit="count",
+    day_to=prev,
+  )
+  e_48 = sum_ledger(
+    session,
+    account="company_cylinders_debts",
+    gas_type="48kg",
+    unit="count",
+    day_to=day,
+  )
+
+  lines: list[tuple[int, int, int, str]] = []
+
+  def add_line(priority: int, sub: int, amount: int, text: str) -> None:
+    if amount <= 0:
+      return
+    lines.append((priority, sub, -amount, text))
+
+  paid_earlier = max(0, s_cash - max(e_cash, 0))
+  if e_cash > 0:
+    add_line(0, 0, e_cash, f"Remaining company payment: {_format_money_major(e_cash, money_decimals)}")
+  if paid_earlier > 0:
+    settled = " ✅ Settled" if e_cash == 0 else ""
+    add_line(1, 0, paid_earlier, f"Paid earlier: company {_format_money_major(paid_earlier, money_decimals)}{settled}")
+  if e_cash < 0:
+    add_line(2, 0, abs(e_cash), f"Extra paid: company {_format_money_major(abs(e_cash), money_decimals)}")
+
+  returned_earlier_12 = max(0, s_12 - max(e_12, 0))
+  if e_12 > 0:
+    add_line(0, 1, e_12, f"Remaining company empties: {e_12}x12kg empty")
+  if returned_earlier_12 > 0:
+    settled = " ✅ Settled" if e_12 == 0 else ""
+    add_line(1, 1, returned_earlier_12, f"Returned earlier: company {returned_earlier_12}x12kg empty{settled}")
+  if e_12 < 0:
+    add_line(2, 1, abs(e_12), f"Extra empties: company {abs(e_12)}x12kg empty")
+
+  returned_earlier_48 = max(0, s_48 - max(e_48, 0))
+  if e_48 > 0:
+    add_line(0, 2, e_48, f"Remaining company empties: {e_48}x48kg empty")
+  if returned_earlier_48 > 0:
+    settled = " ✅ Settled" if e_48 == 0 else ""
+    add_line(1, 2, returned_earlier_48, f"Returned earlier: company {returned_earlier_48}x48kg empty{settled}")
+  if e_48 < 0:
+    add_line(2, 2, abs(e_48), f"Extra empties: company {abs(e_48)}x48kg empty")
+
+  return lines
 
 def get_daily_audit_summary(session: Session, business_date: date) -> DailyAuditSummary:
   cash_in = sum_ledger(
@@ -1589,6 +2213,7 @@ def list_daily_reports_v2(
   inv_empty_48 = _daily_deltas(
     session, account="inv", gas_type="48kg", state="empty", unit="count", start=start_date, end=end_date
   )
+  sold_full = _sold_full_by_day(session, start_date, end_date)
 
   running_cash = _sum_cash_before_day(session, start_date)
   running_company = _sum_company_before_day(session, start_date)
@@ -1600,13 +2225,87 @@ def list_daily_reports_v2(
   running_full48 = inv_start.full48
   running_empty48 = inv_start.empty48
 
-  customer_totals = _sum_customer_totals(session)
+  settings = session.get(SystemSettings, "system")
+  money_decimals = settings.money_decimals if settings else 2
+  customers = {c.id: c for c in session.exec(select(Customer)).all()}
+
+  cash_math_by_day = _cash_math_by_day(session, start_date, end_date)
+
+  customer_activity_rows = session.exec(
+    select(CustomerTransaction.day, CustomerTransaction.customer_id, CustomerTransaction.kind)
+    .where(CustomerTransaction.day >= start_date)
+    .where(CustomerTransaction.day <= end_date)
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+  ).all()
+  customer_activity_by_day: dict[date, set[str]] = defaultdict(set)
+  customer_activity_kinds: dict[tuple[date, str], set[str]] = defaultdict(set)
+  for day, customer_id, kind in customer_activity_rows:
+    if customer_id:
+      customer_activity_by_day[day].add(customer_id)
+      customer_activity_kinds[(day, customer_id)].add(kind)
+
+  company_activity_rows = session.exec(
+    select(CompanyTransaction.day)
+    .where(CompanyTransaction.day >= start_date)
+    .where(CompanyTransaction.day <= end_date)
+    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+  ).all()
+  company_activity_days = {row[0] if isinstance(row, tuple) else row for row in company_activity_rows}
+
+  customer_sales_rows = session.exec(
+    select(CustomerTransaction.day, func.coalesce(func.sum(CustomerTransaction.paid), 0))
+    .where(CustomerTransaction.day >= start_date)
+    .where(CustomerTransaction.day <= end_date)
+    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .group_by(CustomerTransaction.day)
+  ).all()
+  customer_sales_by_day = {row[0]: int(row[1] or 0) for row in customer_sales_rows}
+
+  customer_pay_rows = session.exec(
+    select(CustomerTransaction.day, func.coalesce(func.sum(CustomerTransaction.paid), 0))
+    .where(CustomerTransaction.day >= start_date)
+    .where(CustomerTransaction.day <= end_date)
+    .where(CustomerTransaction.kind == "payment")
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .group_by(CustomerTransaction.day)
+  ).all()
+  customer_pay_by_day = {row[0]: int(row[1] or 0) for row in customer_pay_rows}
+
+  company_paid_rows = session.exec(
+    select(CompanyTransaction.day, func.coalesce(func.sum(CompanyTransaction.paid), 0))
+    .where(CompanyTransaction.day >= start_date)
+    .where(CompanyTransaction.day <= end_date)
+    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    .group_by(CompanyTransaction.day)
+  ).all()
+  company_paid_by_day = {row[0]: int(row[1] or 0) for row in company_paid_rows}
+
+  expense_rows = session.exec(
+    select(Expense.day, func.coalesce(func.sum(Expense.amount), 0))
+    .where(Expense.day >= start_date)
+    .where(Expense.day <= end_date)
+    .where(Expense.kind == "expense")
+    .where(Expense.is_reversed == False)  # noqa: E712
+    .group_by(Expense.day)
+  ).all()
+  expenses_by_day = {row[0]: int(row[1] or 0) for row in expense_rows}
+
+  adjustment_rows = session.exec(
+    select(CashAdjustment.day, func.coalesce(func.sum(CashAdjustment.delta_cash), 0))
+    .where(CashAdjustment.day >= start_date)
+    .where(CashAdjustment.day <= end_date)
+    .where(CashAdjustment.is_reversed == False)  # noqa: E712
+    .group_by(CashAdjustment.day)
+  ).all()
+  adjustments_by_day = {row[0]: int(row[1] or 0) for row in adjustment_rows}
 
   response: list[DailyReportV2Card] = []
   for current in _date_range(start_date, end_date):
     cash_start = running_cash
     running_cash += cash_deltas.get(current, 0)
     cash_end = running_cash
+    net_today = cash_end - cash_start
 
     company_start = running_company
     running_company += company_deltas.get(current, 0)
@@ -1654,11 +2353,97 @@ def list_daily_reports_v2(
       empty48=running_empty48,
     )
 
+    sold_12kg = sold_full.get((current, "12kg"), 0)
+    sold_48kg = sold_full.get((current, "48kg"), 0)
+
+    cash_math_values = {
+      "sales": 0,
+      "late": 0,
+      "expenses": 0,
+      "company": 0,
+      "adjust": 0,
+      "other": 0,
+    }
+    for key, value in (cash_math_by_day.get(current) or {}).items():
+      if key in cash_math_values:
+        cash_math_values[key] = int(value or 0)
+    cash_math_total = sum(cash_math_values.values())
+    remainder = net_today - cash_math_total
+    if remainder:
+      cash_math_values["other"] += remainder
+
+    problem_entries: list[tuple[int, int, int, str]] = []
+    problem_transitions: list[BalanceTransition] = []
+    for customer_id in sorted(customer_activity_by_day.get(current, set())):
+      transition_intent = None
+      kinds = customer_activity_kinds.get((current, customer_id), set())
+      if kinds == {"adjust"}:
+        transition_intent = "customer_adjust"
+      problem_entries.extend(
+        _snapshot_lines_for_customer(
+          session=session,
+          day=current,
+          customer_id=customer_id,
+          customers=customers,
+          money_decimals=money_decimals,
+        )
+      )
+      problem_transitions.extend(
+        _snapshot_transitions_for_customer(
+          session=session,
+          day=current,
+          customer_id=customer_id,
+          customers=customers,
+          intent=transition_intent,
+        )
+      )
+    if current in company_activity_days:
+      problem_entries.extend(
+        _snapshot_lines_for_company(
+          session=session,
+          day=current,
+          money_decimals=money_decimals,
+        )
+      )
+      problem_transitions.extend(
+        _snapshot_transitions_for_company(
+          session=session,
+          day=current,
+        )
+      )
+    problem_entries_sorted = sorted(problem_entries, key=lambda entry: (entry[0], entry[1], entry[2], entry[3]))
+    problem_lines = [entry[3] for entry in problem_entries_sorted]
+    if len(problem_lines) > 8:
+      remaining = len(problem_lines) - 7
+      problem_lines = problem_lines[:7] + [f"... +{remaining} more"]
+
+    math_payload = DailyReportV2Math(
+      customers={
+        "sales_cash": customer_sales_by_day.get(current, 0),
+        "paid_earlier": customer_pay_by_day.get(current, 0),
+        "extra_paid": 0,
+      },
+      company={
+        "paid_company": company_paid_by_day.get(current, 0),
+        "extra_company": 0,
+      },
+      result={
+        "expenses": expenses_by_day.get(current, 0),
+        "adjustments": adjustments_by_day.get(current, 0),
+        "pocket_delta": net_today,
+      },
+    )
+
     response.append(
       DailyReportV2Card(
         date=current.isoformat(),
         cash_start=cash_start,
         cash_end=cash_end,
+        sold_12kg=sold_12kg,
+        sold_48kg=sold_48kg,
+        net_today=net_today,
+        cash_math=DailyReportV2CashMath(**cash_math_values),
+        math=math_payload,
         company_start=company_start,
         company_end=company_end,
         company_12kg_start=company_12kg_start,
@@ -1677,15 +2462,10 @@ def list_daily_reports_v2(
         company_48kg_give_end=company_48kg_give_end,
         company_48kg_receive_start=company_48kg_receive_start,
         company_48kg_receive_end=company_48kg_receive_end,
-        customer_money_receivable=customer_totals["money_receivable"],
-        customer_money_payable=customer_totals["money_payable"],
-        customer_12kg_receivable=customer_totals["cyl_receivable_12"],
-        customer_12kg_payable=customer_totals["cyl_payable_12"],
-        customer_48kg_receivable=customer_totals["cyl_receivable_48"],
-        customer_48kg_payable=customer_totals["cyl_payable_48"],
         inventory_start=inv_start,
         inventory_end=inv_end,
-        problems=None,
+        problems=problem_lines,
+        problem_transitions=problem_transitions,
         recalculated=False,
       )
     )
@@ -1705,6 +2485,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   inventory_end = _sum_inventory_at_day_end(session, business_date)
   cash_start = _sum_cash_before_day(session, business_date)
   cash_end = _sum_cash_at_day_end(session, business_date)
+  bank_start = _sum_bank_before_day(session, business_date)
   company_start = _sum_company_before_day(session, business_date)
   company_end = _sum_company_at_day_end(session, business_date)
   company_12kg_start = _sum_company_cyl_before_day(session, business_date, "12kg")
@@ -1723,16 +2504,75 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   company_48kg_receive_end = max(company_48kg_end, 0)
   company_48kg_give_start = max(-company_48kg_start, 0)
   company_48kg_give_end = max(-company_48kg_end, 0)
-  customer_totals = _sum_customer_totals(session)
-
   ledger_rows = session.exec(select(LedgerEntry).where(LedgerEntry.day == business_date)).all()
   ledger_by_source: dict[tuple[str, str], list[LedgerEntry]] = defaultdict(list)
   for row in ledger_rows:
     ledger_by_source[(row.source_type, row.source_id)].append(row)
 
-  customers = {c.id: c for c in session.exec(select(Customer)).all()}
-  systems = {s.id: s for s in session.exec(select(System)).all()}
-  categories = {c.id: c.name for c in session.exec(select(ExpenseCategory)).all()}
+  # Load day-local source rows first so counterparty lookups can be scoped to the ids
+  # that actually appear in this day detail.
+  customer_txns = session.exec(
+    select(CustomerTransaction)
+    .where(CustomerTransaction.day == business_date)
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+  ).all()
+  adjustments = session.exec(
+    select(InventoryAdjustment)
+    .where(InventoryAdjustment.day == business_date)
+    .where(InventoryAdjustment.is_reversed == False)  # noqa: E712
+  ).all()
+  company_txns = session.exec(
+    select(CompanyTransaction)
+    .where(CompanyTransaction.day == business_date)
+    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+  ).all()
+  expenses = session.exec(
+    select(Expense)
+    .where(Expense.day == business_date)
+    .where(Expense.is_reversed == False)  # noqa: E712
+  ).all()
+  cash_adjustments = session.exec(
+    select(CashAdjustment)
+    .where(CashAdjustment.day == business_date)
+    .where(CashAdjustment.is_reversed == False)  # noqa: E712
+  ).all()
+
+  system_init_rows = [row for row in ledger_rows if row.source_type == "system_init"]
+  involved_customer_ids = {
+    row.customer_id
+    for row in system_init_rows
+    if row.customer_id
+  }
+  involved_customer_ids.update(txn.customer_id for txn in customer_txns if txn.customer_id)
+  involved_system_ids = {txn.system_id for txn in customer_txns if txn.system_id}
+  involved_category_ids = {expense.category_id for expense in expenses if expense.category_id}
+
+  customers = (
+    {
+      customer.id: customer
+      for customer in session.exec(select(Customer).where(Customer.id.in_(list(involved_customer_ids)))).all()
+    }
+    if involved_customer_ids
+    else {}
+  )
+  systems = (
+    {
+      system.id: system
+      for system in session.exec(select(System).where(System.id.in_(list(involved_system_ids)))).all()
+    }
+    if involved_system_ids
+    else {}
+  )
+  categories = (
+    {
+      category.id: category.name
+      for category in session.exec(
+        select(ExpenseCategory).where(ExpenseCategory.id.in_(list(involved_category_ids)))
+      ).all()
+    }
+    if involved_category_ids
+    else {}
+  )
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
 
@@ -1740,66 +2580,107 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   stable_row_key = lambda row: (row.happened_at, row.created_at, row.id)
 
   # system init entries (opening balances)
-  system_init_rows = [row for row in ledger_rows if row.source_type == "system_init"]
   if system_init_rows:
     by_source: dict[str, list[LedgerEntry]] = defaultdict(list)
     for row in system_init_rows:
       by_source[row.source_id].append(row)
     for source_id, rows in by_source.items():
-      base = min(rows, key=stable_row_key)
-      event = DailyReportV2Event(
-        event_type="init",
-        effective_at=base.happened_at,
-        created_at=base.happened_at,
-        source_id=source_id,
-        label=None,
-        label_short=None,
-        order_mode=None,
-        gas_type=None,
-        customer_id=None,
-        customer_name=None,
-        customer_description=None,
-        system_name=None,
-        system_type=None,
-        expense_type=None,
-        reason="System initialization",
-        buy12=None,
-        return12=None,
-        buy48=None,
-        return48=None,
-        total_cost=None,
-        paid_now=None,
-        order_total=None,
-        order_paid=None,
-        order_installed=None,
-        order_received=None,
-        cash_before=None,
-        cash_after=None,
-        inventory_before=None,
-        inventory_after=None,
-      )
-      events.append(event)
+      general_rows = [row for row in rows if not row.customer_id]
+      customer_rows: dict[str, list[LedgerEntry]] = defaultdict(list)
+      for row in rows:
+        if row.customer_id:
+          customer_rows[row.customer_id].append(row)
 
-  # group return transactions by group_id
-  customer_txns = session.exec(
-    select(CustomerTransaction)
-    .where(CustomerTransaction.day == business_date)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).all()
-  customer_txn_by_id = {txn.id: txn for txn in customer_txns}
+      if general_rows:
+        base = min(general_rows, key=stable_row_key)
+        event = DailyReportV2Event(
+          id=f"{source_id}:system",
+          event_type="init",
+          effective_at=base.happened_at,
+          created_at=base.happened_at,
+          source_id=source_id,
+          label=None,
+          label_short=None,
+          order_mode=None,
+          gas_type=None,
+          customer_id=None,
+          customer_name=None,
+          customer_description=None,
+          system_name=None,
+          system_type=None,
+          expense_type=None,
+          reason="System initialization",
+          buy12=None,
+          return12=None,
+          buy48=None,
+          return48=None,
+          total_cost=None,
+          paid_now=None,
+          order_total=None,
+          order_paid=None,
+          order_installed=None,
+          order_received=None,
+          cash_before=None,
+          cash_after=None,
+          inventory_before=None,
+          inventory_after=None,
+        )
+        events.append(event)
+
+      for customer_id, scoped_rows in customer_rows.items():
+        base = min(scoped_rows, key=stable_row_key)
+        customer = customers.get(customer_id)
+        cust_name, cust_desc = _customer_identity(customer)
+        event = DailyReportV2Event(
+          id=f"{source_id}:customer:{customer_id}",
+          event_type="init",
+          effective_at=base.happened_at,
+          created_at=base.happened_at,
+          source_id=source_id,
+          label=None,
+          label_short=None,
+          order_mode=None,
+          gas_type=None,
+          customer_id=customer_id,
+          customer_name=cust_name,
+          customer_description=cust_desc,
+          system_name=None,
+          system_type=None,
+          expense_type=None,
+          reason="Customer opening balance",
+          buy12=None,
+          return12=None,
+          buy48=None,
+          return48=None,
+          total_cost=None,
+          paid_now=None,
+          order_total=None,
+          order_paid=None,
+          order_installed=None,
+          order_received=None,
+          cash_before=None,
+          cash_after=None,
+          inventory_before=None,
+          inventory_after=None,
+        )
+        events.append(event)
+
   grouped_returns: dict[str, list[CustomerTransaction]] = defaultdict(list)
+  grouped_adjustments: dict[str, list[CustomerTransaction]] = defaultdict(list)
   other_txns: list[CustomerTransaction] = []
   for txn in customer_txns:
     if txn.kind == "return" and txn.group_id:
       grouped_returns[txn.group_id].append(txn)
+    elif txn.kind == "adjust":
+      grouped_adjustments[txn.group_id or txn.id].append(txn)
     else:
       other_txns.append(txn)
   return_group_txn_ids: dict[str, list[str]] = {
     group_id: [t.id for t in txns] for group_id, txns in grouped_returns.items()
   }
-  return_group_latest: dict[str, CustomerTransaction] = {}
-  for group_id, txns in grouped_returns.items():
-    return_group_latest[group_id] = max(txns, key=stable_row_key)
+  adjust_group_txn_ids: dict[str, list[str]] = {
+    group_id: [t.id for t in txns] for group_id, txns in grouped_adjustments.items()
+  }
 
   for txn in other_txns:
     source_key = ("customer_txn", txn.id)
@@ -1893,12 +2774,44 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     )
     events.append(event)
 
+  for group_id, txns in grouped_adjustments.items():
+    base = min(txns, key=stable_row_key)
+    customer = customers.get(base.customer_id)
+    cust_name, cust_desc = _customer_identity(customer)
+    event = DailyReportV2Event(
+      event_type="customer_adjust",
+      effective_at=base.happened_at,
+      created_at=base.created_at,
+      source_id=group_id,
+      label=None,
+      label_short=None,
+      order_mode=None,
+      gas_type=None,
+      customer_id=base.customer_id,
+      customer_name=cust_name,
+      customer_description=cust_desc,
+      system_name=None,
+      system_type=None,
+      expense_type=None,
+      reason=base.note,
+      buy12=None,
+      return12=None,
+      buy48=None,
+      return48=None,
+      total_cost=None,
+      paid_now=None,
+      order_total=None,
+      order_paid=None,
+      order_installed=None,
+      order_received=None,
+      cash_before=None,
+      cash_after=None,
+      inventory_before=None,
+      inventory_after=None,
+    )
+    events.append(event)
+
   # inventory adjustments
-  adjustments = session.exec(
-    select(InventoryAdjustment)
-    .where(InventoryAdjustment.day == business_date)
-    .where(InventoryAdjustment.is_reversed == False)  # noqa: E712
-  ).all()
   for adj in adjustments:
     event = DailyReportV2Event(
       event_type="adjust",
@@ -1934,11 +2847,6 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events.append(event)
 
   # company transactions
-  company_txns = session.exec(
-    select(CompanyTransaction)
-    .where(CompanyTransaction.day == business_date)
-    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
-  ).all()
   for txn in company_txns:
     event_type = "refill"
     buy12 = txn.buy12
@@ -2006,11 +2914,6 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events.append(event)
 
   # expenses and deposits
-  expenses = session.exec(
-    select(Expense)
-    .where(Expense.day == business_date)
-    .where(Expense.is_reversed == False)  # noqa: E712
-  ).all()
   for expense in expenses:
     if expense.kind == "deposit":
       event_type = "bank_deposit"
@@ -2049,11 +2952,6 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     )
     events.append(event)
 
-  cash_adjustments = session.exec(
-    select(CashAdjustment)
-    .where(CashAdjustment.day == business_date)
-    .where(CashAdjustment.is_reversed == False)  # noqa: E712
-  ).all()
   for adjustment in cash_adjustments:
     event = DailyReportV2Event(
       event_type="cash_adjust",
@@ -2106,9 +3004,19 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     return None
 
   def _ledger_entries_for_event(event: DailyReportV2Event) -> list[LedgerEntry]:
+    if event.event_type == "init":
+      rows = ledger_by_source.get(("system_init", event.source_id), [])
+      if event.customer_id:
+        return [row for row in rows if row.customer_id == event.customer_id]
+      return [row for row in rows if not row.customer_id]
     if event.event_type == "collection_empty" and event.source_id in return_group_txn_ids:
       rows: list[LedgerEntry] = []
       for txn_id in return_group_txn_ids[event.source_id]:
+        rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
+      return rows
+    if event.event_type == "customer_adjust" and event.source_id in adjust_group_txn_ids:
+      rows: list[LedgerEntry] = []
+      for txn_id in adjust_group_txn_ids[event.source_id]:
         rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
       return rows
     source_key = _event_source_key(event)
@@ -2123,10 +3031,19 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event_sort_ids[id(event)] = boundary.entry_id if boundary else (event.source_id or event.event_type or "")
 
   # sort and apply running balances for cash/inventory
+  # Canonical feed ordering is effective business time first, then creation time,
+  # then a stable ledger/source tie-breaker. Running balance assignment uses the
+  # same key in ascending order; the returned feed reverses that order for display.
   events.sort(
-    key=lambda ev: (ev.effective_at, ev.created_at, event_sort_ids.get(id(ev), ev.source_id or ""))
+    key=lambda ev: _event_order_key(ev, event_sort_ids=event_sort_ids)
+  )
+  customer_state_by_id = _seed_customer_states_before_day(
+    session,
+    customer_ids={event.customer_id for event in events if event.customer_id},
+    day=business_date,
   )
   running_cash = cash_start
+  running_bank = bank_start
   running_company = company_start
   running_company_12 = company_12kg_start
   running_company_48 = company_48kg_start
@@ -2137,6 +3054,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   for event in events:
     entry_rows = event_entries.get(id(event), [])
     cash_delta = sum(row.amount for row in entry_rows if row.account == "cash")
+    bank_delta = sum(row.amount for row in entry_rows if row.account == "bank")
     company_delta = sum(row.amount for row in entry_rows if row.account == "company_money_debts")
     company_12_delta = sum(
       row.amount
@@ -2153,6 +3071,10 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     event.cash_before = running_cash
     event.cash_after = running_cash + cash_delta
     running_cash = event.cash_after
+
+    event.bank_before = running_bank
+    event.bank_after = running_bank + bank_delta
+    running_bank = event.bank_after
 
     event.company_before = running_company
     event.company_after = running_company + company_delta
@@ -2193,31 +3115,59 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       event.inventory_before = inv_before
       event.inventory_after = inv_after
 
-    customer_debt: Optional[tuple[int, int, int]] = None
-    if event.event_type == "collection_empty" and event.source_id in return_group_latest:
-      txn = return_group_latest[event.source_id]
-      customer_debt = (txn.debt_cash, txn.debt_cylinders_12, txn.debt_cylinders_48)
-    elif event.source_id and event.event_type in {
-      "order",
-      "collection_money",
-      "collection_payout",
-      "customer_adjust",
-    }:
-      txn = customer_txn_by_id.get(event.source_id)
-      if txn:
-        customer_debt = (txn.debt_cash, txn.debt_cylinders_12, txn.debt_cylinders_48)
+    customer_before: Optional[CustomerLedgerState] = None
+    customer_after: Optional[CustomerLedgerState] = None
+    if event.customer_id:
+      customer_before = customer_state_by_id.get(event.customer_id, (0, 0, 0))
+      customer_delta = _customer_state_delta_from_entries(entry_rows)
+      customer_after = _add_customer_state(customer_before, customer_delta)
+      customer_state_by_id[event.customer_id] = customer_after
+      event.customer_money_before = customer_before[0]
+      event.customer_money_after = customer_after[0]
+      event.customer_12kg_before = customer_before[1]
+      event.customer_12kg_after = customer_after[1]
+      event.customer_48kg_before = customer_before[2]
+      event.customer_48kg_after = customer_after[2]
+
+    if customer_before is not None and customer_after is not None:
+      event.balance_transitions = _customer_balance_transitions(
+        before=customer_before,
+        after=customer_after,
+        include_static=False,
+        intent="customer_adjust" if event.event_type == "customer_adjust" else None,
+      )
+    elif event.event_type in {"refill", "company_payment", "company_buy_iron", "init"}:
+      event.balance_transitions = _company_balance_transitions(
+        money_before=event.company_before or 0,
+        money_after=event.company_after or 0,
+        cyl12_before=event.company_12kg_before or 0,
+        cyl12_after=event.company_12kg_after or 0,
+        cyl48_before=event.company_48kg_before or 0,
+        cyl48_after=event.company_48kg_after or 0,
+        include_static=False,
+      )
+    else:
+      event.balance_transitions = []
 
     _apply_ticket_fields(event)
-    _apply_level3_fields(event, customer_debt=customer_debt)
-    _apply_status_fields(event, customer_debt=customer_debt)
-    notes = _notes_for_event(event, customer_debt=customer_debt, money_decimals=money_decimals)
+    _apply_level3_fields(event, customer_after=customer_after)
+    _apply_status_fields(
+      event,
+      customer_before=customer_before,
+      customer_after=customer_after,
+    )
+    notes = _notes_for_event(
+      event,
+      customer_before=customer_before,
+      customer_after=customer_after,
+      money_decimals=money_decimals,
+    )
     _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
 
-    if event.event_type != "init":
-      event_rows.append(event)
+    event_rows.append(event)
 
   event_rows.sort(
-    key=lambda ev: (ev.effective_at, ev.created_at, event_sort_ids.get(id(ev), ev.id or ev.source_id or "")),
+    key=lambda ev: _event_order_key(ev, event_sort_ids=event_sort_ids),
     reverse=True,
   )
 
@@ -2243,14 +3193,9 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     company_48kg_give_end=company_48kg_give_end,
     company_48kg_receive_start=company_48kg_receive_start,
     company_48kg_receive_end=company_48kg_receive_end,
-    customer_money_receivable=customer_totals["money_receivable"],
-    customer_money_payable=customer_totals["money_payable"],
-    customer_12kg_receivable=customer_totals["cyl_receivable_12"],
-    customer_12kg_payable=customer_totals["cyl_payable_12"],
-    customer_48kg_receivable=customer_totals["cyl_receivable_48"],
-    customer_48kg_payable=customer_totals["cyl_payable_48"],
     inventory_start=inventory_start,
     inventory_end=inventory_end,
     audit_summary=get_daily_audit_summary(session, business_date),
     events=event_rows,
   )
+

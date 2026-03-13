@@ -153,3 +153,4 @@ def delete_system(system_id: str, session: Session = Depends(get_session)) -> No
     )
   session.delete(system)
   session.commit()
+

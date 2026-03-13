@@ -311,3 +311,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_cash_adjustments_day'), table_name='cash_adjustments')
     op.drop_table('cash_adjustments')
     # ### end Alembic commands ###
+

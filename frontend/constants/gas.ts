@@ -11,3 +11,4 @@ export function gasColor(gas?: string): string {
   }
   return "#475569";
 }
+

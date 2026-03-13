@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from conftest import create_customer, create_order, create_system, init_inventory
+from tests.backend.conftest import create_customer, create_order, create_system, init_inventory
 
 
 def test_bank_deposit_reduces_cash_and_appears_in_timeline(client) -> None:
@@ -31,7 +31,11 @@ def test_bank_deposit_reduces_cash_and_appears_in_timeline(client) -> None:
     assert deposit_event["source_id"] == deposit_id
     assert deposit_event["cash_before"] == 1000
     assert deposit_event["cash_after"] == 800
+    assert deposit_event["bank_before"] == 0
+    assert deposit_event["bank_after"] == 200
     assert deposit_event["reason"] == "deposit"
+    assert deposit_event["hero_text"] == "Transferred ₪200 to bank"
+    assert deposit_event["money_direction"] == "none"
 
     listing = client.get("/cash/bank_deposits", params={"date": day1.isoformat()})
     assert listing.status_code == 200

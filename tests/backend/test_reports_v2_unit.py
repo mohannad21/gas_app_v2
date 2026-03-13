@@ -24,11 +24,11 @@ def test_cash_replay_ordering_tiebreak(client) -> None:
     resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
-    assert [event["reason"] for event in events] == ["first", "second"]
-    assert events[0]["cash_before"] == 0
-    assert events[0]["cash_after"] == 10
-    assert events[1]["cash_before"] == 10
-    assert events[1]["cash_after"] == 30
+    assert [event["reason"] for event in events] == ["second", "first"]
+    assert events[1]["cash_before"] == 0
+    assert events[1]["cash_after"] == 10
+    assert events[0]["cash_before"] == 10
+    assert events[0]["cash_after"] == 30
 
 
 def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
@@ -47,13 +47,10 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
     assert resp.status_code == 201
 
     with Session(engine) as session:
-        adjustments = session.exec(select(CashAdjustment)).all()
-        adj_a = next(adj for adj in adjustments if adj.note == "adjust-a")
-        adj_b = next(adj for adj in adjustments if adj.note == "adjust-b")
-        old_a = adj_a.id
-        old_b = adj_b.id
-
-        session.exec(
+        rows = session.exec(text("select id, delta_cash from cash_adjustments")).all()
+        adj_a_id = next(row[0] for row in rows if row[1] == 10)
+        adj_b_id = next(row[0] for row in rows if row[1] == 20)
+        session.execute(
             text(
                 """
                 update cash_adjustments
@@ -64,9 +61,9 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 where id = :old_id
                 """
             ),
-            {"new_id": "adjust-a", "ts": happened_at, "day": happened_at.date(), "old_id": old_a},
+            {"new_id": "adjust-a", "ts": happened_at, "day": happened_at.date(), "old_id": adj_a_id},
         )
-        session.exec(
+        session.execute(
             text(
                 """
                 update cash_adjustments
@@ -77,23 +74,37 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 where id = :old_id
                 """
             ),
-            {"new_id": "adjust-b", "ts": happened_at, "day": happened_at.date(), "old_id": old_b},
+            {"new_id": "adjust-b", "ts": happened_at, "day": happened_at.date(), "old_id": adj_b_id},
         )
 
-        entry_a = session.exec(
-            select(LedgerEntry)
-            .where(LedgerEntry.source_type == "cash_adjust")
-            .where(LedgerEntry.source_id == old_a)
+        entry_a_id = session.execute(
+            text(
+                """
+                select id
+                from ledger_entries
+                where source_type = 'cash_adjust'
+                  and source_id = :source_id
+                  and account = 'cash'
+                """
+            ),
+            {"source_id": adj_a_id},
         ).first()
-        entry_b = session.exec(
-            select(LedgerEntry)
-            .where(LedgerEntry.source_type == "cash_adjust")
-            .where(LedgerEntry.source_id == old_b)
+        entry_b_id = session.execute(
+            text(
+                """
+                select id
+                from ledger_entries
+                where source_type = 'cash_adjust'
+                  and source_id = :source_id
+                  and account = 'cash'
+                """
+            ),
+            {"source_id": adj_b_id},
         ).first()
-        assert entry_a is not None
-        assert entry_b is not None
+        assert entry_a_id is not None
+        assert entry_b_id is not None
 
-        session.exec(
+        session.execute(
             text(
                 """
                 update ledger_entries
@@ -110,10 +121,10 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-a",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_a.id,
+                "old_id": entry_a_id[0] if isinstance(entry_a_id, tuple) else entry_a_id,
             },
         )
-        session.exec(
+        session.execute(
             text(
                 """
                 update ledger_entries
@@ -130,7 +141,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-b",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_b.id,
+                "old_id": entry_b_id[0] if isinstance(entry_b_id, tuple) else entry_b_id,
             },
         )
         session.commit()
@@ -138,11 +149,11 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
     resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
-    assert [event["reason"] for event in events] == ["adjust-b", "adjust-a"]
-    assert events[0]["cash_before"] == 0
-    assert events[0]["cash_after"] == 20
-    assert events[1]["cash_before"] == 20
-    assert events[1]["cash_after"] == 30
+    assert [event["reason"] for event in events] == ["adjust-a", "adjust-b"]
+    assert events[1]["cash_before"] == 0
+    assert events[1]["cash_after"] == 20
+    assert events[0]["cash_before"] == 20
+    assert events[0]["cash_after"] == 30
 
 
 def test_refill_grouping_by_source_id(client) -> None:
@@ -204,7 +215,7 @@ def test_daily_audit_summary_cash_in_net_zero(client) -> None:
     assert audit["new_debt"] == 0
 
 
-def test_customer_adjust_visible_in_day_v2(client) -> None:
+def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> None:
     day = date(2025, 9, 1)
     customer_id = create_customer(client, name="Adjust Customer")
 
@@ -213,21 +224,122 @@ def test_customer_adjust_visible_in_day_v2(client) -> None:
         json={
             "customer_id": customer_id,
             "amount_money": 100,
-            "count_12kg": 0,
+            "count_12kg": 2,
             "count_48kg": 0,
             "reason": "manual adjust",
             "happened_at": f"{day.isoformat()}T10:00:00",
         },
     )
     assert resp.status_code == 201
+    adjustment = resp.json()
 
     report = client.get("/reports/day_v2", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "customer_adjust"]
     assert len(events) == 1
     event = events[0]
+    assert event["source_id"] == adjustment["id"]
+    assert event["counterparty"]["type"] == "customer"
+    assert event["customer_name"] == "Adjust Customer"
+    assert event["hero_text"] == "Adjusted customer balance"
+    assert event["status_mode"] == "settlement"
+    assert event["status"] == "needs_action"
     assert isinstance(event["cash_before"], int)
     assert isinstance(event["cash_after"], int)
     assert event["cash_before"] == event["cash_after"]
     assert "inventory_before" in event
     assert "inventory_after" in event
+    transitions = {row["component"]: row for row in event["balance_transitions"]}
+    assert transitions["money"]["before"] == 0
+    assert transitions["money"]["after"] == 100
+    assert transitions["cyl_12"]["before"] == 0
+    assert transitions["cyl_12"]["after"] == 2
+    assert transitions["money"]["intent"] == "customer_adjust"
+    assert transitions["cyl_12"]["intent"] == "customer_adjust"
+
+
+def test_day_v2_orders_feed_by_effective_then_created_then_tiebreaker(client) -> None:
+    day = date(2025, 9, 2)
+    customer_id = create_customer(client, name="Lina")
+
+    payment_resp = client.post(
+        "/company/payments",
+        json={
+            "amount": 500,
+            "note": "company payment",
+            "happened_at": f"{day.isoformat()}T10:42:00",
+        },
+    )
+    assert payment_resp.status_code == 201
+
+    adjust_resp = client.post(
+        "/customer-adjustments",
+        json={
+            "customer_id": customer_id,
+            "count_12kg": -1,
+            "reason": "manual adjust",
+            "happened_at": f"{day.isoformat()}T09:46:00",
+        },
+    )
+    assert adjust_resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = report.json()["events"]
+    company_payment = next(index for index, event in enumerate(events) if event["event_type"] == "company_payment")
+    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "customer_adjust")
+
+    # Newest-first display order is based on effective_at first; created_at only breaks ties.
+    assert company_payment < customer_adjust
+    assert events[company_payment]["time_display"] == "10:42"
+    assert events[customer_adjust]["time_display"] == "09:46"
+
+
+def test_daily_v2_customer_adjust_problem_transitions_are_marked_neutral(client) -> None:
+    day = date(2025, 9, 3)
+    customer_id = create_customer(client, name="Lina")
+
+    resp = client.post(
+        "/customer-adjustments",
+        json={
+            "customer_id": customer_id,
+            "count_12kg": -1,
+            "reason": "manual adjust",
+            "happened_at": f"{day.isoformat()}T09:46:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/daily_v2", params={"from": day.isoformat(), "to": day.isoformat()})
+    assert report.status_code == 200
+    [row] = report.json()
+    cyl12 = next(item for item in row["problem_transitions"] if item["component"] == "cyl_12")
+    assert cyl12["intent"] == "customer_adjust"
+
+
+def test_day_v2_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> None:
+    day = date(2025, 9, 4)
+    happened_at = f"{day.isoformat()}T10:00:00"
+    customer_id = create_customer(client, name="Lina")
+
+    first = client.post("/cash/adjust", json={"happened_at": happened_at, "delta_cash": 10, "reason": "first"})
+    assert first.status_code == 201
+
+    second = client.post(
+        "/customer-adjustments",
+        json={
+            "customer_id": customer_id,
+            "amount_money": 50,
+            "reason": "later create",
+            "happened_at": happened_at,
+        },
+    )
+    assert second.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = report.json()["events"]
+    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "customer_adjust")
+    cash_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "cash_adjust")
+
+    assert customer_adjust < cash_adjust

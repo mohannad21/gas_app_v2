@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
@@ -88,11 +88,12 @@ def update_cash_adjustment(
   if not existing or existing.is_reversed:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CashAdjustment(
     request_id=None,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     delta_cash=existing.delta_cash,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
@@ -116,8 +117,8 @@ def update_cash_adjustment(
   new_note = payload.reason if payload.reason is not None else existing.note
   new_adjustment = CashAdjustment(
     request_id=None,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     delta_cash=new_amount,
     note=new_note,
     is_reversed=False,
@@ -141,11 +142,12 @@ def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_sessio
   existing = session.get(CashAdjustment, adjust_id)
   if not existing or existing.is_reversed:
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CashAdjustment(
     request_id=None,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     delta_cash=existing.delta_cash,
     note=f"Reversal of {existing.id}",
     reversed_id=existing.id,
@@ -237,11 +239,12 @@ def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)
   existing = session.get(Expense, deposit_id)
   if not existing or existing.is_reversed:
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = Expense(
     request_id=None,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind=existing.kind,
     category_id=existing.category_id,
     amount=existing.amount,
@@ -265,3 +268,4 @@ def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)
   existing.is_reversed = True
   session.add(existing)
   session.commit()
+

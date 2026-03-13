@@ -196,9 +196,64 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
 
     assert event["event_type"] == "refill"
     assert event["settlement"]["is_settled"] is False
-    notes = event["notes"]
-    assert any(note["direction"] == "you_pay_company" for note in notes)
-    assert any(note["direction"] == "you_return_company" and note["kind"] == "cyl_12" for note in notes)
+    assert event["notes"] == []
+    actions = event["action_pills"]
+    assert any(action["direction"] == "dist->company" and action["kind"] == "money" for action in actions)
+    assert any(action["direction"] == "dist->company" and action["kind"] == "empty_12" for action in actions)
+
+
+def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
+    day = date(2025, 11, 5)
+    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
+
+    resp = client.post(
+        "/company/cylinders/settle",
+        json={
+            "happened_at": iso_at(day.isoformat(), "morning"),
+            "gas_type": "12kg",
+            "quantity": 3,
+            "direction": "receive_full",
+        },
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
+
+    assert event["label"] == "Company Settle"
+    assert event["hero"]["text"] == "Company Settle"
+    assert event["hero_text"] == "Received 3x12kg full from company"
+    assert event["event_kind"] == "company_settle_receive_full"
+    assert event["activity_type"] == "company_settle_receive_full"
+    assert event["status_mode"] == "settlement"
+
+
+def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
+    day = date(2025, 11, 6)
+    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
+
+    resp = client.post(
+        "/company/cylinders/settle",
+        json={
+            "happened_at": iso_at(day.isoformat(), "morning"),
+            "gas_type": "48kg",
+            "quantity": 2,
+            "direction": "return_empty",
+        },
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
+
+    assert event["label"] == "Company Settle"
+    assert event["hero"]["text"] == "Company Settle"
+    assert event["hero_text"] == "Returned 2x48kg empties to company"
+    assert event["event_kind"] == "company_settle_return_empty"
+    assert event["activity_type"] == "company_settle_return_empty"
+    assert event["status_mode"] == "settlement"
 
 
 def test_level3_system_only_for_replacement(client) -> None:

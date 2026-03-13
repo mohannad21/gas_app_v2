@@ -11,6 +11,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      initialRouteName="reports/index"
       screenOptions={{
         headerShown: false,
         tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 6 },
@@ -20,11 +21,12 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontWeight: "700", fontSize: 12 },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={20} color={color} /> }} />
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
-      <Tabs.Screen name="customers" options={{ title: "Customers", tabBarIcon: ({ color }) => <Ionicons name="people-outline" size={20} color={color} /> }} />
+      <Tabs.Screen name="customers" options={{ href: null }} />
       <Tabs.Screen name="add/index" options={{ title: "Add", tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} /> }} />
       <Tabs.Screen name="reports/index" options={{ title: "Daily", tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={20} color={color} /> }} />
     </Tabs>
   );
 }
+

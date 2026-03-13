@@ -80,3 +80,4 @@ def business_date_end_utc(business_date: date) -> datetime:
   """
   next_day_start = business_date_start_utc(business_date + timedelta(days=1))
   return next_day_start - timedelta(seconds=1)
+

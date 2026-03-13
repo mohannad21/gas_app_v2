@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Alert,
   FlatList,
@@ -23,17 +23,10 @@ import BalancesCard from "@/components/reports/BalancesCard";
 import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
-import {
-  formatSigned,
-  getInitInventoryAfter,
-  summarizeEventTypes,
-  summarizeDayNet,
-  summarizeOrderEvents,
-  summarizeRefillEvents,
-} from "@/lib/reports/utils";
-import { buildHappenedAt, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { formatBalanceTransitions } from "@/lib/balanceTransitions";
+import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
+import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
-import { getEventColor } from "@/lib/reports/eventColors";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -44,6 +37,210 @@ const getExpenseIcon = (type?: string | null) => {
   if (key === "car insurance") return "shield-checkmark-outline";
   return "receipt-outline";
 };
+
+const formatMoney = (value: number) => Number(value || 0).toFixed(0);
+const formatCount = (value: number) => Number(value || 0).toFixed(0);
+const formatCustomerCount = (count: number) => `${count} customer${count === 1 ? "" : "s"}`;
+const formatMoneySigned = (value: number) => {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}₪${formatMoney(Math.abs(value))}`;
+};
+const buildCashMathLines = (cashMath?: any) => {
+  if (!cashMath) return [];
+  const lines: { label: string; value: number }[] = [];
+  const pushLine = (label: string, value: number | null | undefined) => {
+    if (typeof value !== "number" || value === 0) return;
+    lines.push({ label, value });
+  };
+  pushLine("Sales", cashMath.sales);
+  pushLine("Late", cashMath.late);
+  pushLine("Expenses", cashMath.expenses);
+  pushLine("Company", cashMath.company);
+  pushLine("Adjust", cashMath.adjust);
+  pushLine("Other", cashMath.other);
+  return lines;
+};
+
+type ReportDayCardProps = {
+  item: any;
+  isOpen: boolean;
+  dayInfo: any;
+  onToggle: (date: string) => void;
+  onShowSyncInfo: (date: string | null) => void;
+};
+
+const ReportDayCard = memo(function ReportDayCard({
+  item,
+  isOpen,
+  dayInfo,
+  onToggle,
+  onShowSyncInfo,
+}: ReportDayCardProps) {
+  const weekday = formatWeekdayShort(item.date);
+  const problems = Array.isArray(item.problems) ? item.problems : [];
+  const problemTransitions = Array.isArray(item.problem_transitions) ? item.problem_transitions : [];
+  const events = (dayInfo?.events ?? []) as any[];
+  const recalculated = dayInfo?.recalculated ?? item.recalculated;
+  const initAfter = getInitInventoryAfter(events);
+  const displayInventoryStart = initAfter
+    ? {
+        full12: initAfter.full12 ?? item.inventory_start.full12,
+        empty12: initAfter.empty12 ?? item.inventory_start.empty12,
+        full48: initAfter.full48 ?? item.inventory_start.full48,
+        empty48: initAfter.empty48 ?? item.inventory_start.empty48,
+      }
+    : item.inventory_start;
+
+  const alertLines =
+    problemTransitions.length > 0
+      ? formatBalanceTransitions(problemTransitions, {
+          mode: "transition",
+          collapseAllSettled: true,
+          includeDisplayName: true,
+          intent: "generic",
+          formatMoney,
+        })
+      : problems;
+  const hasAlerts = alertLines.length > 0;
+  const sold12 = item.sold_12kg ?? 0;
+  const sold48 = item.sold_48kg ?? 0;
+  const netToday =
+    typeof item.net_today === "number" ? item.net_today : (item.cash_end ?? 0) - (item.cash_start ?? 0);
+  const cashMathLines = buildCashMathLines(item.cash_math);
+  const dayLabel =
+    formatDateLocale(item.date, { day: "2-digit", month: "short" }, "en-GB").toUpperCase() || item.date;
+
+  return (
+    <View>
+      <Pressable
+        onPress={() => onToggle(item.date)}
+        style={({ pressed }) => [
+          styles.card,
+          !isOpen && styles.cardCollapsed,
+          isOpen && styles.cardExpanded,
+          pressed && styles.cardPressed,
+        ]}
+      >
+        <View>
+          <View>
+            <View style={styles.collapsedHeaderRow}>
+              <View style={[styles.alertBar, hasAlerts ? styles.alertBarActive : styles.alertBarNeutral]} />
+              <View style={styles.collapsedHeaderBody}>
+                <View style={styles.collapsedHeaderTop}>
+                  <Text style={styles.v2Date}>
+                    {dayLabel} - {weekday}
+                  </Text>
+                  <View style={styles.collapsedPillsRow}>
+                    <Text style={[styles.collapsedPillText, { color: gasColor("12kg") }]}>
+                      {formatCount(sold12)}x12kg
+                    </Text>
+                    <Text style={styles.collapsedPillSeparator}>|</Text>
+                    <Text style={[styles.collapsedPillText, { color: gasColor("48kg") }]}>
+                      {formatCount(sold48)}x48kg
+                    </Text>
+                  </View>
+                  <Text style={styles.collapsedNet}>Net {formatMoneySigned(netToday)}</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.collapsedBodyRow}>
+              <View style={styles.collapsedAlerts}>
+                {alertLines.map((line, index) => (
+                  <Text key={`${line}-${index}`} style={styles.alertLine} numberOfLines={1} ellipsizeMode="tail">
+                    ! {line}
+                  </Text>
+                ))}
+              </View>
+              <View style={styles.collapsedCashMath}>
+                {cashMathLines.map((line) => (
+                  <Text key={line.label} style={styles.cashLine} numberOfLines={1} ellipsizeMode="tail">
+                    {line.label} {formatMoneySigned(line.value)}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {isOpen ? (
+          <>
+            <View style={styles.expandedDivider} />
+            {dayInfo ? (
+              <V2Timeline events={events} formatMoney={formatMoney} formatCount={formatCount} />
+            ) : (
+              <Text style={styles.meta}>Loading events...</Text>
+            )}
+
+            <View style={styles.rowBetween}>
+              <View />
+              <View style={styles.badgeRow}>
+                {recalculated ? (
+                  <Pressable style={styles.recalcBadge} onPress={() => onShowSyncInfo(item.date)}>
+                    <Text style={styles.recalcBadgeText}>Sync Update</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.v2InvCashRow}>
+              <View style={styles.v2InvCompactBox}>
+                <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg F</Text>
+                <View style={styles.v2DeltaBlock}>
+                  <DeltaArrowRow
+                    start={displayInventoryStart.full12}
+                    end={item.inventory_end.full12}
+                    format={formatCount}
+                    size="sm"
+                  />
+                </View>
+                <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg E</Text>
+                <View style={styles.v2DeltaBlock}>
+                  <DeltaArrowRow
+                    start={displayInventoryStart.empty12}
+                    end={item.inventory_end.empty12}
+                    format={formatCount}
+                    size="sm"
+                  />
+                </View>
+              </View>
+              <View style={styles.v2InvCompactBox}>
+                <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg F</Text>
+                <View style={styles.v2DeltaBlock}>
+                  <DeltaArrowRow
+                    start={displayInventoryStart.full48}
+                    end={item.inventory_end.full48}
+                    format={formatCount}
+                    size="sm"
+                  />
+                </View>
+                <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg E</Text>
+                <View style={styles.v2DeltaBlock}>
+                  <DeltaArrowRow
+                    start={displayInventoryStart.empty48}
+                    end={item.inventory_end.empty48}
+                    format={formatCount}
+                    size="sm"
+                  />
+                </View>
+              </View>
+              <View style={styles.v2InvCompactBox}>
+                <Text style={styles.v2InvCompactLabel}>Cash</Text>
+                <View style={styles.v2DeltaBlock}>
+                  <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.v2DetailsRow}>
+              <Text style={styles.v2DetailsText}>Hide details</Text>
+              <Ionicons name="chevron-up" size={16} color="#0a7ea4" />
+            </View>
+          </>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+});
 
 /**
  * NOTE:
@@ -71,9 +268,6 @@ export default function ReportsScreen() {
   const [routeHandled, setRouteHandled] = useState(false);
   const [allowExpenseInput, setAllowExpenseInput] = useState(false);
 
-  // V2
-  const [v2SummaryOpen, setV2SummaryOpen] = useState<string | null>(null);
-
   // Hooks
   const createExpense = useCreateExpense();
   const {
@@ -85,157 +279,10 @@ export default function ReportsScreen() {
     setV2DayByDate,
     balanceSummary,
     companySummary,
+    companyBalancesQuery,
     refetchV2,
     refetchCustomers,
   } = useDailyReportScreen();
-
-  // Formatters
-  const formatMoney = (value: number) => Number(value || 0).toFixed(0);
-  const formatCount = (value: number) => Number(value || 0).toFixed(0);
-  const formatCustomerCount = (count: number) => `${count} cstmr${count === 1 ? "" : "s"}`;
-
-  const buildBalanceAlertLines = (row: any, prevRow?: any | null, events?: any[]) => {
-    const lines: { label: string; color: string }[] = [];
-    const delta = (end?: number | null, start?: number | null) => Number(end ?? 0) - Number(start ?? 0);
-    const pushLine = (
-      label: string,
-      value: number | null | undefined,
-      formatter: (n: number) => string,
-      color: string
-    ) => {
-      const numeric = Number(value ?? 0);
-      if (!numeric) return;
-      lines.push({ label: `${label} ${formatter(Math.abs(numeric))}`, color });
-    };
-
-    if (Array.isArray(events) && events.length > 0) {
-      const customerNet = summarizeDayNet(events);
-      const companyTotals = events.reduce(
-        (acc, ev) => {
-          const cashBefore = typeof ev?.company_before === "number" ? ev.company_before : null;
-          const cashAfter = typeof ev?.company_after === "number" ? ev.company_after : null;
-          if (cashBefore != null && cashAfter != null) acc.cash += cashAfter - cashBefore;
-
-          const before12 = typeof ev?.company_12kg_before === "number" ? ev.company_12kg_before : null;
-          const after12 = typeof ev?.company_12kg_after === "number" ? ev.company_12kg_after : null;
-          if (before12 != null && after12 != null) acc.cyl12 += after12 - before12;
-
-          const before48 = typeof ev?.company_48kg_before === "number" ? ev.company_48kg_before : null;
-          const after48 = typeof ev?.company_48kg_after === "number" ? ev.company_48kg_after : null;
-          if (before48 != null && after48 != null) acc.cyl48 += after48 - before48;
-
-          return acc;
-        },
-        { cash: 0, cyl12: 0, cyl48: 0 }
-      );
-
-      const companyCashDebt = Math.max(companyTotals.cash, 0);
-      const companyCashCredit = Math.max(-companyTotals.cash, 0);
-      const company12Credit = Math.max(companyTotals.cyl12, 0);
-      const company12Debt = Math.max(-companyTotals.cyl12, 0);
-      const company48Credit = Math.max(companyTotals.cyl48, 0);
-      const company48Debt = Math.max(-companyTotals.cyl48, 0);
-
-      if (companyCashDebt > 0)
-        pushLine("company cash debt (you owe)", companyCashDebt, formatMoney, "#b91c1c");
-      if (companyCashCredit > 0)
-        pushLine("company cash credit", companyCashCredit, formatMoney, "#16a34a");
-      if (company12Debt > 0)
-        pushLine("12kg short empties (you owe)", company12Debt, formatCount, "#b91c1c");
-      if (company12Credit > 0)
-        pushLine("12kg shell credit at company", company12Credit, formatCount, "#16a34a");
-      if (company48Debt > 0)
-        pushLine("48kg short empties (you owe)", company48Debt, formatCount, "#b91c1c");
-      if (company48Credit > 0)
-        pushLine("48kg shell credit at company", company48Credit, formatCount, "#16a34a");
-
-      if (customerNet.newDebtCash > 0)
-        pushLine("customer owes (debt) cash", customerNet.newDebtCash, formatMoney, "#b91c1c");
-      if (customerNet.collectedCash > 0)
-        pushLine("customer credit cash", customerNet.collectedCash, formatMoney, "#16a34a");
-      if (customerNet.newDebt12 > 0)
-        pushLine("customer owes (debt) 12kg", customerNet.newDebt12, formatCount, "#b91c1c");
-      if (customerNet.collected12 > 0)
-        pushLine("customer credit 12kg", customerNet.collected12, formatCount, "#16a34a");
-      if (customerNet.newDebt48 > 0)
-        pushLine("customer owes (debt) 48kg", customerNet.newDebt48, formatCount, "#b91c1c");
-      if (customerNet.collected48 > 0)
-        pushLine("customer credit 48kg", customerNet.collected48, formatCount, "#16a34a");
-
-      return lines;
-    }
-
-    const companyCashDebtDelta = delta(row.company_give_end, row.company_give_start ?? prevRow?.company_give_end ?? 0);
-    const companyCashCreditDelta = delta(
-      row.company_receive_end,
-      row.company_receive_start ?? prevRow?.company_receive_end ?? 0
-    );
-    const company12DebtDelta = delta(
-      row.company_12kg_give_end,
-      row.company_12kg_give_start ?? prevRow?.company_12kg_give_end ?? 0
-    );
-    const company12CreditDelta = delta(
-      row.company_12kg_receive_end,
-      row.company_12kg_receive_start ?? prevRow?.company_12kg_receive_end ?? 0
-    );
-    const company48DebtDelta = delta(
-      row.company_48kg_give_end,
-      row.company_48kg_give_start ?? prevRow?.company_48kg_give_end ?? 0
-    );
-    const company48CreditDelta = delta(
-      row.company_48kg_receive_end,
-      row.company_48kg_receive_start ?? prevRow?.company_48kg_receive_end ?? 0
-    );
-
-    // Company balances (daily delta)
-    if (companyCashDebtDelta > 0)
-      pushLine("company cash debt (you owe)", companyCashDebtDelta, formatMoney, "#b91c1c");
-    if (companyCashCreditDelta > 0)
-      pushLine("company cash credit", companyCashCreditDelta, formatMoney, "#16a34a");
-    if (company12DebtDelta > 0)
-      pushLine("12kg short empties (you owe)", company12DebtDelta, formatCount, "#b91c1c");
-    if (company12CreditDelta > 0)
-      pushLine("12kg shell credit at company", company12CreditDelta, formatCount, "#16a34a");
-    if (company48DebtDelta > 0)
-      pushLine("48kg short empties (you owe)", company48DebtDelta, formatCount, "#b91c1c");
-    if (company48CreditDelta > 0)
-      pushLine("48kg shell credit at company", company48CreditDelta, formatCount, "#16a34a");
-
-    // Customer balances (daily delta; derived from previous day)
-    const customerCashDebtDelta = prevRow
-      ? delta(row.customer_money_payable, prevRow?.customer_money_payable ?? 0)
-      : 0;
-    const customerCashCreditDelta = prevRow
-      ? delta(row.customer_money_receivable, prevRow?.customer_money_receivable ?? 0)
-      : 0;
-    const customer12DebtDelta = prevRow
-      ? delta(row.customer_12kg_payable, prevRow?.customer_12kg_payable ?? 0)
-      : 0;
-    const customer12CreditDelta = prevRow
-      ? delta(row.customer_12kg_receivable, prevRow?.customer_12kg_receivable ?? 0)
-      : 0;
-    const customer48DebtDelta = prevRow
-      ? delta(row.customer_48kg_payable, prevRow?.customer_48kg_payable ?? 0)
-      : 0;
-    const customer48CreditDelta = prevRow
-      ? delta(row.customer_48kg_receivable, prevRow?.customer_48kg_receivable ?? 0)
-      : 0;
-
-    if (customerCashDebtDelta > 0)
-      pushLine("customer owes (debt) cash", customerCashDebtDelta, formatMoney, "#b91c1c");
-    if (customerCashCreditDelta > 0)
-      pushLine("customer credit cash", customerCashCreditDelta, formatMoney, "#16a34a");
-    if (customer12DebtDelta > 0)
-      pushLine("customer owes (debt) 12kg", customer12DebtDelta, formatCount, "#b91c1c");
-    if (customer12CreditDelta > 0)
-      pushLine("customer credit 12kg", customer12CreditDelta, formatCount, "#16a34a");
-    if (customer48DebtDelta > 0)
-      pushLine("customer owes (debt) 48kg", customer48DebtDelta, formatCount, "#b91c1c");
-    if (customer48CreditDelta > 0)
-      pushLine("customer credit 48kg", customer48CreditDelta, formatCount, "#16a34a");
-
-    return lines;
-  };
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
@@ -329,15 +376,43 @@ export default function ReportsScreen() {
 
   // Clear cached day info when collapsing
   useEffect(() => {
-    if (!v2Query.data || v2Expanded.length === 0) return;
+    if (!v2Query.data) return;
     setV2DayByDate((prev) => {
-      const next = { ...prev };
-      v2Expanded.forEach((date) => {
-        delete next[date];
+      const expanded = new Set(v2Expanded);
+      const next: typeof prev = {};
+      Object.entries(prev).forEach(([date, value]) => {
+        if (expanded.has(date)) {
+          next[date] = value;
+        }
       });
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every((key) => prev[key] === next[key])) {
+        return prev;
+      }
       return next;
     });
   }, [v2Query.data, v2Expanded]);
+
+  const toggleDay = useCallback((date: string) => {
+    setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
+  }, [setV2Expanded]);
+
+  const renderDayRow = useCallback(
+    ({ item }: { item: any }) => {
+      if (!item) return null;
+      return (
+        <ReportDayCard
+          item={item}
+          isOpen={v2Expanded.includes(item.date)}
+          dayInfo={v2DayByDate[item.date] ?? null}
+          onToggle={toggleDay}
+          onShowSyncInfo={setSyncInfoDate}
+        />
+      );
+    },
+    [setSyncInfoDate, toggleDay, v2DayByDate, v2Expanded]
+  );
 
   // -------------------------
   // VIEW MODE: NEW (V2)
@@ -376,6 +451,7 @@ export default function ReportsScreen() {
           formatCustomerCount={formatCustomerCount}
           formatMoney={formatMoney}
           formatCount={formatCount}
+          companyBalancesReady={companyBalancesQuery.isSuccess}
           collapsed={!balancesOpen}
           onToggle={() => setBalancesOpen((prev) => !prev)}
         />
@@ -383,345 +459,18 @@ export default function ReportsScreen() {
 
         <FlatList
           data={v2Rows}
-          keyExtractor={(item) => item.date}
+          extraData={`${v2Expanded.join("|")}::${Object.entries(v2DayByDate)
+            .map(([date, value]) => `${date}:${value === null ? "n" : "y"}`)
+            .sort()
+            .join("|")}`}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews
+          keyExtractor={(item, index) => item?.date ?? `report-row-${index}`}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={!v2Query.isLoading ? <Text style={styles.meta}>No reports yet.</Text> : null}
-          renderItem={({ item, index }) => {
-            const isOpen = v2Expanded.includes(item.date);
-            const weekday = formatWeekdayShort(item.date);
-            const prevRow = v2Rows[index + 1] ?? null;
-
-            const problems = item.problems ?? [];
-            const companyStart = item.company_start ?? 0;
-            const companyEnd = item.company_end ?? 0;
-
-            const actionItems = [...problems];
-            if (companyEnd > 0) actionItems.push(`you pay cmpy ${formatMoney(companyEnd)}₪`);
-
-            const problemSummary =
-              actionItems.length > 0
-                ? `Next Actions: ${actionItems.slice(0, 2).join(" - ")}${
-                    actionItems.length > 2 ? ` +${actionItems.length - 2} more` : ""
-                  }`
-                : null;
-
-            const dayInfo = v2DayByDate[item.date] ?? null;
-            const events = (dayInfo?.events ?? []) as any[];
-            const recalculated = dayInfo?.recalculated ?? item.recalculated;
-            const initAfter = getInitInventoryAfter(events);
-            const displayInventoryStart = initAfter
-              ? {
-                  full12: initAfter.full12 ?? item.inventory_start.full12,
-                  empty12: initAfter.empty12 ?? item.inventory_start.empty12,
-                  full48: initAfter.full48 ?? item.inventory_start.full48,
-                  empty48: initAfter.empty48 ?? item.inventory_start.empty48,
-                }
-              : item.inventory_start;
-
-            return (
-              <View>
-                <Pressable
-                  onPress={() => {
-                    setV2Expanded((prev) =>
-                      prev.includes(item.date) ? prev.filter((date) => date !== item.date) : [...prev, item.date]
-                    );
-                  }}
-                  style={({ pressed }) => [
-                    styles.card,
-                    !isOpen && styles.cardCollapsed,
-                    isOpen && styles.cardExpanded,
-                    pressed && styles.cardPressed,
-                  ]}
-                >
-                  <View>
-                    {(() => {
-                      const summary = dayInfo ? summarizeOrderEvents(events) : null;
-                      const alertLines = buildBalanceAlertLines(item, prevRow, events);
-                      const cashEnd = dayInfo?.cash_end ?? item.cash_end ?? 0;
-                      return (
-                        <View>
-                          <View style={styles.collapsedHeaderRow}>
-                            <View style={styles.collapsedLeft}>
-                              <Text style={styles.v2Date}>
-                                {weekday}, {item.date}
-                              </Text>
-
-                              <View style={styles.collapsedList}>
-                                <Text style={styles.collapsedListItem}>
-                                  <Text style={[styles.collapsedListItem, { color: gasColor("12kg") }]}>
-                                    {formatCount(summary?.sold12 ?? 0)}x 12kg
-                                  </Text>
-                                  <Text style={styles.collapsedListItem}> | </Text>
-                                  <Text style={[styles.collapsedListItem, { color: gasColor("48kg") }]}>
-                                    {formatCount(summary?.sold48 ?? 0)}x 48kg
-                                  </Text>
-                                </Text>
-                                <Text style={styles.collapsedListItem}>
-                                  total {formatMoney(summary?.total ?? 0)} | paid {formatMoney(summary?.paid ?? 0)}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.collapsedRight}>
-                              {alertLines.length > 0 ? (
-                                <View style={styles.missingInlineBox}>
-                                  {alertLines.map((line, index) => (
-                                    <Text
-                                      key={`${line.label}-${index}`}
-                                      style={[styles.auditValue, { color: line.color }]}
-                                    >
-                                      {line.label}
-                                    </Text>
-                                  ))}
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                          {dayInfo ? (
-                            (() => {
-                              const resolveSummaryType = (type: string, label: string) => {
-                                if (type.startsWith("order:")) return "order";
-                                    if (type.startsWith("label:")) {
-                                      const name = label.replace(/\s+\d+$/, "");
-                                      if (["Replace", "SellFull", "BuyEmpty"].includes(name)) return "order";
-                                      if (name === "Refill") return "refill";
-                                      if (name === "BuyIron") return "company_buy_iron";
-                                  if (name === "Expense") return "expense";
-                                  if (name === "CashAdjust") return "cash_adjust";
-                                  if (name === "InvAdjust") return "adjust";
-                                  if (name === "LatePay") return "collection_money";
-                                  if (name === "Payout") return "collection_payout";
-                                  if (name === "ReturnEmp") return "collection_empty";
-                                  if (name === "PayCompany") return "company_payment";
-                                  if (name === "Deposit") return "bank_deposit";
-                                }
-                                return type;
-                              };
-                              const entries = summarizeEventTypes(events).map((entry) => ({
-                                ...entry,
-                                color: getEventColor(resolveSummaryType(entry.type, entry.label)),
-                              }));
-                              return (
-                                <View style={styles.collapsedChipsRow}>
-                                  {entries.map((entry) => (
-                                    <View
-                                      key={entry.type}
-                                      style={[
-                                        styles.v2EventSummaryChip,
-                                        styles.collapsedEventChip,
-                                        { backgroundColor: entry.color },
-                                      ]}
-                                    >
-                                      <Text style={[styles.v2EventSummaryText, styles.collapsedEventText]}>
-                                        {entry.label}
-                                      </Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              );
-                            })()
-                          ) : null}
-                        </View>
-                      );
-                    })()}
-                  </View>
-
-                  {isOpen ? (
-                    <>
-                      <View style={styles.expandedDivider} />
-                      {dayInfo ? (
-                        <V2Timeline events={events} formatMoney={formatMoney} formatCount={formatCount} />
-                      ) : (
-                        <Text style={styles.meta}>Loading events...</Text>
-                      )}
-
-                      <View style={styles.rowBetween}>
-                        <View />
-                        <View style={styles.badgeRow}>
-                          {recalculated ? (
-                            <Pressable style={styles.recalcBadge} onPress={() => setSyncInfoDate(item.date)}>
-                              <Text style={styles.recalcBadgeText}>Sync Update</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </View>
-
-                      {(() => {
-                        const summary = dayInfo ? summarizeOrderEvents(events) : null;
-                        const refillSummary = dayInfo ? summarizeRefillEvents(events) : null;
-                        const sold12 = summary?.sold12 ?? 0;
-                        const missing12 = summary?.missing12 ?? 0;
-                        const credit12 = summary?.credit12 ?? 0;
-                        const sold48 = summary?.sold48 ?? 0;
-                        const missing48 = summary?.missing48 ?? 0;
-                        const credit48 = summary?.credit48 ?? 0;
-                        const total = summary?.total ?? 0;
-                        const paid = summary?.paid ?? 0;
-                        const moneyMissing = summary?.missingCash ?? 0;
-                        const moneyCredit = summary?.creditCash ?? 0;
-                        const fmtCount = (value: number) => (value === 0 ? "-" : formatCount(value));
-                        const fmtMoney = (value: number) => (value === 0 ? "-" : formatMoney(value));
-                        const refillBuy12 = refillSummary?.buy12 ?? 0;
-                        const refillRet12 = refillSummary?.ret12 ?? 0;
-                        const refillBuy48 = refillSummary?.buy48 ?? 0;
-                        const refillRet48 = refillSummary?.ret48 ?? 0;
-                        const refillDelta12 = refillBuy12 - refillRet12;
-                        const refillDelta48 = refillBuy48 - refillRet48;
-                        const refillMissing12 = Math.max(refillDelta12, 0);
-                        const refillCredit12 = Math.max(-refillDelta12, 0);
-                        const refillMissing48 = Math.max(refillDelta48, 0);
-                        const refillCredit48 = Math.max(-refillDelta48, 0);
-                        const refillTotal = refillSummary?.total ?? 0;
-                        const refillPaid = refillSummary?.paid ?? 0;
-                        const refillUnpaid = refillSummary?.unpaid ?? 0;
-                        const refillMissingCash = Math.max(refillUnpaid, 0);
-                        const refillCreditCash = Math.max(-refillUnpaid, 0);
-                        const summaryOpen = v2SummaryOpen === item.date;
-                        return (
-                          <Pressable
-                            style={styles.summaryToggleCard}
-                            onPress={() => {
-                              setV2SummaryOpen((prev) => (prev === item.date ? null : item.date));
-                            }}
-                          >
-                            <View style={styles.summaryToggleHeader}>
-                              <Text style={styles.summaryToggleTitle}>Summary</Text>
-                              <Ionicons
-                                name={summaryOpen ? "chevron-up" : "chevron-down"}
-                                size={16}
-                                color="#0a7ea4"
-                              />
-                            </View>
-                            {summaryOpen ? (
-                              <View style={styles.summaryToggleBody}>
-                                <View style={styles.summaryTable}>
-                                  <View style={[styles.summaryRowLine, styles.summaryHeaderRow]}>
-                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>type</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>inst/buy/ttl</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>recv/rtrn/paid</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>msg</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryHeaderCell]}>crdt</Text>
-                                  </View>
-                                  <View style={styles.summaryRowLine}>
-                                    <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("12kg") }]}>
-                                      12kg
-                                    </Text>
-                                    <Text style={styles.summaryCell}>{fmtCount(sold12)}</Text>
-                                    <Text style={styles.summaryCell}>{fmtCount(sold12 - missing12 + credit12)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(missing12)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(credit12)}</Text>
-                                  </View>
-                                  <View style={styles.summaryRowLine}>
-                                    <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("48kg") }]}>
-                                      48kg
-                                    </Text>
-                                    <Text style={styles.summaryCell}>{fmtCount(sold48)}</Text>
-                                    <Text style={styles.summaryCell}>{fmtCount(sold48 - missing48 + credit48)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(missing48)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(credit48)}</Text>
-                                  </View>
-                                  <View style={styles.summaryRowLine}>
-                                    <Text style={[styles.summaryCell, styles.summaryLabelCell]}>money</Text>
-                                    <Text style={styles.summaryCell}>{fmtMoney(total)}</Text>
-                                    <Text style={styles.summaryCell}>{fmtMoney(paid)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtMoney(moneyMissing)}</Text>
-                                    <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtMoney(moneyCredit)}</Text>
-                                  </View>
-                                  {(refillBuy12 > 0 || refillRet12 > 0 || refillBuy48 > 0 || refillRet48 > 0) ? (
-                                    <>
-                                      <View style={styles.summaryRowLine}>
-                                        <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("12kg") }]}>
-                                          rfl 12kg
-                                        </Text>
-                                        <Text style={styles.summaryCell}>{fmtCount(refillBuy12)}</Text>
-                                        <Text style={styles.summaryCell}>{fmtCount(refillRet12)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(refillMissing12)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(refillCredit12)}</Text>
-                                      </View>
-                                      <View style={styles.summaryRowLine}>
-                                        <Text style={[styles.summaryCell, styles.summaryLabelCell, { color: gasColor("48kg") }]}>
-                                          rfl 48kg
-                                        </Text>
-                                        <Text style={styles.summaryCell}>{fmtCount(refillBuy48)}</Text>
-                                        <Text style={styles.summaryCell}>{fmtCount(refillRet48)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtCount(refillMissing48)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtCount(refillCredit48)}</Text>
-                                      </View>
-                                      <View style={styles.summaryRowLine}>
-                                        <Text style={[styles.summaryCell, styles.summaryLabelCell]}>rfl money</Text>
-                                        <Text style={styles.summaryCell}>{fmtMoney(refillTotal)}</Text>
-                                        <Text style={styles.summaryCell}>{fmtMoney(refillPaid)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryMissing]}>{fmtMoney(refillMissingCash)}</Text>
-                                        <Text style={[styles.summaryCell, styles.summaryCredit]}>{fmtMoney(refillCreditCash)}</Text>
-                                      </View>
-                                    </>
-                                  ) : null}
-                                </View>
-
-                                <View style={styles.v2InvCashRow}>
-                                  <View style={styles.v2InvCompactBox}>
-                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg F</Text>
-                                    <View style={styles.v2DeltaBlock}>
-                                      <DeltaArrowRow
-                                        start={displayInventoryStart.full12}
-                                        end={item.inventory_end.full12}
-                                        format={formatCount}
-                                        size="sm"
-                                      />
-                                    </View>
-                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg E</Text>
-                                    <View style={styles.v2DeltaBlock}>
-                                      <DeltaArrowRow
-                                        start={displayInventoryStart.empty12}
-                                        end={item.inventory_end.empty12}
-                                        format={formatCount}
-                                        size="sm"
-                                      />
-                                    </View>
-                                  </View>
-                                  <View style={styles.v2InvCompactBox}>
-                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg F</Text>
-                                    <View style={styles.v2DeltaBlock}>
-                                      <DeltaArrowRow
-                                        start={displayInventoryStart.full48}
-                                        end={item.inventory_end.full48}
-                                        format={formatCount}
-                                        size="sm"
-                                      />
-                                    </View>
-                                    <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg E</Text>
-                                    <View style={styles.v2DeltaBlock}>
-                                      <DeltaArrowRow
-                                        start={displayInventoryStart.empty48}
-                                        end={item.inventory_end.empty48}
-                                        format={formatCount}
-                                        size="sm"
-                                      />
-                                    </View>
-                                  </View>
-                                  <View style={styles.v2InvCompactBox}>
-                                    <Text style={styles.v2InvCompactLabel}>Cash</Text>
-                                    <View style={styles.v2DeltaBlock}>
-                                      <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
-                                    </View>
-                                  </View>
-                                </View>
-                              </View>
-                            ) : null}
-                          </Pressable>
-                        );
-                      })()}
-
-                      <View style={styles.v2DetailsRow}>
-                        <Text style={styles.v2DetailsText}>Hide details</Text>
-                        <Ionicons name="chevron-up" size={16} color="#0a7ea4" />
-                      </View>
-                    </>
-                  ) : null}
-                </Pressable>
-
-              </View>
-            );
-          }}
+          renderItem={renderDayRow}
         />
 
         {/* Sync tooltip */}
@@ -1013,6 +762,23 @@ function V2Timeline({
         const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
         const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
         const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
+        const bankBefore = typeof ev?.bank_before === "number" ? ev.bank_before : null;
+        const bankAfter = typeof ev?.bank_after === "number" ? ev.bank_after : null;
+        const hasBank = typeof bankBefore === "number" && typeof bankAfter === "number";
+        const customerMoneyBefore =
+          typeof ev?.customer_money_before === "number" ? ev.customer_money_before : null;
+        const customerMoneyAfter =
+          typeof ev?.customer_money_after === "number" ? ev.customer_money_after : null;
+        const customer12Before = typeof ev?.customer_12kg_before === "number" ? ev.customer_12kg_before : null;
+        const customer12After = typeof ev?.customer_12kg_after === "number" ? ev.customer_12kg_after : null;
+        const customer48Before = typeof ev?.customer_48kg_before === "number" ? ev.customer_48kg_before : null;
+        const customer48After = typeof ev?.customer_48kg_after === "number" ? ev.customer_48kg_after : null;
+        const companyMoneyBefore = typeof ev?.company_before === "number" ? ev.company_before : null;
+        const companyMoneyAfter = typeof ev?.company_after === "number" ? ev.company_after : null;
+        const company12Before = typeof ev?.company_12kg_before === "number" ? ev.company_12kg_before : null;
+        const company12After = typeof ev?.company_12kg_after === "number" ? ev.company_12kg_after : null;
+        const company48Before = typeof ev?.company_48kg_before === "number" ? ev.company_48kg_before : null;
+        const company48After = typeof ev?.company_48kg_after === "number" ? ev.company_48kg_after : null;
 
         const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
         const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
@@ -1040,6 +806,18 @@ function V2Timeline({
             />
           ) : null;
         const cashBox = renderCashBox("cash");
+        const bankBox =
+          hasBank && bankBefore !== bankAfter ? (
+            <DeltaBox
+              key="bank"
+              label="Bank"
+              before={bankBefore ?? 0}
+              after={bankAfter ?? 0}
+              format={formatMoney}
+              smallDelta
+              compact
+            />
+          ) : null;
 
         const orderFullBefore = is48 ? full48Before : full12Before;
         const orderFullAfter = is48 ? full48After : full12After;
@@ -1099,6 +877,98 @@ function V2Timeline({
           ) : null;
 
         const expandedContent = () => {
+          const relationshipRows: ReactNode[] = [];
+          const customerBoxes: ReactNode[] = [];
+          const companyBoxes: ReactNode[] = [];
+
+          if (
+            customerMoneyBefore != null &&
+            customerMoneyAfter != null &&
+            customerMoneyBefore !== customerMoneyAfter
+          ) {
+            customerBoxes.push(
+              <DeltaBox
+                key="cust-money"
+                label="Cust Money"
+                before={customerMoneyBefore}
+                after={customerMoneyAfter}
+                format={formatMoneySigned}
+                compact
+              />
+            );
+          }
+          if (customer12Before != null && customer12After != null && customer12Before !== customer12After) {
+            customerBoxes.push(
+              <DeltaBox
+                key="cust-12"
+                label="Cust 12kg"
+                before={customer12Before}
+                after={customer12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (customer48Before != null && customer48After != null && customer48Before !== customer48After) {
+            customerBoxes.push(
+              <DeltaBox
+                key="cust-48"
+                label="Cust 48kg"
+                before={customer48Before}
+                after={customer48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          if (customerBoxes.length > 0) {
+            relationshipRows.push(buildDeltaRow(customerBoxes, "rel-customer"));
+          }
+
+          if (companyMoneyBefore != null && companyMoneyAfter != null && companyMoneyBefore !== companyMoneyAfter) {
+            companyBoxes.push(
+              <DeltaBox
+                key="company-money"
+                label="Co Money"
+                before={companyMoneyBefore}
+                after={companyMoneyAfter}
+                format={formatMoneySigned}
+                compact
+              />
+            );
+          }
+          if (company12Before != null && company12After != null && company12Before !== company12After) {
+            companyBoxes.push(
+              <DeltaBox
+                key="company-12"
+                label="Co 12kg"
+                before={company12Before}
+                after={company12After}
+                format={formatCount}
+                accent={gasColor("12kg")}
+                compact
+              />
+            );
+          }
+          if (company48Before != null && company48After != null && company48Before !== company48After) {
+            companyBoxes.push(
+              <DeltaBox
+                key="company-48"
+                label="Co 48kg"
+                before={company48Before}
+                after={company48After}
+                format={formatCount}
+                accent={gasColor("48kg")}
+                compact
+              />
+            );
+          }
+          if (companyBoxes.length > 0) {
+            relationshipRows.push(buildDeltaRow(companyBoxes, "rel-company"));
+          }
+
           const row12Boxes: ReactNode[] = [];
           const row48Boxes: ReactNode[] = [];
           if (full12Before != null && full12After != null) {
@@ -1157,7 +1027,12 @@ function V2Timeline({
 
           if (eventType === "order") {
             if (orderBoxes.length > 0) {
-              return buildDeltaRow(orderBoxes, "order");
+              return (
+                <>
+                  {relationshipRows}
+                  {buildDeltaRow(orderBoxes, "order")}
+                </>
+              );
             }
           }
           if (
@@ -1170,14 +1045,22 @@ function V2Timeline({
               empty48Box ?? placeholderBox("collection-empty-48"),
               cashBox ?? placeholderBox("collection-cash"),
             ];
-            return buildDeltaRow(boxes, "collection");
+            return (
+              <>
+                {relationshipRows}
+                {buildDeltaRow(boxes, "collection")}
+                {bankBox ? buildDeltaRow([bankBox], "collection-bank") : null}
+              </>
+            );
           }
-          const rows = [row12Boxes, row48Boxes, cashRow].filter((row) => row.length > 0);
-          if (rows.length === 0) {
-            return <Text style={styles.eventExpandedEmpty}>No cash/inventory change for this activity.</Text>;
+          const bankRow = bankBox ? [bankBox] : [];
+          const rows = [row12Boxes, row48Boxes, cashRow, bankRow].filter((row) => row.length > 0);
+          if (relationshipRows.length === 0 && rows.length === 0) {
+            return <Text style={styles.eventExpandedEmpty}>No relationship/cash/inventory change for this activity.</Text>;
           }
           return (
             <>
+              {relationshipRows}
               {rows.map((row, idx) => buildDeltaRow(row, `row-${idx}`))}
             </>
           );
@@ -1384,7 +1267,7 @@ const styles = StyleSheet.create({
 
   labeledRowGroupCard: { backgroundColor: "#ffffff" },
 
-  v2Date: { fontSize: FontSizes.lg, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.extrabold },
+  v2Date: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   badgeRow: { flexDirection: "row", gap: Spacing.md, alignItems: "center" },
   pendingBadge: { backgroundColor: "#fde68a", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
   pendingBadgeText: { fontSize: 11, fontWeight: "800", color: "#78350f", fontFamily: FontFamilies.bold },
@@ -1414,15 +1297,38 @@ const styles = StyleSheet.create({
   collapsedSummaryLine: { color: "#0f172a", fontWeight: "700", marginTop: 6, fontFamily: FontFamilies.semibold },
   collapsedHeaderRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: Spacing.lg,
+    gap: Spacing.md,
   },
-  collapsedLeft: { flex: 1, minWidth: 0 },
-  collapsedSubtext: { fontSize: 11, fontWeight: "800", color: "#64748b", marginTop: 2, fontFamily: FontFamilies.bold },
-  collapsedRight: { alignItems: "flex-end", gap: 6, maxWidth: "48%", flexShrink: 1 },
-  collapsedList: { marginTop: 2, gap: 4 },
-  collapsedListItem: { fontSize: FontSizes.sm, fontWeight: "800", color: "#0f172a", flexWrap: "wrap", fontFamily: FontFamilies.bold },
+  alertBar: { width: 4, borderRadius: 999, marginTop: 4, alignSelf: "stretch" },
+  alertBarActive: { backgroundColor: "#dc2626" },
+  alertBarNeutral: { backgroundColor: "#cbd5e1" },
+  collapsedHeaderBody: { flex: 1, minWidth: 0 },
+  collapsedHeaderTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  collapsedNet: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
+  collapsedPillsRow: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 },
+  collapsedPillText: { fontSize: 12, fontWeight: "800", fontFamily: FontFamilies.bold },
+  collapsedPillSeparator: { fontSize: 12, fontWeight: "800", color: "#94a3b8", fontFamily: FontFamilies.bold },
+  collapsedBodyRow: { marginTop: 10, flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  collapsedAlerts: { flex: 3, gap: 4, minWidth: 0 },
+  alertLine: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    color: "#b91c1c",
+    flexShrink: 1,
+    fontFamily: FontFamilies.semibold,
+  },
+  collapsedCashMath: { flex: 1, alignItems: "flex-end", gap: 4, minWidth: 0 },
+  cashLine: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+    textAlign: "right",
+    flexShrink: 1,
+    fontFamily: FontFamilies.semibold,
+  },
   missingInlineBox: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -1486,61 +1392,6 @@ const styles = StyleSheet.create({
   summaryChipValueOk: { color: "#16a34a" },
   summaryChipValueBad: { color: "#b91c1c" },
   summaryRow: { width: "100%", flexDirection: "row", gap: 8 },
-  summaryToggleCard: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-  },
-  summaryToggleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  summaryToggleTitle: { fontSize: 13, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
-  summaryToggleBody: { marginTop: 12 },
-  summaryTable: {
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    overflow: "hidden",
-  },
-  summaryRowLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-  },
-  summaryHeaderRow: {
-    backgroundColor: "#f1f5f9",
-  },
-  summaryCell: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0f172a",
-    fontFamily: FontFamilies.semibold,
-  },
-  summaryHeaderCell: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#475569",
-    textTransform: "uppercase",
-    fontFamily: FontFamilies.bold,
-  },
-  summaryLabelCell: {
-    fontWeight: "800",
-    fontFamily: FontFamilies.bold,
-  },
-  summaryMissing: {
-    color: "#b91c1c",
-  },
-  summaryCredit: {
-    color: "#2563eb",
-  },
-
   deltaRow: { flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "nowrap" },
   deltaEndColumn: { alignItems: "flex-end" },
   deltaValueSm: { fontSize: 14, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
@@ -1711,4 +1562,5 @@ const styles = StyleSheet.create({
   syncClose: { marginTop: 12, alignSelf: "flex-end", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: "#0a7ea4" },
   syncCloseText: { color: "white", fontWeight: "900", fontFamily: FontFamilies.extrabold },
 });
+
 

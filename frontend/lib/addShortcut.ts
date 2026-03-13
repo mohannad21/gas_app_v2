@@ -14,3 +14,4 @@ export function consumeAddShortcut(): AddShortcut | null {
   pendingShortcut = null;
   return current;
 }
+

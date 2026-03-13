@@ -28,3 +28,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("price_catalog", "buy_iron_price")
     op.drop_column("price_catalog", "sell_iron_price")
+

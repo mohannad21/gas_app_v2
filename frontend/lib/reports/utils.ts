@@ -506,3 +506,4 @@ export function getInitInventoryAfter(events: any[]) {
   });
   return Object.keys(out).length ? out : null;
 }
+

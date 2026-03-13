@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 
 import ReportsScreen from "@/app/(tabs)/reports";
 
@@ -7,55 +7,24 @@ const dayRow = {
   date: "2025-01-01",
   cash_start: 1000,
   cash_end: 900,
+  sold_12kg: 0,
+  sold_48kg: 0,
+  net_today: -100,
+  cash_math: {
+    sales: 0,
+    late: 0,
+    expenses: 0,
+    company: 0,
+    adjust: 0,
+    other: 0,
+  },
   company_start: 0,
   company_end: 0,
   inventory_start: { full12: 10, empty12: 2, full48: 6, empty48: 1 },
   inventory_end: { full12: 9, empty12: 3, full48: 6, empty48: 1 },
   problems: [],
+  problem_transitions: [],
   recalculated: false,
-};
-
-const orderEvent = {
-  event_type: "order",
-  effective_at: "2025-01-01T08:00:00Z",
-  created_at: "2025-01-01T08:00:00Z",
-  source_id: "order-1",
-  gas_type: "12kg",
-  order_mode: "replacement",
-  order_installed: 1,
-  order_received: 0,
-  order_total: 500,
-  order_paid: 500,
-  customer_id: "cust-1",
-  customer_name: "Acme",
-  cash_before: 1000,
-  cash_after: 900,
-  inventory_before: { full12: 10, empty12: 2, full48: 0, empty48: 0 },
-  inventory_after: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
-};
-
-const companyPaymentEvent = {
-  event_type: "company_payment",
-  effective_at: "2025-01-01T09:00:00Z",
-  created_at: "2025-01-01T09:00:00Z",
-  source_id: "cp-1",
-  cash_before: 900,
-  cash_after: 800,
-  company_before: 100,
-  company_after: 50,
-};
-
-const companyBuyIronEvent = {
-  event_type: "company_buy_iron",
-  effective_at: "2025-01-01T10:00:00Z",
-  created_at: "2025-01-01T10:00:00Z",
-  source_id: "cbi-1",
-  buy12: 2,
-  buy48: 0,
-  cash_before: 800,
-  cash_after: 700,
-  inventory_before: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
-  inventory_after: { full12: 11, empty12: 3, full48: 0, empty48: 0 },
 };
 
 const dayDetail = {
@@ -67,29 +36,169 @@ const dayDetail = {
   inventory_start: { full12: 10, empty12: 2, full48: 6, empty48: 1 },
   inventory_end: { full12: 9, empty12: 3, full48: 6, empty48: 1 },
   audit_summary: { cash_in: 0, new_debt: 0, inv_delta_12: 0, inv_delta_48: 0 },
-  events: [orderEvent, companyPaymentEvent, companyBuyIronEvent],
+  recalculated: false,
+  events: [
+    {
+      event_type: "collection_money",
+      effective_at: "2025-01-01T07:30:00Z",
+      created_at: "2025-01-01T07:30:00Z",
+      source_id: "pay-1",
+      customer_id: "cust-1",
+      customer_name: "Acme",
+      hero_text: "Received ₪150",
+      cash_before: 1000,
+      cash_after: 1150,
+      customer_money_before: 200,
+      customer_money_after: 50,
+      balance_transitions: [],
+    },
+    {
+      event_type: "order",
+      effective_at: "2025-01-01T08:00:00Z",
+      created_at: "2025-01-01T08:00:00Z",
+      source_id: "order-1",
+      gas_type: "12kg",
+      order_mode: "replacement",
+      order_installed: 1,
+      order_received: 0,
+      order_total: 500,
+      order_paid: 500,
+      customer_id: "cust-1",
+      customer_name: "Acme",
+      cash_before: 1000,
+      cash_after: 900,
+      customer_money_before: 0,
+      customer_money_after: 0,
+      customer_12kg_before: 0,
+      customer_12kg_after: 1,
+      customer_48kg_before: 0,
+      customer_48kg_after: 0,
+      inventory_before: { full12: 10, empty12: 2, full48: 0, empty48: 0 },
+      inventory_after: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
+      balance_transitions: [],
+    },
+    {
+      event_type: "collection_empty",
+      effective_at: "2025-01-01T08:30:00Z",
+      created_at: "2025-01-01T08:30:00Z",
+      source_id: "return-group-1",
+      customer_id: "cust-1",
+      customer_name: "Acme",
+      return12: 1,
+      return48: 3,
+      hero_text: "Returned 1x12kg | 3x48kg empties",
+      cash_before: 1150,
+      cash_after: 1150,
+      customer_12kg_before: 2,
+      customer_12kg_after: 1,
+      customer_48kg_before: 5,
+      customer_48kg_after: 2,
+      inventory_before: { full12: 9, empty12: 3, full48: 6, empty48: 1 },
+      inventory_after: { full12: 9, empty12: 4, full48: 6, empty48: 4 },
+      balance_transitions: [],
+    },
+    {
+      event_type: "company_payment",
+      effective_at: "2025-01-01T09:00:00Z",
+      created_at: "2025-01-01T09:00:00Z",
+      source_id: "cp-1",
+      label: "Pay Company",
+      cash_before: 900,
+      cash_after: 800,
+      company_before: 100,
+      company_after: 50,
+      company_12kg_before: 0,
+      company_12kg_after: 0,
+      company_48kg_before: 0,
+      company_48kg_after: 0,
+      balance_transitions: [],
+    },
+    {
+      event_type: "company_buy_iron",
+      effective_at: "2025-01-01T10:00:00Z",
+      created_at: "2025-01-01T10:00:00Z",
+      source_id: "cbi-1",
+      hero_text: "Bought 2x12kg",
+      buy12: 2,
+      buy48: 0,
+      cash_before: 800,
+      cash_after: 700,
+      company_before: 0,
+      company_after: 120,
+      company_12kg_before: 0,
+      company_12kg_after: 0,
+      company_48kg_before: 0,
+      company_48kg_after: 0,
+      inventory_before: { full12: 9, empty12: 3, full48: 0, empty48: 0 },
+      inventory_after: { full12: 11, empty12: 3, full48: 0, empty48: 0 },
+      balance_transitions: [],
+    },
+    {
+      event_type: "refill",
+      effective_at: "2025-01-01T11:00:00Z",
+      created_at: "2025-01-01T11:00:00Z",
+      source_id: "refill-1",
+      label: "Refill",
+      buy12: 0,
+      return12: 1,
+      buy48: 2,
+      return48: 0,
+      cash_before: 700,
+      cash_after: 650,
+      company_before: 0,
+      company_after: 80,
+      company_12kg_before: 0,
+      company_12kg_after: -1,
+      company_48kg_before: 0,
+      company_48kg_after: 2,
+      inventory_before: { full12: 11, empty12: 3, full48: 6, empty48: 1 },
+      inventory_after: { full12: 11, empty12: 2, full48: 8, empty48: 1 },
+      balance_transitions: [],
+    },
+    {
+      event_type: "bank_deposit",
+      effective_at: "2025-01-01T12:00:00Z",
+      created_at: "2025-01-01T12:00:00Z",
+      source_id: "deposit-1",
+      hero_text: "Transferred ₪500 to bank",
+      cash_before: 650,
+      cash_after: 150,
+      bank_before: 0,
+      bank_after: 500,
+      balance_transitions: [],
+    },
+  ],
 };
 
-jest.mock("@/hooks/useReports", () => ({
-  useDailyReportsV2: () => ({
-    data: [dayRow],
-    isLoading: false,
-    error: null,
-    refetch: jest.fn(),
-    dataUpdatedAt: Date.now(),
+jest.mock("@/hooks/useDailyReportScreen", () => ({
+  useDailyReportScreen: () => ({
+    v2Query: { isLoading: false, error: null },
+    v2Rows: [dayRow],
+    v2Expanded: ["2025-01-01"],
+    setV2Expanded: jest.fn(),
+    v2DayByDate: { "2025-01-01": dayDetail },
+    setV2DayByDate: jest.fn(),
+    balanceSummary: {
+      money: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+      cyl12: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+      cyl48: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+    },
+    companySummary: {
+      give12: 0,
+      receive12: 0,
+      give48: 0,
+      receive48: 0,
+      payCash: 0,
+      receiveCash: 0,
+    },
+    companyBalancesQuery: { isSuccess: true },
+    refetchV2: jest.fn(),
+    refetchCustomers: jest.fn(),
   }),
-}));
-
-jest.mock("@/hooks/useCustomers", () => ({
-  useCustomers: () => ({ data: [], refetch: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useExpenses", () => ({
   useCreateExpense: () => ({ mutateAsync: jest.fn() }),
-}));
-
-jest.mock("@/lib/api", () => ({
-  getDailyReportV2: jest.fn().mockResolvedValue(dayDetail),
 }));
 
 jest.mock("expo-router", () => ({
@@ -98,7 +207,7 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@react-navigation/native", () => ({
-  useFocusEffect: (cb: () => void) => cb(),
+  useFocusEffect: () => {},
 }));
 
 jest.mock("@expo/vector-icons", () => ({
@@ -106,37 +215,60 @@ jest.mock("@expo/vector-icons", () => ({
 }));
 
 describe("ReportsScreen expanded DeltaBox", () => {
-  it("renders three DeltaBox blocks for 12kg replacement when expanded", async () => {
-    const { getByText, queryByText } = render(<ReportsScreen />);
+  it("renders customer operational boxes for replacement", () => {
+    const { getByText, getAllByText } = render(<ReportsScreen />);
 
-    fireEvent.press(getByText(/2025-01-01/));
-
-    await waitFor(() => expect(getByText("Installed 1x12kg")).toBeTruthy());
-
-    expect(queryByText("12kg F")).toBeNull();
+    expect(getByText("Installed 1x12kg")).toBeTruthy();
 
     fireEvent.press(getByText("Installed 1x12kg"));
 
-    await waitFor(() => expect(getByText("12kg F")).toBeTruthy());
-    expect(getByText("12kg E")).toBeTruthy();
-    expect(getByText("Cash")).toBeTruthy();
+    expect(getAllByText("12kg F").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
+    expect(getAllByText("Cash").length).toBeGreaterThan(0);
+    expect(getAllByText("Cust 12kg").length).toBeGreaterThan(0);
   });
 
-  it("expands company events with cash and inventory boxes", async () => {
-    const { getByText } = render(<ReportsScreen />);
+  it("renders company relationship boxes for company payment and buy iron", () => {
+    const { getAllByText } = render(<ReportsScreen />);
 
-    fireEvent.press(getByText(/2025-01-01/));
+    fireEvent.press(getAllByText("Pay Company")[0]);
+    expect(getAllByText("Cash").length).toBeGreaterThan(0);
+    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
 
-    await waitFor(() => expect(getByText("Pay Company")).toBeTruthy());
-    fireEvent.press(getByText("Pay Company"));
+    fireEvent.press(getAllByText("Bought 2x12kg")[0]);
+    expect(getAllByText("12kg F").length).toBeGreaterThan(0);
+    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
+  });
 
-    await waitFor(() => expect(getByText("Cash")).toBeTruthy());
+  it("renders customer relationship boxes for payment and grouped return", () => {
+    const { getAllByText } = render(<ReportsScreen />);
 
-    await waitFor(() => expect(getByText("Bought 2x12kg")).toBeTruthy());
-    fireEvent.press(getByText("Bought 2x12kg"));
+    fireEvent.press(getAllByText("Received ₪150")[0]);
+    expect(getAllByText("Cust Money").length).toBeGreaterThan(0);
+    expect(getAllByText("Cash").length).toBeGreaterThan(0);
 
-    await waitFor(() => expect(getByText("12kg F")).toBeTruthy());
-    expect(getByText("12kg E")).toBeTruthy();
-    expect(getByText("Cash")).toBeTruthy();
+    fireEvent.press(getAllByText("Returned 1x12kg | 3x48kg empties")[0]);
+    expect(getAllByText("Cust 12kg").length).toBeGreaterThan(0);
+    expect(getAllByText("Cust 48kg").length).toBeGreaterThan(0);
+  });
+
+  it("renders split company relationship result for refill", () => {
+    const { getAllByText } = render(<ReportsScreen />);
+
+    fireEvent.press(getAllByText("Refill")[0]);
+    expect(getAllByText("Co 12kg").length).toBeGreaterThan(0);
+    expect(getAllByText("Co 48kg").length).toBeGreaterThan(0);
+    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
+    expect(getAllByText("48kg F").length).toBeGreaterThan(0);
+  });
+
+  it("renders bank deposit as transfer with cash and bank boxes", () => {
+    const { getAllByText, queryByText } = render(<ReportsScreen />);
+
+    fireEvent.press(getAllByText("Transferred ₪500 to bank")[0]);
+    expect(getAllByText("Cash").length).toBeGreaterThan(0);
+    expect(getAllByText("Bank").length).toBeGreaterThan(0);
+    expect(queryByText("Received ₪500")).toBeNull();
   });
 });

@@ -17,10 +17,10 @@ import {
 } from "react-native";
 
 import { gasColor } from "@/constants/gas";
+import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
 import {
   calcCompanyCylinderLedgerDelta,
-  calcCompanyCylinderUiResult,
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
 import {
@@ -31,7 +31,7 @@ import {
   useUpdateRefill,
 } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
-import { useDailyReportsV2 } from "@/hooks/useReports";
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 
 type SavedRefillEntry = {
   id: string;
@@ -120,6 +120,71 @@ function sanitizeCountInput(value: string) {
   return String(Math.max(0, parsed));
 }
 
+function RemainingExtraChips({
+  lines,
+  remainingText,
+  extraText,
+  unavailable = false,
+}: {
+  lines?: string[] | null;
+  remainingText?: string | null;
+  extraText?: string | null;
+  unavailable?: boolean;
+}) {
+  if (unavailable) {
+    return (
+      <View style={styles.remainingExtraStack}>
+        <View style={[styles.statusChip, styles.statusChipRemaining]}>
+          <Text style={[styles.statusChipText, styles.statusChipRemainingText]} numberOfLines={1}>
+            Preview unavailable
+          </Text>
+        </View>
+      </View>
+    );
+  }
+  // Fallback-only adapter for older props. Active previews should pass structured `lines`.
+  const parseLegacyLineFallback = (value?: string | null) => {
+    if (!value) return null;
+    const moneyMatch = value.match(/(\d+)/);
+    const cylMatch = value.match(/(\d+)x(12kg|48kg)\s+(empty|full)/i);
+    if (cylMatch) {
+      const qty = Number(cylMatch[1] ?? 0);
+      const component = cylMatch[2] === "12kg" ? "cyl_12" : "cyl_48";
+      const after = cylMatch[3]?.toLowerCase() === "full" ? qty : -qty;
+      return formatBalanceTransitions([makeBalanceTransition("company", component, after, after)], {
+        mode: "current",
+      });
+    }
+    if (moneyMatch) {
+      const amount = Number(moneyMatch[1] ?? 0);
+      const after = value.toLowerCase().includes("company owes") ? -amount : amount;
+      return formatBalanceTransitions([makeBalanceTransition("company", "money", after, after)], {
+        mode: "current",
+        formatMoney,
+      });
+    }
+    return [value];
+  };
+  const visibleLines =
+    Array.isArray(lines) && lines.length > 0
+      ? lines.filter(Boolean)
+      : [...(parseLegacyLineFallback(remainingText) ?? []), ...(parseLegacyLineFallback(extraText) ?? [])];
+  if (visibleLines.length === 0) {
+    return <Text style={styles.settledText}>Settled</Text>;
+  }
+  return (
+    <View style={styles.remainingExtraStack}>
+      {visibleLines.map((line, index) => (
+        <View key={`${line}-${index}`} style={[styles.statusChip, styles.statusChipRemaining]}>
+          <Text style={[styles.statusChipText, styles.statusChipRemainingText]} numberOfLines={1}>
+            {line}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function RefillForm({
   visible,
   onClose,
@@ -146,16 +211,7 @@ export function RefillForm({
   const pricesQuery = usePriceSettings();
   const [date, setDate] = useState(getNowDate());
   const [time, setTime] = useState(getNowTime());
-  const v2From = useMemo(() => {
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
-    const year = start.getFullYear();
-    const month = String(start.getMonth() + 1).padStart(2, "0");
-    const day = String(start.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }, []);
-  const v2To = getNowDate();
-  const reportsQuery = useDailyReportsV2(v2From, v2To);
+  const companyBalancesQuery = useCompanyBalances();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [buy12, setBuy12] = useState("");
@@ -331,22 +387,13 @@ export function RefillForm({
   const ret48Value = Number(ret48) || 0;
   const totalBuy12 = buy12Value;
   const totalBuy48 = buy48Value;
-  const rawCylinderUi12 = isBuyMode ? 0 : calcCompanyCylinderUiResult(buy12Value, ret12Value);
-  const rawCylinderUi48 = isBuyMode ? 0 : calcCompanyCylinderUiResult(buy48Value, ret48Value);
-  const shortEmpties12 = Math.max(rawCylinderUi12, 0);
-  const shortEmpties48 = Math.max(rawCylinderUi48, 0);
-  const companyCredit12 = Math.max(calcCompanyCylinderLedgerDelta(buy12Value, ret12Value), 0);
-  const companyCredit48 = Math.max(calcCompanyCylinderLedgerDelta(buy48Value, ret48Value), 0);
 
-  const reportRows = useMemo(() => {
-    const rows = Array.isArray(reportsQuery.data) ? reportsQuery.data : [];
-    return [...rows].sort((a, b) => String(b?.date ?? "").localeCompare(String(a?.date ?? "")));
-  }, [reportsQuery.data]);
-  const reportRow = reportRows[0];
+  const companyBalances = companyBalancesQuery.data ?? null;
+  const companyBalanceReady = companyBalancesQuery.isSuccess;
   const originalMoneyResult = editEntry
     ? calcMoneyUiResult(Number(refillDetails?.total_cost ?? 0), Number(refillDetails?.paid_now ?? 0))
     : 0;
-  const baseMoneyNet = Number(reportRow?.company_end ?? 0) - originalMoneyResult;
+  const baseMoneyNet = Number(companyBalances?.company_money ?? 0) - originalMoneyResult;
   const line12Cost = totalBuy12 * price12Value;
   const line48Cost = totalBuy48 * price48Value;
   const ironLine12Cost = isBuyMode ? totalBuy12 * ironPrice12Value : 0;
@@ -359,9 +406,8 @@ export function RefillForm({
 
   const paidNowValue = Number(paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
-  const moneyResultIsOutflow = moneyResult > 0;
-  const moneyResultLabel =
-    moneyResult > 0 ? "You owe company (debt)" : moneyResult < 0 ? "Company owes you (credit)" : "Settled";
+  const remainingPay = Math.max(totalCost - paidNowValue, 0);
+  const extraPaid = Math.max(paidNowValue - totalCost, 0);
 
   const availableEmpty12 = base?.empty12 ?? 0;
   const availableEmpty48 = base?.empty48 ?? 0;
@@ -377,8 +423,8 @@ export function RefillForm({
   const delta48 = isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy48Value, ret48Value);
 
   // Recalculate net company balance for display purposes, excluding new shells from the 'buy' side that affect company debt
-  const baseCompanyNet12 = Number(reportRow?.company_12kg_end ?? 0);
-  const baseCompanyNet48 = Number(reportRow?.company_48kg_end ?? 0);
+  const baseCompanyNet12 = Number(companyBalances?.company_cyl_12 ?? 0);
+  const baseCompanyNet48 = Number(companyBalances?.company_cyl_48 ?? 0);
   const adjustedBase12 = baseCompanyNet12 - originalDelta12;
   const adjustedBase48 = baseCompanyNet48 - originalDelta48;
   const owedReturn12 = Math.max(-adjustedBase12, 0);
@@ -391,35 +437,50 @@ export function RefillForm({
   const liveReceive48 = Math.max(liveCompanyNet48, 0);
   const liveGive12 = Math.max(-liveCompanyNet12, 0);
   const liveGive48 = Math.max(-liveCompanyNet48, 0);
+  const companyMoneyTransitionLines = formatBalanceTransitions(
+    [makeBalanceTransition("company", "money", baseMoneyNet, liveMoneyNet)],
+    {
+      mode: "transition",
+      collapseAllSettled: true,
+      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      formatMoney,
+    }
+  );
+  const company12TransitionLines = formatBalanceTransitions(
+    [makeBalanceTransition("company", "cyl_12", adjustedBase12, liveCompanyNet12)],
+    {
+      mode: "transition",
+      collapseAllSettled: true,
+      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      formatMoney,
+    }
+  );
+  const company48TransitionLines = formatBalanceTransitions(
+    [makeBalanceTransition("company", "cyl_48", adjustedBase48, liveCompanyNet48)],
+    {
+      mode: "transition",
+      collapseAllSettled: true,
+      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      formatMoney,
+    }
+  );
 
   const balanceAlertLines = useMemo(() => {
-    const lines: string[] = [];
     if (isReturnMode) {
-      if (liveGive12 > 0) lines.push(`You return to company ${formatCount(liveGive12)} empty 12kg`);
-      if (liveGive48 > 0) lines.push(`You return to company ${formatCount(liveGive48)} empty 48kg`);
-      return lines;
+      return [...company12TransitionLines, ...company48TransitionLines].filter(
+        (line) => line !== "All settled ✅"
+      );
     }
     if (isBuyMode) {
-      if (liveMoneyGive > 0) lines.push(`You pay company ${formatMoney(liveMoneyGive)}₪`);
-      if (liveMoneyReceive > 0) lines.push(`Company pays you ${formatMoney(liveMoneyReceive)}₪`);
-      return lines;
+      return companyMoneyTransitionLines;
     }
-    if (liveMoneyGive > 0) lines.push(`You pay company ${formatMoney(liveMoneyGive)}₪`);
-    if (liveMoneyReceive > 0) lines.push(`Company pays you ${formatMoney(liveMoneyReceive)}₪`);
-    if (liveGive12 > 0) lines.push(`You return to company ${formatCount(liveGive12)} empty 12kg`);
-    if (liveReceive12 > 0) lines.push(`Company gives you ${formatCount(liveReceive12)} full 12kg`);
-    if (liveGive48 > 0) lines.push(`You return to company ${formatCount(liveGive48)} empty 48kg`);
-    if (liveReceive48 > 0) lines.push(`Company gives you ${formatCount(liveReceive48)} full 48kg`);
-    return lines;
+    return [...companyMoneyTransitionLines, ...company12TransitionLines, ...company48TransitionLines];
   }, [
+    company12TransitionLines,
+    company48TransitionLines,
+    companyMoneyTransitionLines,
     isBuyMode,
     isReturnMode,
-    liveGive12,
-    liveGive48,
-    liveMoneyGive,
-    liveMoneyReceive,
-    liveReceive12,
-    liveReceive48,
   ]);
 
   useEffect(() => {
@@ -451,6 +512,7 @@ export function RefillForm({
   });
 
   const disableSave =
+    !companyBalanceReady ||
     inventoryNotInitialized ||
     !base ||
     return12Invalid ||
@@ -761,7 +823,13 @@ export function RefillForm({
                 </View>
               </View>
 
-              {balanceAlertLines.length > 0 ? (
+              {!companyBalanceReady ? (
+                <View style={styles.alertBox}>
+                  <Text style={styles.alertText}>
+                    Current company balances unavailable. Preview is disabled until balances load.
+                  </Text>
+                </View>
+              ) : balanceAlertLines.length > 0 ? (
                 <View style={styles.alertBox}>
                   {balanceAlertLines.map((line) => (
                     <Text key={line} style={styles.alertText}>
@@ -876,16 +944,11 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Short empties (you owe)</Text>
-                        <Text style={styles.helperText}>Shell credit at company: {companyCredit12}</Text>
+                        <Text style={styles.fieldName}>Remaining / Extra</Text>
+                        <Text style={styles.helperText}> </Text>
                       </View>
                       <View style={styles.stepperSpacer} />
-                      <TextInput
-                        style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                        value={shortEmpties12.toString()}
-                        editable={false}
-                        placeholder="0"
-                      />
+                      <RemainingExtraChips lines={company12TransitionLines} unavailable={!companyBalanceReady} />
                     </View>
                   </View>
                   {return12Invalid && !disableReturn12 ? (
@@ -1063,16 +1126,11 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Short empties (you owe)</Text>
-                        <Text style={styles.helperText}>Shell credit at company: {companyCredit48}</Text>
+                        <Text style={styles.fieldName}>Remaining / Extra</Text>
+                        <Text style={styles.helperText}> </Text>
                       </View>
                       <View style={styles.stepperSpacer} />
-                      <TextInput
-                        style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                        value={shortEmpties48.toString()}
-                        editable={false}
-                        placeholder="0"
-                      />
+                      <RemainingExtraChips lines={company48TransitionLines} unavailable={!companyBalanceReady} />
                     </View>
                   </View>
                   {return48Invalid && !disableReturn48 ? (
@@ -1427,22 +1485,16 @@ export function RefillForm({
                     </View>
                     <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
                       <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>{moneyResultLabel}</Text>
+                        <Text style={styles.fieldName}>Remaining / Extra</Text>
                       </View>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          styles.moneyInput,
-                          styles.inputReadOnly,
-                          moneyResultIsOutflow
-                            ? styles.negativeValue
-                            : moneyResult < 0
-                              ? styles.positiveValue
-                              : null,
-                        ]}
-                        value={moneyResult.toFixed(0)}
-                        editable={false}
-                        placeholder="0"
+                      <RemainingExtraChips
+                        unavailable={!companyBalanceReady}
+                        remainingText={
+                          remainingPay > 0 ? `Remaining: pay company ${formatMoney(remainingPay)}â‚ª` : null
+                        }
+                        extraText={
+                          extraPaid > 0 ? `Extra: company owes ${formatMoney(extraPaid)}â‚ª` : null
+                        }
                       />
                     </View>
                   </View>
@@ -2234,6 +2286,38 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontWeight: "700",
   },
+  remainingExtraStack: {
+    gap: 6,
+  },
+  statusChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  statusChipRemaining: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#fca5a5",
+  },
+  statusChipRemainingText: {
+    color: "#b91c1c",
+  },
+  statusChipExtra: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#86efac",
+  },
+  statusChipExtraText: {
+    color: "#166534",
+  },
+  settledText: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
   sectionDisabled: {
     opacity: 0.45,
   },
@@ -2448,3 +2532,4 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 });
+

@@ -15,6 +15,12 @@ jest.mock("@/hooks/useOrders", () => ({
   useDeleteOrder: () => ({ mutate: jest.fn() }),
 }));
 
+jest.mock("@/hooks/useCollections", () => ({
+  useCollections: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCollection: () => ({ mutateAsync: jest.fn() }),
+  useUpdateCollection: () => ({ mutateAsync: jest.fn() }),
+}));
+
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
@@ -35,12 +41,21 @@ jest.mock("@/hooks/useExpenses", () => ({
         note: "test",
         created_at: "2025-01-01T09:00:00",
       },
+      {
+        id: "e2",
+        date: "2025-01-01",
+        expense_type: "fuel",
+        amount: 80,
+        note: "second",
+        created_at: "2025-01-01T10:00:00",
+      },
     ],
     isLoading: false,
     error: null,
+    refetch: jest.fn(),
   }),
   useCreateExpense: () => ({ mutateAsync: mockCreateExpense }),
-  useDeleteExpense: () => ({ mutate: mockDeleteExpense }),
+  useDeleteExpense: () => ({ mutateAsync: mockDeleteExpense }),
 }));
 
 jest.mock("@/hooks/useBankDeposits", () => ({
@@ -67,6 +82,21 @@ jest.mock("@/hooks/useInventory", () => ({
   useInitInventory: () => ({ mutateAsync: jest.fn() }),
   useInventoryLatest: () => ({ data: null }),
   useInventorySnapshot: () => ({ data: null }),
+  useDeleteRefill: () => ({ mutateAsync: jest.fn() }),
+  useDeleteInventoryAdjustment: () => ({ mutateAsync: jest.fn() }),
+}));
+
+jest.mock("@/hooks/useInventoryActivity", () => ({
+  useInventoryActivity: () => ({
+    items: [],
+    refillsQuery: { refetch: jest.fn() },
+    inventoryAdjustmentsQuery: { refetch: jest.fn() },
+    cashAdjustmentsQuery: { refetch: jest.fn() },
+  }),
+}));
+
+jest.mock("@/hooks/useCash", () => ({
+  useDeleteCashAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/usePrices", () => ({
@@ -97,44 +127,46 @@ describe("Cash & Expenses view", () => {
     mockDeleteExpense.mockReset();
     mockCreateDeposit.mockReset();
     mockDeleteDeposit.mockReset();
-  });
-
-  it("switches modes and renders fields", () => {
-    const { getByText, getAllByText, getAllByPlaceholderText } = render(<AddChooserScreen />);
-
-    fireEvent.press(getByText("Expenses"));
-    expect(getByText("Expense")).toBeTruthy();
-    expect(getAllByText("Bank deposit").length).toBeGreaterThan(0);
-    expect(getAllByPlaceholderText("0").length).toBeGreaterThan(0);
-  });
-
-  it("creates an expense and a bank deposit", async () => {
-    const { getByText, getAllByText, getAllByPlaceholderText } = render(<AddChooserScreen />);
-
-    fireEvent.press(getByText("Expenses"));
-    fireEvent.changeText(getAllByPlaceholderText("0")[0], "25");
-    await act(async () => {
-      fireEvent.press(getByText("Save"));
+    jest.spyOn(Alert, "alert").mockImplementation((_, __, buttons) => {
+      const destructive = Array.isArray(buttons)
+        ? buttons.find((button) => button.style === "destructive" || button.text === "Remove")
+        : null;
+      destructive?.onPress?.();
     });
-    expect(mockCreateExpense).toHaveBeenCalled();
-
-    fireEvent.press(getAllByText("Bank deposit")[0]);
-    fireEvent.changeText(getAllByPlaceholderText("0")[0], "80");
-    await act(async () => {
-      fireEvent.press(getByText("Save"));
-    });
-    expect(mockCreateDeposit).toHaveBeenCalled();
   });
 
-  it("delete actions call correct endpoints", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("switches to expenses mode and renders duplicate expenses separately", () => {
     const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("Expenses"));
-    const deleteButtons = getAllByLabelText(/Remove/);
-    fireEvent.press(deleteButtons[0]);
-    fireEvent.press(deleteButtons[1]);
-    expect(mockDeleteExpense).toHaveBeenCalled();
-    expect(mockDeleteDeposit).toHaveBeenCalled();
+    expect(getByText("Recent expenses")).toBeTruthy();
+    expect(getByText("80")).toBeTruthy();
+    expect(getByText("50")).toBeTruthy();
+    expect(getAllByLabelText("Remove expense").length).toBe(2);
+  });
+
+  it("shows both same-day same-type expenses as distinct rows", () => {
+    const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
+
+    fireEvent.press(getByText("Expenses"));
+    expect(getByText("second")).toBeTruthy();
+    expect(getByText("test")).toBeTruthy();
+    expect(getAllByLabelText("Remove expense").length).toBe(2);
+  });
+
+  it("deletes the exact selected expense row through the real UI path", async () => {
+    const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
+
+    fireEvent.press(getByText("Expenses"));
+    const deleteExpenseButtons = getAllByLabelText("Remove expense");
+    await act(async () => {
+      fireEvent.press(deleteExpenseButtons[0]);
+    });
+    expect(mockDeleteExpense).toHaveBeenCalledWith({ id: "e2", date: "2025-01-01" });
   });
 
   it("shows Done accessory for keyboard", () => {

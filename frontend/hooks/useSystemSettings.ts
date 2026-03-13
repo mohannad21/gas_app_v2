@@ -44,3 +44,4 @@ export function useInitializeSystem(options?: { showToast?: boolean }) {
     },
   });
 }
+

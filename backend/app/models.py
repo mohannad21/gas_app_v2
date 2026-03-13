@@ -286,3 +286,4 @@ class SystemSettings(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+

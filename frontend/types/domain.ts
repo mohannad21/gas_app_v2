@@ -437,10 +437,52 @@ export const ReportInventoryStateSchema = z.object({
 });
 export type ReportInventoryState = z.infer<typeof ReportInventoryStateSchema>;
 
+export const DailyReportV2CashMathSchema = z.object({
+  sales: z.number(),
+  late: z.number(),
+  expenses: z.number(),
+  company: z.number(),
+  adjust: z.number(),
+  other: z.number().optional(),
+});
+export type DailyReportV2CashMath = z.infer<typeof DailyReportV2CashMathSchema>;
+
+export const DailyReportV2MathCustomersSchema = z.object({
+  sales_cash: z.number(),
+  paid_earlier: z.number(),
+  extra_paid: z.number(),
+});
+export type DailyReportV2MathCustomers = z.infer<typeof DailyReportV2MathCustomersSchema>;
+
+export const DailyReportV2MathCompanySchema = z.object({
+  paid_company: z.number(),
+  extra_company: z.number(),
+});
+export type DailyReportV2MathCompany = z.infer<typeof DailyReportV2MathCompanySchema>;
+
+export const DailyReportV2MathResultSchema = z.object({
+  expenses: z.number(),
+  adjustments: z.number(),
+  pocket_delta: z.number(),
+});
+export type DailyReportV2MathResult = z.infer<typeof DailyReportV2MathResultSchema>;
+
+export const DailyReportV2MathSchema = z.object({
+  customers: DailyReportV2MathCustomersSchema,
+  company: DailyReportV2MathCompanySchema,
+  result: DailyReportV2MathResultSchema,
+});
+export type DailyReportV2Math = z.infer<typeof DailyReportV2MathSchema>;
+
 export const DailyReportV2CardSchema = z.object({
   date: z.string(),
   cash_start: z.number(),
   cash_end: z.number(),
+  sold_12kg: z.number(),
+  sold_48kg: z.number(),
+  net_today: z.number(),
+  cash_math: DailyReportV2CashMathSchema,
+  math: DailyReportV2MathSchema.optional(),
   company_start: z.number().optional(),
   company_end: z.number().optional(),
   company_12kg_start: z.number().optional(),
@@ -459,15 +501,22 @@ export const DailyReportV2CardSchema = z.object({
   company_48kg_give_end: z.number().optional(),
   company_48kg_receive_start: z.number().optional(),
   company_48kg_receive_end: z.number().optional(),
-  customer_money_receivable: z.number().optional(),
-  customer_money_payable: z.number().optional(),
-  customer_12kg_receivable: z.number().optional(),
-  customer_12kg_payable: z.number().optional(),
-  customer_48kg_receivable: z.number().optional(),
-  customer_48kg_payable: z.number().optional(),
   inventory_start: ReportInventoryTotalsSchema,
   inventory_end: ReportInventoryTotalsSchema,
-  problems: z.array(z.string()).nullish(),
+  problems: z.array(z.string()),
+  problem_transitions: z
+    .array(
+      z.object({
+        scope: z.enum(["customer", "company"]),
+        component: z.enum(["money", "cyl_12", "cyl_48"]),
+        before: z.number(),
+        after: z.number(),
+        display_name: z.string().nullish(),
+        display_description: z.string().nullish(),
+      })
+    )
+    .optional()
+    .default([]),
   recalculated: z.boolean().optional(),
 });
 export type DailyReportV2Card = z.infer<typeof DailyReportV2CardSchema>;
@@ -540,9 +589,16 @@ export const ActivityNoteSchema = z.object({
   kind: z.enum(["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"]),
   direction: z.enum([
     "customer_pays_you",
+    "you_pay_customer",
+    "you_paid_customer_earlier",
+    "customer_paid_earlier",
+    "customer_extra_paid",
     "you_pay_company",
+    "you_paid_earlier",
+    "company_pays_you",
     "customer_returns_you",
     "you_return_company",
+    "you_returned_earlier",
     "you_deliver_customer",
     "company_delivers_you",
   ]),
@@ -550,6 +606,17 @@ export const ActivityNoteSchema = z.object({
   remaining_before: z.number().nullish(),
 });
 export type ActivityNote = z.infer<typeof ActivityNoteSchema>;
+
+export const BalanceTransitionSchema = z.object({
+  scope: z.enum(["customer", "company"]),
+  component: z.enum(["money", "cyl_12", "cyl_48"]),
+  before: z.number(),
+  after: z.number(),
+  display_name: z.string().nullish(),
+  display_description: z.string().nullish(),
+  intent: z.string().nullish(),
+});
+export type BalanceTransition = z.infer<typeof BalanceTransitionSchema>;
 
 export const DailyReportV2EventSchema = z.object({
   event_type: z.string(),
@@ -616,8 +683,14 @@ export const DailyReportV2EventSchema = z.object({
     unit_price_buy_48: z.number().nullish(),
     cash_before: z.number(),
     cash_after: z.number(),
+    bank_before: z.number().nullish(),
+    bank_after: z.number().nullish(),
     customer_money_before: z.number().nullish(),
     customer_money_after: z.number().nullish(),
+    customer_12kg_before: z.number().nullish(),
+    customer_12kg_after: z.number().nullish(),
+    customer_48kg_before: z.number().nullish(),
+    customer_48kg_after: z.number().nullish(),
     company_before: z.number().nullish(),
     company_after: z.number().nullish(),
   company_12kg_before: z.number().nullish(),
@@ -626,6 +699,7 @@ export const DailyReportV2EventSchema = z.object({
   company_48kg_after: z.number().nullish(),
   inventory_before: ReportInventoryStateSchema.nullish(),
   inventory_after: ReportInventoryStateSchema.nullish(),
+  balance_transitions: z.array(BalanceTransitionSchema).nullish(),
 });
 export type DailyReportV2Event = z.infer<typeof DailyReportV2EventSchema>;
 
@@ -659,12 +733,6 @@ export const DailyReportV2DaySchema = z.object({
   company_48kg_give_end: z.number().optional(),
   company_48kg_receive_start: z.number().optional(),
   company_48kg_receive_end: z.number().optional(),
-  customer_money_receivable: z.number().optional(),
-  customer_money_payable: z.number().optional(),
-  customer_12kg_receivable: z.number().optional(),
-  customer_12kg_payable: z.number().optional(),
-  customer_48kg_receivable: z.number().optional(),
-  customer_48kg_payable: z.number().optional(),
   inventory_start: ReportInventoryTotalsSchema,
   inventory_end: ReportInventoryTotalsSchema,
   recalculated: z.boolean().optional(),
@@ -751,3 +819,4 @@ export const BankDepositSchema = z.object({
   note: z.string().nullish(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;
+

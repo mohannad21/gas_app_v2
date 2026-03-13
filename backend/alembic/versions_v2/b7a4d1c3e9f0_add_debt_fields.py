@@ -43,3 +43,4 @@ def downgrade() -> None:
     op.drop_column("customer_transactions", "debt_cylinders_48")
     op.drop_column("customer_transactions", "debt_cylinders_12")
     op.drop_column("customer_transactions", "debt_cash")
+

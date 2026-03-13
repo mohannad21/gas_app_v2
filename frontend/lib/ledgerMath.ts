@@ -30,3 +30,4 @@ export function calcCompanyCylinderUiResult(buy: number, ret: number): number {
 export function calcMoneyUiResult(total: number, paid: number): number {
   return total - paid;
 }
+

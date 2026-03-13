@@ -285,14 +285,15 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
   existing = session.get(InventoryAdjustment, adjust_id)
   if not existing or existing.is_reversed:
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = InventoryAdjustment(
     gas_type=existing.gas_type,
     delta_full=existing.delta_full,
     delta_empty=existing.delta_empty,
     note=f"Reversal of {existing.id}",
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     reversed_id=existing.id,
     is_reversed=True,
   )
@@ -509,10 +510,11 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
   existing = session.get(CompanyTransaction, refill_id)
   if not existing or existing.is_reversed or existing.kind != "refill":
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CompanyTransaction(
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind=existing.kind,
     buy12=existing.buy12,
     return12=existing.return12,
@@ -543,3 +545,4 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
   existing.is_reversed = True
   session.add(existing)
   session.commit()
+

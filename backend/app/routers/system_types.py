@@ -65,3 +65,4 @@ def update_system_type(
   session.commit()
   session.refresh(row)
   return SystemTypeOptionOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
+

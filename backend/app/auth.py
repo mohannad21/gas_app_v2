@@ -56,3 +56,4 @@ def get_optional_user(
   if not sub:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
   return sub
+

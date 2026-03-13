@@ -88,6 +88,10 @@ export default function EditOrderScreen() {
 
   const selectedSystemId = watch("system_id");
   const selectedGas = watch("gas_type");
+  const selectedCustomerEntry = useMemo(
+    () => (customersQuery.data ?? []).find((c) => c.id === selectedCustomer),
+    [customersQuery.data, selectedCustomer]
+  );
 
   const [unitPrice, setUnitPrice] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
@@ -100,7 +104,7 @@ export default function EditOrderScreen() {
   const paid = Number(watch("paid_amount")) || 0;
 
   const diff = calcCustomerCylinderDelta("replacement", installed, received);
-  const remaining = Math.max(calcMoneyUiResult(total, paid), 0);
+  const remaining = calcMoneyUiResult(total, paid);
 
   const updateOrder = useUpdateOrder();
 
@@ -131,31 +135,60 @@ export default function EditOrderScreen() {
     async (values) => {
       if (!order) return;
 
-      try {
-        setSubmitting(true);
+      const totalValue = Number(values.price_total) || 0;
+      const paidValue = Number(values.paid_amount) || 0;
+      const overpay = paidValue - totalValue;
+      const priorDebt = Math.max(selectedCustomerEntry?.money_balance ?? 0, 0);
+      const paidEarlier = Math.min(Math.max(overpay, 0), priorDebt);
+      const extraCredit = Math.max(overpay - paidEarlier, 0);
 
-        await updateOrder.mutateAsync({
-          id: order.id,
-          payload: {
-            customer_id: values.customer_id,
-            system_id: values.system_id,
-            delivered_at: values.delivered_at,
-            gas_type: values.gas_type,
-            cylinders_installed: Number(values.cylinders_installed),
-            cylinders_received: Number(values.cylinders_received),
-            price_total: Number(values.price_total),
-            paid_amount: Number(values.paid_amount),
-            note: values.note,
-          },
-        });
+      const runUpdate = async () => {
+        try {
+          setSubmitting(true);
 
-        Alert.alert("Order updated");
-        router.back();
-      } catch {
-        Alert.alert("Error", "Failed to update order.");
-      } finally {
-        setSubmitting(false);
+          await updateOrder.mutateAsync({
+            id: order.id,
+            payload: {
+              customer_id: values.customer_id,
+              system_id: values.system_id,
+              delivered_at: values.delivered_at,
+              gas_type: values.gas_type,
+              cylinders_installed: Number(values.cylinders_installed),
+              cylinders_received: Number(values.cylinders_received),
+              price_total: totalValue,
+              paid_amount: paidValue,
+              note: values.note,
+            },
+          });
+
+          Alert.alert("Order updated");
+          router.back();
+        } catch {
+          Alert.alert("Error", "Failed to update order.");
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      if (overpay > 0) {
+        const lines: string[] = [];
+        if (paidEarlier > 0) {
+          lines.push(`Includes $${paidEarlier} paid earlier`);
+        }
+        if (extraCredit > 0) {
+          lines.push(`Creates $${extraCredit} extra credit`);
+        }
+        if (lines.length === 0) {
+          lines.push(`Paid exceeds total by $${overpay}`);
+        }
+        Alert.alert("Overpayment", lines.join("\n"), [
+          { text: "Cancel", style: "cancel" },
+          { text: "Continue", onPress: () => void runUpdate() },
+        ]);
+        return;
       }
+
+      await runUpdate();
     },
     (formErrors) => {
       const first = Object.keys(formErrors)[0];
@@ -379,7 +412,13 @@ export default function EditOrderScreen() {
       <FieldError message={errors.price_total?.message} />
       <FieldError message={errors.paid_amount?.message} />
 
-      <Text style={styles.meta}>Remaining: ${remaining}</Text>
+      <Text style={styles.meta}>
+        {remaining > 0
+          ? `Remaining: $${remaining}`
+          : remaining < 0
+            ? `Extra: $${Math.abs(remaining)}`
+            : "Settled"}
+      </Text>
 
       <Pressable
         onPress={onSubmit}
@@ -426,3 +465,4 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorText: { color: "#b00020", marginTop: 2, fontSize: 12 },
 });
+

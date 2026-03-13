@@ -207,3 +207,4 @@ export const buildCollapsedLines = (ctx: any, fmt: SmartTicketFormatters): Smart
 
   return lines;
 };
+

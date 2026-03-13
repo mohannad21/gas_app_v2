@@ -1,5 +1,7 @@
 from functools import lru_cache
 
+from pydantic import field_validator
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,7 +35,19 @@ class Settings(BaseSettings):
     extra="ignore",
   )
 
+  @field_validator("debug", mode="before")
+  @classmethod
+  def _coerce_debug(cls, value: object) -> object:
+    if isinstance(value, str):
+      normalized = value.strip().lower()
+      if normalized in {"release", "prod", "production"}:
+        return False
+      if normalized in {"debug", "dev", "development"}:
+        return True
+    return value
+
 
 @lru_cache
 def get_settings() -> Settings:
   return Settings()
+

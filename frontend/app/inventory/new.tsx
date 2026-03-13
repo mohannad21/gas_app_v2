@@ -19,7 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
+import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import {
   useAdjustInventory,
   useInventoryAdjustments,
@@ -667,6 +669,7 @@ function CompanyPaymentForm({
   date,
   accessoryId,
   companyBalance,
+  balanceReady,
   onCreate,
   onSaved,
   onCancel,
@@ -675,6 +678,7 @@ function CompanyPaymentForm({
   date: string;
   accessoryId?: string;
   companyBalance: number;
+  balanceReady: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
   onCancel: () => void;
@@ -706,14 +710,21 @@ function CompanyPaymentForm({
 
   const amountValue = Number(amount) || 0;
   const totalDue = Math.abs(companyBalance);
-  const remainingDue = Math.max(totalDue - amountValue, 0);
   const resultValue = totalDue - amountValue;
-  const companyMoneyResultLabel =
-    resultValue > 0 ? "You owe company (debt)" : resultValue < 0 ? "Company owes you (credit)" : "Settled";
+  const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
+  const companyBalanceAfter = companyBalance - normalizedAmount;
+  const companyPreviewLines = formatBalanceTransitions(
+    [makeBalanceTransition("company", "money", companyBalance, companyBalanceAfter)],
+    {
+      mode: amountValue > 0 ? "transition" : "current",
+      collapseAllSettled: true,
+      intent: "company_payment",
+      formatMoney: (value) => value.toFixed(0),
+    }
+  );
   const payDisabled = companyBalance <= 0;
   const receiveDisabled = companyBalance >= 0;
-  const tableDisabled = companyBalance === 0;
-  const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
+  const tableDisabled = !balanceReady || companyBalance === 0;
 
   const save = async () => {
     if (amountValue <= 0) {
@@ -751,13 +762,17 @@ function CompanyPaymentForm({
           <Ionicons name="time-outline" size={16} color="#0a7ea4" />
         </Pressable>
       </View>
-      {totalDue > 0 ? (
+      {!balanceReady ? (
         <View style={styles.alertBox}>
-          <Text style={styles.alertText}>
-            {companyBalance > 0
-              ? `You pay company ${remainingDue.toFixed(0)}`
-              : `Company pays you ${remainingDue.toFixed(0)}`}
-          </Text>
+          <Text style={styles.alertText}>Current company balances unavailable. Preview is disabled until balances load.</Text>
+        </View>
+      ) : totalDue > 0 ? (
+        <View style={styles.alertBox}>
+          {companyPreviewLines.map((line) => (
+            <Text key={line} style={styles.alertText}>
+              {line}
+            </Text>
+          ))}
         </View>
       ) : null}
       <Text style={styles.modalLabel}>Payment direction</Text>
@@ -865,7 +880,7 @@ function CompanyPaymentForm({
             </View>
           </View>
           <View style={[styles.amountCell, styles.paymentCell]}>
-            <Text style={styles.fieldName}>{companyMoneyResultLabel}</Text>
+            <Text style={styles.fieldName}>After</Text>
             <TextInput
               style={[
                 styles.modalInput,
@@ -955,6 +970,7 @@ export default function InventoryNewScreen() {
 
   const inventoryLatest = useInventoryLatest();
   const dailyReportQuery = useDailyReportsV2(businessDate, businessDate);
+  const companyBalancesQuery = useCompanyBalances();
   const inventoryAdjustmentsQuery = useInventoryAdjustments(businessDate, true);
   const cashAdjustmentsQuery = useCashAdjustments(businessDate, true);
   const refillDetailsQuery = useInventoryRefillDetails(refillId ?? null);
@@ -989,12 +1005,13 @@ export default function InventoryNewScreen() {
   const createCashAdjust = useCreateCashAdjustment();
   const updateCashAdjust = useUpdateCashAdjustment();
   const createCompanyPayment = useCreateCompanyPayment();
-  const reportRow = dailyReportQuery.data?.[0] ?? null;
-  const companyBalance = reportRow?.company_end ?? 0;
-  const company12Balance = reportRow?.company_12kg_end ?? 0;
-  const company48Balance = reportRow?.company_48kg_end ?? 0;
-  const paymentTabDisabled = reportRow ? companyBalance === 0 : false;
-  const returnTabDisabled = reportRow ? company12Balance >= 0 && company48Balance >= 0 : false;
+  const companyBalances = companyBalancesQuery.data ?? null;
+  const companyBalanceReady = companyBalancesQuery.isSuccess;
+  const companyBalance = companyBalances?.company_money ?? 0;
+  const company12Balance = companyBalances?.company_cyl_12 ?? 0;
+  const company48Balance = companyBalances?.company_cyl_48 ?? 0;
+  const paymentTabDisabled = !companyBalanceReady || companyBalance === 0;
+  const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
 
   useEffect(() => {
     setActiveTab(resolveTab());
@@ -1082,14 +1099,15 @@ export default function InventoryNewScreen() {
             keyboardDismissMode="on-drag"
           >
             {activeTab === "payment" ? (
-              <CompanyPaymentForm
-                visible
-                date={businessDate}
-                accessoryId={accessoryId}
-                companyBalance={companyBalance}
-                onCreate={async (payload) => {
-                  await createCompanyPayment.mutateAsync(payload);
-                }}
+                <CompanyPaymentForm
+                  visible
+                  date={businessDate}
+                  accessoryId={accessoryId}
+                  companyBalance={companyBalance}
+                  balanceReady={companyBalanceReady}
+                  onCreate={async (payload) => {
+                    await createCompanyPayment.mutateAsync(payload);
+                  }}
                 onSaved={() => router.back()}
                 onCancel={() => router.back()}
               />
@@ -1591,4 +1609,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
 

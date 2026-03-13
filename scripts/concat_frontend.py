@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
 FRONTEND_ROOT = REPO_ROOT / "frontend"
-OUTPUT_PATH = SCRIPTS_DIR / "02_frontend.txt"
+OUTPUT_PATH = SCRIPTS_DIR / "frontend.txt"
 
 FRONTEND_DIRS = [
     "hooks",

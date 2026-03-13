@@ -82,6 +82,8 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
       }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
     },
   });
 }
@@ -125,3 +127,4 @@ export function useDeleteCustomer() {
     },
   });
 }
+

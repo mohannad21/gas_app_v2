@@ -40,6 +40,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from app import db as app_db
     importlib.reload(app_db)
     from app import models as app_models
+    # Clear SQLModel metadata before reloading models to avoid table redefinition errors.
+    app_db.SQLModel.metadata.clear()
     importlib.reload(app_models)
     from app import main as app_main
     importlib.reload(app_main)

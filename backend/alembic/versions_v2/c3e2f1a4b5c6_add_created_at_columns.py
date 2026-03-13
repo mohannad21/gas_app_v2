@@ -37,3 +37,4 @@ def downgrade() -> None:
     op.drop_column("inventory_adjustments", "created_at")
     op.drop_column("company_transactions", "created_at")
     op.drop_column("customer_transactions", "created_at")
+

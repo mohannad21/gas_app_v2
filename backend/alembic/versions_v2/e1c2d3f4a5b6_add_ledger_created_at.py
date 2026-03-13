@@ -31,3 +31,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_ledger_entries_happened_created_id", table_name="ledger_entries")
     op.drop_column("ledger_entries", "created_at")
+

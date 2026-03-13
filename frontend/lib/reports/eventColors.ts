@@ -16,3 +16,4 @@ export const EVENT_COLOR_MAP: Record<string, string> = {
 export function getEventColor(eventType: string): string {
   return EVENT_COLOR_MAP[eventType] ?? "#0a7ea4";
 }
+

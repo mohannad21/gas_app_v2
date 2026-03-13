@@ -41,8 +41,7 @@ export function useCreateExpense() {
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ date, expense_type }: { date: string; expense_type: string }) =>
-      deleteExpense(date, expense_type),
+    mutationFn: ({ id }: { id: string; date: string }) => deleteExpense(id),
     onError: (err) => {
       const message = extractErrorMessage(err as AxiosError);
       showToast(`Failed to remove expense: ${message}`);
@@ -56,3 +55,4 @@ export function useDeleteExpense() {
     },
   });
 }
+

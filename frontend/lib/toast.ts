@@ -17,3 +17,4 @@ export function subscribeToast(listener: Listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+

@@ -667,10 +667,57 @@ class DailyAuditSummary(SQLModel):
   inv_delta_48: int
 
 
+class DailyReportV2CashMath(SQLModel):
+  sales: int = 0
+  late: int = 0
+  expenses: int = 0
+  company: int = 0
+  adjust: int = 0
+  other: int = 0
+
+
+class DailyReportV2MathCustomers(SQLModel):
+  sales_cash: int = 0
+  paid_earlier: int = 0
+  extra_paid: int = 0
+
+
+class DailyReportV2MathCompany(SQLModel):
+  paid_company: int = 0
+  extra_company: int = 0
+
+
+class DailyReportV2MathResult(SQLModel):
+  expenses: int = 0
+  adjustments: int = 0
+  pocket_delta: int = 0
+
+
+class DailyReportV2Math(SQLModel):
+  customers: DailyReportV2MathCustomers = Field(default_factory=DailyReportV2MathCustomers)
+  company: DailyReportV2MathCompany = Field(default_factory=DailyReportV2MathCompany)
+  result: DailyReportV2MathResult = Field(default_factory=DailyReportV2MathResult)
+
+
+class BalanceTransition(SQLModel):
+  scope: Literal["customer", "company"]
+  component: Literal["money", "cyl_12", "cyl_48"]
+  before: int = 0
+  after: int = 0
+  display_name: Optional[str] = None
+  display_description: Optional[str] = None
+  intent: Optional[str] = None
+
+
 class DailyReportV2Card(SQLModel):
   date: str
   cash_start: int
   cash_end: int
+  sold_12kg: int = 0
+  sold_48kg: int = 0
+  net_today: int = 0
+  cash_math: DailyReportV2CashMath = Field(default_factory=DailyReportV2CashMath)
+  math: Optional[DailyReportV2Math] = None
   company_start: int = 0
   company_end: int = 0
   company_12kg_start: int = 0
@@ -689,15 +736,10 @@ class DailyReportV2Card(SQLModel):
   company_48kg_give_end: int = 0
   company_48kg_receive_start: int = 0
   company_48kg_receive_end: int = 0
-  customer_money_receivable: int = 0
-  customer_money_payable: int = 0
-  customer_12kg_receivable: int = 0
-  customer_12kg_payable: int = 0
-  customer_48kg_receivable: int = 0
-  customer_48kg_payable: int = 0
   inventory_start: ReportInventoryTotals
   inventory_end: ReportInventoryTotals
-  problems: Optional[list[str]] = None
+  problems: list[str] = Field(default_factory=list)
+  problem_transitions: list["BalanceTransition"] = Field(default_factory=list)
   recalculated: bool = False
 
 
@@ -762,9 +804,16 @@ class ActivityNote(SQLModel):
   kind: Literal["money", "cyl_12", "cyl_48", "cyl_full_12", "cyl_full_48"]
   direction: Literal[
     "customer_pays_you",
+    "you_pay_customer",
+    "you_paid_customer_earlier",
+    "customer_paid_earlier",
+    "customer_extra_paid",
     "you_pay_company",
+    "you_paid_earlier",
+    "company_pays_you",
     "customer_returns_you",
     "you_return_company",
+    "you_returned_earlier",
     "you_deliver_customer",
     "company_delivers_you",
   ]
@@ -832,6 +881,14 @@ class DailyReportV2Event(SQLModel):
   order_received: Optional[int] = None
   cash_before: Optional[int] = None
   cash_after: Optional[int] = None
+  bank_before: Optional[int] = None
+  bank_after: Optional[int] = None
+  customer_money_before: Optional[int] = None
+  customer_money_after: Optional[int] = None
+  customer_12kg_before: Optional[int] = None
+  customer_12kg_after: Optional[int] = None
+  customer_48kg_before: Optional[int] = None
+  customer_48kg_after: Optional[int] = None
   company_before: Optional[int] = None
   company_after: Optional[int] = None
   company_12kg_before: Optional[int] = None
@@ -840,6 +897,7 @@ class DailyReportV2Event(SQLModel):
   company_48kg_after: Optional[int] = None
   inventory_before: Optional[ReportInventoryState] = None
   inventory_after: Optional[ReportInventoryState] = None
+  balance_transitions: list[BalanceTransition] = Field(default_factory=list)
 
 
 class DailyReportV2Day(SQLModel):
@@ -864,13 +922,8 @@ class DailyReportV2Day(SQLModel):
   company_48kg_give_end: int = 0
   company_48kg_receive_start: int = 0
   company_48kg_receive_end: int = 0
-  customer_money_receivable: int = 0
-  customer_money_payable: int = 0
-  customer_12kg_receivable: int = 0
-  customer_12kg_payable: int = 0
-  customer_48kg_receivable: int = 0
-  customer_48kg_payable: int = 0
   inventory_start: ReportInventoryTotals
   inventory_end: ReportInventoryTotals
   audit_summary: DailyAuditSummary
   events: list[DailyReportV2Event]
+

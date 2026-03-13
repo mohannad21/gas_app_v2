@@ -211,3 +211,4 @@ def ledger_health_check(session: Session = Depends(get_session)) -> SystemHealth
         orphans=0, # Simplified for brevity
         issues=issues,
     )
+

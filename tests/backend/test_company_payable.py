@@ -184,3 +184,37 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
     payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
     assert payment["cash_after"] == -1000
     assert payment["company_after"] == 0
+
+
+def test_company_buy_iron_unpaid_remainder_visible_in_report(client) -> None:
+    day = date(2025, 10, 5)
+    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
+
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": f"{day.isoformat()}T08:00:00", "delta_cash": 1000, "reason": "open"},
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/company/buy_iron",
+        json={
+            "happened_at": f"{day.isoformat()}T09:00:00",
+            "new12": 3,
+            "new48": 0,
+            "total_cost": 120,
+            "paid_now": 40,
+            "note": "shells",
+        },
+    )
+    assert resp.status_code == 201
+
+    day_report = client.get("/reports/day_v2", params={"date": day.isoformat()}).json()
+    event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_iron")
+
+    assert event["status"] == "needs_action"
+    assert event["company_before"] == 0
+    assert event["company_after"] == 80
+    money_transition = next(row for row in event["balance_transitions"] if row["component"] == "money")
+    assert money_transition["before"] == 0
+    assert money_transition["after"] == 80

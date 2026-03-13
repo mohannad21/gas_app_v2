@@ -11,3 +11,4 @@ module.exports = {
     "node_modules/(?!(react-native|@react-native|expo|@expo|expo-router|@react-navigation|@tanstack|expo-modules-core)/)",
   ],
 };
+

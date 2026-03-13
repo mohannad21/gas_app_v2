@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { gasColor } from "@/constants/gas";
-import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
+import { FontFamilies, FontSizes } from "@/constants/typography";
+import { formatAggregateBalanceState, formatCurrentBalanceState } from "@/lib/balanceTransitions";
 
 type BalanceBucket = { count: number; total: number };
 export type BalanceSummary = {
@@ -27,9 +27,64 @@ type BalancesCardProps = {
   formatCustomerCount: (count: number) => string;
   formatMoney: (value: number) => string;
   formatCount: (value: number) => string;
+  companyBalancesReady?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
 };
+
+function buildCustomerLines(balanceSummary: BalanceSummary, formatMoney: (value: number) => string) {
+  const lines = [
+    balanceSummary.money.receivable.total > 0
+      ? formatAggregateBalanceState("customer", "money", balanceSummary.money.receivable.total, {
+          count: balanceSummary.money.receivable.count,
+          formatMoney,
+        })
+      : null,
+    balanceSummary.money.payable.total > 0
+      ? formatAggregateBalanceState("customer", "money", -balanceSummary.money.payable.total, {
+          count: balanceSummary.money.payable.count,
+          formatMoney,
+        })
+      : null,
+    balanceSummary.cyl12.receivable.total > 0
+      ? formatAggregateBalanceState("customer", "cyl_12", balanceSummary.cyl12.receivable.total, {
+          count: balanceSummary.cyl12.receivable.count,
+          formatMoney,
+        })
+      : null,
+    balanceSummary.cyl12.payable.total > 0
+      ? formatAggregateBalanceState("customer", "cyl_12", -balanceSummary.cyl12.payable.total, {
+          count: balanceSummary.cyl12.payable.count,
+          formatMoney,
+        })
+      : null,
+    balanceSummary.cyl48.receivable.total > 0
+      ? formatAggregateBalanceState("customer", "cyl_48", balanceSummary.cyl48.receivable.total, {
+          count: balanceSummary.cyl48.receivable.count,
+          formatMoney,
+        })
+      : null,
+    balanceSummary.cyl48.payable.total > 0
+      ? formatAggregateBalanceState("customer", "cyl_48", -balanceSummary.cyl48.payable.total, {
+          count: balanceSummary.cyl48.payable.count,
+          formatMoney,
+        })
+      : null,
+  ].filter(Boolean) as string[];
+  return lines.length > 0 ? lines : ["All settled ✅"];
+}
+
+function buildCompanyLines(companySummary: CompanySummary, formatMoney: (value: number) => string) {
+  const moneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
+  const cyl12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
+  const cyl48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
+  const lines = [
+    moneyNet !== 0 ? formatCurrentBalanceState("company", "money", moneyNet, { formatMoney }) : null,
+    cyl12Net !== 0 ? formatCurrentBalanceState("company", "cyl_12", cyl12Net, { formatMoney }) : null,
+    cyl48Net !== 0 ? formatCurrentBalanceState("company", "cyl_48", cyl48Net, { formatMoney }) : null,
+  ].filter(Boolean) as string[];
+  return lines.length > 0 ? lines : ["All settled ✅"];
+}
 
 export default function BalancesCard({
   balanceSummary,
@@ -37,13 +92,25 @@ export default function BalancesCard({
   formatCustomerCount,
   formatMoney,
   formatCount,
+  companyBalancesReady = true,
   collapsed = false,
   onToggle,
 }: BalancesCardProps) {
+  const customerDisplayLines = buildCustomerLines(balanceSummary, formatMoney);
+  const companyDisplayLines = buildCompanyLines(companySummary, formatMoney);
+  const customerCounts = [
+    balanceSummary.money.receivable.count,
+    balanceSummary.money.payable.count,
+    balanceSummary.cyl12.receivable.count,
+    balanceSummary.cyl12.payable.count,
+    balanceSummary.cyl48.receivable.count,
+    balanceSummary.cyl48.payable.count,
+  ].reduce((max, value) => Math.max(max, value), 0);
+
   const content = (
     <>
       <View style={styles.headerRow}>
-        <Text style={styles.topSummaryTitle}>Balances</Text>
+        <Text style={styles.topSummaryTitle}>Current Balances</Text>
         {onToggle ? (
           <Ionicons name={collapsed ? "chevron-down" : "chevron-up"} size={16} color="#0a7ea4" />
         ) : null}
@@ -52,59 +119,34 @@ export default function BalancesCard({
         <View style={styles.balanceSplitRow}>
           <View style={styles.balanceColumn}>
             <Text style={styles.balancePanelTitle}>Customers</Text>
-              <Text style={styles.relationshipLine}>
-                <Text style={{ color: gasColor("12kg") }}>12kg</Text>: you give{" "}
-                {formatCustomerCount(balanceSummary.cyl12.payable.count)}{" "}
-                {formatCount(balanceSummary.cyl12.payable.total)}
+            {customerDisplayLines.map((line) => (
+              <Text key={line} style={styles.relationshipLine}>
+                {line}
               </Text>
-              <Text style={styles.relationshipLine}>
-                <Text style={{ color: gasColor("12kg") }}>12kg</Text>:{" "}
-                {formatCustomerCount(balanceSummary.cyl12.receivable.count)} give you{" "}
-                {formatCount(balanceSummary.cyl12.receivable.total)}
+            ))}
+            {customerCounts > 0 ? (
+              <Text style={styles.relationshipMeta}>
+                {formatCustomerCount(customerCounts)} tracked across money / 12kg / 48kg
               </Text>
-              <Text style={styles.relationshipLine}>
-                <Text style={{ color: gasColor("48kg") }}>48kg</Text>: you give{" "}
-                {formatCustomerCount(balanceSummary.cyl48.payable.count)}{" "}
-                {formatCount(balanceSummary.cyl48.payable.total)}
-              </Text>
-              <Text style={styles.relationshipLine}>
-                <Text style={{ color: gasColor("48kg") }}>48kg</Text>:{" "}
-                {formatCustomerCount(balanceSummary.cyl48.receivable.count)} give you{" "}
-                {formatCount(balanceSummary.cyl48.receivable.total)}
-              </Text>
-              <Text style={styles.relationshipLine}>
-                cash: you pay {formatCustomerCount(balanceSummary.money.payable.count)}{" "}
-                {formatMoney(balanceSummary.money.payable.total)}
-              </Text>
-              <Text style={styles.relationshipLine}>
-                cash: {formatCustomerCount(balanceSummary.money.receivable.count)} pay you{" "}
-                {formatMoney(balanceSummary.money.receivable.total)}
-              </Text>
+            ) : null}
           </View>
           <View style={styles.balanceColumn}>
-            <Text style={styles.balancePanelTitle}>Cmpny</Text>
-            <Text style={styles.relationshipLine}>
-              <Text style={{ color: gasColor("12kg") }}>12kg</Text>: you give cmpny{" "}
-              {formatCount(companySummary.give12)}
-            </Text>
-            <Text style={styles.relationshipLine}>
-              <Text style={{ color: gasColor("12kg") }}>12kg</Text>: cmpny gives you{" "}
-              {formatCount(companySummary.receive12)}
-            </Text>
-            <Text style={styles.relationshipLine}>
-              <Text style={{ color: gasColor("48kg") }}>48kg</Text>: you give cmpny{" "}
-              {formatCount(companySummary.give48)}
-            </Text>
-            <Text style={styles.relationshipLine}>
-              <Text style={{ color: gasColor("48kg") }}>48kg</Text>: cmpny gives you{" "}
-              {formatCount(companySummary.receive48)}
-            </Text>
-            <Text style={styles.relationshipLine}>
-              cash: you pay cmpny {formatMoney(companySummary.payCash)}
-            </Text>
-            <Text style={styles.relationshipLine}>
-              cash: cmpny pays you {formatMoney(companySummary.receiveCash)}
-            </Text>
+            <Text style={styles.balancePanelTitle}>Company</Text>
+            {!companyBalancesReady ? (
+              <Text style={styles.relationshipLine}>Current company balances unavailable</Text>
+            ) : (
+              companyDisplayLines.map((line) => (
+                <Text key={line} style={styles.relationshipLine}>
+                  {line}
+                </Text>
+              ))
+            )}
+            {companyBalancesReady ? (
+              <Text style={styles.relationshipMeta}>
+                12kg {formatCount(companySummary.receive12 + companySummary.give12)} | 48kg{" "}
+                {formatCount(companySummary.receive48 + companySummary.give48)}
+              </Text>
+            ) : null}
           </View>
         </View>
       )}
@@ -141,7 +183,7 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   balanceSplitRow: { flexDirection: "row", gap: Spacing.xl, marginTop: Spacing.lg },
-  balanceColumn: { flex: 1, gap: Spacing.md },
+  balanceColumn: { flex: 1, gap: Spacing.sm },
   balancePanelTitle: {
     fontSize: FontSizes.md,
     fontWeight: "900",
@@ -167,4 +209,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamilies.regular,
     fontSize: FontSizes.md,
   },
+  relationshipMeta: {
+    color: "#64748b",
+    fontWeight: "600",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.sm,
+    marginTop: 2,
+  },
 });
+

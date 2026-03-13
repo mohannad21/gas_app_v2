@@ -129,6 +129,19 @@ function parseArray<T>(schema: z.ZodType<T>, data: unknown): T[] {
   return schema.array().parse(data);
 }
 
+function mapBalanceTransitionAmounts<T extends { component: string; before: number; after: number }>(items: T[] | null | undefined) {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) =>
+    item.component === "money"
+      ? {
+          ...item,
+          before: fromMinorUnits(item.before),
+          after: fromMinorUnits(item.after),
+        }
+      : item
+  );
+}
+
 
 // Customers
 export async function listCustomers(): Promise<Customer[]> {
@@ -502,14 +515,23 @@ export async function listDailyReportsV2(params: { from: string; to: string }): 
     ...row,
     cash_start: fromMinorUnits(row.cash_start),
     cash_end: fromMinorUnits(row.cash_end),
+    net_today: fromMinorUnits(row.net_today),
+    cash_math: {
+      ...row.cash_math,
+      sales: fromMinorUnits(row.cash_math.sales),
+      late: fromMinorUnits(row.cash_math.late),
+      expenses: fromMinorUnits(row.cash_math.expenses),
+      company: fromMinorUnits(row.cash_math.company),
+      adjust: fromMinorUnits(row.cash_math.adjust),
+      other: row.cash_math.other != null ? fromMinorUnits(row.cash_math.other) : row.cash_math.other,
+    },
     company_start: row.company_start != null ? fromMinorUnits(row.company_start) : row.company_start,
     company_end: row.company_end != null ? fromMinorUnits(row.company_end) : row.company_end,
     company_give_start: row.company_give_start != null ? fromMinorUnits(row.company_give_start) : row.company_give_start,
     company_give_end: row.company_give_end != null ? fromMinorUnits(row.company_give_end) : row.company_give_end,
     company_receive_start: row.company_receive_start != null ? fromMinorUnits(row.company_receive_start) : row.company_receive_start,
     company_receive_end: row.company_receive_end != null ? fromMinorUnits(row.company_receive_end) : row.company_receive_end,
-    customer_money_receivable: row.customer_money_receivable != null ? fromMinorUnits(row.customer_money_receivable) : row.customer_money_receivable,
-    customer_money_payable: row.customer_money_payable != null ? fromMinorUnits(row.customer_money_payable) : row.customer_money_payable,
+    problem_transitions: mapBalanceTransitionAmounts(row.problem_transitions) ?? row.problem_transitions,
   }));
 }
 
@@ -526,8 +548,6 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
     company_give_end: parsed.company_give_end != null ? fromMinorUnits(parsed.company_give_end) : parsed.company_give_end,
     company_receive_start: parsed.company_receive_start != null ? fromMinorUnits(parsed.company_receive_start) : parsed.company_receive_start,
     company_receive_end: parsed.company_receive_end != null ? fromMinorUnits(parsed.company_receive_end) : parsed.company_receive_end,
-    customer_money_receivable: parsed.customer_money_receivable != null ? fromMinorUnits(parsed.customer_money_receivable) : parsed.customer_money_receivable,
-    customer_money_payable: parsed.customer_money_payable != null ? fromMinorUnits(parsed.customer_money_payable) : parsed.customer_money_payable,
     audit_summary: {
       ...parsed.audit_summary,
       cash_in: fromMinorUnits(parsed.audit_summary.cash_in),
@@ -575,6 +595,7 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
               : action
           )
         : ev.action_pills,
+      balance_transitions: mapBalanceTransitionAmounts(ev.balance_transitions) ?? ev.balance_transitions,
     })),
   };
 }
@@ -809,8 +830,8 @@ export async function createExpense(payload: ExpenseCreateInput): Promise<Expens
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
 }
 
-export async function deleteExpense(date: string, expenseType: string): Promise<void> {
-  await api.delete("/expenses", { params: { date, expense_type: expenseType } });
+export async function deleteExpense(expenseId: string): Promise<void> {
+  await api.delete(`/expenses/${expenseId}`);
 }
 
 // Bank deposits
@@ -843,3 +864,4 @@ export async function createBankDeposit(payload: {
 export async function deleteBankDeposit(depositId: string): Promise<void> {
   await api.delete(`/cash/bank_deposit/${depositId}`);
 }
+

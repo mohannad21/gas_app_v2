@@ -259,3 +259,4 @@ def get_company_balances(session: Session = Depends(get_session)) -> CompanyBala
     inventory_full_48=inv["full48"],
     inventory_empty_48=inv["empty48"],
   )
+

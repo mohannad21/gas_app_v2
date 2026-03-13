@@ -311,12 +311,12 @@ const formatDateTime = (value?: string) => {
   useEffect(() => {
     const openParam = Array.isArray(addParams.open) ? addParams.open[0] : addParams.open;
     if (!openParam) return;
-    setMode("inventory");
     const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
     router.replace({
       pathname: "/(tabs)/add",
       params: openPrices ? { prices: openPrices } : {},
     });
+    setMode("inventory");
     if (openParam === "adjust-inventory") {
       router.push({ pathname: "/inventory/new", params: { tab: "inventory" } });
     } else if (openParam === "adjust-cash") {
@@ -563,7 +563,7 @@ const formatDateTime = (value?: string) => {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteExpense.mutateAsync({ date: entry.date, expense_type: entry.expense_type });
+            await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
             expensesQuery.refetch();
           } catch (error) {
             console.error("[add] delete expense failed", error);
@@ -3653,4 +3653,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
 

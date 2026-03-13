@@ -1,0 +1,943 @@
+# Distributor App – Product Summary, Decisions, and Roadmap
+
+## Purpose of this document
+
+This document summarizes the full conversation and serves as a structured reference for:
+
+* what the system is trying to become
+* what has already been decided
+* what still needs to be designed
+* what should be built now, in the near future, and in the far future
+* how to prioritize product and engineering work
+
+It covers the distributor mobile app, the future customer/company apps at a high level, and the developer backoffice web app.
+
+---
+
+# 1. Overall product direction
+
+The product is a **ledger-first distributor app** for managing gas-cylinder operations, customer activity, company activity, cash/bank movements, reminders, and later dashboard insights.
+
+The system should remain based on these principles:
+
+* the backend is the source of truth
+* the ledger/reporting logic must be deterministic and auditable
+* the daily report must reflect real posted events in correct order
+* UI must be simple, fast, modern, and easy for daily operational use
+* the app should support multiple workers with controlled permissions
+* the system should be designed so it can later expand to:
+
+  * a customer mobile app
+  * a company web/mobile app
+  * dashboard insights and forecasting
+
+---
+
+# 2. Main product areas
+
+The product has been divided into these major areas:
+
+## A. Distributor mobile app
+
+Main operational app for the distributor and workers.
+
+## B. Developer backoffice web app
+
+Internal admin web app for the developer/operator to manage distributors, billing, plans, activation/deactivation, and support.
+
+## C. Future customer app
+
+Mobile app for end customers.
+
+## D. Future company app
+
+Web app, and maybe later mobile, for the company side.
+
+---
+
+# 3. Final mobile app navigation decision
+
+The agreed navigation structure is:
+
+## Bottom bar
+
+* **Customers**
+* **New**
+* **Daily**
+* **Dashboard**
+* **Account**
+
+This structure is preferred because it balances:
+
+* daily operational speed
+* discoverability
+* low clutter
+* separation between operational workflows and admin/personal settings
+
+## Why this structure was chosen
+
+* **Customers** is a real destination; it replaces the idea of a bottom tab called "Add Customer"
+* **New** is the action/entry hub for posting new events
+* **Daily** remains the daily report/timeline view
+* **Dashboard** is separate from Daily because it is for trends, KPIs, and charts
+* **Account** groups low-frequency personal/admin areas such as Profile, Settings, and Billing
+
+---
+
+# 4. What belongs under each bottom tab
+
+## 4.1 Customers
+
+This tab is for:
+
+* customer list
+* search
+* filters
+* balances and status indicators
+* opening a customer’s timeline/activity view
+* adding a new customer
+
+### Important decision
+
+A separate bottom tab called **Add Customer** is not needed. Instead:
+
+* use **Customers** as the destination
+* place a clear **Add Customer** action within that tab
+
+## 4.2 New
+
+This is the operational creation hub. It replaces the old idea of a simple Add screen.
+
+Inside **New**, the app should expose these sections:
+
+* **Customer Activity**
+* **Company Activity**
+* **Expenses**
+* **Ledger Adjustments**
+
+### Customer Activity
+
+Includes:
+
+* Replacement
+* Late Payment
+* Return Empties
+* Payout
+* Sell Full
+* Buy Empty
+
+### Company Activity
+
+This is broader than only refill. It can include company-side operational entries such as:
+
+* Refill
+* Company payment / company-related movements
+* Buy / return related company entries
+* other company-side actions already represented in the code
+
+### Expenses
+
+This is a separate section next to Customer Activity, Company Activity, and Ledger Adjustments.
+
+Agreed structure for Expenses:
+
+* **Expense**
+* **Bank Transfer**
+
+Inside this area, the user can:
+
+* enter normal expenses
+* move money from cash to bank
+* move money from bank to cash
+
+This means the expenses area should support two clear categories/tabs:
+
+* **Expense**
+* **Move Money / Bank Transfer**
+
+### Ledger Adjustments
+
+Includes correction-type entries such as:
+
+* Cash Adjustment
+* Inventory Adjustment
+
+These are meant for controlled manual corrections and not as normal daily business actions.
+
+## 4.3 Daily
+
+This remains the day/timeline/report screen.
+
+It should be used for:
+
+* daily report
+* chronological activity list
+* expanding a day to see all activities
+* quick daily totals
+* reviewing the real sequence of events
+
+### Important decision
+
+**Dashboard is different from Daily.**
+Daily is for operational review of what happened on a day.
+Dashboard is for summary, trends, KPIs, and charts.
+
+## 4.4 Dashboard
+
+This is the analytics and summary area.
+
+It should contain:
+
+* KPI cards
+* charts
+* trends
+* summary insights
+* customer-oriented and business-oriented metrics
+
+Charts should live here, not in Daily, not in New, and not in Profile/Settings.
+
+## 4.5 Account
+
+This groups low-frequency and admin/personal areas:
+
+* **Profile**
+* **Settings**
+* **Billing**
+
+This is preferred over having separate bottom tabs for Config and Profile.
+
+---
+
+# 5. Profile, Settings, and Billing
+
+## 5.1 Profile
+
+Profile is for **personal user settings only**.
+
+Should include:
+
+* name
+* phone number
+* optional email
+* password change
+* biometric unlock toggle
+* language
+* logout
+
+### Not needed
+
+* personal avatar is not needed
+
+## 5.2 Settings
+
+Settings is for **business configuration**, not personal settings.
+
+Should include:
+
+* prices
+* system types
+* reminder rules
+* worker/team management
+* permissions by role
+* expense categories
+* business settings
+* low cash threshold / warning rules
+* other distributor-level configuration
+
+### Important clarification
+
+Business config should not be inside Profile.
+
+## 5.3 Billing
+
+Billing is for the distributor’s subscription to the app.
+
+Should include:
+
+* current plan
+* paid months
+* amounts paid
+* next due date
+* current status
+* later: receipts/invoices
+
+This belongs under Account and should be visible only to the appropriate role, usually owner/admin.
+
+---
+
+# 6. Dashboard content
+
+Dashboard is the place for summary, charts, and business insights.
+
+## 6.1 KPI cards
+
+Suggested top-level KPIs:
+
+* cash on hand
+* bank balance
+* money customers owe
+* empties customers owe
+* company balance
+* overdue reminders count
+* month-to-date sales
+* month-to-date collections
+
+## 6.2 Suggested charts
+
+* sales trend
+* collections vs outstanding
+* inventory movement by gas type
+* reminders aging
+* top customers by revenue
+* top customers by debt
+* top customers by empties owed
+* later: profit trend
+
+## 6.3 Interesting things the distributor should see
+
+* customers who owe empties the longest
+* customers who owe cash the longest
+* likely-to-order-soon customers later
+* which gas type is moving faster
+* how many days stock may last
+* repeated late payers
+* large expenses this month
+* overview of current unresolved reminders
+
+---
+
+# 7. Customer Activity view
+
+Customer Activity is not a bottom tab; it lives under Customers.
+
+## Suggested event types in customer timeline
+
+* Replacement
+* Late Payment
+* Return Empties
+* Payout
+* Sell Full
+* Buy Empty
+* Adjustment (if relevant)
+* System-related actions (if relevant)
+
+## Clarification of terms
+
+### Adjustment
+
+A manual correction event used when a normal business action does not fit, for example:
+
+* correcting money balance
+* correcting cylinder balance
+* correcting a mistaken entry
+
+### System-related actions
+
+Actions related to the customer’s installed system or safety process, for example:
+
+* security check due/completed
+* system installation-related event
+* system follow-up
+
+---
+
+# 8. Company Activity and Ledger Adjustments
+
+## Final decision
+
+These do **not** need to exist as separate entries under Dashboard/More if they already live operationally under New.
+
+The product direction is:
+
+* keep them inside **New**
+* allow creating entries there
+* show recent entries there
+* tap an entry for details/editing there
+
+This matches the actual workflow better.
+
+### Why this decision was reached
+
+Originally they were considered as possible secondary destinations, but the agreed direction is:
+
+* if they are mainly entry + recent list + inspect/edit
+* then they fit better under **New**
+* and do not need to be duplicated as separate primary destinations elsewhere
+
+---
+
+# 9. Expenses and bank movement
+
+One specific decision to complete now:
+
+Under **New**, the app needs an **Expenses** section with two main parts:
+
+* **Expense**
+* **Move Money / Bank Transfer**
+
+This should support:
+
+* entering an expense
+* moving money from cash to bank
+* moving money from bank to cash
+
+## Related business rules
+
+* the ledger must track bank balance as well as cash
+* the opposite of bank deposit must be possible
+* if refill would cause negative cash, the app should warn the distributor and allow moving money from bank before saving
+* bank transfer events must be visible in ledger/reporting
+
+---
+
+# 10. Profit calculation and pricing model
+
+This is one of the most important missing architecture decisions.
+
+## Agreed business rule
+
+If prices change at the beginning of the month:
+
+* sales start using the new **selling price** from the beginning of the new month
+* but the system must still remember which cylinders came from which **buying price / refill cost layer**
+
+So each sold cylinder conceptually needs both:
+
+* the selling price at the time of sale
+* the buying price of the inventory layer it came from
+
+## Required data model direction
+
+For each sale/replacement, the system should preserve:
+
+* sale-time selling price
+* quantity sold
+* associated inventory/refill cost layer
+* actual buying cost used for that quantity
+
+## Recommended inventory costing model
+
+Start with **FIFO**.
+
+### Why FIFO
+
+* easy to explain
+* auditable
+* deterministic
+* answers the real business question of how much profit was made using cylinders bought at different costs
+
+## Resulting future dashboard possibilities
+
+This will later allow exact calculation of:
+
+* revenue
+* cost of goods sold
+* gross profit
+* profit by period/customer/gas type
+
+---
+
+# 11. Monthly price enforcement
+
+The prices for buying gas from the company change at the first day of each month.
+
+## Agreed requirement
+
+The distributor must be forced to add the new monthly price before the first refill of the new month.
+
+## Recommended implementation
+
+This must be a **backend rule**, not only a frontend reminder.
+
+If the current month’s required price is missing:
+
+* refill creation should be blocked or strongly gated
+* the user should be sent to the price setup flow
+
+Workers should not be able to bypass this if permissions do not allow it.
+
+---
+
+# 12. System types and languages
+
+## Requirement
+
+When adding a customer, system types should appear by default.
+The current experience is not liked.
+
+## Multilingual consideration
+
+System types should not rely only on translated display text.
+
+## Recommended direction
+
+Store:
+
+* a stable internal key/code
+* a display label
+* later multilingual labels if needed
+
+This allows:
+
+* one stable system type identity internally
+* different labels for different languages later
+
+For now, the system can begin with one main business language and prepare the structure for translations later.
+
+---
+
+# 13. Reminders
+
+Reminders became a major product area during the discussion.
+
+## Core use cases
+
+A reminder should be creatable when something is unresolved, for example:
+
+* customer did not pay enough
+* customer did not return enough empties
+* follow-up expected in one week
+* system/security follow-up needed
+* any other distributor reminder workflow
+
+## Example given
+
+A customer takes full cylinders without returning empties because they need to cook, and promises to return the empties a week later. The distributor should be able to set a reminder date and receive a reminder in one week.
+
+## Requirement
+
+The reminder date field should appear only when relevant, for example when:
+
+* payment is incomplete
+* empty return is incomplete
+* other follow-up is needed
+
+## Reminder behavior in the app
+
+The distributor must be able to:
+
+* see what to collect and from whom
+* tap quickly into the relevant action
+* add the missing payment or empty return in one click/flow
+* defer a reminder
+* set a new date
+* mark it as done
+* cancel/remove it
+
+## Product direction
+
+Reminders should be a dedicated topic/feature, not just a simple date field.
+
+## UI placement
+
+Reminders should have their own bottom tab.
+
+## Possible reminder categories
+
+* overdue
+* today
+* upcoming
+* recently done
+
+---
+
+# 14. Users, workers, roles, and permissions
+
+## Main business requirement
+
+The distributor can add or remove workers.
+
+## Roles (initial suggestion)
+
+* Owner
+* Manager
+* Worker / Driver
+
+## Important permission decisions
+
+### Worker/Driver should **not**:
+
+* see buying prices
+* see company buy cost information generally
+* delete records freely
+* change global config
+* manage subscription/billing
+
+### Worker/Driver should be able to:
+
+* create daily customer activities
+* edit within defined rules
+* view operationally relevant information
+
+## Important security concern
+
+The worker must not be able to delete everything in case of conflict.
+
+## Recommended rule
+
+* workers can create
+* workers can update under controlled rules
+* deletes should be restricted to owner/manager or handled through audited reversal logic
+
+---
+
+# 15. Authentication and biometrics
+
+## Distributor onboarding flow
+
+When a new distributor is added:
+
+* the distributor receives a link to install the app
+* they receive temporary username and password
+* they must change the password immediately on first login
+* after that, the app asks them to activate biometric unlock / face recognition
+
+## Login identifier discussion
+
+Username can be:
+
+* phone number or email
+* with optional email support in profile
+
+## Biometrics
+
+Biometric unlock is desired as a convenience layer after login.
+
+### Product direction
+
+* first login with credentials
+* force password change if temporary
+* then prompt for biometric unlock
+
+This should be implemented as app unlock/session unlock, not as the only identity method.
+
+---
+
+# 16. Daily report issues and UI cleanup needs
+
+Several UI/reporting issues were identified and should be fixed.
+
+## Issues found
+
+* activities sometimes do not appear correctly in lists/daily report
+* activities may appear in the wrong order
+* the third/result box is confusing and should be removed
+* wording around the interactive balance/red box should be improved
+* initialization of customer does not need to appear on the day
+* some balances should not appear at daily report level 4
+* when expanding a day, the extra end-of-day boxes (12kg F, 12kg E, 48kg F, 48kg E, Cash) should be removed from that level
+
+## Desired behavior
+
+Expanding a day should show:
+
+* the activities
+* not unrelated redundant balance boxes
+
+---
+
+# 17. UI/UX principles and wording
+
+The entire frontend UI/UX needs cleanup and consistency.
+
+## Main themes
+
+* unify notification style across the app
+* make notifications short and easy to understand
+* align all tabs and layouts consistently
+* improve wording consistency
+* keep forms simple
+* remove confusing or redundant information
+* use modern and user-friendly mobile design
+
+## Navigation-related naming decisions
+
+* Orders -> Customer Activity
+* Inventory concept evolves into Company Activity inside New
+* Config should conceptually become Settings under Account
+* Add becomes New
+
+---
+
+# 18. Icons
+
+The discussion included ideas for iconography.
+
+## Replacement icon concept
+
+Use a relationship-style visual:
+
+* distributor icon
+* exchange/recycle icon in the middle
+* customer icon
+
+### Color logic
+
+* if everything is settled, the exchange arrows can be blue
+* if cash or empties are missing, the relevant part can show red state
+
+## Additional idea
+
+Create icons representing:
+
+* distributor
+* customer
+* relationship/exchange between them
+
+A complete icon system for all activity types is still to be finalized later.
+
+---
+
+# 19. Developer backoffice web app
+
+A simple web app is needed for the developer/operator.
+
+## Main purpose
+
+Manage distributors and the platform’s subscription/billing/admin operations.
+
+## Required features
+
+* add distributor
+* remove/deactivate distributor
+* reactivate distributor
+* see billing/payment history
+* suspend if not paid
+* manage temporary credentials/invites
+* resend invite
+* reset password if needed
+* view plan/status
+* later possibly manage support details and feature flags
+
+## Billing and plan control
+
+The developer should be able to manage subscription plans and platform billing from the backoffice web app.
+
+### This includes
+
+* change subscription plans
+* change plan prices
+* manage who is active/suspended
+* record which months were paid and how much
+* record manual payments (for example when paid at the bar)
+
+## Important distinction
+
+There are two different types of prices:
+
+### A. Platform subscription prices
+
+What the distributor pays for using the app.
+These are controlled by the developer in Backoffice.
+
+### B. Business gas prices inside the distributor app
+
+What the distributor uses operationally for gas buying/selling.
+These are controlled inside the distributor’s Settings, not globally by the developer in normal cases.
+
+---
+
+# 20. Backoffice billing/pricing architecture direction
+
+The developer should be able to change plans and subscription prices for the distributor app.
+
+## Important design rule
+
+Billing history should not be overwritten.
+
+If plan price changes:
+
+* old billing records remain as they were
+* the new price applies from an effective date forward
+
+This implies future need for structures such as:
+
+* plan catalog
+* plan price history
+* distributor subscription
+* billing records
+* effective date logic
+
+---
+
+# 21. Screenshot/testing workflow improvement
+
+A practical concern was raised: manually testing on phone, taking screenshots, sending them to WhatsApp, and uploading them again is too slow.
+
+## Key conclusion
+
+The UI cannot be extracted as final screenshots from code alone without rendering, but the app can be rendered on web and used for automatic screenshots.
+
+## Product/process direction
+
+* run the Expo app on web/browser
+* create stable preview/demo routes with mock data
+* use browser screenshots for fast UI review
+* keep phone testing for final QA
+
+This should significantly speed up UI review and issue detection.
+
+---
+
+# 22. Testing
+
+Testing is required on both frontend and backend.
+
+## Frontend testing needs
+
+* style and layout consistency
+* wording consistency
+* number consistency
+* activity rendering correctness
+* notification consistency
+* navigation/UX sanity
+
+## Backend testing needs
+
+* business logic correctness
+* ordering correctness in daily report
+* ledger correctness
+* price enforcement rules
+* reminder logic
+* role/permission logic
+* profit/costing logic later
+
+---
+
+# 23. Logging and security
+
+## To do
+
+* authentication
+* security
+* better logging
+* testing
+
+## Logging direction
+
+Needs improvement beyond current simple behavior. Eventually should support:
+
+* structured logs
+* request tracing
+* actor/user context
+* error context
+* easier support/debugging
+
+## Security direction
+
+Needs proper auth/authorization and careful role separation.
+
+---
+
+# 24. Roadmap by time horizon
+
+## 24.1 Develop / fix now
+
+### Core correctness
+
+* finalize bottom-bar and screen information architecture
+* complete Expenses section with:
+
+  * Expense
+  * Bank Transfer / Move Money
+* fix daily report issues (missing/wrong order/wrong scope/redundant boxes)
+* enforce monthly prices before first refill of month
+* add bank-to-cash as well as cash-to-bank flows
+* support negative-cash prevention/warning on refill
+* implement worker roles and restrictions
+* build proper auth foundation
+* improve logging
+* add frontend/backend regression tests
+
+### Product/UX
+
+* Customers tab with Add Customer inside it
+* New tab with:
+
+  * Customer Activity
+  * Company Activity
+  * Expenses
+  * Ledger Adjustments
+* Daily tab cleanup
+* Dashboard tab introduction
+* Account tab with Profile/Settings/Billing
+* unify notifications
+* remove confusing result/third box
+* improve wording consistency
+* show default system types when adding customer
+
+### Reminders minimum version
+
+* reminder creation for incomplete payment / incomplete empties / follow-up cases
+* reminder list and basic actions
+
+### Pricing/profit groundwork
+
+* save selling price at sale time
+* begin cost-layer / FIFO design for true profitability later
+
+## 24.2 Near future
+
+* full Dashboard with KPIs and charts
+* richer reminder workflows and filters
+* better role/permission management
+* billing screen in Account
+* multilingual support for system types and catalogs
+* worker/team management polish
+* audit history improvements
+* exports
+* full subscription administration flows
+
+## 24.3 Far future
+
+* customer mobile app
+* company web/mobile app
+* reward system / loyalty program
+* forecasting / prediction of sales and customer ordering
+* more advanced company-distributor linking workflows
+
+---
+
+# 25. Open design questions still remaining
+
+These should be finalized later:
+
+* exact final list of all Company Activity types based on full code review
+* exact schema for reminders and quick actions
+* detailed role matrix for owner/manager/worker
+* exact dashboard chart list for version 1
+* full Settings catalog list
+* final icon system for all activity types
+* multilingual implementation timing and scope
+* subscription plan structure and pricing model in Backoffice
+
+---
+
+# 26. Final agreed direction in one short summary
+
+The distributor app should become a clean mobile product with this main structure:
+
+* **Customers** for people and their activity
+* **New** for posting operational events
+* **Daily** for day-based report/timeline
+* **Dashboard** for insights and charts
+* **Account** for Profile, Settings, and Billing
+
+Inside **New**, the main operational sections are:
+
+* Customer Activity
+* Company Activity
+* Expenses
+* Ledger Adjustments
+
+The system must support:
+
+* exact, auditable ledger logic
+* multiple workers with restricted permissions
+* reminders as a real feature
+* bank and cash tracking
+* monthly pricing enforcement
+* future exact profitability through cost layers/FIFO
+* a separate developer backoffice web app for distributors, subscription plans, billing, and activation/deactivation
+
+This is the current reference direction for planning and prioritization.

@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Optional
 
 import logging
@@ -13,6 +12,95 @@ from app.services.posting import derive_day, normalize_happened_at, post_custome
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def _resolve_value(payload_data: dict, field: str, current):
+  return payload_data[field] if field in payload_data else current
+
+
+def _normalize_system_id(value: Optional[str]) -> Optional[str]:
+  if value is None:
+    return None
+  return value or None
+
+
+def _resolve_update_order_context(
+  *,
+  existing: CustomerTransaction,
+  payload_data: dict,
+) -> tuple[str, Optional[str], str, str]:
+  order_mode = _resolve_value(payload_data, "order_mode", existing.mode or "replacement")
+  customer_id = _resolve_value(payload_data, "customer_id", existing.customer_id)
+  system_id = _normalize_system_id(_resolve_value(payload_data, "system_id", existing.system_id))
+  gas_type = _resolve_value(payload_data, "gas_type", existing.gas_type or "12kg")
+
+  # Non-replacement orders only use system as optional operational context.
+  if (
+    order_mode != "replacement"
+    and "customer_id" in payload_data
+    and "system_id" not in payload_data
+    and customer_id != existing.customer_id
+  ):
+    system_id = None
+
+  return customer_id, system_id, order_mode, gas_type
+
+
+def _validate_order_context_on_update(
+  session: Session,
+  *,
+  payload_data: dict,
+  customer_id: str,
+  system_id: Optional[str],
+  order_mode: str,
+  gas_type: str,
+) -> tuple[Customer, Optional[System]]:
+  customer = session.get(Customer, customer_id)
+  if not customer:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+
+  context_changed = any(field in payload_data for field in {"customer_id", "system_id", "order_mode", "gas_type"})
+
+  if order_mode == "replacement":
+    if not system_id:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System is required for replacement orders")
+    system = session.get(System, system_id)
+    if not system:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+    if not system.is_active:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System is inactive, orders cannot be created against it",
+      )
+    if context_changed and system.customer_id != customer_id:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System does not belong to the selected customer",
+      )
+    if context_changed and system.gas_type != gas_type:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System gas type does not match order gas type",
+      )
+    return customer, system
+
+  if system_id:
+    system = session.get(System, system_id)
+    if not system:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+    if not system.is_active:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System is inactive, orders cannot be created against it",
+      )
+    if context_changed and system.customer_id != customer_id:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System does not belong to the selected customer",
+      )
+    return customer, system
+
+  return customer, None
 
 def _money_delta_for_mode(order_mode: str, total: int, paid: int) -> int:
   if order_mode == "buy_iron":
@@ -235,6 +323,20 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   if not existing or existing.kind != "order" or existing.is_reversed:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
+  payload_data = payload.model_dump(exclude_unset=True)
+  customer_id, system_id, mode, gas_type = _resolve_update_order_context(
+    existing=existing,
+    payload_data=payload_data,
+  )
+  _validate_order_context_on_update(
+    session,
+    payload_data=payload_data,
+    customer_id=customer_id,
+    system_id=system_id,
+    order_mode=mode,
+    gas_type=gas_type,
+  )
+
   # reverse existing
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
@@ -272,32 +374,28 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   session.add(existing)
   session.flush()
 
-  # create new order with merged payload
-  new_data = existing.model_dump()
-  for field, value in payload.model_dump(exclude_unset=True).items():
-    new_data[field] = value
-  happened_at = normalize_happened_at(new_data.get("happened_at") or existing.happened_at)
-  paid_amount = new_data.get("paid_amount") if new_data.get("paid_amount") is not None else existing.paid
-  total_amount = new_data.get("price_total") or existing.total
-  mode = new_data.get("order_mode") or existing.mode or "replacement"
-  gas_type = new_data.get("gas_type") or existing.gas_type
-  installed = new_data.get("cylinders_installed") or existing.installed
-  received = new_data.get("cylinders_received") or existing.received
+  happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else existing.happened_at
+  happened_at = normalize_happened_at(happened_at_raw)
+  paid_amount = _resolve_value(payload_data, "paid_amount", existing.paid)
+  total_amount = _resolve_value(payload_data, "price_total", existing.total)
+  installed = _resolve_value(payload_data, "cylinders_installed", existing.installed)
+  received = _resolve_value(payload_data, "cylinders_received", existing.received)
+  note = _resolve_value(payload_data, "note", existing.note)
 
   money_delta = _money_delta_for_mode(mode, total_amount, paid_amount)
   cyl_delta = installed - received
   if mode in {"sell_iron", "buy_iron"}:
     cyl_delta = 0
-  current_money = sum_customer_money(session, customer_id=existing.customer_id)
-  current_cyl_12 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="12kg")
-  current_cyl_48 = sum_customer_cylinders(session, customer_id=existing.customer_id, gas_type="48kg")
+  current_money = sum_customer_money(session, customer_id=customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="48kg")
   next_money = current_money + money_delta
   next_cyl_12 = current_cyl_12 + (cyl_delta if gas_type == "12kg" else 0)
   next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
 
   txn = CustomerTransaction(
-    customer_id=new_data.get("customer_id") or existing.customer_id,
-    system_id=new_data.get("system_id") or existing.system_id,
+    customer_id=customer_id,
+    system_id=system_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
     kind="order",
@@ -310,7 +408,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     debt_cash=next_money,
     debt_cylinders_12=next_cyl_12,
     debt_cylinders_48=next_cyl_48,
-    note=new_data.get("note") if new_data.get("note") is not None else existing.note,
+    note=note,
     is_reversed=False,
   )
   session.add(txn)
@@ -325,12 +423,13 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
   existing = session.get(CustomerTransaction, order_id)
   if not existing or existing.kind != "order" or existing.is_reversed:
     return
-  now = datetime.now(timezone.utc)
+  reversal_happened_at = existing.happened_at
+  reversal_day = existing.day
   reversal = CustomerTransaction(
     customer_id=existing.customer_id,
     system_id=existing.system_id,
-    happened_at=now,
-    day=derive_day(now),
+    happened_at=reversal_happened_at,
+    day=reversal_day,
     kind="order",
     mode=existing.mode,
     gas_type=existing.gas_type,
@@ -359,3 +458,4 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
   existing.is_reversed = True
   session.add(existing)
   session.commit()
+

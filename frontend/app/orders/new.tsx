@@ -21,13 +21,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { AxiosError } from "axios";
 import { useFocusEffect } from "@react-navigation/native";
 
-import { useCustomers } from "@/hooks/useCustomers";
+import { useCustomerBalance, useCustomers } from "@/hooks/useCustomers";
 import { useCreateOrder } from "@/hooks/useOrders";
 import { useCreateCollection } from "@/hooks/useCollections";
 import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { getOrderWhatsappLink } from "@/lib/api";
+import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { GasType, OrderCreateInput } from "@/types/domain";
@@ -259,23 +260,33 @@ export default function NewOrderScreen() {
     () => (customersQuery.data ?? []).find((c) => c.id === selectedCustomer),
     [customersQuery.data, selectedCustomer]
   );
+  const customerBalanceQuery = useCustomerBalance(selectedCustomer || undefined);
+  const customerBalance = selectedCustomer ? customerBalanceQuery.data ?? null : null;
+  const customerPreviewReady = !selectedCustomer || customerBalanceQuery.isSuccess;
+  const customerPreviewStatusLine = selectedCustomer
+    ? customerBalanceQuery.isLoading
+      ? "Loading current customer balances..."
+      : customerBalanceQuery.isError
+        ? "Current customer balances unavailable. Preview is disabled until balances load."
+        : null
+    : null;
   const hasCustomer = Boolean(selectedCustomerEntry);
   const showOrderTabs = hasCustomer;
   const showSystemSection = hasCustomer && currentAction === "replacement";
   const showOrderDetails =
     hasCustomer && (currentAction !== "replacement" || Boolean(selectedSystemId));
-  const balanceBefore = selectedCustomerEntry?.money_balance ?? 0;
+  const balanceBefore = customerBalance?.money_balance ?? 0;
   const balanceAfter = balanceBefore + unpaid;
-  const cylinder12Before = selectedCustomerEntry?.cylinder_balance_12kg ?? 0;
-  const cylinder48Before = selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
+  const cylinder12Before = customerBalance?.cylinder_balance_12kg ?? 0;
+  const cylinder48Before = customerBalance?.cylinder_balance_48kg ?? 0;
   const hasMoneyDebt = balanceBefore > 0;
   const hasMoneyCredit = balanceBefore < 0;
-  const paymentTabEnabled = hasMoneyDebt || hasMoneyCredit;
-  const receivePaymentDisabled = balanceBefore <= 0;
-  const payoutPaymentDisabled = balanceBefore >= 0;
+  const paymentTabEnabled = customerPreviewReady && (hasMoneyDebt || hasMoneyCredit);
+  const receivePaymentDisabled = !customerPreviewReady || balanceBefore <= 0;
+  const payoutPaymentDisabled = !customerPreviewReady || balanceBefore >= 0;
   const hasReturnDebt12 = cylinder12Before > 0;
   const hasReturnDebt48 = cylinder48Before > 0;
-  const returnTabEnabled = hasReturnDebt12 || hasReturnDebt48;
+  const returnTabEnabled = customerPreviewReady && (hasReturnDebt12 || hasReturnDebt48);
   const orderCylinderDelta = cylinderResult;
   const orderCylinderAfter12 =
     selectedGas === "12kg" ? cylinder12Before + orderCylinderDelta : cylinder12Before;
@@ -284,102 +295,53 @@ export default function NewOrderScreen() {
   const collectionBusy = createCollection.isPending;
   const previousCustomerRef = useRef<string | undefined>();
   const formatMoneyAmount = (value: number) => Math.abs(value).toFixed(0);
-  const formatSignedMoney = (value: number) => {
-    if (value === 0) return `0₪`;
-    const sign = value > 0 ? "-" : "+";
-    return `${sign}${formatMoneyAmount(value)}₪`;
-  };
-  const formatSignedCylinder = (value: number, label: "12kg" | "48kg") => {
-    if (value === 0) return `0x ${label}`;
-    const sign = value > 0 ? "-" : "+";
-    return `${sign}${Math.abs(value)}x ${label}`;
-  };
-  const customerAlertLines = useMemo(() => {
-    if (!selectedCustomerEntry) return [];
-    const formatMoneyDebtLine = (value: number) => {
-      if (value > 0) return `Customer must pay you ${formatMoneyAmount(value)}`;
-      if (value < 0) return `You must pay the customer ${formatMoneyAmount(value)}`;
-      return "Money debt: 0";
-    };
-    const formatCylinderDebtLine = (value: number, label: "12kg" | "48kg") => {
-      if (value > 0) return `Customer must return ${Math.abs(value)}x ${label}`;
-      if (value < 0) return `You must give the customer ${Math.abs(value)}x ${label}`;
-      return `${label} debt: 0x`;
-    };
-
-    if (isPayment) {
-      const paymentAfter = balanceBefore + paymentDelta;
-      if (paidInput <= 0) {
-        return [formatMoneyDebtLine(balanceBefore)];
-      }
-      if (paymentAfter > 0) {
-        return [`After payment, customer still owes ${formatMoneyAmount(paymentAfter)}`];
-      }
-      if (paymentAfter < 0) {
-        return [`After payment, you owe the customer ${formatMoneyAmount(paymentAfter)}`];
-      }
-      return ["After payment, balance is settled"];
-    }
-    if (isReturn) {
-      return [
-        formatCylinderDebtLine(orderCylinderAfter12, "12kg"),
-        formatCylinderDebtLine(orderCylinderAfter48, "48kg"),
-      ];
-    }
-
-    return [
-      formatMoneyDebtLine(balanceAfter),
-      formatCylinderDebtLine(orderCylinderAfter12, "12kg"),
-      formatCylinderDebtLine(orderCylinderAfter48, "48kg"),
+  const sharedCustomerPreviewTransitions = useMemo(() => {
+    if (!selectedCustomerEntry || !customerPreviewReady) return [];
+    const transitions = [
+      makeBalanceTransition("customer", "money", balanceBefore, balanceAfter),
+      makeBalanceTransition("customer", "cyl_12", cylinder12Before, orderCylinderAfter12),
+      makeBalanceTransition("customer", "cyl_48", cylinder48Before, orderCylinderAfter48),
     ];
-  }, [
-    balanceAfter,
-    balanceBefore,
-    isPayment,
-    isReturn,
-    orderCylinderAfter12,
-    orderCylinderAfter48,
-    paidInput,
-    paymentDelta,
-    paymentDirection,
-    selectedCustomerEntry,
-    formatMoneyAmount,
-  ]);
-
-  const balancePreviewLines = useMemo(() => {
-    if (!selectedCustomerEntry) return [];
-    const lines: string[] = [];
-    if (!isReturn) {
-      lines.push(`Money: ${formatSignedMoney(balanceBefore)} -> ${formatSignedMoney(balanceAfter)}`);
-    }
-    if (!isPayment) {
-      lines.push(
-        `12kg: ${formatSignedCylinder(cylinder12Before, "12kg")} -> ${formatSignedCylinder(
-          orderCylinderAfter12,
-          "12kg"
-        )}`
-      );
-      lines.push(
-        `48kg: ${formatSignedCylinder(cylinder48Before, "48kg")} -> ${formatSignedCylinder(
-          orderCylinderAfter48,
-          "48kg"
-        )}`
-      );
-    }
-    return lines;
+    if (isPayment) return [transitions[0]];
+    if (isReturn) return [transitions[1], transitions[2]];
+    return transitions;
   }, [
     balanceAfter,
     balanceBefore,
     cylinder12Before,
     cylinder48Before,
+    customerPreviewReady,
     isPayment,
     isReturn,
     orderCylinderAfter12,
     orderCylinderAfter48,
     selectedCustomerEntry,
-    formatSignedMoney,
-    formatSignedCylinder,
   ]);
+  const previewIntent = useMemo(() => {
+    if (isPayment) {
+      return paymentDirection === "payout" ? "customer_payout" : "customer_payment";
+    }
+    if (isReturn) return "customer_return";
+    return "customer_order";
+  }, [isPayment, isReturn, paymentDirection]);
+  const sharedCustomerAlertLines = useMemo(
+    () =>
+      formatBalanceTransitions(sharedCustomerPreviewTransitions, {
+        mode: "current",
+        formatMoney: formatMoneyAmount,
+      }),
+    [formatMoneyAmount, sharedCustomerPreviewTransitions]
+  );
+  const sharedBalancePreviewLines = useMemo(
+    () =>
+      formatBalanceTransitions(sharedCustomerPreviewTransitions, {
+        mode: "transition",
+        collapseAllSettled: true,
+        intent: previewIntent,
+        formatMoney: formatMoneyAmount,
+      }),
+    [formatMoneyAmount, previewIntent, sharedCustomerPreviewTransitions]
+  );
 
   const adjustPriceTotal = (delta: number) => {
     if (!canEditTotal) return;
@@ -836,32 +798,47 @@ export default function NewOrderScreen() {
     const total = Number(values.price_total) || 0;
     const paid = Number(values.paid_amount) || 0;
     const moneyDeltaValue = calcCustomerMoneyDelta(orderMode, total, paid);
-    const balanceBeforeValue = selectedCustomerEntry?.money_balance ?? 0;
+    const balanceBeforeValue = customerBalance?.money_balance ?? 0;
     const balanceAfterValue = balanceBeforeValue + moneyDeltaValue;
-    const balanceStatus =
-      balanceAfterValue < 0 ? "Credit" : balanceAfterValue > 0 ? "Debt" : "Settled";
     const cylDelta = calcCustomerCylinderDelta(orderMode, installedCount, receivedCount);
     const balanceBeforeCyl =
       gasType === "12kg"
-        ? selectedCustomerEntry?.cylinder_balance_12kg ?? 0
-        : selectedCustomerEntry?.cylinder_balance_48kg ?? 0;
+        ? customerBalance?.cylinder_balance_12kg ?? 0
+        : customerBalance?.cylinder_balance_48kg ?? 0;
     const balanceAfterCyl = balanceBeforeCyl + cylDelta;
-    const alertLines: string[] = [];
-    if (balanceAfterValue !== 0) {
-      if (balanceAfterValue > 0) {
-        alertLines.push(`Money: Customer must pay ${formatMoneyAmount(balanceAfterValue)}₪`);
-      } else {
-        alertLines.push(`Money: You must pay the customer ${formatMoneyAmount(balanceAfterValue)}₪`);
+    const overpay = orderMode === "replacement" ? Math.max(paid - total, 0) : 0;
+    const paidEarlier = orderMode === "replacement" ? Math.min(overpay, Math.max(balanceBeforeValue, 0)) : 0;
+    const extraCredit = orderMode === "replacement" ? Math.max(overpay - paidEarlier, 0) : 0;
+    const guardrailLines: string[] = [];
+    if (overpay > 0) {
+      if (paidEarlier > 0) {
+        guardrailLines.push(`Includes ${formatMoneyAmount(paidEarlier)}â‚ª paid earlier`);
+      }
+      if (extraCredit > 0) {
+        guardrailLines.push(`Creates ${formatMoneyAmount(extraCredit)}â‚ª extra credit`);
+      }
+      if (guardrailLines.length === 0) {
+        guardrailLines.push(`Paid exceeds total by ${formatMoneyAmount(overpay)}â‚ª`);
       }
     }
-    if (balanceAfterCyl !== 0) {
-      if (balanceAfterCyl > 0) {
-        alertLines.push(`Cylinders: Customer must return ${Math.abs(balanceAfterCyl)} empty`);
-      } else {
-        alertLines.push(`Cylinders: You must give the customer ${Math.abs(balanceAfterCyl)} empty`);
+    const alertLines = formatBalanceTransitions(
+      [
+        makeBalanceTransition("customer", "money", balanceBeforeValue, balanceAfterValue),
+        makeBalanceTransition(
+          "customer",
+          gasType === "12kg" ? "cyl_12" : "cyl_48",
+          balanceBeforeCyl,
+          balanceAfterCyl
+        ),
+      ],
+      {
+        mode: "transition",
+        collapseAllSettled: true,
+        intent: "customer_order",
+        formatMoney: formatMoneyAmount,
       }
-    }
-    const alertMessage = alertLines.length > 0 ? alertLines.join("\n") : "All settled.";
+    );
+    const alertMessage = alertLines.join("\n");
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const orderPayload: OrderCreateInput = {
@@ -901,23 +878,21 @@ export default function NewOrderScreen() {
       }
     };
 
-    if (balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
+    if (guardrailLines.length > 0 || balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
       const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
         0
       )} + ${moneyDeltaValue.toFixed(0)} = ${balanceAfterValue.toFixed(0)}`;
       const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
         0
       )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
+      const headerBlock = guardrailLines.length ? `${guardrailLines.join("\n")}\n\n` : "";
       Alert.alert(
         "Confirm settlement",
-        `${alertMessage}
+        `${headerBlock}${alertMessage}
 
 ${moneyLine}
 ${cylLine}
-
-Resulting ${balanceStatus}: ${Math.abs(
-          balanceAfterValue
-        ).toFixed(0)}`,
+`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Confirm", onPress: () => void finalizeCreate() },
@@ -1053,7 +1028,9 @@ Resulting ${balanceStatus}: ${Math.abs(
       ? handleSavePaymentAndAddAnother
       : handleSaveReturnAndAddAnother;
   const saveBusy = isOrderAction ? submitting : collectionBusy;
-  const saveDisabled = isOrderAction ? submitting || orderSaveDisabled : collectionBusy;
+  const saveDisabled = isOrderAction
+    ? submitting || orderSaveDisabled || !customerPreviewReady
+    : collectionBusy || !customerPreviewReady;
   /* -------------------- UI -------------------- */
 
   const scrollToAmountsAndTotals = () => {
@@ -1494,9 +1471,15 @@ Resulting ${balanceStatus}: ${Math.abs(
             </View>
           ) : null}
 
-          {hasCustomer && customerAlertLines.length > 0 ? (
+          {hasCustomer && customerPreviewStatusLine ? (
             <View style={styles.alertBox}>
-              {customerAlertLines.map((line) => (
+              <Text style={styles.alertText}>{customerPreviewStatusLine}</Text>
+            </View>
+          ) : null}
+
+          {hasCustomer && !customerPreviewStatusLine && sharedCustomerAlertLines.length > 0 ? (
+            <View style={styles.alertBox}>
+              {sharedCustomerAlertLines.map((line) => (
                 <Text key={line} style={styles.alertText}>
                   {line}
                 </Text>
@@ -2372,7 +2355,13 @@ Resulting ${balanceStatus}: ${Math.abs(
               <View style={[styles.amountCell, styles.amountCellResult]} />
             </View>
           ) : null}
-          {selectedCustomerEntry ? <BalancePreviewCard lines={balancePreviewLines} /> : null}
+          {selectedCustomerEntry ? (
+            customerPreviewStatusLine ? (
+              <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
+            ) : (
+              <BalancePreviewCard lines={sharedBalancePreviewLines} />
+            )
+          ) : null}
         </View>
         <FieldError message={errors.cylinders_installed?.message} />
         <FieldError message={errors.cylinders_received?.message} />
@@ -2708,10 +2697,10 @@ function FieldError({ message }: { message?: string }) {
   return <Text style={styles.errorText}>{message}</Text>;
 }
 
-function BalancePreviewCard({ lines }: { lines: string[] }) {
+function BalancePreviewCard({ lines, title = "New Balance" }: { lines: string[]; title?: string }) {
   return (
     <View style={styles.balancePreviewCard}>
-      <Text style={styles.balancePreviewTitle}>New Balance</Text>
+      <Text style={styles.balancePreviewTitle}>{title}</Text>
       {lines.map((line) => (
         <Text key={line} style={styles.balancePreviewLine}>
           {line}
@@ -3450,3 +3439,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+

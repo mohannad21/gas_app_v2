@@ -14,3 +14,4 @@ export const FontSizes = {
   xxl: 16,
   title: 18,
 };
+
