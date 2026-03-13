@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -11,22 +11,55 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      initialRouteName="reports/index"
+      initialRouteName="dashboard"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 6 },
-        tabBarShowLabel: true,
+        tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 8 },
+        tabBarShowLabel: false,
         tabBarActiveTintColor: tint,
         tabBarInactiveTintColor: inactive,
-        tabBarLabelStyle: { fontWeight: "700", fontSize: 12 },
+        tabBarIconStyle: { marginBottom: 0 },
       }}
     >
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="dashboard" options={{ href: null }} />
-      <Tabs.Screen name="customers" options={{ href: null }} />
-      <Tabs.Screen name="add/index" options={{ title: "Add", tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} /> }} />
-      <Tabs.Screen name="reports/index" options={{ title: "Daily", tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={20} color={color} /> }} />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "Dashboard",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="chart-bar" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="customers-home"
+        options={{
+          title: "Customers",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="add/index"
+        options={{
+          title: "New",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cylinder" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reports/index"
+        options={{
+          title: "Daily",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="account/index"
+        options={{
+          title: "Account",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
-

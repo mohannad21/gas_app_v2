@@ -65,7 +65,7 @@ function InitializationGuard() {
       return;
     }
     if (isSetupCompleted && inWelcome) {
-      router.replace("/(tabs)/reports");
+      router.replace("/(tabs)/dashboard");
     }
   }, [data?.is_setup_completed, isLoading, router, segments]);
 
@@ -92,4 +92,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
