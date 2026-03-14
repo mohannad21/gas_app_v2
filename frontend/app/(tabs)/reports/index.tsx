@@ -711,6 +711,9 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+      if (eventType === "customer_adjust") {
+        return;
+      }
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -762,23 +765,6 @@ function V2Timeline({
         const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
         const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
         const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
-        const bankBefore = typeof ev?.bank_before === "number" ? ev.bank_before : null;
-        const bankAfter = typeof ev?.bank_after === "number" ? ev.bank_after : null;
-        const hasBank = typeof bankBefore === "number" && typeof bankAfter === "number";
-        const customerMoneyBefore =
-          typeof ev?.customer_money_before === "number" ? ev.customer_money_before : null;
-        const customerMoneyAfter =
-          typeof ev?.customer_money_after === "number" ? ev.customer_money_after : null;
-        const customer12Before = typeof ev?.customer_12kg_before === "number" ? ev.customer_12kg_before : null;
-        const customer12After = typeof ev?.customer_12kg_after === "number" ? ev.customer_12kg_after : null;
-        const customer48Before = typeof ev?.customer_48kg_before === "number" ? ev.customer_48kg_before : null;
-        const customer48After = typeof ev?.customer_48kg_after === "number" ? ev.customer_48kg_after : null;
-        const companyMoneyBefore = typeof ev?.company_before === "number" ? ev.company_before : null;
-        const companyMoneyAfter = typeof ev?.company_after === "number" ? ev.company_after : null;
-        const company12Before = typeof ev?.company_12kg_before === "number" ? ev.company_12kg_before : null;
-        const company12After = typeof ev?.company_12kg_after === "number" ? ev.company_12kg_after : null;
-        const company48Before = typeof ev?.company_48kg_before === "number" ? ev.company_48kg_before : null;
-        const company48After = typeof ev?.company_48kg_after === "number" ? ev.company_48kg_after : null;
 
         const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
         const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
@@ -790,280 +776,332 @@ function V2Timeline({
         const empty48After = typeof invAfter?.empty48 === "number" ? invAfter.empty48 : null;
 
         const gasType = ev?.gas_type;
-        const is48 = gasType === "48kg";
-        const gasLabel = is48 ? "48kg" : "12kg";
 
-        const renderCashBox = (key = "cash") =>
-          hasCash ? (
-            <DeltaBox
-              key={key}
-              label="Cash"
-              before={cashBefore ?? 0}
-              after={cashAfter ?? 0}
-              format={formatMoney}
-              smallDelta
-              compact
-            />
-          ) : null;
-        const cashBox = renderCashBox("cash");
-        const bankBox =
-          hasBank && bankBefore !== bankAfter ? (
-            <DeltaBox
-              key="bank"
-              label="Bank"
-              before={bankBefore ?? 0}
-              after={bankAfter ?? 0}
-              format={formatMoney}
-              smallDelta
-              compact
-            />
-          ) : null;
+        const valueOrZero = (value: number | null | undefined) => (typeof value === "number" ? value : 0);
+        const has12InventoryState =
+          full12Before != null || full12After != null || empty12Before != null || empty12After != null;
+        const has48InventoryState =
+          full48Before != null || full48After != null || empty48Before != null || empty48After != null;
+        const has12InventoryChange =
+          (full12Before != null && full12After != null && full12Before !== full12After) ||
+          (empty12Before != null && empty12After != null && empty12Before !== empty12After);
+        const has48InventoryChange =
+          (full48Before != null && full48After != null && full48Before !== full48After) ||
+          (empty48Before != null && empty48After != null && empty48Before !== empty48After);
+        const hasCashChange = hasCash && cashBefore !== cashAfter;
+        const touches12 =
+          gasType === "12kg" ||
+          (typeof ev?.buy12 === "number" && ev.buy12 !== 0) ||
+          (typeof ev?.return12 === "number" && ev.return12 !== 0) ||
+          has12InventoryChange;
+        const touches48 =
+          gasType === "48kg" ||
+          (typeof ev?.buy48 === "number" && ev.buy48 !== 0) ||
+          (typeof ev?.return48 === "number" && ev.return48 !== 0) ||
+          has48InventoryChange;
+        const inferredGasType =
+          gasType === "12kg" || gasType === "48kg"
+            ? gasType
+            : touches12 && !touches48
+              ? "12kg"
+              : touches48 && !touches12
+                ? "48kg"
+                : null;
 
-        const orderFullBefore = is48 ? full48Before : full12Before;
-        const orderFullAfter = is48 ? full48After : full12After;
-        const orderEmptyBefore = is48 ? empty48Before : empty12Before;
-        const orderEmptyAfter = is48 ? empty48After : empty12After;
-        const orderBoxes =
-          orderFullBefore != null &&
-          orderFullAfter != null &&
-          orderEmptyBefore != null &&
-          orderEmptyAfter != null
-            ? [
-                <DeltaBox
-                  key="order-full"
-                  label={`${gasLabel} F`}
-                  before={orderFullBefore}
-                  after={orderFullAfter}
-                  format={formatCount}
-                  accent={gasColor(gasLabel)}
-                  compact
-                />,
-                <DeltaBox
-                  key="order-empty"
-                  label={`${gasLabel} E`}
-                  before={orderEmptyBefore}
-                  after={orderEmptyAfter}
-                  format={formatCount}
-                  accent={gasColor(gasLabel)}
-                  compact
-                />,
-                cashBox ?? placeholderBox("order-cash"),
-              ]
-            : [];
+        const renderTopStateBox = ({
+          key,
+          label,
+          before,
+          after,
+          format,
+          accent,
+        }: {
+          key: string;
+          label: string;
+          before: number | null | undefined;
+          after: number | null | undefined;
+          format: (v: number) => string;
+          accent?: string;
+        }) => (
+          <DeltaBox
+            key={key}
+            label={label}
+            before={valueOrZero(before)}
+            after={valueOrZero(after)}
+            format={format}
+            accent={accent}
+            compact
+            showNoChange
+          />
+        );
 
-        const empty12Box =
-          empty12Before != null && empty12After != null ? (
-            <DeltaBox
-              key="empty-12"
-              label="12kg E"
-              before={empty12Before}
-              after={empty12After}
-              format={formatCount}
-              accent={gasColor("12kg")}
-              compact
-            />
-          ) : null;
-        const empty48Box =
-          empty48Before != null && empty48After != null ? (
-            <DeltaBox
-              key="empty-48"
-              label="48kg E"
-              before={empty48Before}
-              after={empty48After}
-              format={formatCount}
-              accent={gasColor("48kg")}
-              compact
-            />
-          ) : null;
+        const renderRows = (boxes: ReactNode[]) => {
+          const rows: ReactNode[] = [];
+          for (let idx = 0; idx < boxes.length; idx += 3) {
+            rows.push(buildDeltaRow(boxes.slice(idx, idx + 3), `row-${idx}`));
+          }
+          return <>{rows}</>;
+        };
+
+        const renderFixedRow = (boxes: ReactNode[], key: string) => <>{buildDeltaRow(boxes, key)}</>;
+
+        const renderMixedLayout = ({
+          include12,
+          include48,
+          includeCash,
+          keyPrefix,
+        }: {
+          include12: boolean;
+          include48: boolean;
+          includeCash: boolean;
+          keyPrefix: string;
+        }) => (
+          <>
+            {include12
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-full`,
+                      label: "12kg Full",
+                      before: full12Before,
+                      after: full12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-empty`,
+                      label: "12kg Empty",
+                      before: empty12Before,
+                      after: empty12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-12-row`
+                )
+              : null}
+            {include48
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-full`,
+                      label: "48kg Full",
+                      before: full48Before,
+                      after: full48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-empty`,
+                      label: "48kg Empty",
+                      before: empty48Before,
+                      after: empty48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-48-row`
+                )
+              : null}
+            {includeCash
+              ? buildDeltaRow(
+                  [
+                    placeholderBox(`${keyPrefix}-cash-left`),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-cash`,
+                      label: "Cash",
+                      before: cashBefore,
+                      after: cashAfter,
+                      format: formatMoney,
+                    }),
+                    placeholderBox(`${keyPrefix}-cash-right`),
+                  ],
+                  `${keyPrefix}-cash-row`
+                )
+              : null}
+          </>
+        );
+
+        const renderGasTriplet = (targetGasType: "12kg" | "48kg") => {
+          const isTarget48 = targetGasType === "48kg";
+          return renderFixedRow([
+            renderTopStateBox({
+              key: `${targetGasType}-full`,
+              label: `${targetGasType} Full`,
+              before: isTarget48 ? full48Before : full12Before,
+              after: isTarget48 ? full48After : full12After,
+              format: formatCount,
+              accent: gasColor(targetGasType),
+            }),
+            renderTopStateBox({
+              key: `${targetGasType}-empty`,
+              label: `${targetGasType} Empty`,
+              before: isTarget48 ? empty48Before : empty12Before,
+              after: isTarget48 ? empty48After : empty12After,
+              format: formatCount,
+              accent: gasColor(targetGasType),
+            }),
+            renderTopStateBox({
+              key: `${targetGasType}-cash`,
+              label: "Cash",
+              before: cashBefore,
+              after: cashAfter,
+              format: formatMoney,
+            }),
+          ], `${targetGasType}-triplet`);
+        };
+
+        const renderCashTriplet = () =>
+          renderFixedRow([
+            renderTopStateBox({
+              key: "cash-only-cash",
+              label: "Cash",
+              before: cashBefore,
+              after: cashAfter,
+              format: formatMoney,
+            }),
+            renderTopStateBox({
+              key: "cash-only-12-full",
+              label: "12kg Full",
+              before: full12Before,
+              after: full12After,
+              format: formatCount,
+              accent: gasColor("12kg"),
+            }),
+            renderTopStateBox({
+              key: "cash-only-48-full",
+              label: "48kg Full",
+              before: full48Before,
+              after: full48After,
+              format: formatCount,
+              accent: gasColor("48kg"),
+            }),
+          ], "cash-triplet");
+
+        const renderCenteredCashOnly = (keyPrefix: string) =>
+          buildDeltaRow(
+            [
+              placeholderBox(`${keyPrefix}-cash-left`),
+              renderTopStateBox({
+                key: `${keyPrefix}-cash`,
+                label: "Cash",
+                before: cashBefore,
+                after: cashAfter,
+                format: formatMoney,
+              }),
+              placeholderBox(`${keyPrefix}-cash-right`),
+            ],
+            `${keyPrefix}-cash-row`
+          );
 
         const expandedContent = () => {
-          const relationshipRows: ReactNode[] = [];
-          const customerBoxes: ReactNode[] = [];
-          const companyBoxes: ReactNode[] = [];
-
-          if (
-            customerMoneyBefore != null &&
-            customerMoneyAfter != null &&
-            customerMoneyBefore !== customerMoneyAfter
-          ) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-money"
-                label="Cust Money"
-                before={customerMoneyBefore}
-                after={customerMoneyAfter}
-                format={formatMoneySigned}
-                compact
-              />
-            );
-          }
-          if (customer12Before != null && customer12After != null && customer12Before !== customer12After) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-12"
-                label="Cust 12kg"
-                before={customer12Before}
-                after={customer12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (customer48Before != null && customer48After != null && customer48Before !== customer48After) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-48"
-                label="Cust 48kg"
-                before={customer48Before}
-                after={customer48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (customerBoxes.length > 0) {
-            relationshipRows.push(buildDeltaRow(customerBoxes, "rel-customer"));
+          if (eventType === "order" && inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
 
-          if (companyMoneyBefore != null && companyMoneyAfter != null && companyMoneyBefore !== companyMoneyAfter) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-money"
-                label="Co Money"
-                before={companyMoneyBefore}
-                after={companyMoneyAfter}
-                format={formatMoneySigned}
-                compact
-              />
-            );
-          }
-          if (company12Before != null && company12After != null && company12Before !== company12After) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-12"
-                label="Co 12kg"
-                before={company12Before}
-                after={company12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (company48Before != null && company48After != null && company48Before !== company48After) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-48"
-                label="Co 48kg"
-                before={company48Before}
-                after={company48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (companyBoxes.length > 0) {
-            relationshipRows.push(buildDeltaRow(companyBoxes, "rel-company"));
+          if (eventType === "collection_empty" && inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
 
-          const row12Boxes: ReactNode[] = [];
-          const row48Boxes: ReactNode[] = [];
-          if (full12Before != null && full12After != null) {
-            row12Boxes.push(
-              <DeltaBox
-                key="row12-full"
-                label="12kg F"
-                before={full12Before}
-                after={full12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
+          if (eventType === "collection_money" || eventType === "collection_payout") {
+            return renderCenteredCashOnly(eventType);
           }
-          if (empty12Before != null && empty12After != null) {
-            row12Boxes.push(
-              <DeltaBox
-                key="row12-empty"
-                label="12kg E"
-                before={empty12Before}
-                after={empty12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (full48Before != null && full48After != null) {
-            row48Boxes.push(
-              <DeltaBox
-                key="row48-full"
-                label="48kg F"
-                before={full48Before}
-                after={full48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (empty48Before != null && empty48After != null) {
-            row48Boxes.push(
-              <DeltaBox
-                key="row48-empty"
-                label="48kg E"
-                before={empty48Before}
-                after={empty48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          const cashRow = cashBox ? [cashBox] : [];
 
-          if (eventType === "order") {
-            if (orderBoxes.length > 0) {
-              return (
-                <>
-                  {relationshipRows}
-                  {buildDeltaRow(orderBoxes, "order")}
-                </>
+          if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") {
+            return renderCashTriplet();
+          }
+
+          if (eventType === "refill" || eventType === "company_buy_iron") {
+            if (touches12 && touches48) {
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCash,
+                keyPrefix: "mixed",
+              });
+            }
+            if (touches12) return renderGasTriplet("12kg");
+            if (touches48) return renderGasTriplet("48kg");
+            if (hasCash) return renderCashTriplet();
+          }
+
+          if (eventType === "adjust") {
+            const cylinderBoxes = [
+              has12InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-12-full",
+                    label: "12kg Full",
+                    before: full12Before,
+                    after: full12After,
+                    format: formatCount,
+                    accent: gasColor("12kg"),
+                  })
+                : null,
+              has12InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-12-empty",
+                    label: "12kg Empty",
+                    before: empty12Before,
+                    after: empty12After,
+                    format: formatCount,
+                    accent: gasColor("12kg"),
+                  })
+                : null,
+              has48InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-48-full",
+                    label: "48kg Full",
+                    before: full48Before,
+                    after: full48After,
+                    format: formatCount,
+                    accent: gasColor("48kg"),
+                  })
+                : null,
+              has48InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-48-empty",
+                    label: "48kg Empty",
+                    before: empty48Before,
+                    after: empty48After,
+                    format: formatCount,
+                    accent: gasColor("48kg"),
+                  })
+                : null,
+            ].filter(Boolean) as ReactNode[];
+            if (has12InventoryState && has48InventoryState) {
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCashChange,
+                keyPrefix: "adjust-mixed",
+              });
+            }
+            if (cylinderBoxes.length > 0 && (has12InventoryChange || has48InventoryChange || !hasCashChange)) {
+              return renderRows(cylinderBoxes);
+            }
+            if (hasCash) {
+              return buildDeltaRow(
+                [
+                  renderTopStateBox({
+                    key: "adjust-cash",
+                    label: "Cash",
+                    before: cashBefore,
+                    after: cashAfter,
+                    format: formatMoney,
+                  }),
+                ],
+                "adjust-cash-only"
               );
             }
           }
-          if (
-            eventType === "collection_empty" ||
-            eventType === "collection_money" ||
-            eventType === "collection_payout"
-          ) {
-            const boxes = [
-              empty12Box ?? placeholderBox("collection-empty-12"),
-              empty48Box ?? placeholderBox("collection-empty-48"),
-              cashBox ?? placeholderBox("collection-cash"),
-            ];
-            return (
-              <>
-                {relationshipRows}
-                {buildDeltaRow(boxes, "collection")}
-                {bankBox ? buildDeltaRow([bankBox], "collection-bank") : null}
-              </>
-            );
+
+          if (inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
-          const bankRow = bankBox ? [bankBox] : [];
-          const rows = [row12Boxes, row48Boxes, cashRow, bankRow].filter((row) => row.length > 0);
-          if (relationshipRows.length === 0 && rows.length === 0) {
-            return <Text style={styles.eventExpandedEmpty}>No relationship/cash/inventory change for this activity.</Text>;
+          if (hasCash) {
+            return renderCashTriplet();
           }
-          return (
-            <>
-              {relationshipRows}
-              {rows.map((row, idx) => buildDeltaRow(row, `row-${idx}`))}
-            </>
-          );
+          return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
         };
 
         return (
@@ -1090,6 +1128,7 @@ function DeltaBox({
   valueStyle,
   badgeTone,
   singleValue,
+  showNoChange,
 }: {
   label: string;
   before: number;
@@ -1101,17 +1140,21 @@ function DeltaBox({
   valueStyle?: any;
   badgeTone?: "good" | "bad";
   singleValue?: number;
+  showNoChange?: boolean;
 }) {
   const delta = (after ?? 0) - (before ?? 0);
+  const showSingle = typeof singleValue === "number";
+  const isNoChange = !!showNoChange && !showSingle && delta === 0;
   const badgeStyle =
-    badgeTone === "good"
+    isNoChange
+      ? styles.deltaBadgeNeutral
+      : badgeTone === "good"
       ? styles.deltaBadgePositive
       : badgeTone === "bad"
         ? styles.deltaBadgeNegative
         : delta >= 0
           ? styles.deltaBadgePositive
           : styles.deltaBadgeNegative;
-  const showSingle = typeof singleValue === "number";
   return (
     <View style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}>
       <Text style={styles.deltaBoxLabel}>{label}</Text>
@@ -1122,7 +1165,9 @@ function DeltaBox({
           smallDelta && styles.deltaBadgeSmall,
         ]}
       >
-        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>{formatSigned(delta)}</Text>
+        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>
+          {isNoChange ? "No change" : formatSigned(delta)}
+        </Text>
       </View>
       <View style={styles.deltaBoxRow}>
         {showSingle ? (
@@ -1480,12 +1525,16 @@ const styles = StyleSheet.create({
   inventoryRow: { flexDirection: "row", gap: 8 },
   deltaBox: {
     position: "relative",
-    padding: 10,
+    paddingTop: 32,
+    paddingRight: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#cbd5f5",
     backgroundColor: "#f8fafc",
     minWidth: 140,
+    minHeight: 84,
     flexGrow: 1,
   },
   deltaBoxCompact: { minWidth: 0, flex: 1 },
@@ -1500,12 +1549,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#0f172a",
   },
+  deltaBadgeNeutral: { backgroundColor: "#64748b" },
   deltaBadgePositive: { backgroundColor: "#16a34a" },
   deltaBadgeNegative: { backgroundColor: "#b91c1c" },
   deltaBadgeSmall: { paddingHorizontal: 5, paddingVertical: 1 },
   deltaBadgeText: { fontSize: 11, fontWeight: "900", color: "white", fontFamily: FontFamilies.extrabold },
   deltaBadgeTextSmall: { fontSize: 10 },
-  deltaBoxRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  deltaBoxRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 18 },
   deltaBoxValue: { fontSize: 11, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   deltaBoxArrow: { fontSize: 11, fontWeight: "900", color: "#0a7ea4", fontFamily: FontFamilies.extrabold },
   deltaValueGood: { color: "#16a34a" },
