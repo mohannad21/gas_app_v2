@@ -30,6 +30,20 @@ import {
 } from "@/components/PriceMatrix";
 import { CashAdjustment, Expense, GasType, InventoryAdjustment, PriceSetting } from "@/types/domain";
 
+type CustomerFilter =
+  | "all"
+  | "money_debt"
+  | "money_credit"
+  | "missing_12kg"
+  | "credit_12kg"
+  | "missing_48kg"
+  | "credit_48kg"
+  | "system_active"
+  | "system_requires_check"
+  | "system_no_check"
+  | "system_future_check"
+  | "system_due_check";
+
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
   const [mode, setMode] = useState<"orders" | "customers" | "expenses" | "inventory">("orders");
@@ -37,15 +51,13 @@ export default function AddChooserScreen() {
   const isCustomers = mode === "customers";
   const isExpenses = mode === "expenses";
   const isInventory = mode === "inventory";
-  const [confirm, setConfirm] = useState<{ type: "order" | "customer" | "collection"; id: string; name?: string } | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
   const deleteOrder = useDeleteOrder();
-  const deleteCustomer = useDeleteCustomer();
   const systemsQuery = useSystems();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
@@ -133,93 +145,6 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
-  const customers = customersQuery.data ?? [];
-  const [customerFilter, setCustomerFilter] = useState<
-    | "all"
-    | "money_debt"
-    | "money_credit"
-    | "missing_12kg"
-    | "credit_12kg"
-    | "missing_48kg"
-    | "credit_48kg"
-    | "system_active"
-    | "system_requires_check"
-    | "system_no_check"
-    | "system_future_check"
-    | "system_due_check"
-  >("all");
-  const systemCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    (systemsQuery.data ?? []).forEach((s) => {
-      counts[s.customer_id] = (counts[s.customer_id] ?? 0) + 1;
-    });
-    return counts;
-  }, [systemsQuery.data]);
-  const systemsByCustomer = useMemo(() => {
-    const map = new Map<string, typeof systemsQuery.data>();
-    (systemsQuery.data ?? []).forEach((sys) => {
-      const list = map.get(sys.customer_id) ?? [];
-      map.set(sys.customer_id, [...list, sys]);
-    });
-    return map;
-  }, [systemsQuery.data]);
-  const todayKey = toDateKey(new Date());
-  const customerFilters = [
-    { id: "all", label: "All" },
-    { id: "money_debt", label: "Money debt" },
-    { id: "money_credit", label: "Money credit" },
-    { id: "missing_12kg", label: "Missing 12kg" },
-    { id: "credit_12kg", label: "Credit 12kg" },
-    { id: "missing_48kg", label: "Missing 48kg" },
-    { id: "credit_48kg", label: "Credit 48kg" },
-    { id: "system_active", label: "Active systems" },
-    { id: "system_requires_check", label: "Requires health check" },
-    { id: "system_no_check", label: "No health check" },
-    { id: "system_future_check", label: "Future check" },
-    { id: "system_due_check", label: "Check due" },
-  ] as const;
-  const filteredCustomers = useMemo(() => {
-    const rows = customers.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    if (customerFilter === "all") return rows;
-    return rows.filter((customer) => {
-      const money = Number(customer.money_balance ?? 0);
-      const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
-      const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
-      const systems = systemsByCustomer.get(customer.id) ?? [];
-      const hasActive = systems.some((s) => s.is_active);
-      const requiresCheck = systems.some((s) => s.requires_security_check);
-      const noCheck = systems.some((s) => !s.requires_security_check);
-      const dueCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") <= todayKey);
-      const futureCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") > todayKey);
-
-      switch (customerFilter) {
-        case "money_debt":
-          return money > 0;
-        case "money_credit":
-          return money < 0;
-        case "missing_12kg":
-          return cyl12 > 0;
-        case "credit_12kg":
-          return cyl12 < 0;
-        case "missing_48kg":
-          return cyl48 > 0;
-        case "credit_48kg":
-          return cyl48 < 0;
-        case "system_active":
-          return hasActive;
-        case "system_requires_check":
-          return requiresCheck;
-        case "system_no_check":
-          return noCheck;
-        case "system_future_check":
-          return futureCheck;
-        case "system_due_check":
-          return dueCheck;
-        default:
-          return true;
-      }
-    });
-  }, [customerFilter, customers, systemsByCustomer, todayKey]);
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
   const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
@@ -361,18 +286,6 @@ const formatDateTime = (value?: string) => {
   const confirmDeleteOrder = (id: string) => {
     console.log("[add] delete order pressed", id);
     setConfirm({ type: "order", id });
-  };
-
-  const confirmDeleteCustomer = (id: string) => {
-    console.log("[add] delete customer pressed", id);
-    const customer = customers.find((entry) => entry.id === id);
-    const orderCount = customer?.order_count ?? 0;
-    const hasOrders = orderCount > 0 || orders.some((o) => o.customer_id === id);
-    if (hasOrders) {
-      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
-      return;
-    }
-    setConfirm({ type: "customer", id });
   };
 
   const confirmDeleteCollection = (id: string) => {
@@ -803,136 +716,7 @@ const formatDateTime = (value?: string) => {
           />
         </>
       ) : isCustomers ? (
-        <>
-      {customersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
-      {customersQuery.error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.error}>Failed to load customers.</Text>
-          <Pressable style={styles.retryBtn} onPress={() => customersQuery.refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
-        </View>
-      )}
-      <View style={styles.filterSection}>
-        <View style={styles.filterRow}>
-          {customerFilters.map((filter) => {
-            const active = customerFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => setCustomerFilter(filter.id)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      <FlatList
-        key="customers-list"
-        data={filteredCustomers}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 10, paddingTop: 6 }}
-            ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>No customers yet.</Text> : null}
-            renderItem={({ item }) => {
-              const money = Number(item.money_balance ?? 0);
-              const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
-              const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
-              const systems = systemsByCustomer.get(item.id) ?? [];
-              const requiresCheck = systems.some((s) => s.requires_security_check);
-              const noCheck = systems.some((s) => !s.requires_security_check);
-              const dueCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") <= todayKey);
-              const futureCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") > todayKey);
-              const activeSystems = systems.filter((s) => s.is_active).length;
-
-              const showMoney = customerFilter.startsWith("money") || customerFilter === "all";
-              const show12 = customerFilter.includes("12kg") || customerFilter === "all";
-              const show48 = customerFilter.includes("48kg") || customerFilter === "all";
-              const showSystemFlags = customerFilter.startsWith("system") || customerFilter === "all";
-
-              const moneyLabel =
-                money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
-              const cyl12Label =
-                cyl12 > 0 ? `Missing ${Math.abs(cyl12)}x 12kg` : cyl12 < 0 ? `Credit ${Math.abs(cyl12)}x 12kg` : "12kg 0";
-              const cyl48Label =
-                cyl48 > 0 ? `Missing ${Math.abs(cyl48)}x 48kg` : cyl48 < 0 ? `Credit ${Math.abs(cyl48)}x 48kg` : "48kg 0";
-
-              return (
-              <Pressable onPress={() => router.push(`/customers/${item.id}`)} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.titleBlock}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>
-                      Address: {item.address ?? "-"} | Systems: {systemCounts[item.id] ?? 0}
-                    </Text>
-                    {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
-                    <View style={styles.pillRow}>
-                      {showMoney ? <Text style={[styles.pill, styles.pillPrimary]}>{moneyLabel}</Text> : null}
-                      {show12 ? (
-                        <Text style={[styles.pill, cyl12 > 0 ? styles.pillWarn : styles.pillPrimary]}>
-                          {cyl12Label}
-                        </Text>
-                      ) : null}
-                      {show48 ? (
-                        <Text style={[styles.pill, cyl48 > 0 ? styles.pillWarn : styles.pillPrimary]}>
-                          {cyl48Label}
-                        </Text>
-                      ) : null}
-                      {showSystemFlags && activeSystems > 0 ? (
-                        <Text style={[styles.pill, styles.pillPrimary]}>{`Active ${activeSystems}`}</Text>
-                      ) : null}
-                      {showSystemFlags && requiresCheck ? (
-                        <Text style={[styles.pill, styles.pillWarn]}>Needs check</Text>
-                      ) : null}
-                      {showSystemFlags && noCheck ? (
-                        <Text style={[styles.pill, styles.pillMuted]}>No check</Text>
-                      ) : null}
-                      {showSystemFlags && dueCheck ? (
-                        <Text style={[styles.pill, styles.pillWarn]}>Check due</Text>
-                      ) : null}
-                      {showSystemFlags && futureCheck ? (
-                        <Text style={[styles.pill, styles.pillPrimary]}>Future check</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                  <View style={styles.headerRight}>
-                    <Text style={styles.time}>{formatDateTimeLocale(item.created_at)}</Text>
-                    <View style={styles.actionsCompact}>
-                      <Pressable
-                        accessibilityLabel="Edit customer"
-                        onPress={() => router.push(`/customers/${item.id}/edit`)}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="build-outline" size={16} color="#0a7ea4" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Add order for customer"
-                        onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="add-circle-outline" size={16} color="#0a7ea4" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Remove customer"
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          confirmDeleteCustomer(item.id);
-                        }}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="trash" size={16} color="#b00020" />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            );
-            }}
-          />
-        </>
+        <AddCustomersSection />
          ) : isExpenses ? (
           <View style={styles.formCard}>
             <View style={styles.rowBetween}>
@@ -1264,9 +1048,7 @@ const formatDateTime = (value?: string) => {
             <Text style={styles.modalTitle}>
               {confirm?.type === "order"
                 ? "Delete order?"
-                : confirm?.type === "collection"
-                  ? "Delete collection?"
-                  : "Delete customer?"}
+                : "Delete collection?"}
             </Text>
             <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
             <View style={styles.modalActions}>
@@ -1285,22 +1067,6 @@ const formatDateTime = (value?: string) => {
                     deleteCollection.mutate(confirm.id);
                     setConfirm(null);
                     return;
-                  }
-                  if (confirm?.type === "customer") {
-                    try {
-                      await deleteCustomer.mutateAsync(confirm.id);
-                    } catch (error: any) {
-                      const detail = error?.response?.data?.detail;
-                      if (error?.response?.status === 409 || detail === "customer_has_orders") {
-                        setInfoMessage(
-                          "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-                        );
-                      } else {
-                        setInfoMessage("Could not delete this customer. Please try again.");
-                      }
-                    } finally {
-                      setConfirm(null);
-                    }
                   }
                 }}
               >
@@ -1367,21 +1133,6 @@ const formatDateTime = (value?: string) => {
         </View>
       </Modal>
 
-      {/* Info modal */}
-      <Modal transparent visible={!!infoMessage} animationType="fade" onRequestClose={() => setInfoMessage(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Cannot delete customer</Text>
-            <Text style={styles.modalText}>{infoMessage}</Text>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setInfoMessage(null)}>
-                <Text style={styles.modalBtnText}>OK</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Right drawer */}
       <Modal transparent visible={drawerOpen} animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
         <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)}>
@@ -1431,6 +1182,311 @@ const formatDateTime = (value?: string) => {
       </Modal>
 
     </View>
+  );
+}
+
+export function AddCustomersSection() {
+  const customersQuery = useCustomers();
+  const ordersQuery = useOrders();
+  const systemsQuery = useSystems();
+  const deleteCustomer = useDeleteCustomer();
+  const customers = customersQuery.data ?? [];
+  const orders = ordersQuery.data ?? [];
+  const [customerFilter, setCustomerFilter] = useState<CustomerFilter>("all");
+  const [confirmCustomerId, setConfirmCustomerId] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  const systemCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (systemsQuery.data ?? []).forEach((system) => {
+      counts[system.customer_id] = (counts[system.customer_id] ?? 0) + 1;
+    });
+    return counts;
+  }, [systemsQuery.data]);
+
+  const systemsByCustomer = useMemo(() => {
+    const map = new Map<string, typeof systemsQuery.data>();
+    (systemsQuery.data ?? []).forEach((system) => {
+      const list = map.get(system.customer_id) ?? [];
+      map.set(system.customer_id, [...list, system]);
+    });
+    return map;
+  }, [systemsQuery.data]);
+
+  const todayKey = toDateKey(new Date());
+  const customerFilters = [
+    { id: "all", label: "All" },
+    { id: "money_debt", label: "Money debt" },
+    { id: "money_credit", label: "Money credit" },
+    { id: "missing_12kg", label: "Missing 12kg" },
+    { id: "credit_12kg", label: "Credit 12kg" },
+    { id: "missing_48kg", label: "Missing 48kg" },
+    { id: "credit_48kg", label: "Credit 48kg" },
+    { id: "system_active", label: "Active systems" },
+    { id: "system_requires_check", label: "Requires health check" },
+    { id: "system_no_check", label: "No health check" },
+    { id: "system_future_check", label: "Future check" },
+    { id: "system_due_check", label: "Check due" },
+  ] as const;
+
+  const filteredCustomers = useMemo(() => {
+    const rows = customers.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    if (customerFilter === "all") return rows;
+    return rows.filter((customer) => {
+      const money = Number(customer.money_balance ?? 0);
+      const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
+      const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
+      const systems = systemsByCustomer.get(customer.id) ?? [];
+      const hasActive = systems.some((system) => system.is_active);
+      const requiresCheck = systems.some((system) => system.requires_security_check);
+      const noCheck = systems.some((system) => !system.requires_security_check);
+      const dueCheck = systems.some(
+        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
+      );
+      const futureCheck = systems.some(
+        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
+      );
+
+      switch (customerFilter) {
+        case "money_debt":
+          return money > 0;
+        case "money_credit":
+          return money < 0;
+        case "missing_12kg":
+          return cyl12 > 0;
+        case "credit_12kg":
+          return cyl12 < 0;
+        case "missing_48kg":
+          return cyl48 > 0;
+        case "credit_48kg":
+          return cyl48 < 0;
+        case "system_active":
+          return hasActive;
+        case "system_requires_check":
+          return requiresCheck;
+        case "system_no_check":
+          return noCheck;
+        case "system_future_check":
+          return futureCheck;
+        case "system_due_check":
+          return dueCheck;
+        default:
+          return true;
+      }
+    });
+  }, [customerFilter, customers, systemsByCustomer, todayKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      customersQuery.refetch();
+      ordersQuery.refetch();
+      systemsQuery.refetch();
+    }, [customersQuery, ordersQuery, systemsQuery])
+  );
+
+  const confirmDeleteCustomer = (id: string) => {
+    const customer = customers.find((entry) => entry.id === id);
+    const orderCount = customer?.order_count ?? 0;
+    const hasOrders = orderCount > 0 || orders.some((order) => order.customer_id === id);
+    if (hasOrders) {
+      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
+      return;
+    }
+    setConfirmCustomerId(id);
+  };
+
+  return (
+    <>
+      {customersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
+      {customersQuery.error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.error}>Failed to load customers.</Text>
+          <Pressable style={styles.retryBtn} onPress={() => customersQuery.refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+      <View style={styles.filterSection}>
+        <View style={styles.filterRow}>
+          {customerFilters.map((filter) => {
+            const active = customerFilter === filter.id;
+            return (
+              <Pressable
+                key={filter.id}
+                onPress={() => setCustomerFilter(filter.id)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+      <FlatList
+        key="customers-list"
+        data={filteredCustomers}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ gap: 10, paddingTop: 6 }}
+        ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>No customers yet.</Text> : null}
+        renderItem={({ item }) => {
+          const money = Number(item.money_balance ?? 0);
+          const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
+          const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
+          const systems = systemsByCustomer.get(item.id) ?? [];
+          const requiresCheck = systems.some((system) => system.requires_security_check);
+          const noCheck = systems.some((system) => !system.requires_security_check);
+          const dueCheck = systems.some(
+            (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
+          );
+          const futureCheck = systems.some(
+            (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
+          );
+          const activeSystems = systems.filter((system) => system.is_active).length;
+
+          const showMoney = customerFilter.startsWith("money") || customerFilter === "all";
+          const show12 = customerFilter.includes("12kg") || customerFilter === "all";
+          const show48 = customerFilter.includes("48kg") || customerFilter === "all";
+          const showSystemFlags = customerFilter.startsWith("system") || customerFilter === "all";
+
+          const moneyLabel =
+            money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
+          const cyl12Label =
+            cyl12 > 0 ? `Missing ${Math.abs(cyl12)}x 12kg` : cyl12 < 0 ? `Credit ${Math.abs(cyl12)}x 12kg` : "12kg 0";
+          const cyl48Label =
+            cyl48 > 0 ? `Missing ${Math.abs(cyl48)}x 48kg` : cyl48 < 0 ? `Credit ${Math.abs(cyl48)}x 48kg` : "48kg 0";
+
+          return (
+            <Pressable
+              onPress={() => router.push(`/customers/${item.id}`)}
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.titleBlock}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.meta}>
+                    Address: {item.address ?? "-"} | Systems: {systemCounts[item.id] ?? 0}
+                  </Text>
+                  {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                  <View style={styles.pillRow}>
+                    {showMoney ? <Text style={[styles.pill, styles.pillPrimary]}>{moneyLabel}</Text> : null}
+                    {show12 ? (
+                      <Text style={[styles.pill, cyl12 > 0 ? styles.pillWarn : styles.pillPrimary]}>{cyl12Label}</Text>
+                    ) : null}
+                    {show48 ? (
+                      <Text style={[styles.pill, cyl48 > 0 ? styles.pillWarn : styles.pillPrimary]}>{cyl48Label}</Text>
+                    ) : null}
+                    {showSystemFlags && activeSystems > 0 ? (
+                      <Text style={[styles.pill, styles.pillPrimary]}>{`Active ${activeSystems}`}</Text>
+                    ) : null}
+                    {showSystemFlags && requiresCheck ? (
+                      <Text style={[styles.pill, styles.pillWarn]}>Needs check</Text>
+                    ) : null}
+                    {showSystemFlags && noCheck ? (
+                      <Text style={[styles.pill, styles.pillMuted]}>No check</Text>
+                    ) : null}
+                    {showSystemFlags && dueCheck ? (
+                      <Text style={[styles.pill, styles.pillWarn]}>Check due</Text>
+                    ) : null}
+                    {showSystemFlags && futureCheck ? (
+                      <Text style={[styles.pill, styles.pillPrimary]}>Future check</Text>
+                    ) : null}
+                  </View>
+                </View>
+                <View style={styles.headerRight}>
+                  <Text style={styles.time}>{formatDateTimeLocale(item.created_at)}</Text>
+                  <View style={styles.actionsCompact}>
+                    <Pressable
+                      accessibilityLabel="Edit customer"
+                      onPress={() => router.push(`/customers/${item.id}/edit`)}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="build-outline" size={16} color="#0a7ea4" />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Add order for customer"
+                      onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color="#0a7ea4" />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Remove customer"
+                      onPress={(event) => {
+                        event.stopPropagation?.();
+                        confirmDeleteCustomer(item.id);
+                      }}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="trash" size={16} color="#b00020" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+          );
+        }}
+      />
+
+      <Modal transparent visible={!!confirmCustomerId} animationType="fade" onRequestClose={() => setConfirmCustomerId(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete customer?</Text>
+            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalBtn} onPress={() => setConfirmCustomerId(null)}>
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnDanger]}
+                onPress={async () => {
+                  if (!confirmCustomerId) return;
+                  try {
+                    await deleteCustomer.mutateAsync(confirmCustomerId);
+                  } catch (error: any) {
+                    const detail = error?.response?.data?.detail;
+                    if (error?.response?.status === 409 || detail === "customer_has_orders") {
+                      setInfoMessage(
+                        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
+                      );
+                    } else {
+                      setInfoMessage("Could not delete this customer. Please try again.");
+                    }
+                  } finally {
+                    setConfirmCustomerId(null);
+                  }
+                }}
+              >
+                <Text style={[styles.modalBtnText, styles.modalBtnTextDanger]}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!infoMessage} animationType="fade" onRequestClose={() => setInfoMessage(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Cannot delete customer</Text>
+            <Text style={styles.modalText}>{infoMessage}</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalBtn} onPress={() => setInfoMessage(null)}>
+                <Text style={styles.modalBtnText}>OK</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+export function AddCustomerEntryAction() {
+  return (
+    <Pressable onPress={() => router.push("/customers/new")} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+      <Text style={styles.primaryText}>+ New Customer</Text>
+    </Pressable>
   );
 }
 
@@ -3653,5 +3709,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-
