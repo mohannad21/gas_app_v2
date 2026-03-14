@@ -2,6 +2,7 @@ FILE: frontend/.env
 BUSINESS_TZ=Europe/Berlin
 EXPO_PUBLIC_API_URL=http://192.168.178.120:8000
 
+
 FILE: frontend/.gitignore
 
 # @generated expo-cli sync-2b81b286409207a5da26e14c78851eb30d8ccbdb
@@ -10,9 +11,10 @@ FILE: frontend/.gitignore
 expo-env.d.ts
 # @end expo-cli
 
+
 FILE: frontend/app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -24,24 +26,87 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      initialRouteName="reports/index"
+      initialRouteName="dashboard"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 6 },
-        tabBarShowLabel: true,
+        tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 8 },
+        tabBarShowLabel: false,
         tabBarActiveTintColor: tint,
         tabBarInactiveTintColor: inactive,
-        tabBarLabelStyle: { fontWeight: "700", fontSize: 12 },
+        tabBarIconStyle: { marginBottom: 0 },
       }}
     >
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="dashboard" options={{ href: null }} />
-      <Tabs.Screen name="customers" options={{ href: null }} />
-      <Tabs.Screen name="add/index" options={{ title: "Add", tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} /> }} />
-      <Tabs.Screen name="reports/index" options={{ title: "Daily", tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={20} color={color} /> }} />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "Dashboard",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="chart-bar" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="customers-home"
+        options={{
+          title: "Customers",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="add/index"
+        options={{
+          title: "New",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cylinder" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reports/index"
+        options={{
+          title: "Daily",
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="account/index"
+        options={{
+          title: "Account",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="account-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
+
+FILE: frontend/app/(tabs)/account/index.tsx
+import { StyleSheet, Text, View } from "react-native";
+
+export default function AccountScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Account</Text>
+      <Text style={styles.body}>Account placeholder. Profile and settings will be added later.</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: "#f7f7f8",
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  body: {
+    fontSize: 16,
+    color: "#666",
+  },
+});
 
 FILE: frontend/app/(tabs)/add/index.tsx
 import { useFocusEffect } from "@react-navigation/native";
@@ -76,6 +141,20 @@ import {
 } from "@/components/PriceMatrix";
 import { CashAdjustment, Expense, GasType, InventoryAdjustment, PriceSetting } from "@/types/domain";
 
+type CustomerFilter =
+  | "all"
+  | "money_debt"
+  | "money_credit"
+  | "missing_12kg"
+  | "credit_12kg"
+  | "missing_48kg"
+  | "credit_48kg"
+  | "system_active"
+  | "system_requires_check"
+  | "system_no_check"
+  | "system_future_check"
+  | "system_due_check";
+
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
   const [mode, setMode] = useState<"orders" | "customers" | "expenses" | "inventory">("orders");
@@ -83,15 +162,13 @@ export default function AddChooserScreen() {
   const isCustomers = mode === "customers";
   const isExpenses = mode === "expenses";
   const isInventory = mode === "inventory";
-  const [confirm, setConfirm] = useState<{ type: "order" | "customer" | "collection"; id: string; name?: string } | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
   const deleteOrder = useDeleteOrder();
-  const deleteCustomer = useDeleteCustomer();
   const systemsQuery = useSystems();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
@@ -179,93 +256,6 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
-  const customers = customersQuery.data ?? [];
-  const [customerFilter, setCustomerFilter] = useState<
-    | "all"
-    | "money_debt"
-    | "money_credit"
-    | "missing_12kg"
-    | "credit_12kg"
-    | "missing_48kg"
-    | "credit_48kg"
-    | "system_active"
-    | "system_requires_check"
-    | "system_no_check"
-    | "system_future_check"
-    | "system_due_check"
-  >("all");
-  const systemCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    (systemsQuery.data ?? []).forEach((s) => {
-      counts[s.customer_id] = (counts[s.customer_id] ?? 0) + 1;
-    });
-    return counts;
-  }, [systemsQuery.data]);
-  const systemsByCustomer = useMemo(() => {
-    const map = new Map<string, typeof systemsQuery.data>();
-    (systemsQuery.data ?? []).forEach((sys) => {
-      const list = map.get(sys.customer_id) ?? [];
-      map.set(sys.customer_id, [...list, sys]);
-    });
-    return map;
-  }, [systemsQuery.data]);
-  const todayKey = toDateKey(new Date());
-  const customerFilters = [
-    { id: "all", label: "All" },
-    { id: "money_debt", label: "Money debt" },
-    { id: "money_credit", label: "Money credit" },
-    { id: "missing_12kg", label: "Missing 12kg" },
-    { id: "credit_12kg", label: "Credit 12kg" },
-    { id: "missing_48kg", label: "Missing 48kg" },
-    { id: "credit_48kg", label: "Credit 48kg" },
-    { id: "system_active", label: "Active systems" },
-    { id: "system_requires_check", label: "Requires health check" },
-    { id: "system_no_check", label: "No health check" },
-    { id: "system_future_check", label: "Future check" },
-    { id: "system_due_check", label: "Check due" },
-  ] as const;
-  const filteredCustomers = useMemo(() => {
-    const rows = customers.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    if (customerFilter === "all") return rows;
-    return rows.filter((customer) => {
-      const money = Number(customer.money_balance ?? 0);
-      const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
-      const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
-      const systems = systemsByCustomer.get(customer.id) ?? [];
-      const hasActive = systems.some((s) => s.is_active);
-      const requiresCheck = systems.some((s) => s.requires_security_check);
-      const noCheck = systems.some((s) => !s.requires_security_check);
-      const dueCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") <= todayKey);
-      const futureCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") > todayKey);
-
-      switch (customerFilter) {
-        case "money_debt":
-          return money > 0;
-        case "money_credit":
-          return money < 0;
-        case "missing_12kg":
-          return cyl12 > 0;
-        case "credit_12kg":
-          return cyl12 < 0;
-        case "missing_48kg":
-          return cyl48 > 0;
-        case "credit_48kg":
-          return cyl48 < 0;
-        case "system_active":
-          return hasActive;
-        case "system_requires_check":
-          return requiresCheck;
-        case "system_no_check":
-          return noCheck;
-        case "system_future_check":
-          return futureCheck;
-        case "system_due_check":
-          return dueCheck;
-        default:
-          return true;
-      }
-    });
-  }, [customerFilter, customers, systemsByCustomer, todayKey]);
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
   const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
@@ -407,18 +397,6 @@ const formatDateTime = (value?: string) => {
   const confirmDeleteOrder = (id: string) => {
     console.log("[add] delete order pressed", id);
     setConfirm({ type: "order", id });
-  };
-
-  const confirmDeleteCustomer = (id: string) => {
-    console.log("[add] delete customer pressed", id);
-    const customer = customers.find((entry) => entry.id === id);
-    const orderCount = customer?.order_count ?? 0;
-    const hasOrders = orderCount > 0 || orders.some((o) => o.customer_id === id);
-    if (hasOrders) {
-      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
-      return;
-    }
-    setConfirm({ type: "customer", id });
   };
 
   const confirmDeleteCollection = (id: string) => {
@@ -849,136 +827,7 @@ const formatDateTime = (value?: string) => {
           />
         </>
       ) : isCustomers ? (
-        <>
-      {customersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
-      {customersQuery.error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.error}>Failed to load customers.</Text>
-          <Pressable style={styles.retryBtn} onPress={() => customersQuery.refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
-        </View>
-      )}
-      <View style={styles.filterSection}>
-        <View style={styles.filterRow}>
-          {customerFilters.map((filter) => {
-            const active = customerFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => setCustomerFilter(filter.id)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      <FlatList
-        key="customers-list"
-        data={filteredCustomers}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 10, paddingTop: 6 }}
-            ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>No customers yet.</Text> : null}
-            renderItem={({ item }) => {
-              const money = Number(item.money_balance ?? 0);
-              const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
-              const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
-              const systems = systemsByCustomer.get(item.id) ?? [];
-              const requiresCheck = systems.some((s) => s.requires_security_check);
-              const noCheck = systems.some((s) => !s.requires_security_check);
-              const dueCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") <= todayKey);
-              const futureCheck = systems.some((s) => (s.next_security_check_at ?? "") !== "" && (s.next_security_check_at ?? "") > todayKey);
-              const activeSystems = systems.filter((s) => s.is_active).length;
-
-              const showMoney = customerFilter.startsWith("money") || customerFilter === "all";
-              const show12 = customerFilter.includes("12kg") || customerFilter === "all";
-              const show48 = customerFilter.includes("48kg") || customerFilter === "all";
-              const showSystemFlags = customerFilter.startsWith("system") || customerFilter === "all";
-
-              const moneyLabel =
-                money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
-              const cyl12Label =
-                cyl12 > 0 ? `Missing ${Math.abs(cyl12)}x 12kg` : cyl12 < 0 ? `Credit ${Math.abs(cyl12)}x 12kg` : "12kg 0";
-              const cyl48Label =
-                cyl48 > 0 ? `Missing ${Math.abs(cyl48)}x 48kg` : cyl48 < 0 ? `Credit ${Math.abs(cyl48)}x 48kg` : "48kg 0";
-
-              return (
-              <Pressable onPress={() => router.push(`/customers/${item.id}`)} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.titleBlock}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>
-                      Address: {item.address ?? "-"} | Systems: {systemCounts[item.id] ?? 0}
-                    </Text>
-                    {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
-                    <View style={styles.pillRow}>
-                      {showMoney ? <Text style={[styles.pill, styles.pillPrimary]}>{moneyLabel}</Text> : null}
-                      {show12 ? (
-                        <Text style={[styles.pill, cyl12 > 0 ? styles.pillWarn : styles.pillPrimary]}>
-                          {cyl12Label}
-                        </Text>
-                      ) : null}
-                      {show48 ? (
-                        <Text style={[styles.pill, cyl48 > 0 ? styles.pillWarn : styles.pillPrimary]}>
-                          {cyl48Label}
-                        </Text>
-                      ) : null}
-                      {showSystemFlags && activeSystems > 0 ? (
-                        <Text style={[styles.pill, styles.pillPrimary]}>{`Active ${activeSystems}`}</Text>
-                      ) : null}
-                      {showSystemFlags && requiresCheck ? (
-                        <Text style={[styles.pill, styles.pillWarn]}>Needs check</Text>
-                      ) : null}
-                      {showSystemFlags && noCheck ? (
-                        <Text style={[styles.pill, styles.pillMuted]}>No check</Text>
-                      ) : null}
-                      {showSystemFlags && dueCheck ? (
-                        <Text style={[styles.pill, styles.pillWarn]}>Check due</Text>
-                      ) : null}
-                      {showSystemFlags && futureCheck ? (
-                        <Text style={[styles.pill, styles.pillPrimary]}>Future check</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                  <View style={styles.headerRight}>
-                    <Text style={styles.time}>{formatDateTimeLocale(item.created_at)}</Text>
-                    <View style={styles.actionsCompact}>
-                      <Pressable
-                        accessibilityLabel="Edit customer"
-                        onPress={() => router.push(`/customers/${item.id}/edit`)}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="build-outline" size={16} color="#0a7ea4" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Add order for customer"
-                        onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="add-circle-outline" size={16} color="#0a7ea4" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Remove customer"
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          confirmDeleteCustomer(item.id);
-                        }}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="trash" size={16} color="#b00020" />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            );
-            }}
-          />
-        </>
+        <AddCustomersSection />
          ) : isExpenses ? (
           <View style={styles.formCard}>
             <View style={styles.rowBetween}>
@@ -1310,9 +1159,7 @@ const formatDateTime = (value?: string) => {
             <Text style={styles.modalTitle}>
               {confirm?.type === "order"
                 ? "Delete order?"
-                : confirm?.type === "collection"
-                  ? "Delete collection?"
-                  : "Delete customer?"}
+                : "Delete collection?"}
             </Text>
             <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
             <View style={styles.modalActions}>
@@ -1331,22 +1178,6 @@ const formatDateTime = (value?: string) => {
                     deleteCollection.mutate(confirm.id);
                     setConfirm(null);
                     return;
-                  }
-                  if (confirm?.type === "customer") {
-                    try {
-                      await deleteCustomer.mutateAsync(confirm.id);
-                    } catch (error: any) {
-                      const detail = error?.response?.data?.detail;
-                      if (error?.response?.status === 409 || detail === "customer_has_orders") {
-                        setInfoMessage(
-                          "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-                        );
-                      } else {
-                        setInfoMessage("Could not delete this customer. Please try again.");
-                      }
-                    } finally {
-                      setConfirm(null);
-                    }
                   }
                 }}
               >
@@ -1413,21 +1244,6 @@ const formatDateTime = (value?: string) => {
         </View>
       </Modal>
 
-      {/* Info modal */}
-      <Modal transparent visible={!!infoMessage} animationType="fade" onRequestClose={() => setInfoMessage(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Cannot delete customer</Text>
-            <Text style={styles.modalText}>{infoMessage}</Text>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setInfoMessage(null)}>
-                <Text style={styles.modalBtnText}>OK</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Right drawer */}
       <Modal transparent visible={drawerOpen} animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
         <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)}>
@@ -1477,6 +1293,311 @@ const formatDateTime = (value?: string) => {
       </Modal>
 
     </View>
+  );
+}
+
+export function AddCustomersSection() {
+  const customersQuery = useCustomers();
+  const ordersQuery = useOrders();
+  const systemsQuery = useSystems();
+  const deleteCustomer = useDeleteCustomer();
+  const customers = customersQuery.data ?? [];
+  const orders = ordersQuery.data ?? [];
+  const [customerFilter, setCustomerFilter] = useState<CustomerFilter>("all");
+  const [confirmCustomerId, setConfirmCustomerId] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  const systemCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (systemsQuery.data ?? []).forEach((system) => {
+      counts[system.customer_id] = (counts[system.customer_id] ?? 0) + 1;
+    });
+    return counts;
+  }, [systemsQuery.data]);
+
+  const systemsByCustomer = useMemo(() => {
+    const map = new Map<string, typeof systemsQuery.data>();
+    (systemsQuery.data ?? []).forEach((system) => {
+      const list = map.get(system.customer_id) ?? [];
+      map.set(system.customer_id, [...list, system]);
+    });
+    return map;
+  }, [systemsQuery.data]);
+
+  const todayKey = toDateKey(new Date());
+  const customerFilters = [
+    { id: "all", label: "All" },
+    { id: "money_debt", label: "Money debt" },
+    { id: "money_credit", label: "Money credit" },
+    { id: "missing_12kg", label: "Missing 12kg" },
+    { id: "credit_12kg", label: "Credit 12kg" },
+    { id: "missing_48kg", label: "Missing 48kg" },
+    { id: "credit_48kg", label: "Credit 48kg" },
+    { id: "system_active", label: "Active systems" },
+    { id: "system_requires_check", label: "Requires health check" },
+    { id: "system_no_check", label: "No health check" },
+    { id: "system_future_check", label: "Future check" },
+    { id: "system_due_check", label: "Check due" },
+  ] as const;
+
+  const filteredCustomers = useMemo(() => {
+    const rows = customers.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    if (customerFilter === "all") return rows;
+    return rows.filter((customer) => {
+      const money = Number(customer.money_balance ?? 0);
+      const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
+      const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
+      const systems = systemsByCustomer.get(customer.id) ?? [];
+      const hasActive = systems.some((system) => system.is_active);
+      const requiresCheck = systems.some((system) => system.requires_security_check);
+      const noCheck = systems.some((system) => !system.requires_security_check);
+      const dueCheck = systems.some(
+        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
+      );
+      const futureCheck = systems.some(
+        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
+      );
+
+      switch (customerFilter) {
+        case "money_debt":
+          return money > 0;
+        case "money_credit":
+          return money < 0;
+        case "missing_12kg":
+          return cyl12 > 0;
+        case "credit_12kg":
+          return cyl12 < 0;
+        case "missing_48kg":
+          return cyl48 > 0;
+        case "credit_48kg":
+          return cyl48 < 0;
+        case "system_active":
+          return hasActive;
+        case "system_requires_check":
+          return requiresCheck;
+        case "system_no_check":
+          return noCheck;
+        case "system_future_check":
+          return futureCheck;
+        case "system_due_check":
+          return dueCheck;
+        default:
+          return true;
+      }
+    });
+  }, [customerFilter, customers, systemsByCustomer, todayKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      customersQuery.refetch();
+      ordersQuery.refetch();
+      systemsQuery.refetch();
+    }, [customersQuery, ordersQuery, systemsQuery])
+  );
+
+  const confirmDeleteCustomer = (id: string) => {
+    const customer = customers.find((entry) => entry.id === id);
+    const orderCount = customer?.order_count ?? 0;
+    const hasOrders = orderCount > 0 || orders.some((order) => order.customer_id === id);
+    if (hasOrders) {
+      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
+      return;
+    }
+    setConfirmCustomerId(id);
+  };
+
+  return (
+    <>
+      {customersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
+      {customersQuery.error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.error}>Failed to load customers.</Text>
+          <Pressable style={styles.retryBtn} onPress={() => customersQuery.refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+      <View style={styles.filterSection}>
+        <View style={styles.filterRow}>
+          {customerFilters.map((filter) => {
+            const active = customerFilter === filter.id;
+            return (
+              <Pressable
+                key={filter.id}
+                onPress={() => setCustomerFilter(filter.id)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+      <FlatList
+        key="customers-list"
+        data={filteredCustomers}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ gap: 10, paddingTop: 6 }}
+        ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>No customers yet.</Text> : null}
+        renderItem={({ item }) => {
+          const money = Number(item.money_balance ?? 0);
+          const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
+          const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
+          const systems = systemsByCustomer.get(item.id) ?? [];
+          const requiresCheck = systems.some((system) => system.requires_security_check);
+          const noCheck = systems.some((system) => !system.requires_security_check);
+          const dueCheck = systems.some(
+            (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
+          );
+          const futureCheck = systems.some(
+            (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
+          );
+          const activeSystems = systems.filter((system) => system.is_active).length;
+
+          const showMoney = customerFilter.startsWith("money") || customerFilter === "all";
+          const show12 = customerFilter.includes("12kg") || customerFilter === "all";
+          const show48 = customerFilter.includes("48kg") || customerFilter === "all";
+          const showSystemFlags = customerFilter.startsWith("system") || customerFilter === "all";
+
+          const moneyLabel =
+            money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
+          const cyl12Label =
+            cyl12 > 0 ? `Missing ${Math.abs(cyl12)}x 12kg` : cyl12 < 0 ? `Credit ${Math.abs(cyl12)}x 12kg` : "12kg 0";
+          const cyl48Label =
+            cyl48 > 0 ? `Missing ${Math.abs(cyl48)}x 48kg` : cyl48 < 0 ? `Credit ${Math.abs(cyl48)}x 48kg` : "48kg 0";
+
+          return (
+            <Pressable
+              onPress={() => router.push(`/customers/${item.id}`)}
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.titleBlock}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.meta}>
+                    Address: {item.address ?? "-"} | Systems: {systemCounts[item.id] ?? 0}
+                  </Text>
+                  {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                  <View style={styles.pillRow}>
+                    {showMoney ? <Text style={[styles.pill, styles.pillPrimary]}>{moneyLabel}</Text> : null}
+                    {show12 ? (
+                      <Text style={[styles.pill, cyl12 > 0 ? styles.pillWarn : styles.pillPrimary]}>{cyl12Label}</Text>
+                    ) : null}
+                    {show48 ? (
+                      <Text style={[styles.pill, cyl48 > 0 ? styles.pillWarn : styles.pillPrimary]}>{cyl48Label}</Text>
+                    ) : null}
+                    {showSystemFlags && activeSystems > 0 ? (
+                      <Text style={[styles.pill, styles.pillPrimary]}>{`Active ${activeSystems}`}</Text>
+                    ) : null}
+                    {showSystemFlags && requiresCheck ? (
+                      <Text style={[styles.pill, styles.pillWarn]}>Needs check</Text>
+                    ) : null}
+                    {showSystemFlags && noCheck ? (
+                      <Text style={[styles.pill, styles.pillMuted]}>No check</Text>
+                    ) : null}
+                    {showSystemFlags && dueCheck ? (
+                      <Text style={[styles.pill, styles.pillWarn]}>Check due</Text>
+                    ) : null}
+                    {showSystemFlags && futureCheck ? (
+                      <Text style={[styles.pill, styles.pillPrimary]}>Future check</Text>
+                    ) : null}
+                  </View>
+                </View>
+                <View style={styles.headerRight}>
+                  <Text style={styles.time}>{formatDateTimeLocale(item.created_at)}</Text>
+                  <View style={styles.actionsCompact}>
+                    <Pressable
+                      accessibilityLabel="Edit customer"
+                      onPress={() => router.push(`/customers/${item.id}/edit`)}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="build-outline" size={16} color="#0a7ea4" />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Add order for customer"
+                      onPress={() => router.push(`/orders/new?customerId=${item.id}`)}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color="#0a7ea4" />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Remove customer"
+                      onPress={(event) => {
+                        event.stopPropagation?.();
+                        confirmDeleteCustomer(item.id);
+                      }}
+                      style={styles.iconBtn}
+                    >
+                      <Ionicons name="trash" size={16} color="#b00020" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+          );
+        }}
+      />
+
+      <Modal transparent visible={!!confirmCustomerId} animationType="fade" onRequestClose={() => setConfirmCustomerId(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete customer?</Text>
+            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalBtn} onPress={() => setConfirmCustomerId(null)}>
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnDanger]}
+                onPress={async () => {
+                  if (!confirmCustomerId) return;
+                  try {
+                    await deleteCustomer.mutateAsync(confirmCustomerId);
+                  } catch (error: any) {
+                    const detail = error?.response?.data?.detail;
+                    if (error?.response?.status === 409 || detail === "customer_has_orders") {
+                      setInfoMessage(
+                        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
+                      );
+                    } else {
+                      setInfoMessage("Could not delete this customer. Please try again.");
+                    }
+                  } finally {
+                    setConfirmCustomerId(null);
+                  }
+                }}
+              >
+                <Text style={[styles.modalBtnText, styles.modalBtnTextDanger]}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!infoMessage} animationType="fade" onRequestClose={() => setInfoMessage(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Cannot delete customer</Text>
+            <Text style={styles.modalText}>{infoMessage}</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalBtn} onPress={() => setInfoMessage(null)}>
+                <Text style={styles.modalBtnText}>OK</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+export function AddCustomerEntryAction() {
+  return (
+    <Pressable onPress={() => router.push("/customers/new")} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+      <Text style={styles.primaryText}>+ New Customer</Text>
+    </Pressable>
   );
 }
 
@@ -3700,6 +3821,46 @@ const styles = StyleSheet.create({
   },
 });
 
+FILE: frontend/app/(tabs)/customers-home.tsx
+import { AddCustomerEntryAction, AddCustomersSection } from "./add/index";
+
+export default function CustomersHomeScreen() {
+  return (
+    <>
+      <AddCustomerEntryAction />
+      <AddCustomersSection />
+    </>
+  );
+}
+
+FILE: frontend/app/(tabs)/dashboard.tsx
+import { StyleSheet, Text, View } from "react-native";
+
+export default function DashboardScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Dashboard</Text>
+      <Text style={styles.body}>Dashboard placeholder. Analytics content will be added later.</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: "#f7f7f8",
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  body: {
+    fontSize: 16,
+    color: "#666",
+  },
+});
 
 FILE: frontend/app/(tabs)/reports/index.tsx
 import { Ionicons } from "@expo/vector-icons";
@@ -4415,6 +4576,9 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+      if (eventType === "customer_adjust") {
+        return;
+      }
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -4466,23 +4630,6 @@ function V2Timeline({
         const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
         const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
         const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
-        const bankBefore = typeof ev?.bank_before === "number" ? ev.bank_before : null;
-        const bankAfter = typeof ev?.bank_after === "number" ? ev.bank_after : null;
-        const hasBank = typeof bankBefore === "number" && typeof bankAfter === "number";
-        const customerMoneyBefore =
-          typeof ev?.customer_money_before === "number" ? ev.customer_money_before : null;
-        const customerMoneyAfter =
-          typeof ev?.customer_money_after === "number" ? ev.customer_money_after : null;
-        const customer12Before = typeof ev?.customer_12kg_before === "number" ? ev.customer_12kg_before : null;
-        const customer12After = typeof ev?.customer_12kg_after === "number" ? ev.customer_12kg_after : null;
-        const customer48Before = typeof ev?.customer_48kg_before === "number" ? ev.customer_48kg_before : null;
-        const customer48After = typeof ev?.customer_48kg_after === "number" ? ev.customer_48kg_after : null;
-        const companyMoneyBefore = typeof ev?.company_before === "number" ? ev.company_before : null;
-        const companyMoneyAfter = typeof ev?.company_after === "number" ? ev.company_after : null;
-        const company12Before = typeof ev?.company_12kg_before === "number" ? ev.company_12kg_before : null;
-        const company12After = typeof ev?.company_12kg_after === "number" ? ev.company_12kg_after : null;
-        const company48Before = typeof ev?.company_48kg_before === "number" ? ev.company_48kg_before : null;
-        const company48After = typeof ev?.company_48kg_after === "number" ? ev.company_48kg_after : null;
 
         const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
         const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
@@ -4494,280 +4641,332 @@ function V2Timeline({
         const empty48After = typeof invAfter?.empty48 === "number" ? invAfter.empty48 : null;
 
         const gasType = ev?.gas_type;
-        const is48 = gasType === "48kg";
-        const gasLabel = is48 ? "48kg" : "12kg";
 
-        const renderCashBox = (key = "cash") =>
-          hasCash ? (
-            <DeltaBox
-              key={key}
-              label="Cash"
-              before={cashBefore ?? 0}
-              after={cashAfter ?? 0}
-              format={formatMoney}
-              smallDelta
-              compact
-            />
-          ) : null;
-        const cashBox = renderCashBox("cash");
-        const bankBox =
-          hasBank && bankBefore !== bankAfter ? (
-            <DeltaBox
-              key="bank"
-              label="Bank"
-              before={bankBefore ?? 0}
-              after={bankAfter ?? 0}
-              format={formatMoney}
-              smallDelta
-              compact
-            />
-          ) : null;
+        const valueOrZero = (value: number | null | undefined) => (typeof value === "number" ? value : 0);
+        const has12InventoryState =
+          full12Before != null || full12After != null || empty12Before != null || empty12After != null;
+        const has48InventoryState =
+          full48Before != null || full48After != null || empty48Before != null || empty48After != null;
+        const has12InventoryChange =
+          (full12Before != null && full12After != null && full12Before !== full12After) ||
+          (empty12Before != null && empty12After != null && empty12Before !== empty12After);
+        const has48InventoryChange =
+          (full48Before != null && full48After != null && full48Before !== full48After) ||
+          (empty48Before != null && empty48After != null && empty48Before !== empty48After);
+        const hasCashChange = hasCash && cashBefore !== cashAfter;
+        const touches12 =
+          gasType === "12kg" ||
+          (typeof ev?.buy12 === "number" && ev.buy12 !== 0) ||
+          (typeof ev?.return12 === "number" && ev.return12 !== 0) ||
+          has12InventoryChange;
+        const touches48 =
+          gasType === "48kg" ||
+          (typeof ev?.buy48 === "number" && ev.buy48 !== 0) ||
+          (typeof ev?.return48 === "number" && ev.return48 !== 0) ||
+          has48InventoryChange;
+        const inferredGasType =
+          gasType === "12kg" || gasType === "48kg"
+            ? gasType
+            : touches12 && !touches48
+              ? "12kg"
+              : touches48 && !touches12
+                ? "48kg"
+                : null;
 
-        const orderFullBefore = is48 ? full48Before : full12Before;
-        const orderFullAfter = is48 ? full48After : full12After;
-        const orderEmptyBefore = is48 ? empty48Before : empty12Before;
-        const orderEmptyAfter = is48 ? empty48After : empty12After;
-        const orderBoxes =
-          orderFullBefore != null &&
-          orderFullAfter != null &&
-          orderEmptyBefore != null &&
-          orderEmptyAfter != null
-            ? [
-                <DeltaBox
-                  key="order-full"
-                  label={`${gasLabel} F`}
-                  before={orderFullBefore}
-                  after={orderFullAfter}
-                  format={formatCount}
-                  accent={gasColor(gasLabel)}
-                  compact
-                />,
-                <DeltaBox
-                  key="order-empty"
-                  label={`${gasLabel} E`}
-                  before={orderEmptyBefore}
-                  after={orderEmptyAfter}
-                  format={formatCount}
-                  accent={gasColor(gasLabel)}
-                  compact
-                />,
-                cashBox ?? placeholderBox("order-cash"),
-              ]
-            : [];
+        const renderTopStateBox = ({
+          key,
+          label,
+          before,
+          after,
+          format,
+          accent,
+        }: {
+          key: string;
+          label: string;
+          before: number | null | undefined;
+          after: number | null | undefined;
+          format: (v: number) => string;
+          accent?: string;
+        }) => (
+          <DeltaBox
+            key={key}
+            label={label}
+            before={valueOrZero(before)}
+            after={valueOrZero(after)}
+            format={format}
+            accent={accent}
+            compact
+            showNoChange
+          />
+        );
 
-        const empty12Box =
-          empty12Before != null && empty12After != null ? (
-            <DeltaBox
-              key="empty-12"
-              label="12kg E"
-              before={empty12Before}
-              after={empty12After}
-              format={formatCount}
-              accent={gasColor("12kg")}
-              compact
-            />
-          ) : null;
-        const empty48Box =
-          empty48Before != null && empty48After != null ? (
-            <DeltaBox
-              key="empty-48"
-              label="48kg E"
-              before={empty48Before}
-              after={empty48After}
-              format={formatCount}
-              accent={gasColor("48kg")}
-              compact
-            />
-          ) : null;
+        const renderRows = (boxes: ReactNode[]) => {
+          const rows: ReactNode[] = [];
+          for (let idx = 0; idx < boxes.length; idx += 3) {
+            rows.push(buildDeltaRow(boxes.slice(idx, idx + 3), `row-${idx}`));
+          }
+          return <>{rows}</>;
+        };
+
+        const renderFixedRow = (boxes: ReactNode[], key: string) => <>{buildDeltaRow(boxes, key)}</>;
+
+        const renderMixedLayout = ({
+          include12,
+          include48,
+          includeCash,
+          keyPrefix,
+        }: {
+          include12: boolean;
+          include48: boolean;
+          includeCash: boolean;
+          keyPrefix: string;
+        }) => (
+          <>
+            {include12
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-full`,
+                      label: "12kg Full",
+                      before: full12Before,
+                      after: full12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-empty`,
+                      label: "12kg Empty",
+                      before: empty12Before,
+                      after: empty12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-12-row`
+                )
+              : null}
+            {include48
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-full`,
+                      label: "48kg Full",
+                      before: full48Before,
+                      after: full48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-empty`,
+                      label: "48kg Empty",
+                      before: empty48Before,
+                      after: empty48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-48-row`
+                )
+              : null}
+            {includeCash
+              ? buildDeltaRow(
+                  [
+                    placeholderBox(`${keyPrefix}-cash-left`),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-cash`,
+                      label: "Cash",
+                      before: cashBefore,
+                      after: cashAfter,
+                      format: formatMoney,
+                    }),
+                    placeholderBox(`${keyPrefix}-cash-right`),
+                  ],
+                  `${keyPrefix}-cash-row`
+                )
+              : null}
+          </>
+        );
+
+        const renderGasTriplet = (targetGasType: "12kg" | "48kg") => {
+          const isTarget48 = targetGasType === "48kg";
+          return renderFixedRow([
+            renderTopStateBox({
+              key: `${targetGasType}-full`,
+              label: `${targetGasType} Full`,
+              before: isTarget48 ? full48Before : full12Before,
+              after: isTarget48 ? full48After : full12After,
+              format: formatCount,
+              accent: gasColor(targetGasType),
+            }),
+            renderTopStateBox({
+              key: `${targetGasType}-empty`,
+              label: `${targetGasType} Empty`,
+              before: isTarget48 ? empty48Before : empty12Before,
+              after: isTarget48 ? empty48After : empty12After,
+              format: formatCount,
+              accent: gasColor(targetGasType),
+            }),
+            renderTopStateBox({
+              key: `${targetGasType}-cash`,
+              label: "Cash",
+              before: cashBefore,
+              after: cashAfter,
+              format: formatMoney,
+            }),
+          ], `${targetGasType}-triplet`);
+        };
+
+        const renderCashTriplet = () =>
+          renderFixedRow([
+            renderTopStateBox({
+              key: "cash-only-cash",
+              label: "Cash",
+              before: cashBefore,
+              after: cashAfter,
+              format: formatMoney,
+            }),
+            renderTopStateBox({
+              key: "cash-only-12-full",
+              label: "12kg Full",
+              before: full12Before,
+              after: full12After,
+              format: formatCount,
+              accent: gasColor("12kg"),
+            }),
+            renderTopStateBox({
+              key: "cash-only-48-full",
+              label: "48kg Full",
+              before: full48Before,
+              after: full48After,
+              format: formatCount,
+              accent: gasColor("48kg"),
+            }),
+          ], "cash-triplet");
+
+        const renderCenteredCashOnly = (keyPrefix: string) =>
+          buildDeltaRow(
+            [
+              placeholderBox(`${keyPrefix}-cash-left`),
+              renderTopStateBox({
+                key: `${keyPrefix}-cash`,
+                label: "Cash",
+                before: cashBefore,
+                after: cashAfter,
+                format: formatMoney,
+              }),
+              placeholderBox(`${keyPrefix}-cash-right`),
+            ],
+            `${keyPrefix}-cash-row`
+          );
 
         const expandedContent = () => {
-          const relationshipRows: ReactNode[] = [];
-          const customerBoxes: ReactNode[] = [];
-          const companyBoxes: ReactNode[] = [];
-
-          if (
-            customerMoneyBefore != null &&
-            customerMoneyAfter != null &&
-            customerMoneyBefore !== customerMoneyAfter
-          ) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-money"
-                label="Cust Money"
-                before={customerMoneyBefore}
-                after={customerMoneyAfter}
-                format={formatMoneySigned}
-                compact
-              />
-            );
-          }
-          if (customer12Before != null && customer12After != null && customer12Before !== customer12After) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-12"
-                label="Cust 12kg"
-                before={customer12Before}
-                after={customer12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (customer48Before != null && customer48After != null && customer48Before !== customer48After) {
-            customerBoxes.push(
-              <DeltaBox
-                key="cust-48"
-                label="Cust 48kg"
-                before={customer48Before}
-                after={customer48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (customerBoxes.length > 0) {
-            relationshipRows.push(buildDeltaRow(customerBoxes, "rel-customer"));
+          if (eventType === "order" && inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
 
-          if (companyMoneyBefore != null && companyMoneyAfter != null && companyMoneyBefore !== companyMoneyAfter) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-money"
-                label="Co Money"
-                before={companyMoneyBefore}
-                after={companyMoneyAfter}
-                format={formatMoneySigned}
-                compact
-              />
-            );
-          }
-          if (company12Before != null && company12After != null && company12Before !== company12After) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-12"
-                label="Co 12kg"
-                before={company12Before}
-                after={company12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (company48Before != null && company48After != null && company48Before !== company48After) {
-            companyBoxes.push(
-              <DeltaBox
-                key="company-48"
-                label="Co 48kg"
-                before={company48Before}
-                after={company48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (companyBoxes.length > 0) {
-            relationshipRows.push(buildDeltaRow(companyBoxes, "rel-company"));
+          if (eventType === "collection_empty" && inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
 
-          const row12Boxes: ReactNode[] = [];
-          const row48Boxes: ReactNode[] = [];
-          if (full12Before != null && full12After != null) {
-            row12Boxes.push(
-              <DeltaBox
-                key="row12-full"
-                label="12kg F"
-                before={full12Before}
-                after={full12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
+          if (eventType === "collection_money" || eventType === "collection_payout") {
+            return renderCenteredCashOnly(eventType);
           }
-          if (empty12Before != null && empty12After != null) {
-            row12Boxes.push(
-              <DeltaBox
-                key="row12-empty"
-                label="12kg E"
-                before={empty12Before}
-                after={empty12After}
-                format={formatCount}
-                accent={gasColor("12kg")}
-                compact
-              />
-            );
-          }
-          if (full48Before != null && full48After != null) {
-            row48Boxes.push(
-              <DeltaBox
-                key="row48-full"
-                label="48kg F"
-                before={full48Before}
-                after={full48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          if (empty48Before != null && empty48After != null) {
-            row48Boxes.push(
-              <DeltaBox
-                key="row48-empty"
-                label="48kg E"
-                before={empty48Before}
-                after={empty48After}
-                format={formatCount}
-                accent={gasColor("48kg")}
-                compact
-              />
-            );
-          }
-          const cashRow = cashBox ? [cashBox] : [];
 
-          if (eventType === "order") {
-            if (orderBoxes.length > 0) {
-              return (
-                <>
-                  {relationshipRows}
-                  {buildDeltaRow(orderBoxes, "order")}
-                </>
+          if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") {
+            return renderCashTriplet();
+          }
+
+          if (eventType === "refill" || eventType === "company_buy_iron") {
+            if (touches12 && touches48) {
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCash,
+                keyPrefix: "mixed",
+              });
+            }
+            if (touches12) return renderGasTriplet("12kg");
+            if (touches48) return renderGasTriplet("48kg");
+            if (hasCash) return renderCashTriplet();
+          }
+
+          if (eventType === "adjust") {
+            const cylinderBoxes = [
+              has12InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-12-full",
+                    label: "12kg Full",
+                    before: full12Before,
+                    after: full12After,
+                    format: formatCount,
+                    accent: gasColor("12kg"),
+                  })
+                : null,
+              has12InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-12-empty",
+                    label: "12kg Empty",
+                    before: empty12Before,
+                    after: empty12After,
+                    format: formatCount,
+                    accent: gasColor("12kg"),
+                  })
+                : null,
+              has48InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-48-full",
+                    label: "48kg Full",
+                    before: full48Before,
+                    after: full48After,
+                    format: formatCount,
+                    accent: gasColor("48kg"),
+                  })
+                : null,
+              has48InventoryState
+                ? renderTopStateBox({
+                    key: "adjust-48-empty",
+                    label: "48kg Empty",
+                    before: empty48Before,
+                    after: empty48After,
+                    format: formatCount,
+                    accent: gasColor("48kg"),
+                  })
+                : null,
+            ].filter(Boolean) as ReactNode[];
+            if (has12InventoryState && has48InventoryState) {
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCashChange,
+                keyPrefix: "adjust-mixed",
+              });
+            }
+            if (cylinderBoxes.length > 0 && (has12InventoryChange || has48InventoryChange || !hasCashChange)) {
+              return renderRows(cylinderBoxes);
+            }
+            if (hasCash) {
+              return buildDeltaRow(
+                [
+                  renderTopStateBox({
+                    key: "adjust-cash",
+                    label: "Cash",
+                    before: cashBefore,
+                    after: cashAfter,
+                    format: formatMoney,
+                  }),
+                ],
+                "adjust-cash-only"
               );
             }
           }
-          if (
-            eventType === "collection_empty" ||
-            eventType === "collection_money" ||
-            eventType === "collection_payout"
-          ) {
-            const boxes = [
-              empty12Box ?? placeholderBox("collection-empty-12"),
-              empty48Box ?? placeholderBox("collection-empty-48"),
-              cashBox ?? placeholderBox("collection-cash"),
-            ];
-            return (
-              <>
-                {relationshipRows}
-                {buildDeltaRow(boxes, "collection")}
-                {bankBox ? buildDeltaRow([bankBox], "collection-bank") : null}
-              </>
-            );
+
+          if (inferredGasType) {
+            return renderGasTriplet(inferredGasType);
           }
-          const bankRow = bankBox ? [bankBox] : [];
-          const rows = [row12Boxes, row48Boxes, cashRow, bankRow].filter((row) => row.length > 0);
-          if (relationshipRows.length === 0 && rows.length === 0) {
-            return <Text style={styles.eventExpandedEmpty}>No relationship/cash/inventory change for this activity.</Text>;
+          if (hasCash) {
+            return renderCashTriplet();
           }
-          return (
-            <>
-              {relationshipRows}
-              {rows.map((row, idx) => buildDeltaRow(row, `row-${idx}`))}
-            </>
-          );
+          return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
         };
 
         return (
@@ -4794,6 +4993,7 @@ function DeltaBox({
   valueStyle,
   badgeTone,
   singleValue,
+  showNoChange,
 }: {
   label: string;
   before: number;
@@ -4805,17 +5005,21 @@ function DeltaBox({
   valueStyle?: any;
   badgeTone?: "good" | "bad";
   singleValue?: number;
+  showNoChange?: boolean;
 }) {
   const delta = (after ?? 0) - (before ?? 0);
+  const showSingle = typeof singleValue === "number";
+  const isNoChange = !!showNoChange && !showSingle && delta === 0;
   const badgeStyle =
-    badgeTone === "good"
+    isNoChange
+      ? styles.deltaBadgeNeutral
+      : badgeTone === "good"
       ? styles.deltaBadgePositive
       : badgeTone === "bad"
         ? styles.deltaBadgeNegative
         : delta >= 0
           ? styles.deltaBadgePositive
           : styles.deltaBadgeNegative;
-  const showSingle = typeof singleValue === "number";
   return (
     <View style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}>
       <Text style={styles.deltaBoxLabel}>{label}</Text>
@@ -4826,7 +5030,9 @@ function DeltaBox({
           smallDelta && styles.deltaBadgeSmall,
         ]}
       >
-        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>{formatSigned(delta)}</Text>
+        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>
+          {isNoChange ? "No change" : formatSigned(delta)}
+        </Text>
       </View>
       <View style={styles.deltaBoxRow}>
         {showSingle ? (
@@ -5184,12 +5390,16 @@ const styles = StyleSheet.create({
   inventoryRow: { flexDirection: "row", gap: 8 },
   deltaBox: {
     position: "relative",
-    padding: 10,
+    paddingTop: 32,
+    paddingRight: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#cbd5f5",
     backgroundColor: "#f8fafc",
     minWidth: 140,
+    minHeight: 84,
     flexGrow: 1,
   },
   deltaBoxCompact: { minWidth: 0, flex: 1 },
@@ -5204,12 +5414,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#0f172a",
   },
+  deltaBadgeNeutral: { backgroundColor: "#64748b" },
   deltaBadgePositive: { backgroundColor: "#16a34a" },
   deltaBadgeNegative: { backgroundColor: "#b91c1c" },
   deltaBadgeSmall: { paddingHorizontal: 5, paddingVertical: 1 },
   deltaBadgeText: { fontSize: 11, fontWeight: "900", color: "white", fontFamily: FontFamilies.extrabold },
   deltaBadgeTextSmall: { fontSize: 10 },
-  deltaBoxRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  deltaBoxRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 18 },
   deltaBoxValue: { fontSize: 11, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   deltaBoxArrow: { fontSize: 11, fontWeight: "900", color: "#0a7ea4", fontFamily: FontFamilies.extrabold },
   deltaValueGood: { color: "#16a34a" },
@@ -5266,6 +5477,7 @@ const styles = StyleSheet.create({
   syncClose: { marginTop: 12, alignSelf: "flex-end", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: "#0a7ea4" },
   syncCloseText: { color: "white", fontWeight: "900", fontFamily: FontFamilies.extrabold },
 });
+
 
 
 FILE: frontend/app/_layout.tsx
@@ -5336,7 +5548,7 @@ function InitializationGuard() {
       return;
     }
     if (isSetupCompleted && inWelcome) {
-      router.replace("/(tabs)/reports");
+      router.replace("/(tabs)/dashboard");
     }
   }, [data?.is_setup_completed, isLoading, router, segments]);
 
@@ -5912,6 +6124,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+
 
 FILE: frontend/app/customers/[id].tsx
 import { useMemo, useCallback } from "react";
@@ -6507,6 +6720,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/customers/index.tsx
 import { FlatList, View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
@@ -6903,6 +7117,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
 
 FILE: frontend/app/customers/new.tsx
 import { useMemo, useState } from "react";
@@ -7675,6 +7890,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/dev/level3.tsx
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -7713,6 +7929,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
 });
+
 
 FILE: frontend/app/expenses/new.tsx
 import { useState } from "react";
@@ -8297,11 +8514,12 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/index.tsx
 import { Redirect } from "expo-router";
 
 export default function Index() {
-  return <Redirect href="/(tabs)/reports" />;
+  return <Redirect href="/(tabs)/dashboard" />;
 }
 
 FILE: frontend/app/inventory/new.tsx
@@ -9918,6 +10136,7 @@ const styles = StyleSheet.create({
 });
 
 
+
 FILE: frontend/app/orders/[id]/edit.tsx
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10387,6 +10606,7 @@ const styles = StyleSheet.create({
   errorText: { color: "#b00020", marginTop: 2, fontSize: 12 },
 });
 
+
 FILE: frontend/app/orders/[id].tsx
 import { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
@@ -10534,6 +10754,7 @@ const styles = StyleSheet.create({
     color: "#b00020",
   },
 });
+
 
 FILE: frontend/app/orders/new.tsx
 import { router, useLocalSearchParams } from "expo-router";
@@ -13978,6 +14199,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/prices/index.tsx
 import { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
@@ -14062,6 +14284,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 });
+
 
 FILE: frontend/app/system-health.tsx
 import { useMemo } from "react";
@@ -14247,6 +14470,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/system-types/index.tsx
 import { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -14387,6 +14611,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
 });
+
 
 FILE: frontend/app/systems/[id].tsx
 import { useEffect, useMemo, useState } from "react";
@@ -14743,6 +14968,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app/systems/new.tsx
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
@@ -15061,6 +15287,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
 });
+
 
 FILE: frontend/app/welcome/index.tsx
 import { Ionicons } from "@expo/vector-icons";
@@ -15817,6 +16044,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/app.json
 {
   "expo": {
@@ -15868,6 +16096,7 @@ FILE: frontend/app.json
   }
 }
 
+
 FILE: frontend/babel.config.js
 module.exports = function (api) {
   api.cache(true);
@@ -15888,6 +16117,7 @@ module.exports = function (api) {
     ],
   };
 };
+
 
 FILE: frontend/components/AddRefillModal.tsx
 import { Ionicons } from "@expo/vector-icons";
@@ -18425,6 +18655,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/components/CashExpensesView.tsx
 import React from "react";
 import {
@@ -18776,6 +19007,7 @@ export default function CashExpensesView({
 }
 
 
+
 FILE: frontend/components/PriceMatrix.tsx
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { GasType } from "@/types/domain";
@@ -18935,6 +19167,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 });
+
 
 FILE: frontend/components/reports/BalancesCard.tsx
 import { Ionicons } from "@expo/vector-icons";
@@ -19157,6 +19390,7 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/components/reports/ReportHeader.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -19310,6 +19544,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
   },
 });
+
 
 FILE: frontend/components/reports/SlimActivityRow.tsx
 import { StyleSheet, Text, View } from "react-native";
@@ -19735,6 +19970,7 @@ const styles = StyleSheet.create({
 
 
 
+
 FILE: frontend/components/Toast.tsx
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Animated, Easing, Platform } from "react-native";
@@ -19812,8 +20048,10 @@ const styles = StyleSheet.create({
   },
 });
 
+
 FILE: frontend/constants/currency.ts
 export const DEFAULT_CURRENCY_CODE = "USD";
+
 
 FILE: frontend/constants/gas.ts
 import { GasType } from "@/types/domain";
@@ -19829,6 +20067,7 @@ export function gasColor(gas?: string): string {
   }
   return "#475569";
 }
+
 
 FILE: frontend/constants/level3.ts
 import { FontFamilies, FontSizes } from "./typography";
@@ -19873,6 +20112,7 @@ export const Level3Tokens = {
   },
 };
 
+
 FILE: frontend/constants/spacing.ts
 export const Spacing = {
   xs: 4,
@@ -19885,6 +20125,7 @@ export const Spacing = {
   huge: 18,
   massive: 20,
 };
+
 
 FILE: frontend/constants/theme.ts
 /**
@@ -19941,6 +20182,7 @@ export const Fonts = Platform.select({
   },
 });
 
+
 FILE: frontend/constants/typography.ts
 export const FontFamilies = {
   regular: "NunitoSans-Regular",
@@ -19958,6 +20200,7 @@ export const FontSizes = {
   xxl: 16,
   title: 18,
 };
+
 
 FILE: frontend/dev/level3-fixtures.ts
 import { DailyReportV2Event } from "@/types/domain";
@@ -20312,6 +20555,7 @@ export const level3Fixtures: DailyReportV2Event[] = [
   },
 ];
 
+
 FILE: frontend/eslint.config.js
 // https://docs.expo.dev/guides/using-eslint/
 const { defineConfig } = require('eslint/config');
@@ -20324,6 +20568,7 @@ module.exports = defineConfig([
   },
 ]);
 
+
 FILE: frontend/expo-env.d.ts
 /// <reference types="expo/types" />
 
@@ -20331,6 +20576,7 @@ FILE: frontend/expo-env.d.ts
 
 FILE: frontend/hooks/use-color-scheme.ts
 export { useColorScheme } from 'react-native';
+
 
 FILE: frontend/hooks/use-color-scheme.web.ts
 import { useEffect, useState } from 'react';
@@ -20355,6 +20601,7 @@ export function useColorScheme() {
   return 'light';
 }
 
+
 FILE: frontend/hooks/use-theme-color.ts
 /**
  * Learn more about light and dark modes:
@@ -20377,6 +20624,7 @@ export function useThemeColor(
     return Colors[theme][colorName];
   }
 }
+
 
 FILE: frontend/hooks/useBankDeposits.ts
 import { createBankDeposit, deleteBankDeposit, listBankDeposits } from "@/lib/api";
@@ -20436,6 +20684,7 @@ export function useDeleteBankDeposit() {
   });
 }
 
+
 FILE: frontend/hooks/useCash.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -20488,6 +20737,7 @@ export function useDeleteCashAdjustment() {
     },
   });
 }
+
 
 FILE: frontend/hooks/useCollections.ts
 import { createCollection, deleteCollection, listCollections, updateCollection } from "@/lib/api";
@@ -20584,6 +20834,7 @@ export function useDeleteCollection() {
   });
 }
 
+
 FILE: frontend/hooks/useCompanyBalances.ts
 import { useQuery } from "@tanstack/react-query";
 
@@ -20595,6 +20846,7 @@ export function useCompanyBalances() {
     queryFn: () => getCompanyBalances(),
   });
 }
+
 
 FILE: frontend/hooks/useCompanyPayments.ts
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20612,6 +20864,7 @@ export function useCreateCompanyPayment() {
     },
   });
 }
+
 
 FILE: frontend/hooks/useCustomers.ts
 import {
@@ -20743,6 +20996,7 @@ export function useDeleteCustomer() {
     },
   });
 }
+
 
 FILE: frontend/hooks/useDailyReportScreen.ts
 import { useEffect, useMemo, useState } from "react";
@@ -20911,6 +21165,7 @@ export function useDailyReportScreen(rangeDays = 30) {
   };
 }
 
+
 FILE: frontend/hooks/useExpenses.ts
 import { createExpense, deleteExpense, listExpenses } from "@/lib/api";
 import { Expense, ExpenseCreateInput } from "@/types/domain";
@@ -20969,6 +21224,7 @@ export function useDeleteExpense() {
     },
   });
 }
+
 
 FILE: frontend/hooks/useInventory.ts
 import {
@@ -21139,6 +21395,7 @@ export function useDeleteRefill() {
   });
 }
 
+
 FILE: frontend/hooks/useInventoryActivity.ts
 import { useMemo } from "react";
 
@@ -21213,6 +21470,7 @@ export function useInventoryActivity(date: string, includeDeleted?: boolean) {
     cashAdjustmentsQuery,
   };
 }
+
 
 FILE: frontend/hooks/useOrders.ts
 import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
@@ -21322,6 +21580,7 @@ export function useDeleteOrder() {
   });
 }
 
+
 FILE: frontend/hooks/usePrices.ts
 import { listPriceSettings, savePriceSetting } from "@/lib/api";
 import { showToast } from "@/lib/toast";
@@ -21358,6 +21617,7 @@ export function useSavePriceSetting() {
   });
 }
 
+
 FILE: frontend/hooks/useReports.ts
 import { getDailyReportV2, listDailyReportsV2 } from "@/lib/api";
 import { DailyReportV2Card, DailyReportV2Day } from "@/types/domain";
@@ -21377,6 +21637,7 @@ export function useDailyReportDayV2(date: string) {
     enabled: !!date,
   });
 }
+
 
 FILE: frontend/hooks/useSystemHealthCheck.ts
 import { useQuery } from "@tanstack/react-query";
@@ -21407,6 +21668,7 @@ export function useSystemHealthCheck() {
     },
   });
 }
+
 
 FILE: frontend/hooks/useSystems.ts
 import { createSystem, deleteSystem, listSystems, updateSystem } from "@/lib/api";
@@ -21527,6 +21789,7 @@ export function useDeleteSystem() {
   });
 }
 
+
 FILE: frontend/hooks/useSystemSettings.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
@@ -21574,6 +21837,7 @@ export function useInitializeSystem(options?: { showToast?: boolean }) {
     },
   });
 }
+
 
 FILE: frontend/hooks/useSystemTypes.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21633,6 +21897,7 @@ export function useUpdateSystemType() {
   });
 }
 
+
 FILE: frontend/jest.config.js
 module.exports = {
   preset: "jest-expo",
@@ -21647,6 +21912,7 @@ module.exports = {
     "node_modules/(?!(react-native|@react-native|expo|@expo|expo-router|@react-navigation|@tanstack|expo-modules-core)/)",
   ],
 };
+
 
 FILE: frontend/lib/addShortcut.ts
 type AddShortcut = {
@@ -21665,6 +21931,7 @@ export function consumeAddShortcut(): AddShortcut | null {
   pendingShortcut = null;
   return current;
 }
+
 
 FILE: frontend/lib/api.ts
 import axios from "axios";
@@ -22534,411 +22801,158 @@ export async function deleteBankDeposit(depositId: string): Promise<void> {
   await api.delete(`/cash/bank_deposit/${depositId}`);
 }
 
+
 FILE: frontend/lib/balanceTransitions.ts
-import { BalanceTransition } from "@/types/domain";
+import type { BalanceTransition } from "@/types/domain";
 
-type FormatMode = "current" | "transition";
-type TransitionIntent =
-  | "generic"
-  | "customer_order"
-  | "customer_payment"
-  | "customer_payout"
-  | "customer_return"
-  | "customer_adjust"
-  | "company_payment"
-  | "company_refill"
-  | "company_buy_iron"
-  | "company_settle";
+type BalanceScope = BalanceTransition["scope"];
+type BalanceComponent = BalanceTransition["component"];
 
-type FormatOptions = {
+type FormatMoney = (value: number) => string;
+
+type SharedOptions = {
+  formatMoney?: FormatMoney;
+};
+
+type AggregateOptions = SharedOptions & {
+  count?: number;
+};
+
+type TransitionOptions = SharedOptions & {
+  mode?: "current" | "transition";
   collapseAllSettled?: boolean;
   includeDisplayName?: boolean;
-  formatMoney?: (value: number) => string;
-  mode?: FormatMode;
-  intent?: TransitionIntent;
+  intent?: string;
 };
 
-type CurrentStateOptions = {
-  formatMoney?: (value: number) => string;
-  includeDisplayName?: boolean;
+type TransitionInput = Partial<BalanceTransition> & {
+  scope: BalanceScope;
+  component: BalanceComponent;
+  before: number;
+  after: number;
 };
 
-type AggregateStateOptions = {
-  count?: number;
-  formatMoney?: (value: number) => string;
-};
+const defaultFormatMoney: FormatMoney = (value) => String(Number(value || 0));
 
-type TransitionLineKind = "state" | "settled";
+function formatMoneyValue(value: number, formatMoney: FormatMoney) {
+  return `EUR ${formatMoney(Math.abs(value))}`;
+}
 
-type Scope = "customer" | "company";
-type Component = "money" | "cyl_12" | "cyl_48";
+function formatCylinderValue(component: BalanceComponent, value: number) {
+  const gasLabel = component === "cyl_12" ? "12kg" : "48kg";
+  const qty = Math.abs(Number(value || 0));
+  return `${qty}x${gasLabel} ${qty === 1 ? "empty" : "empties"}`;
+}
 
-type ResolvedState = {
-  side: "positive" | "negative" | "settled";
-  settledLabel: string;
-  currentLabel: string;
-  stillLabel: string;
-  nowLabel: string;
-  wasValue: string;
-};
+function formatComponentValue(component: BalanceComponent, value: number, formatMoney: FormatMoney) {
+  if (component === "money") {
+    return formatMoneyValue(value, formatMoney);
+  }
+  return formatCylinderValue(component, value);
+}
+
+function buildDirectionLabel(scope: BalanceScope, component: BalanceComponent, amount: number) {
+  const positive = Number(amount || 0) > 0;
+  if (scope === "customer") {
+    if (component === "money") {
+      return positive ? "Customer owes you" : "You owe customer";
+    }
+    return positive ? "Customer owes you" : "You owe customer";
+  }
+  if (component === "money") {
+    return positive ? "You owe company" : "Company owes you";
+  }
+  return positive ? "You owe company" : "Company owes you";
+}
+
+function prefixWithDisplayName(line: string, transition: TransitionInput, includeDisplayName?: boolean) {
+  if (!includeDisplayName) return line;
+  const label = transition.display_name ?? transition.display_description ?? null;
+  return label ? `${label}: ${line}` : line;
+}
 
 export function makeBalanceTransition(
-  scope: Scope,
-  component: Component,
+  scope: BalanceScope,
+  component: BalanceComponent,
   before: number,
   after: number,
-  displayName?: string | null,
-  displayDescription?: string | null
+  extra: Partial<BalanceTransition> = {}
 ): BalanceTransition {
   return {
     scope,
     component,
     before,
     after,
-    display_name: displayName ?? null,
-    display_description: displayDescription ?? null,
+    display_name: extra.display_name ?? null,
+    display_description: extra.display_description ?? null,
+    intent: extra.intent ?? null,
   };
-}
-
-function formatMoneyValue(value: number, formatMoney: (value: number) => string) {
-  return `\u20aa${formatMoney(Math.abs(value))}`;
-}
-
-function formatCylinderValue(value: number, gasLabel: "12kg" | "48kg", unit: "empty" | "full") {
-  return `${Math.abs(value)} x ${gasLabel} ${unit}`;
-}
-
-function getGasLabel(component: Component) {
-  return component === "cyl_12" ? "12kg" : "48kg";
-}
-
-function settledLabel(component: Component) {
-  if (component === "money") return "Money settled \u2705";
-  if (component === "cyl_12") return "12kg settled \u2705";
-  return "48kg settled \u2705";
-}
-
-function resolveState(scope: Scope, component: Component, value: number, formatMoney: (value: number) => string): ResolvedState {
-  const absValue = Math.abs(value);
-  const gasLabel = getGasLabel(component);
-  if (component === "money") {
-    if (scope === "customer") {
-      if (value > 0) {
-        return {
-          side: "positive",
-          settledLabel: settledLabel(component),
-          currentLabel: `Customer owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          stillLabel: `Customer still owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          nowLabel: `Now customer owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          wasValue: formatMoneyValue(absValue, formatMoney),
-        };
-      }
-      if (value < 0) {
-        return {
-          side: "negative",
-          settledLabel: settledLabel(component),
-          currentLabel: `You owe customer ${formatMoneyValue(absValue, formatMoney)}`,
-          stillLabel: `You still owe customer ${formatMoneyValue(absValue, formatMoney)}`,
-          nowLabel: `Now you owe customer ${formatMoneyValue(absValue, formatMoney)}`,
-          wasValue: formatMoneyValue(absValue, formatMoney),
-        };
-      }
-    } else {
-      if (value > 0) {
-        return {
-          side: "positive",
-          settledLabel: settledLabel(component),
-          currentLabel: `You owe company ${formatMoneyValue(absValue, formatMoney)}`,
-          stillLabel: `You still owe company ${formatMoneyValue(absValue, formatMoney)}`,
-          nowLabel: `Now you owe company ${formatMoneyValue(absValue, formatMoney)}`,
-          wasValue: formatMoneyValue(absValue, formatMoney),
-        };
-      }
-      if (value < 0) {
-        return {
-          side: "negative",
-          settledLabel: settledLabel(component),
-          currentLabel: `Company owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          stillLabel: `Company still owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          nowLabel: `Now company owes you ${formatMoneyValue(absValue, formatMoney)}`,
-          wasValue: formatMoneyValue(absValue, formatMoney),
-        };
-      }
-    }
-  } else {
-    const unit = (() => {
-      if (scope === "customer") return value > 0 ? "empty" : "full";
-      return value > 0 ? "full" : "empty";
-    })();
-    if (scope === "customer") {
-      if (value > 0) {
-        return {
-          side: "positive",
-          settledLabel: settledLabel(component),
-          currentLabel: `Customer owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          stillLabel: `Customer still owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          nowLabel: `Now customer owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          wasValue: String(absValue),
-        };
-      }
-      if (value < 0) {
-        return {
-          side: "negative",
-          settledLabel: settledLabel(component),
-          currentLabel: `You owe customer ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          stillLabel: `You still owe customer ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          nowLabel: `Now you owe customer ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          wasValue: String(absValue),
-        };
-      }
-    } else {
-      if (value > 0) {
-        return {
-          side: "positive",
-          settledLabel: settledLabel(component),
-          currentLabel: `Company owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          stillLabel: `Company still owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          nowLabel: `Now company owes you ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          wasValue: String(absValue),
-        };
-      }
-      if (value < 0) {
-        return {
-          side: "negative",
-          settledLabel: settledLabel(component),
-          currentLabel: `You owe company ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          stillLabel: `You still owe company ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          nowLabel: `Now you owe company ${formatCylinderValue(absValue, gasLabel, unit)}`,
-          wasValue: String(absValue),
-        };
-      }
-    }
-  }
-
-  return {
-    side: "settled",
-    settledLabel: settledLabel(component),
-    currentLabel: settledLabel(component),
-    stillLabel: settledLabel(component),
-    nowLabel: settledLabel(component),
-    wasValue: component === "money" ? formatMoneyValue(0, formatMoney) : "0",
-  };
-}
-
-function prefixDisplayName(text: string, transition: BalanceTransition, includeDisplayName: boolean) {
-  if (!includeDisplayName || !transition.display_name || transition.scope !== "customer") {
-    return text;
-  }
-  return `${transition.display_name}: ${text}`;
-}
-
-function inferIntent(intent: TransitionIntent | undefined) {
-  return intent ?? "generic";
-}
-
-function getSettledActionLabel(
-  transition: BalanceTransition,
-  before: number,
-  formatMoney: (value: number) => string,
-  intent: TransitionIntent
-) {
-  const scope = transition.scope;
-  const component = transition.component;
-  const amount = Math.abs(before);
-  const gasLabel = getGasLabel(component);
-  const money = formatMoneyValue(amount, formatMoney);
-  const cylCustomerEmpty = `Customer returned ${formatCylinderValue(amount, gasLabel, "empty")}`;
-  const cylCustomerFullGive = `You gave customer ${formatCylinderValue(amount, gasLabel, "full")}`;
-  const cylCustomerFullUsed = `Customer used ${formatCylinderValue(amount, gasLabel, "full")}`;
-  const cylCompanyEmptyReturn = `You returned ${formatCylinderValue(amount, gasLabel, "empty")} to company`;
-  const cylCompanyFullGive = `Company gave you ${formatCylinderValue(amount, gasLabel, "full")}`;
-  const cylCompanyFullUsed = `You used ${formatCylinderValue(amount, gasLabel, "full")}`;
-
-  if (scope === "customer" && component === "money") {
-    if (intent === "customer_adjust") return null;
-    if (before > 0) return `Customer paid ${money}`;
-    return intent === "customer_order" ? `Customer used ${money}` : `You paid customer ${money}`;
-  }
-  if (scope === "customer") {
-    if (intent === "customer_adjust") return null;
-    if (before > 0) return cylCustomerEmpty;
-    return intent === "customer_order" ? cylCustomerFullUsed : cylCustomerFullGive;
-  }
-  if (scope === "company" && component === "money") {
-    if (before > 0) return `You paid company ${money}`;
-    return intent === "company_refill" || intent === "company_buy_iron" ? `You used ${money}` : `Company paid you ${money}`;
-  }
-  if (before < 0) return cylCompanyEmptyReturn;
-  return intent === "company_refill" || intent === "company_settle" ? cylCompanyFullGive : cylCompanyFullUsed;
-}
-
-function buildTransitionLines(
-  transition: BalanceTransition,
-  formatMoney: (value: number) => string,
-  includeDisplayName: boolean,
-  intent: TransitionIntent
-) {
-  const before = Number(transition.before ?? 0);
-  const after = Number(transition.after ?? 0);
-  if (before === 0 && after === 0) return [] as { kind: TransitionLineKind; text: string }[];
-
-  const beforeState = resolveState(transition.scope, transition.component, before, formatMoney);
-  const afterState = resolveState(transition.scope, transition.component, after, formatMoney);
-  const lines: { kind: TransitionLineKind; text: string }[] = [];
-
-  if (before === 0 && after !== 0) {
-    lines.push({
-      kind: "state",
-      text: prefixDisplayName(afterState.nowLabel, transition, includeDisplayName),
-    });
-    return lines;
-  }
-
-  const sameSide = before !== 0 && after !== 0 && Math.sign(before) === Math.sign(after);
-  if (sameSide) {
-    const text =
-      Math.abs(before) === Math.abs(after)
-        ? afterState.stillLabel
-        : `${afterState.stillLabel} (was ${beforeState.wasValue})`;
-    lines.push({
-      kind: "state",
-      text: prefixDisplayName(text, transition, includeDisplayName),
-    });
-    return lines;
-  }
-
-  if (before !== 0 && after === 0) {
-    const settledAction = getSettledActionLabel(transition, before, formatMoney, intent);
-    lines.push({
-      kind: "settled",
-      text: prefixDisplayName(
-        settledAction ? `${settledAction}, ${beforeState.settledLabel}` : beforeState.settledLabel,
-        transition,
-        includeDisplayName
-      ),
-    });
-    return lines;
-  }
-
-  if (before !== 0 && after !== 0 && Math.sign(before) !== Math.sign(after)) {
-    const settledAction = getSettledActionLabel(transition, before, formatMoney, intent);
-    lines.push({
-      kind: "settled",
-      text: prefixDisplayName(
-        settledAction ? `${settledAction}, ${beforeState.settledLabel}` : beforeState.settledLabel,
-        transition,
-        includeDisplayName
-      ),
-    });
-    lines.push({
-      kind: "state",
-      text: prefixDisplayName(afterState.nowLabel, transition, includeDisplayName),
-    });
-    return lines;
-  }
-
-  lines.push({
-    kind: "state",
-    text: prefixDisplayName(afterState.currentLabel, transition, includeDisplayName),
-  });
-  return lines;
-}
-
-function buildCurrentStateLines(
-  transition: BalanceTransition,
-  formatMoney: (value: number) => string,
-  includeDisplayName: boolean
-) {
-  const after = Number(transition.after ?? 0);
-  if (after === 0) return [] as string[];
-  const state = resolveState(transition.scope, transition.component, after, formatMoney);
-  return [prefixDisplayName(state.currentLabel, transition, includeDisplayName)];
-}
-
-export function formatBalanceTransitions(
-  transitions: BalanceTransition[] | null | undefined,
-  options: FormatOptions = {}
-) {
-  const formatMoney = options.formatMoney ?? ((value: number) => String(value));
-  const includeDisplayName = options.includeDisplayName ?? false;
-  const mode = options.mode ?? "transition";
-
-  if (mode === "current") {
-    const currentLines = (Array.isArray(transitions) ? transitions : []).flatMap((transition) =>
-      buildCurrentStateLines(transition, formatMoney, includeDisplayName)
-    );
-    return currentLines.length > 0 ? currentLines : ["All settled \u2705"];
-  }
-
-  const lines = (Array.isArray(transitions) ? transitions : []).flatMap((transition) =>
-    buildTransitionLines(
-      transition,
-      formatMoney,
-      includeDisplayName,
-      inferIntent((transition as BalanceTransition & { intent?: TransitionIntent | null }).intent ?? options.intent)
-    )
-  );
-
-  if (
-    options.collapseAllSettled &&
-    lines.length > 1 &&
-    lines.every((line) => line.kind === "settled")
-  ) {
-    return ["All settled \u2705"];
-  }
-
-  return lines.length > 0 ? lines.map((line) => line.text) : ["All settled \u2705"];
 }
 
 export function formatCurrentBalanceState(
-  scope: Scope,
-  component: Component,
-  value: number,
-  options: CurrentStateOptions = {}
+  scope: BalanceScope,
+  component: BalanceComponent,
+  amount: number,
+  options: SharedOptions = {}
 ) {
-  const formatMoney = options.formatMoney ?? ((amount: number) => String(amount));
-  const line = formatBalanceTransitions(
-    [makeBalanceTransition(scope, component, value, value)],
-    {
-      mode: "current",
-      formatMoney,
-      includeDisplayName: options.includeDisplayName,
-    }
-  )[0];
-  return line ?? "All settled \u2705";
+  const numeric = Number(amount || 0);
+  if (numeric === 0) return "Settled";
+  const formatMoney = options.formatMoney ?? defaultFormatMoney;
+  const label = buildDirectionLabel(scope, component, numeric);
+  const value = formatComponentValue(component, numeric, formatMoney);
+  return `${label} ${value}`;
 }
 
 export function formatAggregateBalanceState(
-  scope: Scope,
-  component: Component,
-  total: number,
-  options: AggregateStateOptions = {}
+  scope: BalanceScope,
+  component: BalanceComponent,
+  amount: number,
+  options: AggregateOptions = {}
 ) {
+  const base = formatCurrentBalanceState(scope, component, amount, options);
   const count = Number(options.count ?? 0);
-  const formatMoney = options.formatMoney ?? ((amount: number) => String(amount));
-  if (total === 0 || count <= 0) {
-    return component === "money" ? "Money settled \u2705" : `${getGasLabel(component)} settled \u2705`;
-  }
+  if (count <= 0) return base;
+  const subject = count === 1 ? "customer" : "customers";
+  return `${base} across ${count} ${subject}`;
+}
 
-  const countLabel = `${count} customer${count === 1 ? "" : "s"}`;
-  const oweVerb = count === 1 ? "owes" : "owe";
-  const absTotal = Math.abs(total);
-  const gasLabel = getGasLabel(component);
+export function formatBalanceTransitions(
+  transitions: TransitionInput[] | null | undefined,
+  options: TransitionOptions = {}
+) {
+  if (!Array.isArray(transitions) || transitions.length === 0) return [];
 
-  if (component === "money") {
-    return total > 0
-      ? `${countLabel} ${oweVerb} you ${formatMoneyValue(absTotal, formatMoney)}`
-      : `You owe ${countLabel} ${formatMoneyValue(absTotal, formatMoney)}`;
-  }
+  const mode = options.mode ?? "transition";
+  const formatMoney = options.formatMoney ?? defaultFormatMoney;
 
-  if (component === "cyl_12" || component === "cyl_48") {
-    if (total > 0) {
-      return `${countLabel} ${oweVerb} you ${formatCylinderValue(absTotal, gasLabel, "empty")}`;
-    }
-    return `You owe ${countLabel} ${formatCylinderValue(absTotal, gasLabel, "full")}`;
-  }
+  return transitions
+    .map((transition) => {
+      const before = Number(transition.before ?? 0);
+      const after = Number(transition.after ?? 0);
 
-  return "All settled \u2705";
+      if (mode === "current") {
+        if (after === 0 && options.collapseAllSettled) return null;
+        return prefixWithDisplayName(
+          formatCurrentBalanceState(transition.scope, transition.component, after, { formatMoney }),
+          transition,
+          options.includeDisplayName
+        );
+      }
+
+      if (after === 0) {
+        if (options.collapseAllSettled) return null;
+        return prefixWithDisplayName("Settled", transition, options.includeDisplayName);
+      }
+
+      const current = formatCurrentBalanceState(transition.scope, transition.component, after, { formatMoney });
+      if (before === after || before === 0) {
+        return prefixWithDisplayName(current, transition, options.includeDisplayName);
+      }
+
+      const previous = formatComponentValue(transition.component, before, formatMoney);
+      return prefixWithDisplayName(`${current} (was ${previous})`, transition, options.includeDisplayName);
+    })
+    .filter((line): line is string => Boolean(line));
 }
 
 FILE: frontend/lib/date.ts
@@ -23050,6 +23064,7 @@ export const formatDateTimeYMDHM = (value: DateInput) => {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 };
 
+
 FILE: frontend/lib/ledgerMath.ts
 export type CustomerOrderMode = "replacement" | "sell_iron" | "buy_iron" | "payment" | "return" | "adjust" | string;
 
@@ -23083,6 +23098,7 @@ export function calcCompanyCylinderUiResult(buy: number, ret: number): number {
 export function calcMoneyUiResult(total: number, paid: number): number {
   return total - paid;
 }
+
 
 FILE: frontend/lib/money.ts
 import { DEFAULT_CURRENCY_CODE } from "@/constants/currency";
@@ -23123,6 +23139,7 @@ export function fromMinorUnits(value?: number | null) {
 }
 
 
+
 FILE: frontend/lib/reports/eventColors.ts
 export const EVENT_COLOR_MAP: Record<string, string> = {
   order: "#0a7ea4",
@@ -23142,6 +23159,7 @@ export const EVENT_COLOR_MAP: Record<string, string> = {
 export function getEventColor(eventType: string): string {
   return EVENT_COLOR_MAP[eventType] ?? "#0a7ea4";
 }
+
 
 FILE: frontend/lib/reports/smartTicket.ts
 export type SmartTicketLine = {
@@ -23353,6 +23371,7 @@ export const buildCollapsedLines = (ctx: any, fmt: SmartTicketFormatters): Smart
 
   return lines;
 };
+
 
 FILE: frontend/lib/reports/utils.ts
 import {
@@ -23864,6 +23883,7 @@ export function getInitInventoryAfter(events: any[]) {
   return Object.keys(out).length ? out : null;
 }
 
+
 FILE: frontend/lib/toast.ts
 type Listener = (message: string | null) => void;
 
@@ -23885,12 +23905,14 @@ export function subscribeToast(listener: Listener) {
   return () => listeners.delete(listener);
 }
 
+
 FILE: frontend/metro.config.js
 const { getDefaultConfig } = require("expo/metro-config");
 
 const config = getDefaultConfig(__dirname);
 
 module.exports = config;
+
 
 FILE: frontend/package.json
 {
@@ -23959,6 +23981,7 @@ FILE: frontend/package.json
   "private": true
 }
 
+
 FILE: frontend/tsconfig.json
 {
   "extends": "expo/tsconfig.base",
@@ -23983,6 +24006,7 @@ FILE: frontend/tsconfig.json
     "temp*.tsx"
   ]
 }
+
 
 FILE: frontend/types/domain.ts
 import { z } from "zod";
@@ -24806,4 +24830,5 @@ export const BankDepositSchema = z.object({
   note: z.string().nullish(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;
+
 

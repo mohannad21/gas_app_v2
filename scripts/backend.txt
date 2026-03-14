@@ -1,8 +1,10 @@
 FILE: backend/.env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/gas_db
 
+
 FILE: backend/.env.test
 DATABASE_URL_TEST=postgresql://postgres:password@localhost:5432/gas_db_test
+
 
 FILE: backend/alembic/env.py
 from logging.config import fileConfig
@@ -53,6 +55,7 @@ if context.is_offline_mode():
 else:
   run_migrations_online()
 
+
 FILE: backend/alembic/script.py.mako
 """${message}"""
 from __future__ import annotations
@@ -75,6 +78,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     ${downgrades if downgrades else "pass"}
+
 
 FILE: backend/alembic/versions_v2/0d12367ce15f_init_schema.py
 """A generic, single-database configuration."""
@@ -391,6 +395,7 @@ def downgrade() -> None:
     op.drop_table('cash_adjustments')
     # ### end Alembic commands ###
 
+
 FILE: backend/alembic/versions_v2/b7a4d1c3e9f0_add_debt_fields.py
 from alembic import op
 import sqlalchemy as sa
@@ -438,6 +443,7 @@ def downgrade() -> None:
     op.drop_column("customer_transactions", "debt_cylinders_12")
     op.drop_column("customer_transactions", "debt_cash")
 
+
 FILE: backend/alembic/versions_v2/c3e2f1a4b5c6_add_created_at_columns.py
 """add created_at to activity tables"""
 from __future__ import annotations
@@ -479,6 +485,7 @@ def downgrade() -> None:
     op.drop_column("company_transactions", "created_at")
     op.drop_column("customer_transactions", "created_at")
 
+
 FILE: backend/alembic/versions_v2/d9f1a2b3c4d5_add_iron_prices.py
 """add iron prices to price_catalog"""
 from __future__ import annotations
@@ -510,6 +517,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("price_catalog", "buy_iron_price")
     op.drop_column("price_catalog", "sell_iron_price")
+
 
 FILE: backend/alembic/versions_v2/e1c2d3f4a5b6_add_ledger_created_at.py
 """add created_at to ledger_entries"""
@@ -546,6 +554,7 @@ def downgrade() -> None:
     op.drop_index("ix_ledger_entries_happened_created_id", table_name="ledger_entries")
     op.drop_column("ledger_entries", "created_at")
 
+
 FILE: backend/alembic/versions_v2/f2b3c4d5e6f7_enforce_customer_fk.py
 """enforce customer_transactions customer_id fk"""
 from __future__ import annotations
@@ -581,6 +590,7 @@ def downgrade() -> None:
         ["customer_id"],
         ["id"],
     )
+
 
 FILE: backend/alembic.ini
 [alembic]
@@ -621,8 +631,10 @@ formatter = generic
 [formatter_generic]
 format = %(levelname)-5.5s [%(name)s] %(message)s
 
+
 FILE: backend/app/__init__.py
 # Backend package init
+
 
 FILE: backend/app/auth.py
 from datetime import datetime, timedelta, timezone
@@ -684,6 +696,7 @@ def get_optional_user(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
   return sub
 
+
 FILE: backend/app/config.py
 from functools import lru_cache
 
@@ -738,8 +751,10 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
   return Settings()
 
+
 FILE: backend/app/constants.py
 DEFAULT_CURRENCY_CODE = "USD"
+
 
 FILE: backend/app/db.py
 from collections.abc import Generator
@@ -782,6 +797,7 @@ def get_session() -> Generator[Session, None, None]:
   with Session(engine) as session:
     yield session
 
+
 FILE: backend/app/logging_config.py
 import logging
 
@@ -791,6 +807,7 @@ def configure_logging(level: int = logging.INFO) -> None:
     level=level,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
   )
+
 
 FILE: backend/app/main.py
 from fastapi import FastAPI
@@ -840,6 +857,7 @@ app.include_router(company.router)
 app.include_router(cash.router)
 app.include_router(expenses.router)
 app.include_router(reports.router)
+
 
 FILE: backend/app/models.py
 from datetime import date, datetime, timezone
@@ -1131,8 +1149,10 @@ class SystemSettings(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
 
+
 FILE: backend/app/routers/__init__.py
 # Routers package init
+
 
 FILE: backend/app/routers/cash.py
 from datetime import datetime
@@ -1405,6 +1425,7 @@ def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)
   existing.is_reversed = True
   session.add(existing)
   session.commit()
+
 
 FILE: backend/app/routers/collections.py
 from typing import Optional
@@ -1774,6 +1795,7 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
     session.add(txn)
   session.commit()
 
+
 FILE: backend/app/routers/company.py
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -2037,6 +2059,7 @@ def get_company_balances(session: Session = Depends(get_session)) -> CompanyBala
     inventory_empty_48=inv["empty48"],
   )
 
+
 FILE: backend/app/routers/customer_adjustments.py
 from datetime import datetime, timezone
 from typing import Optional
@@ -2187,6 +2210,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   for txn in txns:
     session.refresh(txn)
   return _adjustment_out(txns)
+
 
 FILE: backend/app/routers/customers.py
 from datetime import datetime, timezone
@@ -2392,6 +2416,7 @@ def delete_customer(customer_id: str, session: Session = Depends(get_session)) -
   session.delete(customer)
   session.commit()
 
+
 FILE: backend/app/routers/expenses.py
 from datetime import datetime, timedelta, timezone
 
@@ -2530,6 +2555,7 @@ def delete_expense(
   session.add(expense)
   session.commit()
 
+
 FILE: backend/app/routers/health.py
 from fastapi import APIRouter
 
@@ -2539,6 +2565,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health() -> dict[str, str]:
   return {"status": "ok"}
+
 
 FILE: backend/app/routers/inventory.py
 from datetime import datetime, timedelta, timezone
@@ -3089,6 +3116,7 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
   session.add(existing)
   session.commit()
 
+
 FILE: backend/app/routers/orders.py
 from typing import Optional
 
@@ -3551,6 +3579,7 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
   session.add(existing)
   session.commit()
 
+
 FILE: backend/app/routers/prices.py
 from datetime import datetime, timezone
 
@@ -3607,6 +3636,7 @@ def create_price(payload: PriceCreate, session: Session = Depends(get_session)) 
     effective_from=row.effective_from,
     created_at=row.created_at,
   )
+
 
 FILE: backend/app/routers/reports.py
 from collections import defaultdict
@@ -6810,6 +6840,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events=event_rows,
   )
 
+
 FILE: backend/app/routers/system.py
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
@@ -7025,6 +7056,7 @@ def ledger_health_check(session: Session = Depends(get_session)) -> SystemHealth
         issues=issues,
     )
 
+
 FILE: backend/app/routers/system_types.py
 from datetime import datetime, timezone
 
@@ -7093,6 +7125,7 @@ def update_system_type(
   session.commit()
   session.refresh(row)
   return SystemTypeOptionOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
+
 
 FILE: backend/app/routers/systems.py
 from datetime import date, datetime, timezone
@@ -7250,6 +7283,7 @@ def delete_system(system_id: str, session: Session = Depends(get_session)) -> No
     )
   session.delete(system)
   session.commit()
+
 
 FILE: backend/app/schemas.py
 from __future__ import annotations
@@ -8181,6 +8215,7 @@ class DailyReportV2Day(SQLModel):
   audit_summary: DailyAuditSummary
   events: list[DailyReportV2Event]
 
+
 FILE: backend/app/services/ledger.py
 from __future__ import annotations
 
@@ -8363,6 +8398,7 @@ def sum_customer_cylinders(
     customer_id=customer_id,
     up_to=up_to,
   )
+
 
 FILE: backend/app/services/posting.py
 from __future__ import annotations
@@ -8890,8 +8926,10 @@ def reverse_source(
     lines=lines,
   )
 
+
 FILE: backend/app/utils/__init__.py
 """Utility helpers for inventory/time/locks."""
+
 
 FILE: backend/app/utils/locks.py
 from __future__ import annotations
@@ -8919,6 +8957,7 @@ def acquire_inventory_lock(session: Session, gas_type: str) -> None:
 def acquire_inventory_locks(session: Session, gas_types: list[str]) -> None:
   for gas_type in sorted(set(gas_types)):
     acquire_inventory_lock(session, gas_type)
+
 
 FILE: backend/app/utils/time.py
 from __future__ import annotations
@@ -9003,6 +9042,7 @@ def business_date_end_utc(business_date: date) -> datetime:
   """
   next_day_start = business_date_start_utc(business_date + timedelta(days=1))
   return next_day_start - timedelta(seconds=1)
+
 
 FILE: backend/poetry.lock
 # This file is automatically @generated by Poetry 2.2.1 and should not be changed by hand.
@@ -10599,6 +10639,7 @@ lock-version = "2.1"
 python-versions = "^3.11"
 content-hash = "f77b8b6d0de875bf01cc852ff4482e64494968dfbc691f2836b5f9727ff1b407"
 
+
 FILE: backend/pyproject.toml
 [tool.poetry]
 name = "gas-backend"
@@ -10633,9 +10674,12 @@ pythonpath = ["..", "../tests/backend"]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+
 FILE: backend/tests/__init__.py
 
 
+
 FILE: backend/tests/backend/__init__.py
+
 
 
