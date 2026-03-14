@@ -749,6 +749,10 @@ function V2Timeline({
     );
   };
 
+  const placeholderBox = (key: string) => (
+    <View key={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
+  );
+
   return (
     <View>
       {normalizedEvents.map((ev) => {
@@ -841,6 +845,83 @@ function V2Timeline({
 
         const renderFixedRow = (boxes: ReactNode[], key: string) => <>{buildDeltaRow(boxes, key)}</>;
 
+        const renderMixedLayout = ({
+          include12,
+          include48,
+          includeCash,
+          keyPrefix,
+        }: {
+          include12: boolean;
+          include48: boolean;
+          includeCash: boolean;
+          keyPrefix: string;
+        }) => (
+          <>
+            {include12
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-full`,
+                      label: "12kg Full",
+                      before: full12Before,
+                      after: full12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-12-empty`,
+                      label: "12kg Empty",
+                      before: empty12Before,
+                      after: empty12After,
+                      format: formatCount,
+                      accent: gasColor("12kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-12-row`
+                )
+              : null}
+            {include48
+              ? buildDeltaRow(
+                  [
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-full`,
+                      label: "48kg Full",
+                      before: full48Before,
+                      after: full48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-48-empty`,
+                      label: "48kg Empty",
+                      before: empty48Before,
+                      after: empty48After,
+                      format: formatCount,
+                      accent: gasColor("48kg"),
+                    }),
+                  ],
+                  `${keyPrefix}-48-row`
+                )
+              : null}
+            {includeCash
+              ? buildDeltaRow(
+                  [
+                    placeholderBox(`${keyPrefix}-cash-left`),
+                    renderTopStateBox({
+                      key: `${keyPrefix}-cash`,
+                      label: "Cash",
+                      before: cashBefore,
+                      after: cashAfter,
+                      format: formatMoney,
+                    }),
+                    placeholderBox(`${keyPrefix}-cash-right`),
+                  ],
+                  `${keyPrefix}-cash-row`
+                )
+              : null}
+          </>
+        );
+
         const renderGasTriplet = (targetGasType: "12kg" | "48kg") => {
           const isTarget48 = targetGasType === "48kg";
           return renderFixedRow([
@@ -897,6 +978,22 @@ function V2Timeline({
             }),
           ], "cash-triplet");
 
+        const renderCenteredCashOnly = (keyPrefix: string) =>
+          buildDeltaRow(
+            [
+              placeholderBox(`${keyPrefix}-cash-left`),
+              renderTopStateBox({
+                key: `${keyPrefix}-cash`,
+                label: "Cash",
+                before: cashBefore,
+                after: cashAfter,
+                format: formatMoney,
+              }),
+              placeholderBox(`${keyPrefix}-cash-right`),
+            ],
+            `${keyPrefix}-cash-row`
+          );
+
         const expandedContent = () => {
           if (eventType === "order" && inferredGasType) {
             return renderGasTriplet(inferredGasType);
@@ -906,65 +1003,22 @@ function V2Timeline({
             return renderGasTriplet(inferredGasType);
           }
 
-          if (
-            eventType === "collection_money" ||
-            eventType === "collection_payout" ||
-            eventType === "expense" ||
-            eventType === "bank_deposit" ||
-            eventType === "cash_adjust"
-          ) {
+          if (eventType === "collection_money" || eventType === "collection_payout") {
+            return renderCenteredCashOnly(eventType);
+          }
+
+          if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") {
             return renderCashTriplet();
           }
 
           if (eventType === "refill" || eventType === "company_buy_iron") {
             if (touches12 && touches48) {
-              const mixedBoxes = [
-                renderTopStateBox({
-                  key: "mixed-12-full",
-                  label: "12kg Full",
-                  before: full12Before,
-                  after: full12After,
-                  format: formatCount,
-                  accent: gasColor("12kg"),
-                }),
-                renderTopStateBox({
-                  key: "mixed-12-empty",
-                  label: "12kg Empty",
-                  before: empty12Before,
-                  after: empty12After,
-                  format: formatCount,
-                  accent: gasColor("12kg"),
-                }),
-                hasCash
-                  ? renderTopStateBox({
-                      key: "mixed-cash",
-                      label: "Cash",
-                      before: cashBefore,
-                      after: cashAfter,
-                      format: formatMoney,
-                    })
-                  : null,
-                renderTopStateBox({
-                  key: "mixed-48-full",
-                  label: "48kg Full",
-                  before: full48Before,
-                  after: full48After,
-                  format: formatCount,
-                  accent: gasColor("48kg"),
-                }),
-                renderTopStateBox({
-                  key: "mixed-48-empty",
-                  label: "48kg Empty",
-                  before: empty48Before,
-                  after: empty48After,
-                  format: formatCount,
-                  accent: gasColor("48kg"),
-                }),
-              ];
-              return renderFixedRow(
-                mixedBoxes.filter(Boolean) as ReactNode[],
-                hasCash ? "mixed-five-slot" : "mixed-four-slot"
-              );
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCash,
+                keyPrefix: "mixed",
+              });
             }
             if (touches12) return renderGasTriplet("12kg");
             if (touches48) return renderGasTriplet("48kg");
@@ -1014,6 +1068,14 @@ function V2Timeline({
                   })
                 : null,
             ].filter(Boolean) as ReactNode[];
+            if (has12InventoryState && has48InventoryState) {
+              return renderMixedLayout({
+                include12: true,
+                include48: true,
+                includeCash: hasCashChange,
+                keyPrefix: "adjust-mixed",
+              });
+            }
             if (cylinderBoxes.length > 0 && (has12InventoryChange || has48InventoryChange || !hasCashChange)) {
               return renderRows(cylinderBoxes);
             }
