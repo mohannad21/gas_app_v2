@@ -711,6 +711,9 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+      if (eventType === "customer_adjust") {
+        return;
+      }
       if (eventType !== "init") {
         merged.push(ev);
         return;
@@ -836,9 +839,11 @@ function V2Timeline({
           return <>{rows}</>;
         };
 
+        const renderFixedRow = (boxes: ReactNode[], key: string) => <>{buildDeltaRow(boxes, key)}</>;
+
         const renderGasTriplet = (targetGasType: "12kg" | "48kg") => {
           const isTarget48 = targetGasType === "48kg";
-          return renderRows([
+          return renderFixedRow([
             renderTopStateBox({
               key: `${targetGasType}-full`,
               label: `${targetGasType} Full`,
@@ -862,11 +867,11 @@ function V2Timeline({
               after: cashAfter,
               format: formatMoney,
             }),
-          ]);
+          ], `${targetGasType}-triplet`);
         };
 
         const renderCashTriplet = () =>
-          renderRows([
+          renderFixedRow([
             renderTopStateBox({
               key: "cash-only-cash",
               label: "Cash",
@@ -890,7 +895,7 @@ function V2Timeline({
               format: formatCount,
               accent: gasColor("48kg"),
             }),
-          ]);
+          ], "cash-triplet");
 
         const expandedContent = () => {
           if (eventType === "order" && inferredGasType) {
@@ -930,6 +935,15 @@ function V2Timeline({
                   format: formatCount,
                   accent: gasColor("12kg"),
                 }),
+                hasCash
+                  ? renderTopStateBox({
+                      key: "mixed-cash",
+                      label: "Cash",
+                      before: cashBefore,
+                      after: cashAfter,
+                      format: formatMoney,
+                    })
+                  : null,
                 renderTopStateBox({
                   key: "mixed-48-full",
                   label: "48kg Full",
@@ -946,15 +960,11 @@ function V2Timeline({
                   format: formatCount,
                   accent: gasColor("48kg"),
                 }),
-                renderTopStateBox({
-                  key: "mixed-cash",
-                  label: "Cash",
-                  before: cashBefore,
-                  after: cashAfter,
-                  format: formatMoney,
-                }),
               ];
-              return renderRows(mixedBoxes);
+              return renderFixedRow(
+                mixedBoxes.filter(Boolean) as ReactNode[],
+                hasCash ? "mixed-five-slot" : "mixed-four-slot"
+              );
             }
             if (touches12) return renderGasTriplet("12kg");
             if (touches48) return renderGasTriplet("48kg");
@@ -1072,7 +1082,7 @@ function DeltaBox({
 }) {
   const delta = (after ?? 0) - (before ?? 0);
   const showSingle = typeof singleValue === "number";
-  const isNoChange = !showSingle && delta === 0;
+  const isNoChange = !!showNoChange && !showSingle && delta === 0;
   const badgeStyle =
     isNoChange
       ? styles.deltaBadgeNeutral
@@ -1453,12 +1463,16 @@ const styles = StyleSheet.create({
   inventoryRow: { flexDirection: "row", gap: 8 },
   deltaBox: {
     position: "relative",
-    padding: 10,
+    paddingTop: 32,
+    paddingRight: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#cbd5f5",
     backgroundColor: "#f8fafc",
     minWidth: 140,
+    minHeight: 84,
     flexGrow: 1,
   },
   deltaBoxCompact: { minWidth: 0, flex: 1 },
@@ -1479,7 +1493,7 @@ const styles = StyleSheet.create({
   deltaBadgeSmall: { paddingHorizontal: 5, paddingVertical: 1 },
   deltaBadgeText: { fontSize: 11, fontWeight: "900", color: "white", fontFamily: FontFamilies.extrabold },
   deltaBadgeTextSmall: { fontSize: 10 },
-  deltaBoxRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  deltaBoxRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 18 },
   deltaBoxValue: { fontSize: 11, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   deltaBoxArrow: { fontSize: 11, fontWeight: "900", color: "#0a7ea4", fontFamily: FontFamilies.extrabold },
   deltaValueGood: { color: "#16a34a" },
