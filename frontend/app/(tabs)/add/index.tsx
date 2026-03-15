@@ -6,10 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
-import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
-import { buildCompanySummary } from "@/hooks/useBalancesSummary";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
-import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
@@ -60,17 +57,14 @@ export default function AddChooserScreen() {
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
-  const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
-  const companyBalancesQuery = useCompanyBalances();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [collectionEditOpen, setCollectionEditOpen] = useState(false);
   const [collectionEditTarget, setCollectionEditTarget] = useState<any | null>(null);
@@ -79,7 +73,6 @@ export default function AddChooserScreen() {
   const [collectionQty48, setCollectionQty48] = useState("");
   const [collectionNote, setCollectionNote] = useState("");
   const accessoryId = Platform.OS === "ios" ? "addAccessory" : undefined;
-  const [showDeletedInventory, setShowDeletedInventory] = useState(false);
   const deleteRefill = useDeleteRefill();
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
   const deleteCashAdjust = useDeleteCashAdjustment();
@@ -97,7 +90,7 @@ const formatDateTime = (value?: string) => {
     return `${year}-${month}-${day}`;
   };
   const todayDate = getLocalDateString();
-  const inventoryActivity = useInventoryActivity(todayDate, showDeletedInventory);
+  const inventoryActivity = useInventoryActivity(todayDate);
   const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
 
 
@@ -179,10 +172,6 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
-  const companySummary = useMemo(
-    () => buildCompanySummary(companyBalancesQuery.data),
-    [companyBalancesQuery.data]
-  );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
   const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
@@ -550,21 +539,8 @@ const formatDateTime = (value?: string) => {
         ? "+ Add Expense"
         : "+ New Ledger Adjustment";
 
-  const sectionSubtitle = isCustomerActivities
-    ? "Recent Customer Activities"
-    : isCompanyActivities
-      ? "Recent Company Activities"
-      : isExpenses
-        ? "Recent Expenses"
-        : "Recent Ledger Adjustments";
-
   return (
     <View style={styles.container}>
-      <Pressable style={styles.menuBtn} onPress={() => setDrawerOpen(true)}>
-        <Ionicons name="menu" size={22} color="#111827" />
-      </Pressable>
-      <Text style={styles.title}>New</Text>
-
       <View style={styles.segment}>
         <Pressable
           onPress={() => setMode("customer_activities")}
@@ -598,22 +574,6 @@ const formatDateTime = (value?: string) => {
       <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
         <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
-
-      {isCompanyActivities ? (
-        <CompanyBalancesSection
-          companySummary={companySummary}
-          companyBalancesReady={companyBalancesQuery.isSuccess}
-          collapsed={companyBalancesCollapsed}
-          onToggle={() => setCompanyBalancesCollapsed((prev) => !prev)}
-          formatMoney={(value) => Number(value || 0).toFixed(0)}
-          formatCount={(value) => Number(value || 0).toFixed(0)}
-        />
-      ) : null}
-
-      <Text style={styles.subtitle}>{sectionSubtitle}</Text>
-      {isCustomerActivities ? (
-        <Text style={styles.meta}>Activity items: {recentItems.length}</Text>
-      ) : null}
 
       {isCustomerActivities ? (
         <>
@@ -781,12 +741,6 @@ const formatDateTime = (value?: string) => {
         </>
       ) : isExpenses ? (
         <View style={styles.formCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.formTitle}>Recent Expenses</Text>
-            <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
-              <Text style={styles.linkText}>Refresh</Text>
-            </Pressable>
-          </View>
           {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
           {expensesQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
           {expenses.length === 0 && !expensesQuery.isLoading ? (
@@ -821,22 +775,6 @@ const formatDateTime = (value?: string) => {
         </View>
       ) : isCompanyActivities ? (
         <View style={styles.formCard}>
-          <View style={styles.inventoryHeaderRow}>
-            <Text style={styles.formTitle}>Recent Company Activities</Text>
-            <Pressable
-              onPress={() => setShowDeletedInventory((prev) => !prev)}
-              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
-            >
-              <Text
-                style={[
-                  styles.inventoryToggleText,
-                  showDeletedInventory && styles.inventoryToggleTextActive,
-                ]}
-              >
-                Show deleted
-              </Text>
-            </Pressable>
-          </View>
           <View style={styles.listBlock}>
             {companyActivityItems.map((entry) => {
               const refill = entry.data;
@@ -901,22 +839,6 @@ const formatDateTime = (value?: string) => {
         </View>
       ) : (
         <View style={styles.formCard}>
-          <View style={styles.inventoryHeaderRow}>
-            <Text style={styles.formTitle}>Recent Ledger Adjustments</Text>
-            <Pressable
-              onPress={() => setShowDeletedInventory((prev) => !prev)}
-              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
-            >
-              <Text
-                style={[
-                  styles.inventoryToggleText,
-                  showDeletedInventory && styles.inventoryToggleTextActive,
-                ]}
-              >
-                Show deleted
-              </Text>
-            </Pressable>
-          </View>
           <View style={styles.listBlock}>
             {ledgerAdjustmentItems.map((entry) => {
               if (entry.kind === "inventory_adjustment") {
@@ -1194,54 +1116,6 @@ const formatDateTime = (value?: string) => {
             </View>
           </KeyboardAvoidingView>
         </View>
-      </Modal>
-
-      {/* Right drawer */}
-      <Modal transparent visible={drawerOpen} animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
-        <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)}>
-          <Pressable style={styles.drawer} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.drawerTitle}>Worker Profile</Text>
-            <Text style={styles.drawerMeta}>Name: Your Worker</Text>
-            <Text style={styles.drawerMeta}>Role: Delivery</Text>
-
-            <Text style={[styles.drawerTitle, { marginTop: 16 }]}>Settings</Text>
-            <Text style={styles.drawerLink}>General</Text>
-            <Text style={styles.drawerLink}>Inventory</Text>
-            <Pressable
-              style={styles.linkBtn}
-              onPress={() => {
-                router.push("/system-types");
-                setDrawerOpen(false);
-              }}
-            >
-              <Text style={[styles.linkText, { fontSize: 15 }]}>System types</Text>
-            </Pressable>
-            <Pressable
-              style={styles.linkBtn}
-              onPress={() => {
-                router.push("/system-health");
-                setDrawerOpen(false);
-              }}
-            >
-              <Text style={[styles.linkText, { fontSize: 15 }]}>System health</Text>
-            </Pressable>
-
-            <Text style={[styles.drawerTitle, { marginTop: 16 }]}>Prices</Text>
-            <Pressable
-              style={styles.linkBtn}
-              onPress={() => {
-                setPriceModalOpen(true);
-                setDrawerOpen(false);
-              }}
-            >
-              <Text style={[styles.linkText, { fontSize: 15 }]}>Adjust prices</Text>
-            </Pressable>
-
-            <Pressable style={styles.primary} onPress={() => setDrawerOpen(false)}>
-              <Text style={styles.primaryText}>Close</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
       </Modal>
 
     </View>
@@ -2535,17 +2409,6 @@ const shadowCard = Platform.select({
   },
 });
 
-const shadowDrawer = Platform.select({
-  web: { boxShadow: "-4px 0px 18px rgba(0,0,0,0.18)" },
-  default: {
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: -4, height: 0 },
-    elevation: 8,
-  },
-});
-
 const shadowModal = Platform.select({
   web: { boxShadow: "0px 10px 22px rgba(0,0,0,0.18)" },
   default: {
@@ -2755,10 +2618,6 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: "#f7f7f8",
   },
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-  },
   segment: {
     flexDirection: "row",
     backgroundColor: "#e8eef1",
@@ -2802,12 +2661,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
-  },
-  subtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#444",
   },
   listBlock: {
     gap: 10,
@@ -2864,33 +2717,6 @@ const styles = StyleSheet.create({
     color: "#b00020",
     fontWeight: "700",
     fontSize: 12,
-  },
-  formTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  inventoryHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  inventoryToggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "#e8eef1",
-  },
-  inventoryToggleActive: {
-    backgroundColor: "#0a7ea4",
-  },
-  inventoryToggleText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  inventoryToggleTextActive: {
-    color: "#fff",
   },
   inventoryLabelRow: {
     flexDirection: "row",
@@ -3628,50 +3454,6 @@ const styles = StyleSheet.create({
   },
   retryText: {
     color: "#8a1c1c",
-    fontWeight: "700",
-  },
-  menuBtn: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    backgroundColor: "#0a7ea4",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 20,
-  },
-  menuBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 18,
-  },
-  drawerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-  },
-  drawer: {
-    width: "80%",
-    maxWidth: 420,
-    backgroundColor: "#fff",
-    padding: 16,
-    height: "100%",
-    ...(shadowDrawer as object),
-  },
-  drawerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  drawerMeta: {
-    color: "#555",
-    marginTop: 4,
-  },
-  drawerLink: {
-    marginTop: 8,
-    color: "#0a7ea4",
     fontWeight: "700",
   },
   priceRow: {
