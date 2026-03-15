@@ -15,7 +15,7 @@ import {
   useDeleteInventoryAdjustment,
   useDeleteRefill,
 } from "@/hooks/useInventory";
-import { useInventoryActivity } from "@/hooks/useInventoryActivity";
+import { InventoryActivityItem, useInventoryActivity } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
@@ -44,13 +44,19 @@ type CustomerFilter =
   | "system_future_check"
   | "system_due_check";
 
+type AddMode =
+  | "customer_activities"
+  | "company_activities"
+  | "expenses"
+  | "ledger_adjustments";
+
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
-  const [mode, setMode] = useState<"orders" | "customers" | "expenses" | "inventory">("orders");
-  const isOrders = mode === "orders";
-  const isCustomers = mode === "customers";
+  const [mode, setMode] = useState<AddMode>("customer_activities");
+  const isCustomerActivities = mode === "customer_activities";
+  const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
-  const isInventory = mode === "inventory";
+  const isLedgerAdjustments = mode === "ledger_adjustments";
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
@@ -132,11 +138,34 @@ const formatDateTime = (value?: string) => {
       return safeB - safeA;
     });
   }, [orders, collections, toSafeTime]);
-  const inventoryItems = inventoryActivity.items.filter((entry) => {
-    if (entry.kind !== "refill") return true;
-    const data = entry.data;
-    return data.buy12 || data.buy48 || data.return12 || data.return48;
-  });
+  const filteredInventoryItems = useMemo(
+    () =>
+      inventoryActivity.items.filter((entry) => {
+        if (entry.kind !== "refill") return true;
+        const data = entry.data;
+        return data.buy12 || data.buy48 || data.return12 || data.return48;
+      }),
+    [inventoryActivity.items]
+  );
+  const companyActivityItems = useMemo(
+    () =>
+      filteredInventoryItems.filter(
+        (entry): entry is Extract<InventoryActivityItem, { kind: "refill" }> => entry.kind === "refill"
+      ),
+    [filteredInventoryItems]
+  );
+  const ledgerAdjustmentItems = useMemo(
+    () =>
+      filteredInventoryItems.filter(
+        (
+          entry
+        ): entry is Extract<
+          InventoryActivityItem,
+          { kind: "inventory_adjustment" } | { kind: "cash_adjustment" }
+        > => entry.kind === "inventory_adjustment" || entry.kind === "cash_adjustment"
+      ),
+    [filteredInventoryItems]
+  );
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
     return [...rows].sort((a, b) => {
@@ -241,11 +270,11 @@ const formatDateTime = (value?: string) => {
       pathname: "/(tabs)/add",
       params: openPrices ? { prices: openPrices } : {},
     });
-    setMode("inventory");
+    setMode("ledger_adjustments");
     if (openParam === "adjust-inventory") {
-      router.push({ pathname: "/inventory/new", params: { tab: "inventory" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
     } else if (openParam === "adjust-cash") {
-      router.push({ pathname: "/inventory/new", params: { tab: "cash" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "cash" } });
     }
   }, [addParams.open, addParams.prices]);
 
@@ -261,13 +290,14 @@ const formatDateTime = (value?: string) => {
   );
   useFocusEffect(
     useCallback(() => {
-      if (isInventory) {
+      if (isCompanyActivities || isLedgerAdjustments) {
         inventoryActivity.refillsQuery.refetch();
         inventoryActivity.inventoryAdjustmentsQuery.refetch();
         inventoryActivity.cashAdjustmentsQuery.refetch();
       }
     }, [
-      isInventory,
+      isCompanyActivities,
+      isLedgerAdjustments,
       inventoryActivity.refillsQuery,
       inventoryActivity.inventoryAdjustmentsQuery,
       inventoryActivity.cashAdjustmentsQuery,
@@ -277,8 +307,8 @@ const formatDateTime = (value?: string) => {
     useCallback(() => {
       const shortcut = consumeAddShortcut();
       if (shortcut?.mode === "inventory") {
-        setMode("inventory");
-        router.push("/inventory/new");
+        setMode("company_activities");
+        router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
       }
     }, [])
   );
@@ -487,76 +517,90 @@ const formatDateTime = (value?: string) => {
     ]);
   };
 
+  const handlePrimaryAction = () => {
+    if (isCustomerActivities) {
+      router.push("/orders/new");
+      return;
+    }
+    if (isCompanyActivities) {
+      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
+      return;
+    }
+    if (isExpenses) {
+      router.push("/expenses/new");
+      return;
+    }
+    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
+  };
+
+  const primaryCtaLabel = isCustomerActivities
+    ? "+ New Customer Activity"
+    : isCompanyActivities
+      ? "+ New Company Activity"
+      : isExpenses
+        ? "+ Add Expense"
+        : "+ New Ledger Adjustment";
+
+  const sectionSubtitle = isCustomerActivities
+    ? "Recent Customer Activities"
+    : isCompanyActivities
+      ? "Recent Company Activities"
+      : isExpenses
+        ? "Recent Expenses"
+        : "Recent Ledger Adjustments";
+
   return (
     <View style={styles.container}>
       <Pressable style={styles.menuBtn} onPress={() => setDrawerOpen(true)}>
-        <Text style={styles.menuBtnText}>≡</Text>
+        <Ionicons name="menu" size={22} color="#111827" />
       </Pressable>
-      <Text style={styles.title}>Add</Text>
+      <Text style={styles.title}>New</Text>
 
       <View style={styles.segment}>
-        <Pressable onPress={() => setMode("orders")} style={[styles.segmentBtn, isOrders && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isOrders && styles.segmentTextActive]}>Orders</Text>
+        <Pressable
+          onPress={() => setMode("customer_activities")}
+          style={[styles.segmentBtn, isCustomerActivities && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isCustomerActivities && styles.segmentTextActive]}>
+            Customer{"\n"}Activities
+          </Text>
         </Pressable>
-        <Pressable onPress={() => setMode("customers")} style={[styles.segmentBtn, isCustomers && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isCustomers && styles.segmentTextActive]}>Customers</Text>
+        <Pressable
+          onPress={() => setMode("company_activities")}
+          style={[styles.segmentBtn, isCompanyActivities && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isCompanyActivities && styles.segmentTextActive]}>
+            Company{"\n"}Activities
+          </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
           <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Expenses</Text>
         </Pressable>
-        <Pressable onPress={() => setMode("inventory")} style={[styles.segmentBtn, isInventory && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isInventory && styles.segmentTextActive]}>Inventory</Text>
+        <Pressable
+          onPress={() => setMode("ledger_adjustments")}
+          style={[styles.segmentBtn, isLedgerAdjustments && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isLedgerAdjustments && styles.segmentTextActive]}>
+            Ledger{"\n"}Adjustments
+          </Text>
         </Pressable>
       </View>
 
-      <Pressable
-        onPress={() => {
-          if (isOrders) {
-            router.push("/orders/new");
-            return;
-          }
-          if (isCustomers) {
-            router.push("/customers/new");
-            return;
-          }
-          if (isExpenses) {
-            router.push("/expenses/new");
-            return;
-          }
-          if (isInventory) {
-            router.push("/inventory/new");
-          }
-        }}
-        style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-      >
-        <Text style={styles.primaryText}>
-          {isOrders
-            ? "+ New Order"
-            : isCustomers
-              ? "+ New Customer"
-              : isExpenses
-                ? "+ Add Expense"
-                : "+ Add Inventory"}
-        </Text>
+      <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+        <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
 
-      {!isExpenses && !isCustomers ? (
-        <Text style={styles.subtitle}>
-          {isOrders ? "Recent Orders" : "Inventory shortcuts"}
-        </Text>
-      ) : null}
-      {isOrders ? (
-        <Text style={styles.meta}>
-          orders: {orders.length} | collections: {collections.length}
-        </Text>
+      <Text style={styles.subtitle}>{sectionSubtitle}</Text>
+      {isCustomerActivities ? (
+        <Text style={styles.meta}>Activity items: {recentItems.length}</Text>
       ) : null}
 
-      {isOrders ? (
+      {isCustomerActivities ? (
         <>
           {ordersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
           {ordersQuery.error && (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load orders.</Text>
+              <Text style={styles.error}>Failed to load customer activities.</Text>
               <Pressable style={styles.retryBtn} onPress={() => ordersQuery.refetch()}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
@@ -567,7 +611,7 @@ const formatDateTime = (value?: string) => {
             data={recentItems}
             keyExtractor={(item) => `${item.kind}-${item.data.id}`}
             contentContainerStyle={{ gap: 10 }}
-            ListEmptyComponent={!ordersQuery.isLoading ? <Text style={styles.meta}>No orders yet.</Text> : null}
+            ListEmptyComponent={!ordersQuery.isLoading ? <Text style={styles.meta}>No customer activities yet.</Text> : null}
             renderItem={({ item }) => {
               if (item.kind === "collection") {
                 const collection = item.data;
@@ -676,7 +720,7 @@ const formatDateTime = (value?: string) => {
                         <Text style={[styles.pill, { backgroundColor: gasColor(order.gas_type), color: "#fff" }]}>
                           {order.gas_type}
                         </Text>
-                        <Text style={[styles.pill, styles.pillPrimary]}>Paid {order.paid_amount.toFixed(0)}</Text>
+                        <Text style={[styles.pill, styles.pillPrimary]}>Paid {(order.paid_amount ?? 0).toFixed(0)}</Text>
                       </View>
                     </View>
                     <View style={styles.badgeStack}>
@@ -715,208 +759,156 @@ const formatDateTime = (value?: string) => {
             }}
           />
         </>
-      ) : isCustomers ? (
-        <AddCustomersSection />
-         ) : isExpenses ? (
-          <View style={styles.formCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.formTitle}>Recent expenses</Text>
-              <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
-                <Text style={styles.linkText}>Refresh</Text>
-              </Pressable>
-            </View>
-            {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
-            {expensesQuery.error ? (
-              <Text style={styles.error}>Failed to load expenses.</Text>
-            ) : null}
-            {expenses.length === 0 && !expensesQuery.isLoading ? (
-              <Text style={styles.meta}>No expenses yet.</Text>
-            ) : (
-              <View style={styles.listBlock}>
-                {expenses.map((item) => (
-                  <View key={item.id} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <View style={styles.pillRow}>
-                          <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
-                        </View>
-                        <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
-                        {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+      ) : isExpenses ? (
+        <View style={styles.formCard}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.formTitle}>Recent Expenses</Text>
+            <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
+              <Text style={styles.linkText}>Refresh</Text>
+            </Pressable>
+          </View>
+          {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+          {expensesQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
+          {expenses.length === 0 && !expensesQuery.isLoading ? (
+            <Text style={styles.meta}>No expenses yet.</Text>
+          ) : (
+            <View style={styles.listBlock}>
+              {expenses.map((item) => (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.pillRow}>
+                        <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
                       </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.expenseAmount}>{item.amount}</Text>
-                        <Pressable
-                          accessibilityLabel="Remove expense"
-                          onPress={() => handleDeleteExpense(item)}
-                          style={styles.iconBtn}
-                        >
-                          <Ionicons name="trash" size={16} color="#b00020" />
-                        </Pressable>
-                      </View>
+                      <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
+                      {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                    </View>
+                    <View style={styles.headerRight}>
+                      <Text style={styles.expenseAmount}>{item.amount}</Text>
+                      <Pressable
+                        accessibilityLabel="Remove expense"
+                        onPress={() => handleDeleteExpense(item)}
+                        style={styles.iconBtn}
+                      >
+                        <Ionicons name="trash" size={16} color="#b00020" />
+                      </Pressable>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.formCard}>
-            <View style={styles.inventoryHeaderRow}>
-              <Text style={styles.formTitle}>Inventory</Text>
-              <Pressable
-                onPress={() => setShowDeletedInventory((prev) => !prev)}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : isCompanyActivities ? (
+        <View style={styles.formCard}>
+          <View style={styles.inventoryHeaderRow}>
+            <Text style={styles.formTitle}>Recent Company Activities</Text>
+            <Pressable
+              onPress={() => setShowDeletedInventory((prev) => !prev)}
+              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
+            >
+              <Text
                 style={[
-                  styles.inventoryToggle,
-                  showDeletedInventory && styles.inventoryToggleActive,
+                  styles.inventoryToggleText,
+                  showDeletedInventory && styles.inventoryToggleTextActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.inventoryToggleText,
-                    showDeletedInventory && styles.inventoryToggleTextActive,
-                  ]}
-                >
-                  Show deleted
-                </Text>
-              </Pressable>
-            </View>
-            <View style={styles.listBlock}>
-              {inventoryItems.map((entry) => {
-                if (entry.kind === "refill") {
-                  const refill = entry.data;
-                  const isDeleted = entry.is_deleted;
-                  return (
-                    <View
-                      key={`refill_${refill.refill_id}`}
-                      style={[styles.card, isDeleted && styles.cardMuted]}
-                    >
-                      <View style={styles.cardHeader}>
-                        <View style={styles.titleBlock}>
-                          <View style={styles.inventoryLabelRow}>
-                            <View style={styles.inventoryTypeBadge}>
-                              <Text style={styles.inventoryTypeBadgeText}>Refill</Text>
-                            </View>
-                            {isDeleted && (
-                              <View style={styles.inventoryBadge}>
-                                <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                              </View>
-                            )}
+                Show deleted
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listBlock}>
+            {companyActivityItems.map((entry) => {
+              const refill = entry.data;
+              const isDeleted = entry.is_deleted;
+              return (
+                <View key={`refill_${refill.refill_id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.inventoryLabelRow}>
+                        <View style={styles.inventoryTypeBadge}>
+                          <Text style={styles.inventoryTypeBadgeText}>Refill</Text>
+                        </View>
+                        {isDeleted && (
+                          <View style={styles.inventoryBadge}>
+                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
                           </View>
-                          <Text style={styles.metaLine}>
-                            {refill.date} {refill.time_of_day}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor("12kg"), fontWeight: "700" }]}>12kg</Text>
-                            : buy {refill.buy12} return {refill.return12}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor("48kg"), fontWeight: "700" }]}>48kg</Text>
-                            : buy {refill.buy48} return {refill.return48}
-                          </Text>
-                        </View>
-                        <View style={styles.actionsCompact}>
-                          <Pressable
-                            accessibilityLabel="Update refill"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              router.push({
-                                pathname: "/inventory/new",
-                                params: { tab: "refill", refillId: refill.refill_id },
-                              });
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                          </Pressable>
-                          <Pressable
-                            accessibilityLabel="Remove refill"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              handleRemoveRefill(refill.refill_id);
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                          </Pressable>
-                        </View>
+                        )}
                       </View>
+                      <Text style={styles.metaLine}>
+                        {refill.date} {refill.time_of_day}
+                      </Text>
+                      <Text style={styles.metaLine}>
+                        <Text style={[styles.metaLine, { color: gasColor("12kg"), fontWeight: "700" }]}>12kg</Text>
+                        : buy {refill.buy12} return {refill.return12}
+                      </Text>
+                      <Text style={styles.metaLine}>
+                        <Text style={[styles.metaLine, { color: gasColor("48kg"), fontWeight: "700" }]}>48kg</Text>
+                        : buy {refill.buy48} return {refill.return48}
+                      </Text>
                     </View>
-                  );
-                }
-
-                if (entry.kind === "inventory_adjustment") {
-                  const adjustment = entry.data;
-                  const isDeleted = entry.is_deleted;
-                  return (
-                    <View
-                      key={`inv_adj_${adjustment.id}`}
-                      style={[styles.card, isDeleted && styles.cardMuted]}
-                    >
-                      <View style={styles.cardHeader}>
-                        <View style={styles.titleBlock}>
-                          <View style={styles.inventoryLabelRow}>
-                            <View style={styles.inventoryTypeBadge}>
-                              <Text style={styles.inventoryTypeBadgeText}>InvAdjust</Text>
-                            </View>
-                            {isDeleted && (
-                              <View style={styles.inventoryBadge}>
-                                <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.metaLine}>
-                            {formatDateTime(adjustment.effective_at)}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor(adjustment.gas_type), fontWeight: "700" }]}>
-                              {adjustment.gas_type}
-                            </Text>
-                            : full {adjustment.delta_full} empty {adjustment.delta_empty}
-                          </Text>
-                          {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
-                        </View>
-                        <View style={styles.actionsCompact}>
-                          <Pressable
-                            accessibilityLabel="Update adjustment"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              router.push({
-                                pathname: "/inventory/new",
-                                params: { tab: "inventory", adjustId: adjustment.id },
-                              });
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                          </Pressable>
-                          <Pressable
-                            accessibilityLabel="Remove adjustment"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              handleDeleteInventoryAdjustment(adjustment);
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                          </Pressable>
-                        </View>
-                      </View>
+                    <View style={styles.actionsCompact}>
+                      <Pressable
+                        accessibilityLabel="Update refill"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          router.push({
+                            pathname: "/inventory/new",
+                            params: { section: "company", tab: "refill", refillId: refill.refill_id },
+                          });
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Remove refill"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          handleRemoveRefill(refill.refill_id);
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
+                      </Pressable>
                     </View>
-                  );
-                }
-
+                  </View>
+                </View>
+              );
+            })}
+            {companyActivityItems.length === 0 && <Text style={styles.meta}>No company activities yet.</Text>}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.formCard}>
+          <View style={styles.inventoryHeaderRow}>
+            <Text style={styles.formTitle}>Recent Ledger Adjustments</Text>
+            <Pressable
+              onPress={() => setShowDeletedInventory((prev) => !prev)}
+              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
+            >
+              <Text
+                style={[
+                  styles.inventoryToggleText,
+                  showDeletedInventory && styles.inventoryToggleTextActive,
+                ]}
+              >
+                Show deleted
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listBlock}>
+            {ledgerAdjustmentItems.map((entry) => {
+              if (entry.kind === "inventory_adjustment") {
                 const adjustment = entry.data;
                 const isDeleted = entry.is_deleted;
                 return (
-                  <View
-                    key={`cash_adj_${adjustment.id}`}
-                    style={[styles.card, isDeleted && styles.cardMuted]}
-                  >
+                  <View key={`inv_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
                     <View style={styles.cardHeader}>
                       <View style={styles.titleBlock}>
                         <View style={styles.inventoryLabelRow}>
                           <View style={styles.inventoryTypeBadge}>
-                            <Text style={styles.inventoryTypeBadgeText}>CashAdjust</Text>
+                            <Text style={styles.inventoryTypeBadgeText}>Inventory Adjustment</Text>
                           </View>
                           {isDeleted && (
                             <View style={styles.inventoryBadge}>
@@ -924,20 +916,23 @@ const formatDateTime = (value?: string) => {
                             </View>
                           )}
                         </View>
+                        <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
                         <Text style={styles.metaLine}>
-                          {formatDateTime(adjustment.effective_at)}
+                          <Text style={[styles.metaLine, { color: gasColor(adjustment.gas_type), fontWeight: "700" }]}>
+                            {adjustment.gas_type}
+                          </Text>
+                          : full {adjustment.delta_full} empty {adjustment.delta_empty}
                         </Text>
-                        <Text style={styles.metaLine}>Amount: {adjustment.delta_cash}</Text>
                         {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
                       </View>
                       <View style={styles.actionsCompact}>
                         <Pressable
-                          accessibilityLabel="Update cash adjustment"
+                          accessibilityLabel="Update adjustment"
                           onPress={() => {
                             if (isDeleted) return;
                             router.push({
                               pathname: "/inventory/new",
-                              params: { tab: "cash", cashId: adjustment.id },
+                              params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
                             });
                           }}
                           style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
@@ -945,10 +940,10 @@ const formatDateTime = (value?: string) => {
                           <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
                         </Pressable>
                         <Pressable
-                          accessibilityLabel="Remove cash adjustment"
+                          accessibilityLabel="Remove adjustment"
                           onPress={() => {
                             if (isDeleted) return;
-                            handleDeleteCashAdjustment(adjustment);
+                            handleDeleteInventoryAdjustment(adjustment);
                           }}
                           style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
                         >
@@ -958,13 +953,61 @@ const formatDateTime = (value?: string) => {
                     </View>
                   </View>
                 );
-              })}
-              {inventoryItems.length === 0 && (
-                <Text style={styles.meta}>No inventory activity yet.</Text>
-              )}
-            </View>
+              }
+
+              const adjustment = entry.data;
+              const isDeleted = entry.is_deleted;
+              return (
+                <View key={`cash_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.inventoryLabelRow}>
+                        <View style={styles.inventoryTypeBadge}>
+                          <Text style={styles.inventoryTypeBadgeText}>Cash Adjustment</Text>
+                        </View>
+                        {isDeleted && (
+                          <View style={styles.inventoryBadge}>
+                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
+                      <Text style={styles.metaLine}>Amount: {adjustment.delta_cash}</Text>
+                      {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
+                    </View>
+                    <View style={styles.actionsCompact}>
+                      <Pressable
+                        accessibilityLabel="Update cash adjustment"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          router.push({
+                            pathname: "/inventory/new",
+                            params: { section: "ledger", tab: "cash", cashId: adjustment.id },
+                          });
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Remove cash adjustment"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          handleDeleteCashAdjustment(adjustment);
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+            {ledgerAdjustmentItems.length === 0 && <Text style={styles.meta}>No ledger adjustments yet.</Text>}
           </View>
-        )}
+        </View>
+      )}
 
       {Platform.OS === "ios" && (
         <InputAccessoryView nativeID={accessoryId}>
@@ -2166,8 +2209,8 @@ function CashAdjustForm({
       Alert.alert("Reason required", "Please add a reason for the adjustment.");
       return;
     }
-    if (!entry && !deltaFull12 && !deltaEmpty12 && !deltaFull48 && !deltaEmpty48) {
-      Alert.alert("No changes", "Enter a 12kg or 48kg adjustment first.");
+    if (!entry && deltaValue === 0) {
+      Alert.alert("No changes", "Enter a cash adjustment amount first.");
       return;
     }
     try {
@@ -2705,7 +2748,10 @@ const styles = StyleSheet.create({
   segmentBtn: {
     flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 4,
+    minHeight: 48,
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 10,
   },
   segmentActive: {
@@ -2719,6 +2765,9 @@ const styles = StyleSheet.create({
   segmentText: {
     fontWeight: "700",
     color: "#4a4a4a",
+    fontSize: 11,
+    lineHeight: 13,
+    textAlign: "center",
   },
   segmentTextActive: {
     color: "#0a7ea4",
