@@ -42,16 +42,35 @@ def _customer_balances(session: Session) -> tuple[dict[str, int], dict[str, int]
   return money_map, cyl12_map, cyl48_map
 
 
+def _replacement_order_count_query(customer_id: str | None = None):
+  query = (
+    select(func.count(CustomerTransaction.id))
+    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.mode == "replacement")
+    .where(CustomerTransaction.received > 0)
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+  )
+  if customer_id is not None:
+    return query.where(CustomerTransaction.customer_id == customer_id)
+  return query
+
+
+def _replacement_order_count_grouped_query():
+  return (
+    select(CustomerTransaction.customer_id, func.count(CustomerTransaction.id))
+    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.mode == "replacement")
+    .where(CustomerTransaction.received > 0)
+    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .group_by(CustomerTransaction.customer_id)
+  )
+
+
 @router.get("", response_model=list[CustomerOut])
 def list_customers(session: Session = Depends(get_session)) -> list[CustomerOut]:
   customers = session.exec(select(Customer).order_by(Customer.created_at.desc())).all()
   money_map, cyl12_map, cyl48_map = _customer_balances(session)
-  order_counts = session.exec(
-    select(CustomerTransaction.customer_id, func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-    .group_by(CustomerTransaction.customer_id)
-  ).all()
+  order_counts = session.exec(_replacement_order_count_grouped_query()).all()
   count_map = {row[0]: int(row[1] or 0) for row in order_counts}
 
   output: list[CustomerOut] = []
@@ -82,12 +101,7 @@ def get_customer(customer_id: str, session: Session = Depends(get_session)) -> C
   money = sum_customer_money(session, customer_id=customer.id)
   cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
   cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
-  order_count = session.exec(
-    select(func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.customer_id == customer.id)
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).first() or 0
+  order_count = session.exec(_replacement_order_count_query(customer.id)).first() or 0
   return CustomerOut(
     id=customer.id,
     name=customer.name,
@@ -110,12 +124,7 @@ def get_customer_balances(customer_id: str, session: Session = Depends(get_sessi
   money = sum_customer_money(session, customer_id=customer.id)
   cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
   cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
-  order_count = session.exec(
-    select(func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.customer_id == customer.id)
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).first() or 0
+  order_count = session.exec(_replacement_order_count_query(customer.id)).first() or 0
   return CustomerBalanceOut(
     customer_id=customer.id,
     money_balance=int(money),
@@ -166,12 +175,7 @@ def update_customer(customer_id: str, payload: CustomerUpdate, session: Session 
   money = sum_customer_money(session, customer_id=customer.id)
   cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
   cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
-  order_count = session.exec(
-    select(func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.customer_id == customer.id)
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).first() or 0
+  order_count = session.exec(_replacement_order_count_query(customer.id)).first() or 0
   return CustomerOut(
     id=customer.id,
     name=customer.name,
