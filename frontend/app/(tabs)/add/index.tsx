@@ -7,7 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
-import { buildCompanySummary } from "@/hooks/useBalancesSummary";
+import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
+import { buildCompanySummary, buildCustomerBalanceSummary } from "@/hooks/useBalancesSummary";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
@@ -60,6 +61,7 @@ export default function AddChooserScreen() {
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
+  const [customerBalancesCollapsed, setCustomerBalancesCollapsed] = useState(true);
   const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
@@ -179,6 +181,10 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
+  const customerBalanceSummary = useMemo(
+    () => buildCustomerBalanceSummary(customersQuery.data),
+    [customersQuery.data]
+  );
   const companySummary = useMemo(
     () => buildCompanySummary(companyBalancesQuery.data),
     [companyBalancesQuery.data]
@@ -598,6 +604,16 @@ const formatDateTime = (value?: string) => {
       <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
         <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
+
+      {isCustomerActivities ? (
+        <CustomerBalancesSection
+          balanceSummary={customerBalanceSummary}
+          collapsed={customerBalancesCollapsed}
+          onToggle={() => setCustomerBalancesCollapsed((prev) => !prev)}
+          formatMoney={(value) => Number(value || 0).toFixed(0)}
+          formatCustomerCount={(count) => `${count} customer${count === 1 ? "" : "s"}`}
+        />
+      ) : null}
 
       {isCompanyActivities ? (
         <CompanyBalancesSection
