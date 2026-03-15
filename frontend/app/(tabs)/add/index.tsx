@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
+import FilterChipRow from "@/components/add/FilterChipRow";
+import NewSectionSearch from "@/components/add/NewSectionSearch";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
@@ -50,9 +52,61 @@ type AddMode =
   | "expenses"
   | "ledger_adjustments";
 
+type CustomerActivityFilter =
+  | "all"
+  | "replacement"
+  | "late_payment"
+  | "return_empties"
+  | "payout"
+  | "sell_full"
+  | "buy_empty"
+  | "adjustment";
+
+type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
+type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
+type ExpenseCategoryFilter = "all_categories" | string;
+type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
+
+const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "replacement", label: "Replacement" },
+  { id: "late_payment", label: "Late Payment" },
+  { id: "return_empties", label: "Return Empties" },
+  { id: "payout", label: "Payout" },
+  { id: "sell_full", label: "Sell Full" },
+  { id: "buy_empty", label: "Buy Empty" },
+  { id: "adjustment", label: "Adjustment" },
+];
+
+const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "refill", label: "Refill" },
+  { id: "company_payment", label: "Company Payment" },
+  { id: "buy_full", label: "Buy Full" },
+];
+
+const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "expense", label: "Expense" },
+  { id: "wallet_to_bank", label: "Wallet to Bank" },
+  { id: "bank_to_wallet", label: "Bank to Wallet" },
+];
+
+const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "inventory_adjustment", label: "Inventory Adjustment" },
+  { id: "cash_adjustment", label: "Cash Adjustment" },
+];
+
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
   const [mode, setMode] = useState<AddMode>("customer_activities");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerActivityFilter, setCustomerActivityFilter] = useState<CustomerActivityFilter>("all");
+  const [companyActivityFilter, setCompanyActivityFilter] = useState<CompanyActivityFilter>("all");
+  const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
+  const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
@@ -172,6 +226,15 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
+  const expenseCategoryOptions = useMemo(
+    () => [
+      { id: "all_categories" as const, label: "All categories" },
+      ...Array.from(new Set(expenses.map((item) => item.expense_type).filter(Boolean)))
+        .sort((left, right) => left.localeCompare(right))
+        .map((category) => ({ id: category, label: category })),
+    ],
+    [expenses]
+  );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
   const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
@@ -574,6 +637,55 @@ const formatDateTime = (value?: string) => {
       <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
         <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
+
+      {isCustomerActivities ? (
+        <>
+          <NewSectionSearch
+            value={customerSearch}
+            onChangeText={setCustomerSearch}
+            placeholder="Search customer by name"
+          />
+          <FilterChipRow
+            options={customerActivityFilters}
+            value={customerActivityFilter}
+            onChange={setCustomerActivityFilter}
+          />
+        </>
+      ) : null}
+
+      {isCompanyActivities ? (
+        <FilterChipRow
+          options={companyActivityFilters}
+          value={companyActivityFilter}
+          onChange={setCompanyActivityFilter}
+        />
+      ) : null}
+
+      {isExpenses ? (
+        <>
+          <FilterChipRow
+            options={expensePrimaryFilters}
+            value={expensePrimaryFilter}
+            onChange={setExpensePrimaryFilter}
+          />
+          {expensePrimaryFilter === "expense" ? (
+            <FilterChipRow
+              options={expenseCategoryOptions}
+              value={expenseCategoryFilter}
+              onChange={setExpenseCategoryFilter}
+              contentContainerStyle={styles.secondaryFilterRow}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {isLedgerAdjustments ? (
+        <FilterChipRow
+          options={ledgerActivityFilters}
+          value={ledgerActivityFilter}
+          onChange={setLedgerActivityFilter}
+        />
+      ) : null}
 
       {isCustomerActivities ? (
         <>
@@ -3405,6 +3517,9 @@ const styles = StyleSheet.create({
   },
   filterSection: {
     marginBottom: 6,
+  },
+  secondaryFilterRow: {
+    paddingTop: 0,
   },
   filterChip: {
     paddingHorizontal: 12,
