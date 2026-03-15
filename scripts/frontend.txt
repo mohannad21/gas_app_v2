@@ -126,7 +126,7 @@ import {
   useDeleteInventoryAdjustment,
   useDeleteRefill,
 } from "@/hooks/useInventory";
-import { useInventoryActivity } from "@/hooks/useInventoryActivity";
+import { InventoryActivityItem, useInventoryActivity } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
@@ -155,13 +155,19 @@ type CustomerFilter =
   | "system_future_check"
   | "system_due_check";
 
+type AddMode =
+  | "customer_activities"
+  | "company_activities"
+  | "expenses"
+  | "ledger_adjustments";
+
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
-  const [mode, setMode] = useState<"orders" | "customers" | "expenses" | "inventory">("orders");
-  const isOrders = mode === "orders";
-  const isCustomers = mode === "customers";
+  const [mode, setMode] = useState<AddMode>("customer_activities");
+  const isCustomerActivities = mode === "customer_activities";
+  const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
-  const isInventory = mode === "inventory";
+  const isLedgerAdjustments = mode === "ledger_adjustments";
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
@@ -243,11 +249,34 @@ const formatDateTime = (value?: string) => {
       return safeB - safeA;
     });
   }, [orders, collections, toSafeTime]);
-  const inventoryItems = inventoryActivity.items.filter((entry) => {
-    if (entry.kind !== "refill") return true;
-    const data = entry.data;
-    return data.buy12 || data.buy48 || data.return12 || data.return48;
-  });
+  const filteredInventoryItems = useMemo(
+    () =>
+      inventoryActivity.items.filter((entry) => {
+        if (entry.kind !== "refill") return true;
+        const data = entry.data;
+        return data.buy12 || data.buy48 || data.return12 || data.return48;
+      }),
+    [inventoryActivity.items]
+  );
+  const companyActivityItems = useMemo(
+    () =>
+      filteredInventoryItems.filter(
+        (entry): entry is Extract<InventoryActivityItem, { kind: "refill" }> => entry.kind === "refill"
+      ),
+    [filteredInventoryItems]
+  );
+  const ledgerAdjustmentItems = useMemo(
+    () =>
+      filteredInventoryItems.filter(
+        (
+          entry
+        ): entry is Extract<
+          InventoryActivityItem,
+          { kind: "inventory_adjustment" } | { kind: "cash_adjustment" }
+        > => entry.kind === "inventory_adjustment" || entry.kind === "cash_adjustment"
+      ),
+    [filteredInventoryItems]
+  );
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
     return [...rows].sort((a, b) => {
@@ -352,11 +381,11 @@ const formatDateTime = (value?: string) => {
       pathname: "/(tabs)/add",
       params: openPrices ? { prices: openPrices } : {},
     });
-    setMode("inventory");
+    setMode("ledger_adjustments");
     if (openParam === "adjust-inventory") {
-      router.push({ pathname: "/inventory/new", params: { tab: "inventory" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
     } else if (openParam === "adjust-cash") {
-      router.push({ pathname: "/inventory/new", params: { tab: "cash" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "cash" } });
     }
   }, [addParams.open, addParams.prices]);
 
@@ -372,13 +401,14 @@ const formatDateTime = (value?: string) => {
   );
   useFocusEffect(
     useCallback(() => {
-      if (isInventory) {
+      if (isCompanyActivities || isLedgerAdjustments) {
         inventoryActivity.refillsQuery.refetch();
         inventoryActivity.inventoryAdjustmentsQuery.refetch();
         inventoryActivity.cashAdjustmentsQuery.refetch();
       }
     }, [
-      isInventory,
+      isCompanyActivities,
+      isLedgerAdjustments,
       inventoryActivity.refillsQuery,
       inventoryActivity.inventoryAdjustmentsQuery,
       inventoryActivity.cashAdjustmentsQuery,
@@ -388,8 +418,8 @@ const formatDateTime = (value?: string) => {
     useCallback(() => {
       const shortcut = consumeAddShortcut();
       if (shortcut?.mode === "inventory") {
-        setMode("inventory");
-        router.push("/inventory/new");
+        setMode("company_activities");
+        router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
       }
     }, [])
   );
@@ -598,76 +628,90 @@ const formatDateTime = (value?: string) => {
     ]);
   };
 
+  const handlePrimaryAction = () => {
+    if (isCustomerActivities) {
+      router.push("/orders/new");
+      return;
+    }
+    if (isCompanyActivities) {
+      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
+      return;
+    }
+    if (isExpenses) {
+      router.push("/expenses/new");
+      return;
+    }
+    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
+  };
+
+  const primaryCtaLabel = isCustomerActivities
+    ? "+ New Customer Activity"
+    : isCompanyActivities
+      ? "+ New Company Activity"
+      : isExpenses
+        ? "+ Add Expense"
+        : "+ New Ledger Adjustment";
+
+  const sectionSubtitle = isCustomerActivities
+    ? "Recent Customer Activities"
+    : isCompanyActivities
+      ? "Recent Company Activities"
+      : isExpenses
+        ? "Recent Expenses"
+        : "Recent Ledger Adjustments";
+
   return (
     <View style={styles.container}>
       <Pressable style={styles.menuBtn} onPress={() => setDrawerOpen(true)}>
-        <Text style={styles.menuBtnText}>≡</Text>
+        <Ionicons name="menu" size={22} color="#111827" />
       </Pressable>
-      <Text style={styles.title}>Add</Text>
+      <Text style={styles.title}>New</Text>
 
       <View style={styles.segment}>
-        <Pressable onPress={() => setMode("orders")} style={[styles.segmentBtn, isOrders && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isOrders && styles.segmentTextActive]}>Orders</Text>
+        <Pressable
+          onPress={() => setMode("customer_activities")}
+          style={[styles.segmentBtn, isCustomerActivities && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isCustomerActivities && styles.segmentTextActive]}>
+            Customer{"\n"}Activities
+          </Text>
         </Pressable>
-        <Pressable onPress={() => setMode("customers")} style={[styles.segmentBtn, isCustomers && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isCustomers && styles.segmentTextActive]}>Customers</Text>
+        <Pressable
+          onPress={() => setMode("company_activities")}
+          style={[styles.segmentBtn, isCompanyActivities && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isCompanyActivities && styles.segmentTextActive]}>
+            Company{"\n"}Activities
+          </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
           <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Expenses</Text>
         </Pressable>
-        <Pressable onPress={() => setMode("inventory")} style={[styles.segmentBtn, isInventory && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isInventory && styles.segmentTextActive]}>Inventory</Text>
+        <Pressable
+          onPress={() => setMode("ledger_adjustments")}
+          style={[styles.segmentBtn, isLedgerAdjustments && styles.segmentActive]}
+        >
+          <Text style={[styles.segmentText, isLedgerAdjustments && styles.segmentTextActive]}>
+            Ledger{"\n"}Adjustments
+          </Text>
         </Pressable>
       </View>
 
-      <Pressable
-        onPress={() => {
-          if (isOrders) {
-            router.push("/orders/new");
-            return;
-          }
-          if (isCustomers) {
-            router.push("/customers/new");
-            return;
-          }
-          if (isExpenses) {
-            router.push("/expenses/new");
-            return;
-          }
-          if (isInventory) {
-            router.push("/inventory/new");
-          }
-        }}
-        style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-      >
-        <Text style={styles.primaryText}>
-          {isOrders
-            ? "+ New Order"
-            : isCustomers
-              ? "+ New Customer"
-              : isExpenses
-                ? "+ Add Expense"
-                : "+ Add Inventory"}
-        </Text>
+      <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+        <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
 
-      {!isExpenses && !isCustomers ? (
-        <Text style={styles.subtitle}>
-          {isOrders ? "Recent Orders" : "Inventory shortcuts"}
-        </Text>
-      ) : null}
-      {isOrders ? (
-        <Text style={styles.meta}>
-          orders: {orders.length} | collections: {collections.length}
-        </Text>
+      <Text style={styles.subtitle}>{sectionSubtitle}</Text>
+      {isCustomerActivities ? (
+        <Text style={styles.meta}>Activity items: {recentItems.length}</Text>
       ) : null}
 
-      {isOrders ? (
+      {isCustomerActivities ? (
         <>
           {ordersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
           {ordersQuery.error && (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load orders.</Text>
+              <Text style={styles.error}>Failed to load customer activities.</Text>
               <Pressable style={styles.retryBtn} onPress={() => ordersQuery.refetch()}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
@@ -678,7 +722,7 @@ const formatDateTime = (value?: string) => {
             data={recentItems}
             keyExtractor={(item) => `${item.kind}-${item.data.id}`}
             contentContainerStyle={{ gap: 10 }}
-            ListEmptyComponent={!ordersQuery.isLoading ? <Text style={styles.meta}>No orders yet.</Text> : null}
+            ListEmptyComponent={!ordersQuery.isLoading ? <Text style={styles.meta}>No customer activities yet.</Text> : null}
             renderItem={({ item }) => {
               if (item.kind === "collection") {
                 const collection = item.data;
@@ -787,7 +831,7 @@ const formatDateTime = (value?: string) => {
                         <Text style={[styles.pill, { backgroundColor: gasColor(order.gas_type), color: "#fff" }]}>
                           {order.gas_type}
                         </Text>
-                        <Text style={[styles.pill, styles.pillPrimary]}>Paid {order.paid_amount.toFixed(0)}</Text>
+                        <Text style={[styles.pill, styles.pillPrimary]}>Paid {(order.paid_amount ?? 0).toFixed(0)}</Text>
                       </View>
                     </View>
                     <View style={styles.badgeStack}>
@@ -826,208 +870,156 @@ const formatDateTime = (value?: string) => {
             }}
           />
         </>
-      ) : isCustomers ? (
-        <AddCustomersSection />
-         ) : isExpenses ? (
-          <View style={styles.formCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.formTitle}>Recent expenses</Text>
-              <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
-                <Text style={styles.linkText}>Refresh</Text>
-              </Pressable>
-            </View>
-            {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
-            {expensesQuery.error ? (
-              <Text style={styles.error}>Failed to load expenses.</Text>
-            ) : null}
-            {expenses.length === 0 && !expensesQuery.isLoading ? (
-              <Text style={styles.meta}>No expenses yet.</Text>
-            ) : (
-              <View style={styles.listBlock}>
-                {expenses.map((item) => (
-                  <View key={item.id} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <View style={styles.pillRow}>
-                          <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
-                        </View>
-                        <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
-                        {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+      ) : isExpenses ? (
+        <View style={styles.formCard}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.formTitle}>Recent Expenses</Text>
+            <Pressable onPress={() => expensesQuery.refetch()} style={styles.linkBtn}>
+              <Text style={styles.linkText}>Refresh</Text>
+            </Pressable>
+          </View>
+          {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+          {expensesQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
+          {expenses.length === 0 && !expensesQuery.isLoading ? (
+            <Text style={styles.meta}>No expenses yet.</Text>
+          ) : (
+            <View style={styles.listBlock}>
+              {expenses.map((item) => (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.pillRow}>
+                        <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
                       </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.expenseAmount}>{item.amount}</Text>
-                        <Pressable
-                          accessibilityLabel="Remove expense"
-                          onPress={() => handleDeleteExpense(item)}
-                          style={styles.iconBtn}
-                        >
-                          <Ionicons name="trash" size={16} color="#b00020" />
-                        </Pressable>
-                      </View>
+                      <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
+                      {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                    </View>
+                    <View style={styles.headerRight}>
+                      <Text style={styles.expenseAmount}>{item.amount}</Text>
+                      <Pressable
+                        accessibilityLabel="Remove expense"
+                        onPress={() => handleDeleteExpense(item)}
+                        style={styles.iconBtn}
+                      >
+                        <Ionicons name="trash" size={16} color="#b00020" />
+                      </Pressable>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.formCard}>
-            <View style={styles.inventoryHeaderRow}>
-              <Text style={styles.formTitle}>Inventory</Text>
-              <Pressable
-                onPress={() => setShowDeletedInventory((prev) => !prev)}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : isCompanyActivities ? (
+        <View style={styles.formCard}>
+          <View style={styles.inventoryHeaderRow}>
+            <Text style={styles.formTitle}>Recent Company Activities</Text>
+            <Pressable
+              onPress={() => setShowDeletedInventory((prev) => !prev)}
+              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
+            >
+              <Text
                 style={[
-                  styles.inventoryToggle,
-                  showDeletedInventory && styles.inventoryToggleActive,
+                  styles.inventoryToggleText,
+                  showDeletedInventory && styles.inventoryToggleTextActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.inventoryToggleText,
-                    showDeletedInventory && styles.inventoryToggleTextActive,
-                  ]}
-                >
-                  Show deleted
-                </Text>
-              </Pressable>
-            </View>
-            <View style={styles.listBlock}>
-              {inventoryItems.map((entry) => {
-                if (entry.kind === "refill") {
-                  const refill = entry.data;
-                  const isDeleted = entry.is_deleted;
-                  return (
-                    <View
-                      key={`refill_${refill.refill_id}`}
-                      style={[styles.card, isDeleted && styles.cardMuted]}
-                    >
-                      <View style={styles.cardHeader}>
-                        <View style={styles.titleBlock}>
-                          <View style={styles.inventoryLabelRow}>
-                            <View style={styles.inventoryTypeBadge}>
-                              <Text style={styles.inventoryTypeBadgeText}>Refill</Text>
-                            </View>
-                            {isDeleted && (
-                              <View style={styles.inventoryBadge}>
-                                <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                              </View>
-                            )}
+                Show deleted
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listBlock}>
+            {companyActivityItems.map((entry) => {
+              const refill = entry.data;
+              const isDeleted = entry.is_deleted;
+              return (
+                <View key={`refill_${refill.refill_id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.inventoryLabelRow}>
+                        <View style={styles.inventoryTypeBadge}>
+                          <Text style={styles.inventoryTypeBadgeText}>Refill</Text>
+                        </View>
+                        {isDeleted && (
+                          <View style={styles.inventoryBadge}>
+                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
                           </View>
-                          <Text style={styles.metaLine}>
-                            {refill.date} {refill.time_of_day}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor("12kg"), fontWeight: "700" }]}>12kg</Text>
-                            : buy {refill.buy12} return {refill.return12}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor("48kg"), fontWeight: "700" }]}>48kg</Text>
-                            : buy {refill.buy48} return {refill.return48}
-                          </Text>
-                        </View>
-                        <View style={styles.actionsCompact}>
-                          <Pressable
-                            accessibilityLabel="Update refill"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              router.push({
-                                pathname: "/inventory/new",
-                                params: { tab: "refill", refillId: refill.refill_id },
-                              });
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                          </Pressable>
-                          <Pressable
-                            accessibilityLabel="Remove refill"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              handleRemoveRefill(refill.refill_id);
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                          </Pressable>
-                        </View>
+                        )}
                       </View>
+                      <Text style={styles.metaLine}>
+                        {refill.date} {refill.time_of_day}
+                      </Text>
+                      <Text style={styles.metaLine}>
+                        <Text style={[styles.metaLine, { color: gasColor("12kg"), fontWeight: "700" }]}>12kg</Text>
+                        : buy {refill.buy12} return {refill.return12}
+                      </Text>
+                      <Text style={styles.metaLine}>
+                        <Text style={[styles.metaLine, { color: gasColor("48kg"), fontWeight: "700" }]}>48kg</Text>
+                        : buy {refill.buy48} return {refill.return48}
+                      </Text>
                     </View>
-                  );
-                }
-
-                if (entry.kind === "inventory_adjustment") {
-                  const adjustment = entry.data;
-                  const isDeleted = entry.is_deleted;
-                  return (
-                    <View
-                      key={`inv_adj_${adjustment.id}`}
-                      style={[styles.card, isDeleted && styles.cardMuted]}
-                    >
-                      <View style={styles.cardHeader}>
-                        <View style={styles.titleBlock}>
-                          <View style={styles.inventoryLabelRow}>
-                            <View style={styles.inventoryTypeBadge}>
-                              <Text style={styles.inventoryTypeBadgeText}>InvAdjust</Text>
-                            </View>
-                            {isDeleted && (
-                              <View style={styles.inventoryBadge}>
-                                <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.metaLine}>
-                            {formatDateTime(adjustment.effective_at)}
-                          </Text>
-                          <Text style={styles.metaLine}>
-                            <Text style={[styles.metaLine, { color: gasColor(adjustment.gas_type), fontWeight: "700" }]}>
-                              {adjustment.gas_type}
-                            </Text>
-                            : full {adjustment.delta_full} empty {adjustment.delta_empty}
-                          </Text>
-                          {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
-                        </View>
-                        <View style={styles.actionsCompact}>
-                          <Pressable
-                            accessibilityLabel="Update adjustment"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              router.push({
-                                pathname: "/inventory/new",
-                                params: { tab: "inventory", adjustId: adjustment.id },
-                              });
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                          </Pressable>
-                          <Pressable
-                            accessibilityLabel="Remove adjustment"
-                            onPress={() => {
-                              if (isDeleted) return;
-                              handleDeleteInventoryAdjustment(adjustment);
-                            }}
-                            style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                          >
-                            <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                          </Pressable>
-                        </View>
-                      </View>
+                    <View style={styles.actionsCompact}>
+                      <Pressable
+                        accessibilityLabel="Update refill"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          router.push({
+                            pathname: "/inventory/new",
+                            params: { section: "company", tab: "refill", refillId: refill.refill_id },
+                          });
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Remove refill"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          handleRemoveRefill(refill.refill_id);
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
+                      </Pressable>
                     </View>
-                  );
-                }
-
+                  </View>
+                </View>
+              );
+            })}
+            {companyActivityItems.length === 0 && <Text style={styles.meta}>No company activities yet.</Text>}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.formCard}>
+          <View style={styles.inventoryHeaderRow}>
+            <Text style={styles.formTitle}>Recent Ledger Adjustments</Text>
+            <Pressable
+              onPress={() => setShowDeletedInventory((prev) => !prev)}
+              style={[styles.inventoryToggle, showDeletedInventory && styles.inventoryToggleActive]}
+            >
+              <Text
+                style={[
+                  styles.inventoryToggleText,
+                  showDeletedInventory && styles.inventoryToggleTextActive,
+                ]}
+              >
+                Show deleted
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listBlock}>
+            {ledgerAdjustmentItems.map((entry) => {
+              if (entry.kind === "inventory_adjustment") {
                 const adjustment = entry.data;
                 const isDeleted = entry.is_deleted;
                 return (
-                  <View
-                    key={`cash_adj_${adjustment.id}`}
-                    style={[styles.card, isDeleted && styles.cardMuted]}
-                  >
+                  <View key={`inv_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
                     <View style={styles.cardHeader}>
                       <View style={styles.titleBlock}>
                         <View style={styles.inventoryLabelRow}>
                           <View style={styles.inventoryTypeBadge}>
-                            <Text style={styles.inventoryTypeBadgeText}>CashAdjust</Text>
+                            <Text style={styles.inventoryTypeBadgeText}>Inventory Adjustment</Text>
                           </View>
                           {isDeleted && (
                             <View style={styles.inventoryBadge}>
@@ -1035,20 +1027,23 @@ const formatDateTime = (value?: string) => {
                             </View>
                           )}
                         </View>
+                        <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
                         <Text style={styles.metaLine}>
-                          {formatDateTime(adjustment.effective_at)}
+                          <Text style={[styles.metaLine, { color: gasColor(adjustment.gas_type), fontWeight: "700" }]}>
+                            {adjustment.gas_type}
+                          </Text>
+                          : full {adjustment.delta_full} empty {adjustment.delta_empty}
                         </Text>
-                        <Text style={styles.metaLine}>Amount: {adjustment.delta_cash}</Text>
                         {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
                       </View>
                       <View style={styles.actionsCompact}>
                         <Pressable
-                          accessibilityLabel="Update cash adjustment"
+                          accessibilityLabel="Update adjustment"
                           onPress={() => {
                             if (isDeleted) return;
                             router.push({
                               pathname: "/inventory/new",
-                              params: { tab: "cash", cashId: adjustment.id },
+                              params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
                             });
                           }}
                           style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
@@ -1056,10 +1051,10 @@ const formatDateTime = (value?: string) => {
                           <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
                         </Pressable>
                         <Pressable
-                          accessibilityLabel="Remove cash adjustment"
+                          accessibilityLabel="Remove adjustment"
                           onPress={() => {
                             if (isDeleted) return;
-                            handleDeleteCashAdjustment(adjustment);
+                            handleDeleteInventoryAdjustment(adjustment);
                           }}
                           style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
                         >
@@ -1069,13 +1064,61 @@ const formatDateTime = (value?: string) => {
                     </View>
                   </View>
                 );
-              })}
-              {inventoryItems.length === 0 && (
-                <Text style={styles.meta}>No inventory activity yet.</Text>
-              )}
-            </View>
+              }
+
+              const adjustment = entry.data;
+              const isDeleted = entry.is_deleted;
+              return (
+                <View key={`cash_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.titleBlock}>
+                      <View style={styles.inventoryLabelRow}>
+                        <View style={styles.inventoryTypeBadge}>
+                          <Text style={styles.inventoryTypeBadgeText}>Cash Adjustment</Text>
+                        </View>
+                        {isDeleted && (
+                          <View style={styles.inventoryBadge}>
+                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
+                      <Text style={styles.metaLine}>Amount: {adjustment.delta_cash}</Text>
+                      {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
+                    </View>
+                    <View style={styles.actionsCompact}>
+                      <Pressable
+                        accessibilityLabel="Update cash adjustment"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          router.push({
+                            pathname: "/inventory/new",
+                            params: { section: "ledger", tab: "cash", cashId: adjustment.id },
+                          });
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Remove cash adjustment"
+                        onPress={() => {
+                          if (isDeleted) return;
+                          handleDeleteCashAdjustment(adjustment);
+                        }}
+                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
+                      >
+                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+            {ledgerAdjustmentItems.length === 0 && <Text style={styles.meta}>No ledger adjustments yet.</Text>}
           </View>
-        )}
+        </View>
+      )}
 
       {Platform.OS === "ios" && (
         <InputAccessoryView nativeID={accessoryId}>
@@ -2277,8 +2320,8 @@ function CashAdjustForm({
       Alert.alert("Reason required", "Please add a reason for the adjustment.");
       return;
     }
-    if (!entry && !deltaFull12 && !deltaEmpty12 && !deltaFull48 && !deltaEmpty48) {
-      Alert.alert("No changes", "Enter a 12kg or 48kg adjustment first.");
+    if (!entry && deltaValue === 0) {
+      Alert.alert("No changes", "Enter a cash adjustment amount first.");
       return;
     }
     try {
@@ -2816,7 +2859,10 @@ const styles = StyleSheet.create({
   segmentBtn: {
     flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 4,
+    minHeight: 48,
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 10,
   },
   segmentActive: {
@@ -2830,6 +2876,9 @@ const styles = StyleSheet.create({
   segmentText: {
     fontWeight: "700",
     color: "#4a4a4a",
+    fontSize: 11,
+    lineHeight: 13,
+    textAlign: "center",
   },
   segmentTextActive: {
     color: "#0a7ea4",
@@ -3822,16 +3871,47 @@ const styles = StyleSheet.create({
 });
 
 FILE: frontend/app/(tabs)/customers-home.tsx
+import { StyleSheet, View } from "react-native";
+
+import BalancesCard from "@/components/reports/BalancesCard";
+import { useBalancesSummary } from "@/hooks/useBalancesSummary";
+
 import { AddCustomerEntryAction, AddCustomersSection } from "./add/index";
 
+const formatMoney = (value: number) => Number(value || 0).toFixed(0);
+const formatCount = (value: number) => Number(value || 0).toFixed(0);
+const formatCustomerCount = (count: number) => `${count} customer${count === 1 ? "" : "s"}`;
+
 export default function CustomersHomeScreen() {
+  const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
+
   return (
-    <>
+    <View style={styles.container}>
+      <BalancesCard
+        balanceSummary={balanceSummary}
+        companySummary={companySummary}
+        formatCustomerCount={formatCustomerCount}
+        formatMoney={formatMoney}
+        formatCount={formatCount}
+        companyBalancesReady={companyBalancesQuery.isSuccess}
+        containerStyle={styles.summaryCard}
+      />
       <AddCustomerEntryAction />
       <AddCustomersSection />
-    </>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  summaryCard: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+});
 
 FILE: frontend/app/(tabs)/dashboard.tsx
 import { StyleSheet, Text, View } from "react-native";
@@ -3884,7 +3964,6 @@ import {
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
-import BalancesCard from "@/components/reports/BalancesCard";
 import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
@@ -3905,7 +3984,6 @@ const getExpenseIcon = (type?: string | null) => {
 
 const formatMoney = (value: number) => Number(value || 0).toFixed(0);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
-const formatCustomerCount = (count: number) => `${count} customer${count === 1 ? "" : "s"}`;
 const formatMoneySigned = (value: number) => {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₪${formatMoney(Math.abs(value))}`;
@@ -3956,7 +4034,7 @@ const ReportDayCard = memo(function ReportDayCard({
       }
     : item.inventory_start;
 
-  const alertLines =
+  const alertLines: string[] =
     problemTransitions.length > 0
       ? formatBalanceTransitions(problemTransitions, {
           mode: "transition",
@@ -4123,7 +4201,6 @@ export default function ReportsScreen() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
   const [useCustomType, setUseCustomType] = useState(false);
-  const [balancesOpen, setBalancesOpen] = useState(true);
 
   // Sync tooltip
   const [syncInfoDate, setSyncInfoDate] = useState<string | null>(null);
@@ -4142,11 +4219,7 @@ export default function ReportsScreen() {
     setV2Expanded,
     v2DayByDate,
     setV2DayByDate,
-    balanceSummary,
-    companySummary,
-    companyBalancesQuery,
     refetchV2,
-    refetchCustomers,
   } = useDailyReportScreen();
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
@@ -4235,8 +4308,7 @@ export default function ReportsScreen() {
   useFocusEffect(
     useCallback(() => {
       refetchV2();
-      refetchCustomers();
-    }, [refetchV2, refetchCustomers])
+    }, [refetchV2])
   );
 
   // Clear cached day info when collapsing
@@ -4309,18 +4381,6 @@ export default function ReportsScreen() {
       </View>
         {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
         {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
-
-        <BalancesCard
-          balanceSummary={balanceSummary}
-          companySummary={companySummary}
-          formatCustomerCount={formatCustomerCount}
-          formatMoney={formatMoney}
-          formatCount={formatCount}
-          companyBalancesReady={companyBalancesQuery.isSuccess}
-          collapsed={!balancesOpen}
-          onToggle={() => setBalancesOpen((prev) => !prev)}
-        />
-
 
         <FlatList
           data={v2Rows}
@@ -6127,19 +6187,72 @@ const styles = StyleSheet.create({
 
 
 FILE: frontend/app/customers/[id].tsx
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
-import { formatDateMedium, formatDateTimeMedium, formatTimeHM } from "@/lib/date";
+import { formatDateMedium, formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
 
-import { useCustomerBalance, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
+import { useCollections } from "@/hooks/useCollections";
+import {
+  useCustomerAdjustments,
+  useCustomerBalance,
+  useCustomers,
+  useDeleteCustomer,
+} from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
-import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
+import { CollectionEvent, CustomerAdjustment, Order } from "@/types/domain";
+
+type ActivityFilter =
+  | "all"
+  | "replacement"
+  | "late_payment"
+  | "return_empties"
+  | "buy_empty"
+  | "sell_full"
+  | "adjustment";
+
+type ActivityKind =
+  | "replacement"
+  | "late_payment"
+  | "return_empties"
+  | "buy_empty"
+  | "sell_full"
+  | "adjustment"
+  | "payout";
+
+type CustomerActivityItem = {
+  id: string;
+  kind: ActivityKind;
+  title: string;
+  summary: string;
+  effectiveAt: string;
+  createdAt?: string;
+  systemId?: string | null;
+  systemName?: string | null;
+  note?: string | null;
+  moneyBefore: number;
+  moneyAfter: number;
+  cyl12Before: number;
+  cyl12After: number;
+  cyl48Before: number;
+  cyl48After: number;
+  orderId?: string;
+};
+
+const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "replacement", label: "Replacement" },
+  { id: "late_payment", label: "Late payment" },
+  { id: "return_empties", label: "Return empties" },
+  { id: "buy_empty", label: "Buy empty" },
+  { id: "sell_full", label: "Sell full" },
+  { id: "adjustment", label: "Adjustments" },
+];
 
 const formatCurrency = (value: number) => {
   const abs = Math.abs(value);
@@ -6155,20 +6268,253 @@ const formatDeliveredAt = (value?: string) => {
 };
 
 const formatOrderDate = (value?: string) => (value ? formatDateMedium(value, undefined, "-") : "-");
-const formatOrderTime = (value?: string) => (value ? formatTimeHM(value) : "--:--");
 
 const formatCylinder = (value: number) => {
   const prefix = value < 0 ? "-" : "";
   return `${prefix}${Math.abs(value)}`;
 };
 
+const formatProfileField = (value?: string | null, fallback = "Not provided") => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+};
+
+const formatSignedValue = (value: number, format: (v: number) => string) => {
+  if (value === 0) return "No change";
+  return `${value > 0 ? "+" : ""}${format(value)}`;
+};
+
+const formatQtySummary = (qty12?: number | null, qty48?: number | null, suffix = "") => {
+  const parts: string[] = [];
+  if (qty12) parts.push(`${qty12} x 12kg${suffix}`);
+  if (qty48) parts.push(`${qty48} x 48kg${suffix}`);
+  return parts.join(" | ");
+};
+
+const toTimeValue = (value?: string | null) => {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+};
+
+function ActivityDeltaBox({
+  label,
+  before,
+  after,
+  format,
+  accent,
+}: {
+  label: string;
+  before: number;
+  after: number;
+  format: (value: number) => string;
+  accent?: string;
+}) {
+  const delta = after - before;
+  const isNoChange = delta === 0;
+
+  return (
+    <View style={[styles.deltaBox, accent ? { borderColor: accent } : null]}>
+      <Text style={styles.deltaBoxLabel}>{label}</Text>
+      <View
+        style={[
+          styles.deltaBadge,
+          isNoChange ? styles.deltaBadgeNeutral : delta > 0 ? styles.deltaBadgePositive : styles.deltaBadgeNegative,
+        ]}
+      >
+        <Text style={styles.deltaBadgeText}>{formatSignedValue(delta, format)}</Text>
+      </View>
+      <View style={styles.deltaBoxRow}>
+        <Text style={styles.deltaBoxValue}>{format(before)}</Text>
+        <Text style={styles.deltaBoxArrow}>{"->"}</Text>
+        <Text style={styles.deltaBoxValue}>{format(after)}</Text>
+      </View>
+    </View>
+  );
+}
+
+function buildOrderActivity(order: Order, systemsById: Map<string, string>): CustomerActivityItem {
+  const mode = order.order_mode ?? "replacement";
+  const gas = order.gas_type ?? "12kg";
+  const installed = order.cylinders_installed ?? 0;
+  const received = order.cylinders_received ?? 0;
+  const totalAmount = order.price_total ?? 0;
+  const paidAmount = order.paid_amount ?? 0;
+  const moneyDelta = mode === "buy_iron" ? paidAmount - totalAmount : totalAmount - paidAmount;
+  const cylinderDelta = mode === "replacement" ? installed - received : 0;
+  const delta12 = gas === "12kg" ? cylinderDelta : 0;
+  const delta48 = gas === "48kg" ? cylinderDelta : 0;
+  const moneyAfter = order.debt_cash ?? 0;
+  const cyl12After = order.debt_cylinders_12 ?? 0;
+  const cyl48After = order.debt_cylinders_48 ?? 0;
+
+  if (mode === "replacement") {
+    return {
+      id: `order-${order.id}`,
+      kind: "replacement",
+      title: "Replacement",
+      summary: `Installed ${installed} x ${gas}${received > 0 ? ` | Received ${received} empties` : ""}`,
+      effectiveAt: order.delivered_at,
+      createdAt: order.created_at,
+      systemId: order.system_id || null,
+      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
+      note: order.note,
+      moneyBefore: moneyAfter - moneyDelta,
+      moneyAfter,
+      cyl12Before: cyl12After - delta12,
+      cyl12After,
+      cyl48Before: cyl48After - delta48,
+      cyl48After,
+      orderId: order.id,
+    };
+  }
+
+  if (mode === "sell_iron") {
+    return {
+      id: `order-${order.id}`,
+      kind: "sell_full",
+      title: "Sell full",
+      summary: `Sold ${installed} x ${gas}`,
+      effectiveAt: order.delivered_at,
+      createdAt: order.created_at,
+      systemId: order.system_id || null,
+      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
+      note: order.note,
+      moneyBefore: moneyAfter - moneyDelta,
+      moneyAfter,
+      cyl12Before: cyl12After,
+      cyl12After,
+      cyl48Before: cyl48After,
+      cyl48After,
+      orderId: order.id,
+    };
+  }
+
+  const boughtQty = received > 0 ? received : installed;
+  return {
+    id: `order-${order.id}`,
+    kind: "buy_empty",
+    title: "Buy empty",
+    summary: `Bought ${boughtQty} x ${gas} empties`,
+    effectiveAt: order.delivered_at,
+    createdAt: order.created_at,
+    systemId: order.system_id || null,
+    systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
+    note: order.note,
+    moneyBefore: moneyAfter - moneyDelta,
+    moneyAfter,
+    cyl12Before: cyl12After,
+    cyl12After,
+    cyl48Before: cyl48After,
+    cyl48After,
+    orderId: order.id,
+  };
+}
+
+function buildCollectionActivity(collection: CollectionEvent): CustomerActivityItem {
+  const moneyAfter = collection.debt_cash ?? 0;
+  const cyl12After = collection.debt_cylinders_12 ?? 0;
+  const cyl48After = collection.debt_cylinders_48 ?? 0;
+
+  if (collection.action_type === "payment") {
+    const amount = collection.amount_money ?? 0;
+    return {
+      id: `collection-${collection.id}`,
+      kind: "late_payment",
+      title: "Late payment",
+      summary: amount > 0 ? `Collected ${formatCurrency(amount)}` : "Collected payment",
+      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
+      createdAt: collection.created_at ?? collection.effective_at ?? "",
+      note: collection.note,
+      moneyBefore: moneyAfter + amount,
+      moneyAfter,
+      cyl12Before: cyl12After,
+      cyl12After,
+      cyl48Before: cyl48After,
+      cyl48After,
+    };
+  }
+
+  if (collection.action_type === "payout") {
+    const amount = collection.amount_money ?? 0;
+    return {
+      id: `collection-${collection.id}`,
+      kind: "payout",
+      title: "Payout",
+      summary: amount > 0 ? `Paid customer ${formatCurrency(amount)}` : "Customer payout",
+      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
+      createdAt: collection.created_at ?? collection.effective_at ?? "",
+      note: collection.note,
+      moneyBefore: moneyAfter - amount,
+      moneyAfter,
+      cyl12Before: cyl12After,
+      cyl12After,
+      cyl48Before: cyl48After,
+      cyl48After,
+    };
+  }
+
+  const qty12 = collection.qty_12kg ?? 0;
+  const qty48 = collection.qty_48kg ?? 0;
+  return {
+    id: `collection-${collection.id}`,
+    kind: "return_empties",
+    title: "Return empties",
+    summary: formatQtySummary(qty12, qty48, " empties") || "Returned empties",
+    effectiveAt: collection.effective_at ?? collection.created_at ?? "",
+    createdAt: collection.created_at ?? collection.effective_at ?? "",
+    note: collection.note,
+    moneyBefore: moneyAfter,
+    moneyAfter,
+    cyl12Before: cyl12After + qty12,
+    cyl12After,
+    cyl48Before: cyl48After + qty48,
+    cyl48After,
+  };
+}
+
+function buildAdjustmentActivity(adjustment: CustomerAdjustment): CustomerActivityItem {
+  const moneyDelta = adjustment.amount_money ?? 0;
+  const delta12 = adjustment.count_12kg ?? 0;
+  const delta48 = adjustment.count_48kg ?? 0;
+  const moneyAfter = adjustment.debt_cash ?? 0;
+  const cyl12After = adjustment.debt_cylinders_12 ?? 0;
+  const cyl48After = adjustment.debt_cylinders_48 ?? 0;
+  const summaryParts = [
+    moneyDelta ? `Money ${formatSignedValue(moneyDelta, formatCurrency)}` : null,
+    delta12 ? `12kg ${formatSignedValue(delta12, formatCylinder)}` : null,
+    delta48 ? `48kg ${formatSignedValue(delta48, formatCylinder)}` : null,
+  ].filter(Boolean);
+
+  return {
+    id: `adjustment-${adjustment.id}`,
+    kind: "adjustment",
+    title: "Adjustment",
+    summary: summaryParts.length > 0 ? summaryParts.join(" | ") : "Manual correction",
+    effectiveAt: adjustment.effective_at,
+    createdAt: adjustment.created_at,
+    note: adjustment.reason,
+    moneyBefore: moneyAfter - moneyDelta,
+    moneyAfter,
+    cyl12Before: cyl12After - delta12,
+    cyl12After,
+    cyl48Before: cyl48After - delta48,
+    cyl48After,
+  };
+}
+
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
+  const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
+  const [selectedSystemId, setSelectedSystemId] = useState("all");
+  const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
+  const collectionsQuery = useCollections();
   const systemsQuery = useSystems(id, { enabled: !!id });
   const ordersQuery = useOrders();
+  const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
 
@@ -6177,18 +6523,33 @@ export default function CustomerDetailsScreen() {
     [customersQuery.data, customerId]
   );
   const balances = balancesQuery.data;
-  const systems = systemsQuery.data
-    ? Array.from(new Map(systemsQuery.data.map((s) => [s.id, s])).values())
-    : [];
+  const systems = useMemo(
+    () =>
+      systemsQuery.data
+        ? Array.from(new Map(systemsQuery.data.map((s) => [s.id, s])).values())
+        : [],
+    [systemsQuery.data]
+  );
+  const systemsById = useMemo(
+    () => new Map(systems.map((system) => [system.id, system.name])),
+    [systems]
+  );
   const orders = useMemo(
     () => (ordersQuery.data ?? []).filter((o) => String(o.customer_id) === String(customerId)),
     [ordersQuery.data, customerId]
   );
+  const collections = useMemo(
+    () => (collectionsQuery.data ?? []).filter((item) => String(item.customer_id) === String(customerId)),
+    [collectionsQuery.data, customerId]
+  );
+  const adjustments = useMemo(() => adjustmentsQuery.data ?? [], [adjustmentsQuery.data]);
 
   useFocusEffect(
     useCallback(() => {
       ordersQuery.refetch();
-    }, [ordersQuery])
+      collectionsQuery.refetch();
+      adjustmentsQuery.refetch();
+    }, [adjustmentsQuery, collectionsQuery, ordersQuery])
   );
 
   const orderCylinders = useMemo(() => {
@@ -6197,11 +6558,45 @@ export default function CustomerDetailsScreen() {
       "48kg": 0,
     };
     orders.forEach((order) => {
+      const mode = order.order_mode ?? "replacement";
+      if (mode !== "replacement" && mode !== "sell_iron") {
+        return;
+      }
       const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
       totals[gas] += order.cylinders_installed ?? 0;
     });
     return totals;
   }, [orders]);
+
+  const activities = useMemo(() => {
+    const items: CustomerActivityItem[] = [
+      ...orders.map((order) => buildOrderActivity(order, systemsById)),
+      ...collections.map((collection) => buildCollectionActivity(collection)),
+      ...adjustments.map((adjustment) => buildAdjustmentActivity(adjustment)),
+    ];
+
+    return items.sort((left, right) => {
+      const effectiveGap = toTimeValue(right.effectiveAt) - toTimeValue(left.effectiveAt);
+      if (effectiveGap !== 0) return effectiveGap;
+      return toTimeValue(right.createdAt) - toTimeValue(left.createdAt);
+    });
+  }, [adjustments, collections, orders, systemsById]);
+
+  const filteredActivities = useMemo(() => {
+    let next = activities;
+    if (selectedFilter !== "all") {
+      next = next.filter((activity) => activity.kind === selectedFilter);
+    }
+    if (selectedFilter === "replacement" && selectedSystemId !== "all") {
+      next = next.filter((activity) => activity.systemId === selectedSystemId);
+    }
+    return next;
+  }, [activities, selectedFilter, selectedSystemId]);
+
+  const replacementSystemOptions = useMemo(
+    () => [{ id: "all", label: "All systems" }, ...systems.map((system) => ({ id: system.id, label: system.name }))],
+    [systems]
+  );
 
   if (customersQuery.isLoading) {
     return (
@@ -6243,23 +6638,29 @@ export default function CustomerDetailsScreen() {
     },
   ];
 
-  const orderStats = [
+  const orderedStats = [
     {
-      label: "Orders 12kg",
+      label: "12kg",
       value: `${orderCylinders["12kg"]}`,
-      highlighted: orderCylinders["12kg"] === 0,
+      gas: "12kg" as const,
     },
     {
-      label: "Orders 48kg",
+      label: "48kg",
       value: `${orderCylinders["48kg"]}`,
-      highlighted: orderCylinders["48kg"] === 0,
+      gas: "48kg" as const,
     },
   ];
 
   const lastOrder = orders
     .slice()
-    .sort((a, b) => new Date(b.delivered_at).getTime() - new Date(a.delivered_at).getTime())[0];
-  const lastOrderLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No orders yet";
+    .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
+  const lastActivityLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No activity yet";
+  const activeSystems = systems.filter((system) => system.is_active !== false).length;
+  const activitiesLoading =
+    ordersQuery.isLoading || collectionsQuery.isLoading || adjustmentsQuery.isLoading;
+  const activitiesRefreshing =
+    ordersQuery.isFetching || collectionsQuery.isFetching || adjustmentsQuery.isFetching;
+  const activitiesError = ordersQuery.error || collectionsQuery.error || adjustmentsQuery.error;
 
   const sendWhatsApp = () => {
     const msg = encodeURIComponent(
@@ -6307,61 +6708,90 @@ export default function CustomerDetailsScreen() {
     ]);
   };
 
+  const handleFilterPress = (nextFilter: ActivityFilter) => {
+    setSelectedFilter(nextFilter);
+    setExpandedActivityId(null);
+    if (nextFilter !== "replacement") {
+      setSelectedSystemId("all");
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{customer.name}</Text>
-      <View style={styles.metaBlock}>
-        <Text style={styles.meta}>Phone: {customer.phone || "n/a"}</Text>
-        {customer.address ? (
-          <Text style={styles.meta}>Address: {customer.address}</Text>
-        ) : null}
-        {customer.note ? <Text style={styles.meta}>Note: {customer.note}</Text> : null}
-        <Text style={styles.meta}>Last order: {lastOrderLabel}</Text>
-      </View>
-      <View style={styles.box}>
-        <Text style={styles.boxTitle}>Balances</Text>
-        <View style={styles.balanceRow}>
-          {balanceStats.map((stat) => {
-            const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-            return (
-              <View key={stat.label} style={styles.balanceItem}>
-                <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                  {stat.label}
-                </Text>
-                <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                  {stat.value}
-                </Text>
-              </View>
-            );
-          })}
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeader}>
+          <View style={styles.heroTitleBlock}>
+            <Text style={styles.title}>{customer.name}</Text>
+            <Text style={styles.heroSubtitle}>Customer profile</Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeLabel}>Last activity</Text>
+            <Text style={styles.heroBadgeValue}>{lastActivityLabel}</Text>
+          </View>
         </View>
-        <Text style={styles.balanceNote}>
-          Positive = Customer owes (debt). Negative = Customer credit.
-        </Text>
+        <View style={styles.profileGrid}>
+          <View style={styles.profileItem}>
+            <Text style={styles.profileLabel}>Phone</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.phone, "No phone")}</Text>
+          </View>
+          <View style={styles.profileItem}>
+            <Text style={styles.profileLabel}>Location</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.address, "No location")}</Text>
+          </View>
+          <View style={[styles.profileItem, styles.profileItemWide]}>
+            <Text style={styles.profileLabel}>Description</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.note, "No description")}</Text>
+          </View>
+        </View>
+        <View style={styles.headerMetaRow}>
+          <View style={styles.headerMetaChip}>
+            <Text style={styles.headerMetaLabel}>Active systems</Text>
+            <Text style={styles.headerMetaValue}>{activeSystems}</Text>
+          </View>
+          <View style={styles.headerMetaChip}>
+            <Text style={styles.headerMetaLabel}>Created</Text>
+            <Text style={styles.headerMetaValue}>{formatOrderDate(customer.created_at)}</Text>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.box}>
-        <Text style={styles.boxTitle}>Orders</Text>
-        <View style={styles.boxRow}>
-          {orderStats.map((stat) => {
-            const labelColor = stat.label.includes("12kg")
-              ? gasColor("12kg")
-              : stat.label.includes("48kg")
-                ? gasColor("48kg")
-                : undefined;
-            return (
-            <View key={stat.label} style={styles.boxItem}>
-              <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                {stat.label}
-              </Text>
-              <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                {stat.value}
-              </Text>
-            </View>
-          );
-          })}
+      <View style={styles.summaryGrid}>
+        <View style={[styles.box, styles.summaryCardWide]}>
+          <Text style={styles.boxTitle}>Balances</Text>
+          <View style={styles.balanceRow}>
+            {balanceStats.map((stat) => {
+              const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
+              return (
+                <View key={stat.label} style={styles.balanceItem}>
+                  <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                    {stat.label}
+                  </Text>
+                  <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
+                    {stat.value}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.balanceNote}>
+            Positive = Customer owes (debt). Negative = Customer credit.
+          </Text>
+        </View>
+
+        <View style={[styles.box, styles.summaryCard]}>
+          <Text style={styles.boxTitle}>Cylinders Ordered</Text>
+          <Text style={styles.boxSubtitle}>Lifetime cylinders installed or sold by gas type.</Text>
+          <View style={styles.boxRow}>
+            {orderedStats.map((stat) => (
+              <View key={stat.label} style={styles.boxItem}>
+                <Text style={[styles.statLabel, { color: gasColor(stat.gas) }]}>{stat.label}</Text>
+                <Text style={styles.statValue}>{stat.value}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
+
       <View style={styles.actions}>
         <Pressable
           accessibilityLabel="Edit customer"
@@ -6393,7 +6823,12 @@ export default function CustomerDetailsScreen() {
         </Pressable>
       </View>
 
-      <Text style={[styles.title, { fontSize: 18, marginTop: 12 }]}>Systems</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Systems</Text>
+        <Text style={styles.sectionMeta}>
+          {systems.length > 0 ? `${activeSystems} active` : "No systems yet"}
+        </Text>
+      </View>
       {systemsQuery.isLoading && <Text style={styles.meta}>Loading systems...</Text>}
       {systems.length === 0 && !systemsQuery.isLoading && <Text style={styles.meta}>No systems.</Text>}
       {systems.map((sys) => (
@@ -6442,89 +6877,153 @@ export default function CustomerDetailsScreen() {
         </View>
       ))}
 
-      <Text style={[styles.title, { fontSize: 18, marginTop: 12 }]}>Orders</Text>
-      {ordersQuery.isLoading && <Text style={styles.meta}>Loading orders...</Text>}
-      {orders.length === 0 && !ordersQuery.isLoading && (
-        <Text style={styles.meta}>No orders for this customer.</Text>
-      )}
-      {orders.map((ord) => {
-        const system = systems.find((s) => s.id === ord.system_id);
-        const unpaid = calcMoneyUiResult(ord.price_total, ord.paid_amount);
-        const cylDelta = calcCustomerCylinderDelta(
-          ord.order_mode ?? "replacement",
-          ord.cylinders_installed ?? 0,
-          ord.cylinders_received ?? 0
-        );
-        const remainingCyl = Math.max(0, cylDelta);
-        return (
-          <Pressable key={ord.id} style={styles.orderCard} onPress={() => router.push(`/orders/${ord.id}`)}>
-            <View style={styles.orderHeader}>
-              <Text style={styles.systemTitle}>{system?.name ?? "System"}</Text>
-              <Text style={styles.dateText}>
-                {formatOrderDate(ord.delivered_at)} {formatOrderTime(ord.delivered_at)}
-              </Text>
-            </View>
-            <Text style={styles.metaLine}>{ord.gas_type ?? "12kg"}</Text>
-            <View style={styles.orderStatsRow}>
-              {[
-                { label: "Total", value: formatCurrency(ord.price_total), highlight: false },
-                {
-                  label: "Paid",
-                  value: formatCurrency(ord.paid_amount),
-                  highlight: ord.paid_amount < ord.price_total,
-                },
-                {
-                  label: "Unpaid",
-                  value: unpaid > 0 ? formatCurrency(unpaid) : "Paid",
-                  highlight: unpaid > 0,
-                },
-              ].map((stat) => (
-                <View
-                  key={stat.label}
-                  style={[styles.orderStatCard, stat.highlight && styles.warningBorder]}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Activities</Text>
+        <Text style={styles.sectionMeta}>
+          {activitiesRefreshing && !activitiesLoading ? "Refreshing..." : `${filteredActivities.length} shown`}
+        </Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        style={styles.filterScroll}
+      >
+        {ACTIVITY_FILTER_OPTIONS.map((option) => {
+          const active = selectedFilter === option.id;
+          return (
+            <Pressable
+              key={option.id}
+              onPress={() => handleFilterPress(option.id)}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{option.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {selectedFilter === "replacement" ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.secondaryFilterRow}
+          style={styles.filterScroll}
+        >
+          {replacementSystemOptions.map((option) => {
+            const active = selectedSystemId === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => {
+                  setSelectedSystemId(option.id);
+                  setExpandedActivityId(null);
+                }}
+                style={[styles.secondaryFilterChip, active && styles.secondaryFilterChipActive]}
+              >
+                <Text
+                  style={[
+                    styles.secondaryFilterChipText,
+                    active && styles.secondaryFilterChipTextActive,
+                  ]}
                 >
-                  <Text style={styles.orderStatLabel}>{stat.label}</Text>
-                  <Text
-                    style={[
-                      styles.orderStatValue,
-                      stat.highlight ? styles.warningText : styles.linkText,
-                    ]}
-                  >
-                    {stat.value}
-                  </Text>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
+      {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
+      {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
+      {!activitiesLoading && !activitiesError && filteredActivities.length === 0 ? (
+        <Text style={styles.meta}>No activities match this filter yet.</Text>
+      ) : null}
+
+      {!activitiesLoading &&
+        !activitiesError &&
+        filteredActivities.map((activity) => {
+          const expanded = expandedActivityId === activity.id;
+          return (
+            <Pressable
+              key={activity.id}
+              onPress={() => setExpandedActivityId(expanded ? null : activity.id)}
+              style={[styles.activityCard, expanded && styles.activityCardExpanded]}
+            >
+              <View style={styles.activityHeader}>
+                <View style={styles.activityTitleBlock}>
+                  <Text style={styles.activityTitle}>{activity.title}</Text>
+                  <Text style={styles.activityTimestamp}>{formatDeliveredAt(activity.effectiveAt)}</Text>
                 </View>
-              ))}
-            </View>
-            <View style={styles.orderStatsRow}>
-              {[
-                {
-                  label: "Installed",
-                  value: `${ord.cylinders_installed ?? 0}`,
-                  highlight: false,
-                },
-                {
-                  label: "Received",
-                  value: `${ord.cylinders_received ?? 0}`,
-                  highlight: false,
-                },
-                {
-                  label: "Rest",
-                  value: `${remainingCyl}`,
-                  highlight: remainingCyl > 0,
-                },
-              ].map((stat) => (
-                <View
-                  key={stat.label}
-                  style={[styles.orderStatCard, stat.highlight && styles.warningBorder]}
-                >
-                  <Text style={styles.orderStatLabel}>{stat.label}</Text>
-                  <Text style={styles.orderStatValue}>{stat.value}</Text>
+                <Ionicons
+                  name={expanded ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#64748b"
+                />
+              </View>
+
+              <Text style={styles.activitySummary}>{activity.summary}</Text>
+
+              <View style={styles.activityTagRow}>
+                {activity.systemName ? (
+                  <View style={styles.activityTag}>
+                    <Text style={styles.activityTagText}>{activity.systemName}</Text>
+                  </View>
+                ) : null}
+                {activity.note ? (
+                  <View style={styles.activityTag}>
+                    <Text style={styles.activityTagText} numberOfLines={1}>
+                      {activity.note}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {expanded ? (
+                <View style={styles.activityExpanded}>
+                  <View style={styles.deltaGrid}>
+                    <ActivityDeltaBox
+                      label="Money"
+                      before={activity.moneyBefore}
+                      after={activity.moneyAfter}
+                      format={formatCurrency}
+                    />
+                    <ActivityDeltaBox
+                      label="12kg"
+                      before={activity.cyl12Before}
+                      after={activity.cyl12After}
+                      format={formatCylinder}
+                      accent={gasColor("12kg")}
+                    />
+                    <ActivityDeltaBox
+                      label="48kg"
+                      before={activity.cyl48Before}
+                      after={activity.cyl48After}
+                      format={formatCylinder}
+                      accent={gasColor("48kg")}
+                    />
+                  </View>
+
+                  {activity.orderId ? (
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/orders/[id]",
+                          params: { id: activity.orderId! },
+                        })
+                      }
+                      style={styles.activityLinkBtn}
+                    >
+                      <Text style={styles.linkText}>Open order</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-              ))}
-            </View>
-          </Pressable>
-        );
-      })}
+              ) : null}
+            </Pressable>
+          );
+        })}
     </ScrollView>
   );
 }
@@ -6536,7 +7035,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    gap: 8,
+    gap: 12,
+    paddingBottom: 28,
   },
   center: {
     flex: 1,
@@ -6546,17 +7046,129 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    marginBottom: 8,
+    color: "#0f172a",
   },
   meta: {
     color: "#333",
     lineHeight: 20,
   },
-  metaBlock: {
-    paddingVertical: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  errorText: {
+    color: "#b00020",
+    fontWeight: "700",
+  },
+  heroCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#dfe3e6",
-    marginBottom: 8,
+    gap: 14,
+  },
+  heroHeader: {
+    gap: 12,
+  },
+  heroTitleBlock: {
+    gap: 4,
+  },
+  heroSubtitle: {
+    color: "#64748b",
+    fontSize: 14,
+  },
+  heroBadge: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#dbe3ea",
+    alignSelf: "flex-start",
+    minWidth: 180,
+    gap: 2,
+  },
+  heroBadgeLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  heroBadgeValue: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  profileGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  profileItem: {
+    minWidth: 140,
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  profileItemWide: {
+    minWidth: "100%",
+  },
+  profileLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  profileValue: {
+    color: "#0f172a",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "600",
+  },
+  headerMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  headerMetaChip: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: "#eef6ff",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  headerMetaLabel: {
+    color: "#4b5563",
+    fontSize: 12,
+  },
+  headerMetaValue: {
+    color: "#0a7ea4",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  summaryGrid: {
+    gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  sectionMeta: {
+    flex: 1,
+    textAlign: "right",
+    color: "#64748b",
+    fontSize: 13,
   },
   statLabel: {
     fontSize: 12,
@@ -6577,11 +7189,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e4e7ea",
+    gap: 8,
   },
   boxTitle: {
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: 8,
+    color: "#0f172a",
+  },
+  boxSubtitle: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 18,
   },
   balanceRow: {
     flexDirection: "row",
@@ -6608,11 +7226,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 6,
   },
+  summaryCard: {
+    minHeight: 140,
+  },
+  summaryCardWide: {
+    minHeight: 150,
+  },
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
-    marginTop: 10,
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   },
   linkBtn: {
     paddingVertical: 6,
@@ -6672,51 +7296,167 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginTop: 8,
   },
-  rowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  filterScroll: {
+    marginHorizontal: -20,
   },
-  orderHeader: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: 2,
-  },
-  dateText: {
-    color: "#6b7280",
-    fontSize: 14,
-  },
-  orderStatsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
+  filterRow: {
+    paddingHorizontal: 20,
     gap: 8,
-    marginVertical: 6,
   },
-  orderStatCard: {
-    flex: 1,
-    minWidth: 90,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 10,
-    alignItems: "center",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
+  secondaryFilterRow: {
+    paddingHorizontal: 20,
+    gap: 8,
   },
-  orderStatLabel: {
-    fontSize: 11,
-    color: "#475467",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
+  filterChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#e8eef1",
   },
-  orderStatValue: {
-    fontSize: 17,
+  filterChipActive: {
+    backgroundColor: "#0a7ea4",
+  },
+  filterChipText: {
+    color: "#0a7ea4",
     fontWeight: "700",
   },
-  warningBorder: {
-    borderColor: "#b00020",
+  filterChipTextActive: {
+    color: "#fff",
+  },
+  secondaryFilterChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#eef2f6",
+  },
+  secondaryFilterChipActive: {
+    backgroundColor: "#dbeafe",
+  },
+  secondaryFilterChipText: {
+    color: "#475467",
+    fontWeight: "600",
+  },
+  secondaryFilterChipTextActive: {
+    color: "#0a7ea4",
+  },
+  activityCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d8dee6",
+    gap: 10,
+  },
+  activityCardExpanded: {
+    borderColor: "#c0d8f0",
+  },
+  activityHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  activityTitleBlock: {
+    flex: 1,
+    gap: 3,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  activityTimestamp: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  activitySummary: {
+    fontSize: 14,
+    color: "#334155",
+    lineHeight: 20,
+    fontWeight: "600",
+  },
+  activityTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  activityTag: {
+    maxWidth: "100%",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+  },
+  activityTagText: {
+    color: "#475467",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  activityExpanded: {
+    gap: 12,
+    paddingTop: 4,
+  },
+  deltaGrid: {
+    gap: 10,
+  },
+  deltaBox: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#d8dee6",
+    gap: 8,
+  },
+  deltaBoxLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  deltaBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  deltaBadgePositive: {
+    backgroundColor: "#dcfce7",
+  },
+  deltaBadgeNegative: {
+    backgroundColor: "#fee2e2",
+  },
+  deltaBadgeNeutral: {
+    backgroundColor: "#e2e8f0",
+  },
+  deltaBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  deltaBoxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  deltaBoxValue: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  deltaBoxArrow: {
+    color: "#64748b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  activityLinkBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#e8eef1",
+    borderRadius: 10,
   },
 });
 
@@ -8524,7 +9264,7 @@ export default function Index() {
 
 FILE: frontend/app/inventory/new.tsx
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   InputAccessoryView,
@@ -8559,6 +9299,12 @@ import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
 import { formatDateLocale, formatTimeHM, toDateKey } from "@/lib/date";
 
 type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
+type InventorySection = "company" | "ledger";
+type CompanyInventoryTab = Extract<InventoryTab, "refill" | "return" | "payment" | "buy">;
+type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
+
+const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
+const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
 
 function getLocalDateString() {
   const now = new Date();
@@ -9464,32 +10210,54 @@ function CompanyPaymentForm({
 
 export default function InventoryNewScreen() {
   const params = useLocalSearchParams<{
+    section?: string | string[];
     tab?: string | string[];
     refillId?: string | string[];
     adjustId?: string | string[];
     cashId?: string | string[];
   }>();
+  const sectionParam = Array.isArray(params.section) ? params.section[0] : params.section;
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const refillId = Array.isArray(params.refillId) ? params.refillId[0] : params.refillId;
   const adjustId = Array.isArray(params.adjustId) ? params.adjustId[0] : params.adjustId;
   const cashId = Array.isArray(params.cashId) ? params.cashId[0] : params.cashId;
 
-  const resolveTab = (): InventoryTab => {
-    if (
-      tabParam === "cash" ||
-      tabParam === "inventory" ||
-      tabParam === "refill" ||
-      tabParam === "buy" ||
-      tabParam === "return" ||
-      tabParam === "payment"
-    )
-      return tabParam;
-    if (cashId) return "cash";
-    if (adjustId) return "inventory";
-    return "refill";
-  };
+  const section = useMemo<InventorySection>(() => {
+    if (sectionParam === "company" || sectionParam === "ledger") {
+      return sectionParam;
+    }
+    if (cashId || adjustId) {
+      return "ledger";
+    }
+    return "company";
+  }, [sectionParam, cashId, adjustId]);
+  const visibleTabs = section === "company" ? COMPANY_TABS : LEDGER_TABS;
 
-  const [activeTab, setActiveTab] = useState<InventoryTab>(resolveTab());
+  const resolveTab = useCallback(
+    (nextSection: InventorySection): InventoryTab => {
+      if (nextSection === "company") {
+        if (
+          tabParam === "refill" ||
+          tabParam === "buy" ||
+          tabParam === "return" ||
+          tabParam === "payment"
+        ) {
+          return tabParam;
+        }
+        if (refillId) return "refill";
+        return "refill";
+      }
+      if (tabParam === "cash" || tabParam === "inventory") {
+        return tabParam;
+      }
+      if (cashId) return "cash";
+      if (adjustId) return "inventory";
+      return "inventory";
+    },
+    [tabParam, refillId, cashId, adjustId]
+  );
+
+  const [activeTab, setActiveTab] = useState<InventoryTab>(resolveTab(section));
   const businessDate = getLocalDateString();
   const accessoryId = Platform.OS === "ios" ? "inventoryAccessory" : undefined;
 
@@ -9539,17 +10307,21 @@ export default function InventoryNewScreen() {
   const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
 
   useEffect(() => {
-    setActiveTab(resolveTab());
-  }, [tabParam, refillId, adjustId, cashId]);
+    setActiveTab(resolveTab(section));
+  }, [section, resolveTab]);
 
   useEffect(() => {
+    if (section === "ledger" && activeTab !== "cash" && activeTab !== "inventory") {
+      setActiveTab(resolveTab("ledger"));
+      return;
+    }
     if (activeTab === "payment" && paymentTabDisabled) {
       setActiveTab("refill");
     }
     if (activeTab === "return" && returnTabDisabled) {
       setActiveTab("refill");
     }
-  }, [activeTab, paymentTabDisabled, returnTabDisabled]);
+  }, [activeTab, paymentTabDisabled, returnTabDisabled, section, resolveTab]);
 
   return (
     <SafeAreaView style={styles.hubSafeArea}>
@@ -9559,10 +10331,12 @@ export default function InventoryNewScreen() {
         style={styles.hubScreenInner}
       >
         <View style={styles.hubHeaderRow}>
-          <Text style={styles.hubTitle}>Inventory</Text>
+          <Text style={styles.hubTitle}>
+            {section === "company" ? "Company Activities" : "Ledger Adjustments"}
+          </Text>
         </View>
         <View style={styles.modeRow}>
-          {(["refill", "return", "payment", "buy", "cash", "inventory"] as const).map((tab) => {
+          {visibleTabs.map((tab) => {
             const label =
               tab === "refill"
                 ? "Refill"
@@ -19171,27 +19945,12 @@ const styles = StyleSheet.create({
 
 FILE: frontend/components/reports/BalancesCard.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { Spacing } from "@/constants/spacing";
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import type { BalanceSummary, CompanySummary } from "@/hooks/useBalancesSummary";
 import { formatAggregateBalanceState, formatCurrentBalanceState } from "@/lib/balanceTransitions";
-
-type BalanceBucket = { count: number; total: number };
-export type BalanceSummary = {
-  money: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl12: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl48: { receivable: BalanceBucket; payable: BalanceBucket };
-};
-
-export type CompanySummary = {
-  give12: number;
-  receive12: number;
-  give48: number;
-  receive48: number;
-  payCash: number;
-  receiveCash: number;
-};
 
 type BalancesCardProps = {
   balanceSummary: BalanceSummary;
@@ -19202,6 +19961,7 @@ type BalancesCardProps = {
   companyBalancesReady?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 function buildCustomerLines(balanceSummary: BalanceSummary, formatMoney: (value: number) => string) {
@@ -19267,6 +20027,7 @@ export default function BalancesCard({
   companyBalancesReady = true,
   collapsed = false,
   onToggle,
+  containerStyle,
 }: BalancesCardProps) {
   const customerDisplayLines = buildCustomerLines(balanceSummary, formatMoney);
   const companyDisplayLines = buildCompanyLines(companySummary, formatMoney);
@@ -19327,13 +20088,13 @@ export default function BalancesCard({
 
   if (onToggle) {
     return (
-      <Pressable onPress={onToggle} style={[styles.topSummaryCard, styles.balancesCard]}>
+      <Pressable onPress={onToggle} style={[styles.topSummaryCard, styles.balancesCard, containerStyle]}>
         {content}
       </Pressable>
     );
   }
 
-  return <View style={[styles.topSummaryCard, styles.balancesCard]}>{content}</View>;
+  return <View style={[styles.topSummaryCard, styles.balancesCard, containerStyle]}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -20626,6 +21387,103 @@ export function useThemeColor(
 }
 
 
+FILE: frontend/hooks/useBalancesSummary.ts
+import { useMemo } from "react";
+
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
+import { useCustomers } from "@/hooks/useCustomers";
+
+export type BalanceBucket = { count: number; total: number };
+export type BalanceSummary = {
+  money: { receivable: BalanceBucket; payable: BalanceBucket };
+  cyl12: { receivable: BalanceBucket; payable: BalanceBucket };
+  cyl48: { receivable: BalanceBucket; payable: BalanceBucket };
+};
+
+export type CompanySummary = {
+  give12: number;
+  receive12: number;
+  give48: number;
+  receive48: number;
+  payCash: number;
+  receiveCash: number;
+};
+
+export function useBalancesSummary() {
+  const customersQuery = useCustomers();
+  const companyBalancesQuery = useCompanyBalances();
+
+  const balanceSummary: BalanceSummary = useMemo(() => {
+    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+    const summary: BalanceSummary = {
+      money: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+      cyl12: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+      cyl48: {
+        receivable: { count: 0, total: 0 },
+        payable: { count: 0, total: 0 },
+      },
+    };
+
+    customers.forEach((customer) => {
+      const money = Number(customer.money_balance || 0);
+      if (money > 0) {
+        summary.money.receivable.count += 1;
+        summary.money.receivable.total += money;
+      } else if (money < 0) {
+        summary.money.payable.count += 1;
+        summary.money.payable.total += Math.abs(money);
+      }
+
+      const cyl12 = Number(customer.cylinder_balance_12kg || 0);
+      if (cyl12 > 0) {
+        summary.cyl12.receivable.count += 1;
+        summary.cyl12.receivable.total += cyl12;
+      } else if (cyl12 < 0) {
+        summary.cyl12.payable.count += 1;
+        summary.cyl12.payable.total += Math.abs(cyl12);
+      }
+
+      const cyl48 = Number(customer.cylinder_balance_48kg || 0);
+      if (cyl48 > 0) {
+        summary.cyl48.receivable.count += 1;
+        summary.cyl48.receivable.total += cyl48;
+      } else if (cyl48 < 0) {
+        summary.cyl48.payable.count += 1;
+        summary.cyl48.payable.total += Math.abs(cyl48);
+      }
+    });
+
+    return summary;
+  }, [customersQuery.data]);
+
+  const companySummary: CompanySummary = useMemo(() => {
+    const net12 = Number(companyBalancesQuery.data?.company_cyl_12 ?? 0);
+    const net48 = Number(companyBalancesQuery.data?.company_cyl_48 ?? 0);
+    const cashNet = Number(companyBalancesQuery.data?.company_money ?? 0);
+    return {
+      give12: Math.max(-net12, 0),
+      receive12: Math.max(net12, 0),
+      give48: Math.max(-net48, 0),
+      receive48: Math.max(net48, 0),
+      payCash: Math.max(cashNet, 0),
+      receiveCash: Math.max(-cashNet, 0),
+    };
+  }, [companyBalancesQuery.data]);
+
+  return {
+    balanceSummary,
+    companySummary,
+    companyBalancesQuery,
+    refetchCustomers: customersQuery.refetch,
+  };
+}
+
 FILE: frontend/hooks/useBankDeposits.ts
 import { createBankDeposit, deleteBankDeposit, listBankDeposits } from "@/lib/api";
 import { BankDeposit } from "@/types/domain";
@@ -20872,12 +21730,14 @@ import {
   createCustomerAdjustment,
   deleteCustomer,
   getCustomerBalance,
+  listCustomerAdjustments,
   listCustomers,
   updateCustomer,
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import {
   Customer,
+  CustomerAdjustment,
   CustomerAdjustmentCreateInput,
   CustomerBalance,
   CustomerUpdateInput,
@@ -20930,6 +21790,14 @@ export function useCustomerBalance(customerId?: string) {
   return useQuery<CustomerBalance>({
     queryKey: ["customers", "balance", customerId],
     queryFn: () => getCustomerBalance(customerId ?? ""),
+    enabled: Boolean(customerId),
+  });
+}
+
+export function useCustomerAdjustments(customerId?: string) {
+  return useQuery<CustomerAdjustment[]>({
+    queryKey: ["customers", "adjustments", customerId],
+    queryFn: () => listCustomerAdjustments(customerId ?? ""),
     enabled: Boolean(customerId),
   });
 }
@@ -21001,27 +21869,9 @@ export function useDeleteCustomer() {
 FILE: frontend/hooks/useDailyReportScreen.ts
 import { useEffect, useMemo, useState } from "react";
 
-import { useCompanyBalances } from "@/hooks/useCompanyBalances";
-import { useCustomers } from "@/hooks/useCustomers";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { getDailyReportV2 } from "@/lib/api";
 import { DailyReportV2Day } from "@/types/domain";
-
-type BalanceBucket = { count: number; total: number };
-export type BalanceSummary = {
-  money: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl12: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl48: { receivable: BalanceBucket; payable: BalanceBucket };
-};
-
-export type CompanySummary = {
-  give12: number;
-  receive12: number;
-  give48: number;
-  receive48: number;
-  payCash: number;
-  receiveCash: number;
-};
 
 const getLocalDateString = () => {
   const now = new Date();
@@ -21032,9 +21882,6 @@ const getLocalDateString = () => {
 };
 
 export function useDailyReportScreen(rangeDays = 30) {
-  const customersQuery = useCustomers();
-  const companyBalancesQuery = useCompanyBalances();
-
   const today = getLocalDateString();
   const v2From = useMemo(() => {
     const start = new Date();
@@ -21087,69 +21934,6 @@ export function useDailyReportScreen(rangeDays = 30) {
     setV2DayByDate({});
   }, [v2Query.data, v2Query.dataUpdatedAt]);
 
-  const balanceSummary: BalanceSummary = useMemo(() => {
-    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
-    const summary: BalanceSummary = {
-      money: {
-        receivable: { count: 0, total: 0 },
-        payable: { count: 0, total: 0 },
-      },
-      cyl12: {
-        receivable: { count: 0, total: 0 },
-        payable: { count: 0, total: 0 },
-      },
-      cyl48: {
-        receivable: { count: 0, total: 0 },
-        payable: { count: 0, total: 0 },
-      },
-    };
-
-    customers.forEach((customer) => {
-      const money = Number(customer.money_balance || 0);
-      if (money > 0) {
-        summary.money.receivable.count += 1;
-        summary.money.receivable.total += money;
-      } else if (money < 0) {
-        summary.money.payable.count += 1;
-        summary.money.payable.total += Math.abs(money);
-      }
-
-      const cyl12 = Number(customer.cylinder_balance_12kg || 0);
-      if (cyl12 > 0) {
-        summary.cyl12.receivable.count += 1;
-        summary.cyl12.receivable.total += cyl12;
-      } else if (cyl12 < 0) {
-        summary.cyl12.payable.count += 1;
-        summary.cyl12.payable.total += Math.abs(cyl12);
-      }
-
-      const cyl48 = Number(customer.cylinder_balance_48kg || 0);
-      if (cyl48 > 0) {
-        summary.cyl48.receivable.count += 1;
-        summary.cyl48.receivable.total += cyl48;
-      } else if (cyl48 < 0) {
-        summary.cyl48.payable.count += 1;
-        summary.cyl48.payable.total += Math.abs(cyl48);
-      }
-    });
-
-    return summary;
-  }, [customersQuery.data]);
-
-  const companySummary: CompanySummary = useMemo(() => {
-    const net12 = Number(companyBalancesQuery.data?.company_cyl_12 ?? 0);
-    const net48 = Number(companyBalancesQuery.data?.company_cyl_48 ?? 0);
-    const cashNet = Number(companyBalancesQuery.data?.company_money ?? 0);
-    return {
-      give12: Math.max(-net12, 0),
-      receive12: Math.max(net12, 0),
-      give48: Math.max(-net48, 0),
-      receive48: Math.max(net48, 0),
-      payCash: Math.max(cashNet, 0),
-      receiveCash: Math.max(-cashNet, 0),
-    };
-  }, [companyBalancesQuery.data]);
-
   return {
     v2Query,
     v2Rows,
@@ -21157,11 +21941,7 @@ export function useDailyReportScreen(rangeDays = 30) {
     setV2Expanded,
     v2DayByDate,
     setV2DayByDate,
-    balanceSummary,
-    companySummary,
-    companyBalancesQuery,
     refetchV2: v2Query.refetch,
-    refetchCustomers: customersQuery.refetch,
   };
 }
 
@@ -22117,7 +22897,17 @@ export async function createCustomerAdjustment(
   return {
     ...parsed,
     amount_money: fromMinorUnits(parsed.amount_money),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
+}
+
+export async function listCustomerAdjustments(customerId: string): Promise<CustomerAdjustment[]> {
+  const { data } = await api.get(`/customer-adjustments/${customerId}`);
+  return parseArray(CustomerAdjustmentSchema, data).map((item) => ({
+    ...item,
+    amount_money: fromMinorUnits(item.amount_money),
+    debt_cash: item.debt_cash != null ? fromMinorUnits(item.debt_cash) : item.debt_cash,
+  }));
 }
 
 export async function updateCustomer(id: string, payload: CustomerUpdateInput): Promise<Customer> {
@@ -24236,7 +25026,11 @@ export const CustomerAdjustmentSchema = z
     count_12kg: z.number(),
     count_48kg: z.number(),
     reason: z.string().nullish(),
+    effective_at: z.string(),
     created_at: z.string(),
+    debt_cash: z.number().optional().default(0),
+    debt_cylinders_12: z.number().optional().default(0),
+    debt_cylinders_48: z.number().optional().default(0),
   })
   .passthrough();
 export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;
