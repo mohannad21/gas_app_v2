@@ -154,6 +154,19 @@ Customer <-> distributor
 - one shared 48kg cylinder balance per customer
 - balances are customer-level, not system-level
 - system is operational context for some events, not a balance dimension
+- customer detail is therefore a customer operational profile, not a system-balance view
+
+Customer summary metrics
+- Cylinders Ordered is a customer-level lifetime summary, not a count of event rows
+- Cylinders Ordered must be tracked separately for 12kg and 48kg
+- include:
+  - Replacement installed cylinders
+  - Sell Full cylinders
+- do not include:
+  - late payment / payment-only events
+  - return empties
+  - buy empty
+  - adjustments
 
 Company <-> distributor
 - one shared company money balance
@@ -228,6 +241,33 @@ Below is the business workflow view from user action -> backend posting -> deriv
 
 6.1 Customer-side Events
 
+Customer detail timeline scope
+- the main customer activity view on customer detail is customer-facing operational history, not a generic system/admin timeline
+- it should include:
+  - Replacement
+  - Late payment
+  - Return empties
+  - Payout
+  - Sell Full
+  - Buy Empty
+  - Adjustments
+- it should not include:
+  - refill / company-side activity
+  - company-side activity that only indirectly touched the customer
+  - generic admin or system-maintenance events
+
+System binding rules
+- balances remain customer-level
+- systems remain operational context, not separate balance owners
+- only these customer activity types may be tied to a system:
+  - Replacement
+  - Sell Full
+- Sell Full may:
+  - be tied to an existing system
+  - create a new system and be tied to that new system
+  - remain not tied to a system
+- this allows existing-system delivery, new setup / new house delivery, and one-off delivery without forcing false system ownership
+
 Replacement
 - Scope: customer + operational
 - Operational meaning: deliver full cylinders, receive empties, optionally collect payment
@@ -301,6 +341,36 @@ Customer Adjustment
   - customer 48kg
 - Collapsed UI emphasizes who was adjusted and the resulting state
 - Expanded detail shows the relationship balances that changed
+
+6.1.1 Customer Activity Filters (Customer Detail)
+
+Primary filters
+- All
+- Replacement
+- Late payment
+- Return empties
+- Buy empty
+- Sell full
+- Adjustments
+
+Rules
+- simplified user-facing labels are preferred
+- a system filter appears only when Replacement is selected
+- the system filter uses real customer system names
+- the default system option is All systems
+
+6.1.2 Customer Activity Expansion Model
+
+Customer activity expansion should reuse the same structured explanation model preferred elsewhere in this proposal.
+
+Rule
+- when a user expands any customer activity, always show:
+  - money
+  - 12kg
+  - 48kg
+- always show all three dimensions for consistency
+- if a dimension did not change, show No change
+- this keeps customer-detail explanation aligned with the same before/after reasoning model used by expanded report detail
 
 6.2 Company-side Events
 
@@ -528,7 +598,48 @@ Daily Operations
 
 Customer Management
 - Customers list + search
-- Customer detail
+- Customer detail as the main customer operational profile
+
+Customer detail should include
+- top customer header block
+- Last activity
+- balances
+- Cylinders Ordered
+- systems
+- customer activities list
+- filters
+- expandable activity detail
+
+This page is no longer mainly an orders screen. It is the main place to understand a customer operationally over time.
+
+7.4.1 Customer Detail Page Behavior (Recommended)
+
+Header / summary direction
+- use Last activity rather than Last order as the primary recent-state summary concept
+- balances remain customer-level summaries
+- Cylinders Ordered is a customer-level lifetime summary of installed / sold cylinders by gas type
+
+Activity behavior
+- the customer activity list is the primary operational history for that customer
+- expandable activity detail should reuse the same structured explanation style already preferred for report expanded detail
+- systems appear as context where relevant, not as separate balance owners
+
+7.4.2 Future Customer vs System Metadata Direction
+
+Future customer-level fields
+- active / inactive customer
+- number of family members
+
+Future system-level fields
+- average consumption per system
+
+Future operational note
+- if a system is new and has no usable historical data yet, the distributor may enter an initial estimated average consumption
+- later, average consumption can be derived from historical system activity
+
+Canonical ownership rule
+- family members = customer-level
+- average consumption = system-level
 
 Company
 - Company balance and history
