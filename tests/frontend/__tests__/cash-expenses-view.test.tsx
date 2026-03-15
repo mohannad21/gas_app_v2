@@ -26,6 +26,13 @@ jest.mock("@/hooks/useCustomers", () => ({
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
 }));
 
+jest.mock("@/hooks/useCompanyBalances", () => ({
+  useCompanyBalances: () => ({
+    data: { company_money: 0, company_cyl_12: 0, company_cyl_48: 0 },
+    isSuccess: true,
+  }),
+}));
+
 jest.mock("@/hooks/useSystems", () => ({
   useSystems: () => ({ data: [], isLoading: false, error: null }),
 }));

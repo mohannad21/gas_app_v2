@@ -3,12 +3,15 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
 import { formatCurrentBalanceState } from "@/lib/balanceTransitions";
+import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 
 type CompanyBalancesSectionProps = {
   companySummary: CompanySummary;
   companyBalancesReady: boolean;
   formatMoney: (value: number) => string;
   formatCount: (value: number) => string;
+  collapsed?: boolean;
+  onToggle?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
 };
 
@@ -31,47 +34,53 @@ export default function CompanyBalancesSection({
   companyBalancesReady,
   formatMoney,
   formatCount,
+  collapsed = false,
+  onToggle,
   containerStyle,
 }: CompanyBalancesSectionProps) {
   const companyLines = buildCompanyLines(companySummary, formatMoney);
 
   return (
-    <View style={[styles.card, containerStyle]}>
-      <Text style={styles.title}>Company Balances</Text>
-      {!companyBalancesReady ? (
-        <Text style={styles.line}>Current company balances unavailable</Text>
-      ) : (
-        companyLines.map((line) => (
-          <Text key={line} style={styles.line}>
-            {line}
+    <CollapsibleSectionCard
+      title="Company Balances"
+      collapsed={collapsed}
+      onToggle={onToggle ?? (() => undefined)}
+      containerStyle={[styles.card, containerStyle]}
+      titleStyle={styles.title}
+    >
+      <View style={styles.content}>
+        {!companyBalancesReady ? (
+          <Text style={styles.line}>Current company balances unavailable</Text>
+        ) : (
+          companyLines.map((line) => (
+            <Text key={line} style={styles.line}>
+              {line}
+            </Text>
+          ))
+        )}
+        {companyBalancesReady ? (
+          <Text style={styles.meta}>
+            12kg {formatCount(companySummary.receive12 + companySummary.give12)} | 48kg{" "}
+            {formatCount(companySummary.receive48 + companySummary.give48)}
           </Text>
-        ))
-      )}
-      {companyBalancesReady ? (
-        <Text style={styles.meta}>
-          12kg {formatCount(companySummary.receive12 + companySummary.give12)} | 48kg{" "}
-          {formatCount(companySummary.receive48 + companySummary.give48)}
-        </Text>
-      ) : null}
-    </View>
+        ) : null}
+      </View>
+    </CollapsibleSectionCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginTop: 12,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 8,
   },
   title: {
     fontSize: FontSizes.md,
     fontWeight: "900",
     color: "#0f172a",
     fontFamily: FontFamilies.extrabold,
+  },
+  content: {
+    gap: 8,
   },
   line: {
     color: "#0f172a",

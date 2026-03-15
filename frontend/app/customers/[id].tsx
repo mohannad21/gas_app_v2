@@ -7,6 +7,7 @@ import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
 
+import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 import { useCollections } from "@/hooks/useCollections";
 import {
   useCustomerAdjustments,
@@ -318,6 +319,7 @@ export default function CustomerDetailsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
   const [selectedSystemId, setSelectedSystemId] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
+  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections();
@@ -552,27 +554,34 @@ export default function CustomerDetailsScreen() {
       </View>
 
       <View style={styles.summaryGrid}>
-        <View style={[styles.box, styles.summaryCardWide]}>
-          <Text style={styles.boxTitle}>Balances</Text>
-          <View style={styles.balanceRow}>
-            {balanceStats.map((stat) => {
-              const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-              return (
-                <View key={stat.label} style={styles.balanceItem}>
-                  <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                    {stat.label}
-                  </Text>
-                  <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                    {stat.value}
-                  </Text>
-                </View>
-              );
-            })}
+        <CollapsibleSectionCard
+          title="Balances"
+          collapsed={balancesCollapsed}
+          onToggle={() => setBalancesCollapsed((prev) => !prev)}
+          containerStyle={[styles.box, styles.summaryCardWide]}
+          titleStyle={styles.boxTitle}
+        >
+          <View style={styles.balanceContent}>
+            <View style={styles.balanceRow}>
+              {balanceStats.map((stat) => {
+                const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
+                return (
+                  <View key={stat.label} style={styles.balanceItem}>
+                    <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                      {stat.label}
+                    </Text>
+                    <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
+                      {stat.value}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.balanceNote}>
+              Positive = Customer owes (debt). Negative = Customer credit.
+            </Text>
           </View>
-          <Text style={styles.balanceNote}>
-            Positive = Customer owes (debt). Negative = Customer credit.
-          </Text>
-        </View>
+        </CollapsibleSectionCard>
 
         <View style={[styles.box, styles.summaryCard]}>
           <Text style={styles.boxTitle}>Cylinders Ordered</Text>
@@ -957,6 +966,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
+  },
+  balanceContent: {
+    gap: 8,
   },
   balanceItem: {
     flex: 1,

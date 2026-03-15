@@ -60,6 +60,7 @@ export default function AddChooserScreen() {
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
+  const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
   const companyBalancesQuery = useCompanyBalances();
@@ -602,6 +603,8 @@ const formatDateTime = (value?: string) => {
         <CompanyBalancesSection
           companySummary={companySummary}
           companyBalancesReady={companyBalancesQuery.isSuccess}
+          collapsed={companyBalancesCollapsed}
+          onToggle={() => setCompanyBalancesCollapsed((prev) => !prev)}
           formatMoney={(value) => Number(value || 0).toFixed(0)}
           formatCount={(value) => Number(value || 0).toFixed(0)}
         />
