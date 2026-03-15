@@ -562,7 +562,7 @@ const formatDateTime = (value?: string) => {
           style={[styles.segmentBtn, isCustomerActivities && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isCustomerActivities && styles.segmentTextActive]}>
-            Customer Activities
+            Customer{"\n"}Activities
           </Text>
         </Pressable>
         <Pressable
@@ -570,7 +570,7 @@ const formatDateTime = (value?: string) => {
           style={[styles.segmentBtn, isCompanyActivities && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isCompanyActivities && styles.segmentTextActive]}>
-            Company Activities
+            Company{"\n"}Activities
           </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
@@ -581,7 +581,7 @@ const formatDateTime = (value?: string) => {
           style={[styles.segmentBtn, isLedgerAdjustments && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isLedgerAdjustments && styles.segmentTextActive]}>
-            Ledger Adjustments
+            Ledger{"\n"}Adjustments
           </Text>
         </Pressable>
       </View>
@@ -2741,15 +2741,15 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
-    flexWrap: "wrap",
     backgroundColor: "#e8eef1",
     borderRadius: 12,
     padding: 4,
-    gap: 4,
   },
   segmentBtn: {
-    flexBasis: "49%",
+    flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 4,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
@@ -2765,7 +2765,8 @@ const styles = StyleSheet.create({
   segmentText: {
     fontWeight: "700",
     color: "#4a4a4a",
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 13,
     textAlign: "center",
   },
   segmentTextActive: {
