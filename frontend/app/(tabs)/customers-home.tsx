@@ -1,26 +1,22 @@
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import BalancesCard from "@/components/reports/BalancesCard";
+import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
-
 import { AddCustomerEntryAction, AddCustomersSection } from "./add/index";
 
-const formatMoney = (value: number) => Number(value || 0).toFixed(0);
-const formatCount = (value: number) => Number(value || 0).toFixed(0);
-const formatCustomerCount = (count: number) => `${count} customer${count === 1 ? "" : "s"}`;
-
 export default function CustomersHomeScreen() {
-  const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
+  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
+  const { balanceSummary } = useBalancesSummary();
 
   return (
     <View style={styles.container}>
-      <BalancesCard
+      <CustomerBalancesSection
         balanceSummary={balanceSummary}
-        companySummary={companySummary}
-        formatCustomerCount={formatCustomerCount}
-        formatMoney={formatMoney}
-        formatCount={formatCount}
-        companyBalancesReady={companyBalancesQuery.isSuccess}
+        collapsed={balancesCollapsed}
+        onToggle={() => setBalancesCollapsed((prev) => !prev)}
+        formatMoney={(value) => Number(value || 0).toFixed(0)}
+        formatCustomerCount={(count) => `${count} customer${count === 1 ? "" : "s"}`}
         containerStyle={styles.summaryCard}
       />
       <AddCustomerEntryAction />

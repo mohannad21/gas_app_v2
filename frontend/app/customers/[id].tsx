@@ -4,9 +4,10 @@ import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
-import { formatDateMedium, formatDateTimeMedium } from "@/lib/date";
+import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
 
+import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 import { useCollections } from "@/hooks/useCollections";
 import {
   useCustomerAdjustments,
@@ -77,8 +78,6 @@ const formatDeliveredAt = (value?: string) => {
   }
   return formatDateTimeMedium(value, undefined, value);
 };
-
-const formatOrderDate = (value?: string) => (value ? formatDateMedium(value, undefined, "-") : "-");
 
 const formatCylinder = (value: number) => {
   const prefix = value < 0 ? "-" : "";
@@ -320,6 +319,7 @@ export default function CustomerDetailsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
   const [selectedSystemId, setSelectedSystemId] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
+  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections();
@@ -465,7 +465,7 @@ export default function CustomerDetailsScreen() {
   const lastOrder = orders
     .slice()
     .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
-  const lastActivityLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No activity yet";
+  const lastOrderLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No orders yet";
   const activeSystems = systems.filter((system) => system.is_active !== false).length;
   const activitiesLoading =
     ordersQuery.isLoading || collectionsQuery.isLoading || adjustmentsQuery.isLoading;
@@ -533,11 +533,12 @@ export default function CustomerDetailsScreen() {
         <View style={styles.heroHeader}>
           <View style={styles.heroTitleBlock}>
             <Text style={styles.title}>{customer.name}</Text>
-            <Text style={styles.heroSubtitle}>Customer profile</Text>
-          </View>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeLabel}>Last activity</Text>
-            <Text style={styles.heroBadgeValue}>{lastActivityLabel}</Text>
+            <Text style={styles.heroDescription}>
+              {formatProfileField(customer.note, "No description")}
+            </Text>
+            <Text style={styles.heroLocation}>
+              {formatProfileField(customer.address, "No location")}
+            </Text>
           </View>
         </View>
         <View style={styles.profileGrid}>
@@ -546,48 +547,41 @@ export default function CustomerDetailsScreen() {
             <Text style={styles.profileValue}>{formatProfileField(customer.phone, "No phone")}</Text>
           </View>
           <View style={styles.profileItem}>
-            <Text style={styles.profileLabel}>Location</Text>
-            <Text style={styles.profileValue}>{formatProfileField(customer.address, "No location")}</Text>
-          </View>
-          <View style={[styles.profileItem, styles.profileItemWide]}>
-            <Text style={styles.profileLabel}>Description</Text>
-            <Text style={styles.profileValue}>{formatProfileField(customer.note, "No description")}</Text>
-          </View>
-        </View>
-        <View style={styles.headerMetaRow}>
-          <View style={styles.headerMetaChip}>
-            <Text style={styles.headerMetaLabel}>Active systems</Text>
-            <Text style={styles.headerMetaValue}>{activeSystems}</Text>
-          </View>
-          <View style={styles.headerMetaChip}>
-            <Text style={styles.headerMetaLabel}>Created</Text>
-            <Text style={styles.headerMetaValue}>{formatOrderDate(customer.created_at)}</Text>
+            <Text style={styles.profileLabel}>Last order</Text>
+            <Text style={styles.profileValue}>{lastOrderLabel}</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.summaryGrid}>
-        <View style={[styles.box, styles.summaryCardWide]}>
-          <Text style={styles.boxTitle}>Balances</Text>
-          <View style={styles.balanceRow}>
-            {balanceStats.map((stat) => {
-              const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-              return (
-                <View key={stat.label} style={styles.balanceItem}>
-                  <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                    {stat.label}
-                  </Text>
-                  <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                    {stat.value}
-                  </Text>
-                </View>
-              );
-            })}
+        <CollapsibleSectionCard
+          title="Balances"
+          collapsed={balancesCollapsed}
+          onToggle={() => setBalancesCollapsed((prev) => !prev)}
+          containerStyle={[styles.box, styles.summaryCardWide]}
+          titleStyle={styles.boxTitle}
+        >
+          <View style={styles.balanceContent}>
+            <View style={styles.balanceRow}>
+              {balanceStats.map((stat) => {
+                const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
+                return (
+                  <View key={stat.label} style={styles.balanceItem}>
+                    <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                      {stat.label}
+                    </Text>
+                    <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
+                      {stat.value}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.balanceNote}>
+              Positive = Customer owes (debt). Negative = Customer credit.
+            </Text>
           </View>
-          <Text style={styles.balanceNote}>
-            Positive = Customer owes (debt). Negative = Customer credit.
-          </Text>
-        </View>
+        </CollapsibleSectionCard>
 
         <View style={[styles.box, styles.summaryCard]}>
           <Text style={styles.boxTitle}>Cylinders Ordered</Text>
@@ -879,50 +873,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   heroTitleBlock: {
-    gap: 4,
+    gap: 8,
   },
-  heroSubtitle: {
-    color: "#64748b",
-    fontSize: 14,
-  },
-  heroBadge: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#dbe3ea",
-    alignSelf: "flex-start",
-    minWidth: 180,
-    gap: 2,
-  },
-  heroBadgeLabel: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  heroBadgeValue: {
+  heroDescription: {
     color: "#0f172a",
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: "600",
+  },
+  heroLocation: {
+    color: "#64748b",
+    fontSize: 14,
+    lineHeight: 20,
   },
   profileGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
   },
   profileItem: {
-    minWidth: 140,
     flex: 1,
     backgroundColor: "#f8fafc",
     borderRadius: 14,
     padding: 12,
     gap: 4,
-  },
-  profileItemWide: {
-    minWidth: "100%",
   },
   profileLabel: {
     color: "#64748b",
@@ -936,29 +909,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "600",
-  },
-  headerMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  headerMetaChip: {
-    flex: 1,
-    minWidth: 120,
-    backgroundColor: "#eef6ff",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  headerMetaLabel: {
-    color: "#4b5563",
-    fontSize: 12,
-  },
-  headerMetaValue: {
-    color: "#0a7ea4",
-    fontSize: 16,
-    fontWeight: "700",
   },
   summaryGrid: {
     gap: 12,
@@ -1016,6 +966,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
+  },
+  balanceContent: {
+    gap: 8,
   },
   balanceItem: {
     flex: 1,
