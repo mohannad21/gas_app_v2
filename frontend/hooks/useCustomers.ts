@@ -75,6 +75,19 @@ export function useCustomerAdjustments(customerId?: string) {
   });
 }
 
+export function useAllCustomerAdjustments(customerIds?: string[], options?: { enabled?: boolean }) {
+  const ids = Array.isArray(customerIds) ? customerIds : [];
+  const enabled = options?.enabled ?? true;
+  return useQuery<CustomerAdjustment[]>({
+    queryKey: ["customers", "adjustments", "all", ids.join(",")],
+    queryFn: async () => {
+      const rows = await Promise.all(ids.map((customerId) => listCustomerAdjustments(customerId)));
+      return rows.flat();
+    },
+    enabled: enabled && ids.length > 0,
+  });
+}
+
 export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
   const queryClient = useQueryClient();
   const showSuccessToast = options?.showToast ?? true;

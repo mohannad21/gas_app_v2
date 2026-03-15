@@ -1,6 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,8 +8,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { RefillForm } from "@/components/AddRefillModal";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
+import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
-import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
+import { useAllCustomerAdjustments, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
@@ -30,7 +31,7 @@ import {
   PriceMatrixSection,
   gasTypes,
 } from "@/components/PriceMatrix";
-import { CashAdjustment, Expense, GasType, InventoryAdjustment, PriceSetting } from "@/types/domain";
+import { BankDeposit, CashAdjustment, CollectionEvent, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
 
 type CustomerFilter =
   | "all"
@@ -66,6 +67,47 @@ type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
 type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = "all_categories" | string;
 type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
+
+type CustomerActivityListItem =
+  | {
+      id: string;
+      kind: "order";
+      filterId: Exclude<CustomerActivityFilter, "all" | "late_payment" | "return_empties" | "payout" | "adjustment">;
+      sortAt: string;
+      customerName: string;
+      data: Order;
+    }
+  | {
+      id: string;
+      kind: "collection";
+      filterId: Exclude<CustomerActivityFilter, "all" | "replacement" | "sell_full" | "buy_empty" | "adjustment">;
+      sortAt: string;
+      customerName: string;
+      data: CollectionEvent;
+    }
+  | {
+      id: string;
+      kind: "adjustment";
+      filterId: "adjustment";
+      sortAt: string;
+      customerName: string;
+      data: CustomerAdjustment;
+    };
+
+type ExpenseListItem =
+  | {
+      id: string;
+      kind: "expense";
+      sortAt: string;
+      data: Expense;
+    }
+  | {
+      id: string;
+      kind: "bank_transfer";
+      direction: Exclude<ExpensePrimaryFilter, "all" | "expense">;
+      sortAt: string;
+      data: BankDeposit;
+    };
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -117,6 +159,11 @@ export default function AddChooserScreen() {
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
+  const customerIds = useMemo(
+    () => (customersQuery.data ?? []).map((customer) => customer.id).sort(),
+    [customersQuery.data]
+  );
+  const customerAdjustmentsQuery = useAllCustomerAdjustments(customerIds, { enabled: isCustomerActivities });
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
   const [priceModalOpen, setPriceModalOpen] = useState(false);
@@ -146,6 +193,8 @@ const formatDateTime = (value?: string) => {
   const todayDate = getLocalDateString();
   const inventoryActivity = useInventoryActivity(todayDate);
   const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
+  const bankDepositsQuery = useBankDeposits(todayDate, { enabled: isExpenses });
+  const deleteBankDeposit = useDeleteBankDeposit();
 
 
   const orders = ordersQuery.data
@@ -159,6 +208,10 @@ const formatDateTime = (value?: string) => {
       )
     : [];
   const collections = collectionsQuery.data ?? [];
+  const customersById = useMemo(
+    () => new Map((customersQuery.data ?? []).map((customer) => [customer.id, customer])),
+    [customersQuery.data]
+  );
   const normalizeIso = useCallback((value?: string) => {
     if (!value) return "";
     return value.replace(/(\.\d{3})\d+/, "$1");
@@ -173,23 +226,46 @@ const formatDateTime = (value?: string) => {
     [normalizeIso]
   );
 
-  const recentItems = useMemo(() => {
+  const customerActivityItems = useMemo<CustomerActivityListItem[]>(() => {
     const orderItems = orders.map((order) => ({
+      id: `order-${order.id}`,
       kind: "order" as const,
-      created_at: order.created_at || new Date().toISOString(),
+      filterId:
+        order.order_mode === "sell_iron"
+          ? "sell_full"
+          : order.order_mode === "buy_iron"
+            ? "buy_empty"
+            : "replacement",
+      sortAt: order.created_at || order.delivered_at || new Date().toISOString(),
+      customerName: customersById.get(order.customer_id)?.name ?? order.customer_id,
       data: order,
     }));
     const collectionItems = collections.map((collection) => ({
+      id: `collection-${collection.id}`,
       kind: "collection" as const,
-      created_at: collection.created_at || collection.effective_at || new Date().toISOString(),
+      filterId:
+        collection.action_type === "payment"
+          ? "late_payment"
+          : collection.action_type === "payout"
+            ? "payout"
+            : "return_empties",
+      sortAt: collection.created_at || collection.effective_at || new Date().toISOString(),
+      customerName: customersById.get(collection.customer_id)?.name ?? collection.customer_id,
       data: collection,
     }));
-    return [...orderItems, ...collectionItems].sort((a, b) => {
-      const safeA = toSafeTime(a.created_at);
-      const safeB = toSafeTime(b.created_at);
-      return safeB - safeA;
-    });
-  }, [orders, collections, toSafeTime]);
+    const adjustmentItems = (customerAdjustmentsQuery.data ?? []).map((adjustment) => ({
+      id: `adjustment-${adjustment.id}`,
+      kind: "adjustment" as const,
+      filterId: "adjustment" as const,
+      sortAt: adjustment.created_at || adjustment.effective_at || new Date().toISOString(),
+      customerName: customersById.get(adjustment.customer_id)?.name ?? adjustment.customer_id,
+      data: adjustment,
+    }));
+
+    return [...orderItems, ...collectionItems, ...adjustmentItems].sort(
+      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
+    );
+  }, [collections, customerAdjustmentsQuery.data, customersById, orders, toSafeTime]);
   const filteredInventoryItems = useMemo(
     () =>
       inventoryActivity.items.filter((entry) => {
@@ -226,6 +302,10 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
+  const bankDeposits = useMemo(() => {
+    const rows = bankDepositsQuery.data ?? [];
+    return [...rows].sort((a, b) => toSafeTime(b.happened_at) - toSafeTime(a.happened_at));
+  }, [bankDepositsQuery.data, toSafeTime]);
   const expenseCategoryOptions = useMemo(
     () => [
       { id: "all_categories" as const, label: "All categories" },
@@ -234,6 +314,91 @@ const formatDateTime = (value?: string) => {
         .map((category) => ({ id: category, label: category })),
     ],
     [expenses]
+  );
+  const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
+  const filteredCustomerActivityItems = useMemo(
+    () =>
+      customerActivityItems.filter((item) => {
+        if (customerActivityFilter !== "all" && item.filterId !== customerActivityFilter) {
+          return false;
+        }
+        if (!deferredCustomerSearch) {
+          return true;
+        }
+        return item.customerName.toLowerCase().includes(deferredCustomerSearch);
+      }),
+    [customerActivityFilter, customerActivityItems, deferredCustomerSearch]
+  );
+  const filteredCompanyActivityItems = useMemo(
+    () =>
+      companyActivityItems.filter((entry) => {
+        if (companyActivityFilter === "all") {
+          return true;
+        }
+        const refill = entry.data;
+        const totalBuys = Number(refill.buy12 ?? 0) + Number(refill.buy48 ?? 0);
+        const totalReturns = Number(refill.return12 ?? 0) + Number(refill.return48 ?? 0);
+        if (companyActivityFilter === "buy_full") {
+          return totalBuys > 0 && totalReturns === 0;
+        }
+        if (companyActivityFilter === "refill") {
+          return totalReturns > 0 || (totalBuys > 0 && totalReturns > 0);
+        }
+        return false;
+      }),
+    [companyActivityFilter, companyActivityItems]
+  );
+  const expenseListItems = useMemo<ExpenseListItem[]>(() => {
+    const expenseItems = expenses.map((item) => ({
+      id: `expense-${item.id}`,
+      kind: "expense" as const,
+      sortAt: item.created_at ?? item.date,
+      data: item,
+    }));
+    const bankTransferItems = bankDeposits.map((item) => ({
+      id: `bank-deposit-${item.id}`,
+      kind: "bank_transfer" as const,
+      direction: item.amount >= 0 ? "wallet_to_bank" : "bank_to_wallet",
+      sortAt: item.happened_at,
+      data: item,
+    }));
+
+    return [...expenseItems, ...bankTransferItems].sort(
+      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
+    );
+  }, [bankDeposits, expenses, toSafeTime]);
+  const filteredExpenseItems = useMemo(
+    () =>
+      expenseListItems.filter((item) => {
+        if (expensePrimaryFilter === "expense" && item.kind !== "expense") {
+          return false;
+        }
+        if (expensePrimaryFilter === "wallet_to_bank") {
+          return item.kind === "bank_transfer" && item.direction === "wallet_to_bank";
+        }
+        if (expensePrimaryFilter === "bank_to_wallet") {
+          return item.kind === "bank_transfer" && item.direction === "bank_to_wallet";
+        }
+        if (
+          item.kind === "expense" &&
+          expensePrimaryFilter === "expense" &&
+          expenseCategoryFilter !== "all_categories"
+        ) {
+          return item.data.expense_type === expenseCategoryFilter;
+        }
+        return true;
+      }),
+    [expenseCategoryFilter, expenseListItems, expensePrimaryFilter]
+  );
+  const filteredLedgerAdjustmentItems = useMemo(
+    () =>
+      ledgerAdjustmentItems.filter((entry) => {
+        if (ledgerActivityFilter === "all") {
+          return true;
+        }
+        return entry.kind === ledgerActivityFilter;
+      }),
+    [ledgerActivityFilter, ledgerAdjustmentItems]
   );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
@@ -317,6 +482,12 @@ const formatDateTime = (value?: string) => {
   }, [priceModalOpen]);
 
   useEffect(() => {
+    if (expensePrimaryFilter !== "expense" && expenseCategoryFilter !== "all_categories") {
+      setExpenseCategoryFilter("all_categories");
+    }
+  }, [expenseCategoryFilter, expensePrimaryFilter]);
+
+  useEffect(() => {
     const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
     if (openPrices === "1") {
       setPriceModalOpen(true);
@@ -344,10 +515,23 @@ const formatDateTime = (value?: string) => {
       ordersQuery.refetch();
       collectionsQuery.refetch();
       customersQuery.refetch();
+      if (isCustomerActivities) {
+        customerAdjustmentsQuery.refetch();
+      }
       if (isExpenses) {
         expensesQuery.refetch();
+        bankDepositsQuery.refetch();
       }
-    }, [ordersQuery, customersQuery, collectionsQuery, expensesQuery, isExpenses])
+    }, [
+      bankDepositsQuery,
+      collectionsQuery,
+      customerAdjustmentsQuery,
+      customersQuery,
+      expensesQuery,
+      isCustomerActivities,
+      isExpenses,
+      ordersQuery,
+    ])
   );
   useFocusEffect(
     useCallback(() => {
@@ -578,6 +762,26 @@ const formatDateTime = (value?: string) => {
     ]);
   };
 
+  const handleDeleteBankTransfer = (entry: BankDeposit) => {
+    const date = (entry.happened_at ?? "").slice(0, 10) || todayDate;
+    Alert.alert("Remove transfer?", "This will delete the wallet/bank transfer entry.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteBankDeposit.mutateAsync({ id: entry.id, date });
+            bankDepositsQuery.refetch();
+          } catch (error) {
+            console.error("[add] delete bank transfer failed", error);
+            Alert.alert("Failed to delete", "Try again later.");
+          }
+        },
+      },
+    ]);
+  };
+
   const handlePrimaryAction = () => {
     if (isCustomerActivities) {
       router.push("/orders/new");
@@ -689,25 +893,66 @@ const formatDateTime = (value?: string) => {
 
       {isCustomerActivities ? (
         <>
-          {ordersQuery.isLoading && <Text style={styles.meta}>Loading...</Text>}
-          {ordersQuery.error && (
+          {ordersQuery.isLoading || collectionsQuery.isLoading || customerAdjustmentsQuery.isLoading ? (
+            <Text style={styles.meta}>Loading...</Text>
+          ) : null}
+          {ordersQuery.error || collectionsQuery.error || customerAdjustmentsQuery.error ? (
             <View style={styles.errorBox}>
               <Text style={styles.error}>Failed to load customer activities.</Text>
               <Pressable style={styles.retryBtn} onPress={() => ordersQuery.refetch()}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
             </View>
-          )}
+          ) : null}
           <FlatList
             key="orders-list"
-            data={recentItems}
-            keyExtractor={(item) => `${item.kind}-${item.data.id}`}
+            data={filteredCustomerActivityItems}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={{ gap: 10 }}
-            ListEmptyComponent={!ordersQuery.isLoading ? <Text style={styles.meta}>No customer activities yet.</Text> : null}
+            ListEmptyComponent={
+              !ordersQuery.isLoading && !collectionsQuery.isLoading && !customerAdjustmentsQuery.isLoading ? (
+                <Text style={styles.meta}>No customer activities match these filters.</Text>
+              ) : null
+            }
             renderItem={({ item }) => {
+              if (item.kind === "adjustment") {
+                const adjustment = item.data;
+                const money = Number(adjustment.amount_money ?? 0);
+                const qty12 = Number(adjustment.count_12kg ?? 0);
+                const qty48 = Number(adjustment.count_48kg ?? 0);
+                const summaryParts = [
+                  money !== 0 ? `Money ${money > 0 ? "+" : ""}${money.toFixed(0)}` : null,
+                  qty12 !== 0 ? `12kg ${qty12 > 0 ? "+" : ""}${qty12}` : null,
+                  qty48 !== 0 ? `48kg ${qty48 > 0 ? "+" : ""}${qty48}` : null,
+                ].filter(Boolean);
+                return (
+                  <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.titleBlock}>
+                        <Text style={styles.name}>{item.customerName}</Text>
+                        {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
+                      </View>
+                      <View style={styles.headerRight}>
+                        <Text style={styles.time}>{formatDateTime(adjustment.created_at ?? adjustment.effective_at)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <View style={styles.leftInfo}>
+                        <Text style={styles.metaLine}>
+                          {summaryParts.length > 0 ? summaryParts.join(" | ") : "Manual adjustment"}
+                        </Text>
+                      </View>
+                      <View style={styles.badgeStack}>
+                        <Text style={[styles.statusBadge, styles.collectionBadge]}>Adjustment</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              }
+
               if (item.kind === "collection") {
                 const collection = item.data;
-                const customer = customersQuery.data?.find((c) => c.id === collection.customer_id);
+                const customer = customersById.get(collection.customer_id);
                 const createdAt = new Date(
                   normalizeIso(collection.created_at ?? collection.effective_at ?? "")
                 );
@@ -777,7 +1022,7 @@ const formatDateTime = (value?: string) => {
               const order = item.data;
               const unpaid = calcMoneyUiResult(order.price_total, order.paid_amount ?? 0);
               const system = systemsQuery.data?.find((s) => s.id === order.system_id);
-              const customer = customersQuery.data?.find((c) => c.id === order.customer_id);
+              const customer = customersById.get(order.customer_id);
               const createdAt = new Date(normalizeIso(order.created_at));
               const deliveredAt = new Date(normalizeIso(order.delivered_at));
               const outstandingCyl = Math.max(
@@ -853,42 +1098,71 @@ const formatDateTime = (value?: string) => {
         </>
       ) : isExpenses ? (
         <View style={styles.formCard}>
-          {expensesQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
-          {expensesQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
-          {expenses.length === 0 && !expensesQuery.isLoading ? (
-            <Text style={styles.meta}>No expenses yet.</Text>
+          {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+          {expensesQuery.error || bankDepositsQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
+          {filteredExpenseItems.length === 0 && !expensesQuery.isLoading && !bankDepositsQuery.isLoading ? (
+            <Text style={styles.meta}>No expenses match these filters.</Text>
           ) : (
             <View style={styles.listBlock}>
-              {expenses.map((item) => (
-                <View key={item.id} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.titleBlock}>
-                      <View style={styles.pillRow}>
-                        <Text style={[styles.pill, styles.pillPrimary]}>{item.expense_type}</Text>
+              {filteredExpenseItems.map((item) => {
+                if (item.kind === "bank_transfer") {
+                  const label = item.direction === "wallet_to_bank" ? "Wallet to Bank" : "Bank to Wallet";
+                  return (
+                    <View key={item.id} style={styles.card}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.titleBlock}>
+                          <View style={styles.pillRow}>
+                            <Text style={[styles.pill, styles.pillPrimary]}>{label}</Text>
+                          </View>
+                          <Text style={styles.metaLine}>{formatDateTime(item.data.happened_at)}</Text>
+                          {item.data.note ? <Text style={styles.note}>{item.data.note}</Text> : null}
+                        </View>
+                        <View style={styles.headerRight}>
+                          <Text style={styles.expenseAmount}>{Math.abs(item.data.amount)}</Text>
+                          <Pressable
+                            accessibilityLabel="Remove bank transfer"
+                            onPress={() => handleDeleteBankTransfer(item.data)}
+                            style={styles.iconBtn}
+                          >
+                            <Ionicons name="trash" size={16} color="#b00020" />
+                          </Pressable>
+                        </View>
                       </View>
-                      <Text style={styles.metaLine}>{formatDateTime(item.created_at ?? item.date)}</Text>
-                      {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
                     </View>
-                    <View style={styles.headerRight}>
-                      <Text style={styles.expenseAmount}>{item.amount}</Text>
-                      <Pressable
-                        accessibilityLabel="Remove expense"
-                        onPress={() => handleDeleteExpense(item)}
-                        style={styles.iconBtn}
-                      >
-                        <Ionicons name="trash" size={16} color="#b00020" />
-                      </Pressable>
+                  );
+                }
+
+                return (
+                  <View key={item.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.titleBlock}>
+                        <View style={styles.pillRow}>
+                          <Text style={[styles.pill, styles.pillPrimary]}>{item.data.expense_type}</Text>
+                        </View>
+                        <Text style={styles.metaLine}>{formatDateTime(item.data.created_at ?? item.data.date)}</Text>
+                        {item.data.note ? <Text style={styles.note}>{item.data.note}</Text> : null}
+                      </View>
+                      <View style={styles.headerRight}>
+                        <Text style={styles.expenseAmount}>{item.data.amount}</Text>
+                        <Pressable
+                          accessibilityLabel="Remove expense"
+                          onPress={() => handleDeleteExpense(item.data)}
+                          style={styles.iconBtn}
+                        >
+                          <Ionicons name="trash" size={16} color="#b00020" />
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>
       ) : isCompanyActivities ? (
         <View style={styles.formCard}>
           <View style={styles.listBlock}>
-            {companyActivityItems.map((entry) => {
+            {filteredCompanyActivityItems.map((entry) => {
               const refill = entry.data;
               const isDeleted = entry.is_deleted;
               return (
@@ -946,13 +1220,13 @@ const formatDateTime = (value?: string) => {
                 </View>
               );
             })}
-            {companyActivityItems.length === 0 && <Text style={styles.meta}>No company activities yet.</Text>}
+            {filteredCompanyActivityItems.length === 0 && <Text style={styles.meta}>No company activities match these filters.</Text>}
           </View>
         </View>
       ) : (
         <View style={styles.formCard}>
           <View style={styles.listBlock}>
-            {ledgerAdjustmentItems.map((entry) => {
+            {filteredLedgerAdjustmentItems.map((entry) => {
               if (entry.kind === "inventory_adjustment") {
                 const adjustment = entry.data;
                 const isDeleted = entry.is_deleted;
@@ -1058,7 +1332,7 @@ const formatDateTime = (value?: string) => {
                 </View>
               );
             })}
-            {ledgerAdjustmentItems.length === 0 && <Text style={styles.meta}>No ledger adjustments yet.</Text>}
+            {filteredLedgerAdjustmentItems.length === 0 && <Text style={styles.meta}>No ledger adjustments match these filters.</Text>}
           </View>
         </View>
       )}
