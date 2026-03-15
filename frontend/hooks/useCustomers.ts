@@ -3,12 +3,14 @@ import {
   createCustomerAdjustment,
   deleteCustomer,
   getCustomerBalance,
+  listCustomerAdjustments,
   listCustomers,
   updateCustomer,
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import {
   Customer,
+  CustomerAdjustment,
   CustomerAdjustmentCreateInput,
   CustomerBalance,
   CustomerUpdateInput,
@@ -61,6 +63,14 @@ export function useCustomerBalance(customerId?: string) {
   return useQuery<CustomerBalance>({
     queryKey: ["customers", "balance", customerId],
     queryFn: () => getCustomerBalance(customerId ?? ""),
+    enabled: Boolean(customerId),
+  });
+}
+
+export function useCustomerAdjustments(customerId?: string) {
+  return useQuery<CustomerAdjustment[]>({
+    queryKey: ["customers", "adjustments", customerId],
+    queryFn: () => listCustomerAdjustments(customerId ?? ""),
     enabled: Boolean(customerId),
   });
 }

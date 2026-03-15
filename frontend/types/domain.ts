@@ -225,7 +225,11 @@ export const CustomerAdjustmentSchema = z
     count_12kg: z.number(),
     count_48kg: z.number(),
     reason: z.string().nullish(),
+    effective_at: z.string(),
     created_at: z.string(),
+    debt_cash: z.number().optional().default(0),
+    debt_cylinders_12: z.number().optional().default(0),
+    debt_cylinders_48: z.number().optional().default(0),
   })
   .passthrough();
 export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;
