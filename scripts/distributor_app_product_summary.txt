@@ -104,18 +104,111 @@ A separate bottom tab called **Add Customer** is not needed. Instead:
 * use **Customers** as the destination
 * place a clear **Add Customer** action within that tab
 
+### Customer-view direction
+
+The customer profile should behave as a customer operational view, not as an orders-only screen.
+
+Current decided direction:
+
+* customer balances shown here should be **customer balances only**
+* company balances should be removed from customer view
+* the customer balances section should be **collapsed by default**
+* tapping the balances section title should expand it
+
+### Customer-view filter redesign direction
+
+The current customer-view filters take too much space and should move toward progressive disclosure.
+
+Preferred direction:
+
+* fewer top-level filters visible at once
+* selecting a top-level filter reveals a second level only when needed
+
+Current examples of the preferred structure:
+
+* **Money** -> All / Debt / Credit
+* **12kg** -> All / Debt / Credit
+* **48kg** -> All / Debt / Credit
+* **Systems** -> All / Active / Inactive
+* **Security check** -> Required / Not required
+* if **Security check = Required**, a later extra level may be shown: All / Done / Undone
+
+This is the current preferred direction, not a fully frozen final filter model.
+
 ## 4.2 New
 
 This is the operational creation hub. It replaces the old idea of a simple Add screen.
 
 Inside **New**, the app should expose these sections:
 
-* **Customer Activity**
-* **Company Activity**
+* **Customer Activities**
+* **Company Activities**
 * **Expenses**
 * **Ledger Adjustments**
 
-### Customer Activity
+### Data-entry page cleanup direction
+
+For the four operational sections:
+
+* **Customer Activities**
+* **Company Activities**
+* **Expenses**
+* **Ledger Adjustments**
+
+the page should follow these product/UX cleanup rules:
+
+* the filter area should sit directly between the main add button and the first list item
+* there should be nothing else in between
+* explanatory copy such as "Recent customer activities" or similar section-copy above the list should be removed
+* the top-left **New** label on the data-entry page should be removed
+* the tabs should be visually pushed upward
+* the top-right 3-line menu / drawer should be removed
+* everything attached to that menu should be removed with it
+* dead code should not be left behind after that cleanup
+
+### Filter rules for the New-page sections
+
+**Customer Activities**
+
+Should support:
+
+* search by customer name
+* activity-type filters
+
+Important rule:
+
+* customer-name search applies only to **Customer Activities**
+* it does not apply to **Company Activities**, **Expenses**, or **Ledger Adjustments**
+
+Current intended customer activity filter types should stay aligned with the customer-view activity model:
+
+* Replacement
+* Late Payment
+* Return Empties
+* Payout
+* Sell Full
+* Buy Empty
+* Adjustments
+
+**Company Activities**
+
+* should have type filters only
+* should not have customer-name search
+* the exact final type-filter set still needs a final pass against the real company activity catalog
+
+**Expenses**
+
+* should have expense-type filters only
+* should not have customer-name search
+* the exact final expense filter set still needs final review
+
+**Ledger Adjustments**
+
+* should have adjustment-type filters only
+* should not have customer-name search
+* the exact final adjustment filter set still needs final review
+
+### Customer Activities
 
 Includes:
 
@@ -126,7 +219,7 @@ Includes:
 * Sell Full
 * Buy Empty
 
-### Company Activity
+### Company Activities
 
 This is broader than only refill. It can include company-side operational entries such as:
 
@@ -137,7 +230,7 @@ This is broader than only refill. It can include company-side operational entrie
 
 ### Expenses
 
-This is a separate section next to Customer Activity, Company Activity, and Ledger Adjustments.
+This is a separate section next to Customer Activities, Company Activities, and Ledger Adjustments.
 
 Agreed structure for Expenses:
 
@@ -306,9 +399,9 @@ Suggested top-level KPIs:
 
 ---
 
-# 7. Customer Activity view
+# 7. Customer Activities view
 
-Customer Activity is not a bottom tab; it lives under Customers.
+Customer Activities are not a bottom tab; they live under Customers.
 
 ## Suggested event types in customer timeline
 
@@ -319,7 +412,43 @@ Customer Activity is not a bottom tab; it lives under Customers.
 * Sell Full
 * Buy Empty
 * Adjustment (if relevant)
-* System-related actions (if relevant)
+
+### Customer activity scope
+
+The customer activity view should stay focused on customer-facing operational events.
+
+Include:
+
+* Replacement
+* Late Payment
+* Return Empties
+* Payout
+* Sell Full
+* Buy Empty
+* Adjustment
+
+Do not include:
+
+* refill/company-side activity
+* company-side activity that only indirectly touched the customer
+* generic admin/system-maintenance events
+
+### Customer activity card and expansion direction
+
+Customer activities should use the same visual interaction pattern as Daily report activities as much as possible.
+
+Direction:
+
+* collapsed customer activity cards and collapsed Daily report cards should look and behave consistently where possible
+* expanded customer activity cards and expanded Daily report cards should also feel visually related
+* content may differ by context
+* Daily expanded cards may include ledger-oriented boxes
+* customer expanded cards may include balance-oriented boxes
+
+The goal is one shared product language for:
+
+* collapsed cards
+* expanded cards
 
 ## Clarification of terms
 
@@ -331,17 +460,30 @@ A manual correction event used when a normal business action does not fit, for e
 * correcting cylinder balance
 * correcting a mistaken entry
 
-### System-related actions
+### Customer balance wording direction
 
-Actions related to the customer’s installed system or safety process, for example:
+Customer balances should follow a split structure by:
 
-* security check due/completed
-* system installation-related event
-* system follow-up
+* money
+* 12kg
+* 48kg
+
+and by counterpart state:
+
+* debt
+* credit
+
+Current intended structure:
+
+* money debt / money credit
+* 12kg debt / 12kg credit
+* 48kg debt / 48kg credit
+
+The exact final user-facing wording can still be refined later, but the structure should follow this split.
 
 ---
 
-# 8. Company Activity and Ledger Adjustments
+# 8. Company Activities and Ledger Adjustments
 
 ## Final decision
 
@@ -353,6 +495,40 @@ The product direction is:
 * allow creating entries there
 * show recent entries there
 * tap an entry for details/editing there
+
+### Company balances placement
+
+Company balances should not appear inside the customer view.
+
+Instead:
+
+* company balances should appear in **New -> Company Activities**
+* they should sit below the **Add new company activity** button
+* they should sit above the first data-entry item
+* the company balances section should be **collapsed by default**
+
+### Company balance wording direction
+
+Company balances should follow the same structural split as customer balances:
+
+* money
+* 12kg
+* 48kg
+
+and by debt/credit-style counterpart buckets.
+
+The exact final wording can still be refined later, but the structure should follow this split.
+
+### Systems UI and negative-system rule direction
+
+The Add / Update Systems UI is currently confusing and needs cleanup.
+
+Agreed direction:
+
+* systems UI should be simplified and made easier to understand
+* if a system is in a negative state, no new activities should be added to it
+
+The exact final technical definition of a "negative system" can still be finalized later if needed, but this is already agreed as the product rule direction.
 
 This matches the actual workflow better.
 
@@ -652,8 +828,8 @@ The entire frontend UI/UX needs cleanup and consistency.
 
 ## Navigation-related naming decisions
 
-* Orders -> Customer Activity
-* Inventory concept evolves into Company Activity inside New
+* Orders -> Customer Activities
+* Inventory concept evolves into Company Activities inside New
 * Config should conceptually become Settings under Account
 * Add becomes New
 
@@ -854,10 +1030,14 @@ Needs proper auth/authorization and careful role separation.
 * Customers tab with Add Customer inside it
 * New tab with:
 
-  * Customer Activity
-  * Company Activity
+  * Customer Activities
+  * Company Activities
   * Expenses
   * Ledger Adjustments
+* clean up New/data-entry top chrome
+* remove obsolete 3-line menu and all attached dependencies
+* place filters directly under the add button and directly above the first list item in New sections
+* remove explanatory section-copy above New lists
 * Daily tab cleanup
 * Dashboard tab introduction
 * Account tab with Profile/Settings/Billing
@@ -865,6 +1045,13 @@ Needs proper auth/authorization and careful role separation.
 * remove confusing result/third box
 * improve wording consistency
 * show default system types when adding customer
+* improve Add / Update Systems UI
+* block activities on negative systems
+* redesign customer-view filters using progressive disclosure
+* move company balances out of customer view
+* keep customer balances customer-only inside customer view
+* collapse both customer and company balance sections by default
+* unify customer activity cards and Daily report activity cards visually as much as possible
 
 ### Reminders minimum version
 
@@ -895,6 +1082,26 @@ Needs proper auth/authorization and careful role separation.
 * reward system / loyalty program
 * forecasting / prediction of sales and customer ordering
 * more advanced company-distributor linking workflows
+* map pin support for customer location
+* signed health/security-check workflow linked to customer/system records
+* photo capture/upload for stove, system, and cylinder place as part of that safety workflow
+
+### Future notes
+
+Map/location:
+
+* in the future, the distributor should be able to pin the customer on a map
+* the text location description should still remain necessary even when map pinning exists
+
+Health/security check:
+
+* this belongs in the far future, not immediate implementation
+* the system should later support a signed health/security check form linked to the customer
+* it may later include more system/safety fields such as gas type, stove type, number of stoves/burners, and other safety/system details
+* the distributor should later be able to capture and upload photos of:
+  * the stove
+  * the system
+  * the cylinder place
 
 ---
 
@@ -902,7 +1109,10 @@ Needs proper auth/authorization and careful role separation.
 
 These should be finalized later:
 
-* exact final list of all Company Activity types based on full code review
+* exact final list of Company Activities types based on full code review
+* exact final filter set for Company Activities
+* exact final filter set for Expenses
+* exact final filter set for Ledger Adjustments
 * exact schema for reminders and quick actions
 * detailed role matrix for owner/manager/worker
 * exact dashboard chart list for version 1
@@ -910,6 +1120,10 @@ These should be finalized later:
 * final icon system for all activity types
 * multilingual implementation timing and scope
 * subscription plan structure and pricing model in Backoffice
+* exact final technical definition of a negative system
+* final user-facing wording for customer balance labels
+* final user-facing wording for company balance labels
+* full final security-check schema and workflow
 
 ---
 
@@ -925,10 +1139,18 @@ The distributor app should become a clean mobile product with this main structur
 
 Inside **New**, the main operational sections are:
 
-* Customer Activity
-* Company Activity
+* Customer Activities
+* Company Activities
 * Expenses
 * Ledger Adjustments
+
+Current UX direction also includes:
+
+* cleaner New/data-entry screens with less chrome and no obsolete drawer/menu
+* filters placed directly under the add button
+* customer balances staying in customer view only
+* company balances moving to Company Activities
+* customer and Daily activity cards following one visual interaction language as much as possible
 
 The system must support:
 
