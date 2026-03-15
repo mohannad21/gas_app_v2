@@ -24,6 +24,7 @@ jest.mock("@/hooks/useCollections", () => ({
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
+  useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
@@ -70,18 +71,17 @@ jest.mock("@/hooks/useBankDeposits", () => ({
     data: [
       {
         id: "d1",
-        date: "2025-01-01",
         amount: 100,
         note: "bank",
-        effective_at: "2025-01-01T12:00:00",
-        created_at: "2025-01-01T12:00:00",
+        happened_at: "2025-01-01T12:00:00",
       },
     ],
     isLoading: false,
     error: null,
+    refetch: jest.fn(),
   }),
   useCreateBankDeposit: () => ({ mutateAsync: mockCreateDeposit }),
-  useDeleteBankDeposit: () => ({ mutate: mockDeleteDeposit }),
+  useDeleteBankDeposit: () => ({ mutateAsync: mockDeleteDeposit }),
 }));
 
 jest.mock("@/hooks/useInventory", () => ({
@@ -147,10 +147,10 @@ describe("Cash & Expenses view", () => {
   });
 
   it("switches to expenses mode and renders duplicate expenses separately", () => {
-    const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
+    const { getAllByLabelText, getAllByText, getByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("Expenses"));
-    expect(getByText("Recent expenses")).toBeTruthy();
+    expect(getAllByText("Wallet to Bank").length).toBeGreaterThan(0);
     expect(getByText("80")).toBeTruthy();
     expect(getByText("50")).toBeTruthy();
     expect(getAllByLabelText("Remove expense").length).toBe(2);

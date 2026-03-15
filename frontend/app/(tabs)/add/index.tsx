@@ -3,9 +3,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
-
-import { RefillForm } from "@/components/AddRefillModal";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
@@ -22,7 +19,7 @@ import { InventoryActivityItem, useInventoryActivity } from "@/hooks/useInventor
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
-import { formatDateLocale, formatDateTimeLocale, formatTimeHM, toDateKey } from "@/lib/date";
+import { formatDateTimeLocale, toDateKey } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { gasColor } from "@/constants/gas";
 import {
@@ -227,33 +224,33 @@ const formatDateTime = (value?: string) => {
   );
 
   const customerActivityItems = useMemo<CustomerActivityListItem[]>(() => {
-    const orderItems = orders.map((order) => ({
+    const orderItems = orders.map<CustomerActivityListItem>((order) => ({
       id: `order-${order.id}`,
       kind: "order" as const,
       filterId:
         order.order_mode === "sell_iron"
-          ? "sell_full"
+          ? ("sell_full" as const)
           : order.order_mode === "buy_iron"
-            ? "buy_empty"
-            : "replacement",
+            ? ("buy_empty" as const)
+            : ("replacement" as const),
       sortAt: order.created_at || order.delivered_at || new Date().toISOString(),
       customerName: customersById.get(order.customer_id)?.name ?? order.customer_id,
       data: order,
     }));
-    const collectionItems = collections.map((collection) => ({
+    const collectionItems = collections.map<CustomerActivityListItem>((collection) => ({
       id: `collection-${collection.id}`,
       kind: "collection" as const,
       filterId:
         collection.action_type === "payment"
-          ? "late_payment"
+          ? ("late_payment" as const)
           : collection.action_type === "payout"
-            ? "payout"
-            : "return_empties",
+            ? ("payout" as const)
+            : ("return_empties" as const),
       sortAt: collection.created_at || collection.effective_at || new Date().toISOString(),
       customerName: customersById.get(collection.customer_id)?.name ?? collection.customer_id,
       data: collection,
     }));
-    const adjustmentItems = (customerAdjustmentsQuery.data ?? []).map((adjustment) => ({
+    const adjustmentItems = (customerAdjustmentsQuery.data ?? []).map<CustomerActivityListItem>((adjustment) => ({
       id: `adjustment-${adjustment.id}`,
       kind: "adjustment" as const,
       filterId: "adjustment" as const,
@@ -349,16 +346,16 @@ const formatDateTime = (value?: string) => {
     [companyActivityFilter, companyActivityItems]
   );
   const expenseListItems = useMemo<ExpenseListItem[]>(() => {
-    const expenseItems = expenses.map((item) => ({
+    const expenseItems = expenses.map<ExpenseListItem>((item) => ({
       id: `expense-${item.id}`,
       kind: "expense" as const,
       sortAt: item.created_at ?? item.date,
       data: item,
     }));
-    const bankTransferItems = bankDeposits.map((item) => ({
+    const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
       id: `bank-deposit-${item.id}`,
       kind: "bank_transfer" as const,
-      direction: item.amount >= 0 ? "wallet_to_bank" : "bank_to_wallet",
+      direction: item.amount >= 0 ? ("wallet_to_bank" as const) : ("bank_to_wallet" as const),
       sortAt: item.happened_at,
       data: item,
     }));
@@ -782,6 +779,17 @@ const formatDateTime = (value?: string) => {
     ]);
   };
 
+  const handleRetryCustomerActivities = () => {
+    ordersQuery.refetch();
+    collectionsQuery.refetch();
+    customerAdjustmentsQuery.refetch();
+  };
+
+  const handleRetryExpenses = () => {
+    expensesQuery.refetch();
+    bankDepositsQuery.refetch();
+  };
+
   const handlePrimaryAction = () => {
     if (isCustomerActivities) {
       router.push("/orders/new");
@@ -797,6 +805,15 @@ const formatDateTime = (value?: string) => {
     }
     router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
   };
+
+  const customerActivityEmptyMessage =
+    customerActivityFilter === "all" && !deferredCustomerSearch
+      ? "No customer activities yet."
+      : "No customer activities match these filters.";
+  const expenseEmptyMessage =
+    expensePrimaryFilter === "all" && expenseCategoryFilter === "all_categories"
+      ? "No expenses yet."
+      : "No expenses match these filters.";
 
   const primaryCtaLabel = isCustomerActivities
     ? "+ New Customer Activity"
@@ -899,7 +916,7 @@ const formatDateTime = (value?: string) => {
           {ordersQuery.error || collectionsQuery.error || customerAdjustmentsQuery.error ? (
             <View style={styles.errorBox}>
               <Text style={styles.error}>Failed to load customer activities.</Text>
-              <Pressable style={styles.retryBtn} onPress={() => ordersQuery.refetch()}>
+              <Pressable style={styles.retryBtn} onPress={handleRetryCustomerActivities}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
             </View>
@@ -911,7 +928,7 @@ const formatDateTime = (value?: string) => {
             contentContainerStyle={{ gap: 10 }}
             ListEmptyComponent={
               !ordersQuery.isLoading && !collectionsQuery.isLoading && !customerAdjustmentsQuery.isLoading ? (
-                <Text style={styles.meta}>No customer activities match these filters.</Text>
+                <Text style={styles.meta}>{customerActivityEmptyMessage}</Text>
               ) : null
             }
             renderItem={({ item }) => {
@@ -1099,9 +1116,16 @@ const formatDateTime = (value?: string) => {
       ) : isExpenses ? (
         <View style={styles.formCard}>
           {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
-          {expensesQuery.error || bankDepositsQuery.error ? <Text style={styles.error}>Failed to load expenses.</Text> : null}
+          {expensesQuery.error || bankDepositsQuery.error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.error}>Failed to load expenses.</Text>
+              <Pressable style={styles.retryBtn} onPress={handleRetryExpenses}>
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : null}
           {filteredExpenseItems.length === 0 && !expensesQuery.isLoading && !bankDepositsQuery.isLoading ? (
-            <Text style={styles.meta}>No expenses match these filters.</Text>
+            <Text style={styles.meta}>{expenseEmptyMessage}</Text>
           ) : (
             <View style={styles.listBlock}>
               {filteredExpenseItems.map((item) => {
@@ -1810,977 +1834,6 @@ export function AddCustomerEntryAction() {
     <Pressable onPress={() => router.push("/customers/new")} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
       <Text style={styles.primaryText}>+ New Customer</Text>
     </Pressable>
-  );
-}
-
-function CalendarModal({
-  visible,
-  value,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  value: string;
-  onSelect: (next: string) => void;
-  onClose: () => void;
-}) {
-  const parseDate = (dateValue: string) => {
-    const parts = dateValue.split("-").map((part) => Number(part));
-    if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
-      return new Date();
-    }
-    return new Date(parts[0], parts[1] - 1, parts[2]);
-  };
-  const formatDate = (valueDate: Date) => {
-    const year = valueDate.getFullYear();
-    const month = String(valueDate.getMonth() + 1).padStart(2, "0");
-    const day = String(valueDate.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const [month, setMonth] = useState(() => parseDate(value));
-
-  useEffect(() => {
-    if (!visible) return;
-    setMonth(parseDate(value));
-  }, [value, visible]);
-
-  const start = new Date(month.getFullYear(), month.getMonth(), 1);
-  const startDay = start.getDay();
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const monthLabel = formatDateLocale(month, { month: "long", year: "numeric" }, "en-US");
-  const selected = value;
-  const cells = Array.from({ length: 42 }, (_, index) => {
-    const dayNumber = index - startDay + 1;
-    if (dayNumber < 1 || dayNumber > daysInMonth) return null;
-    return dayNumber;
-  });
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.calendarOverlay}>
-        <View style={styles.calendarCard}>
-          <View style={styles.calendarHeader}>
-            <Pressable
-              style={styles.calendarNav}
-              onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-            >
-              <Ionicons name="chevron-back" size={18} color="#0a7ea4" />
-            </Pressable>
-            <Text style={styles.calendarTitle}>{monthLabel}</Text>
-            <Pressable
-              style={styles.calendarNav}
-              onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-            >
-              <Ionicons name="chevron-forward" size={18} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          <View style={styles.calendarWeekRow}>
-            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-              <Text key={day} style={styles.calendarWeekDay}>
-                {day}
-              </Text>
-            ))}
-          </View>
-          <View style={styles.calendarGrid}>
-            {cells.map((day, index) => {
-              if (!day) {
-                return <View key={`empty-${index}`} style={styles.calendarCell} />;
-              }
-              const dayDate = new Date(month.getFullYear(), month.getMonth(), day);
-              const dayValue = formatDate(dayDate);
-              const isSelected = dayValue === selected;
-              return (
-                <Pressable
-                  key={dayValue}
-                  style={[styles.calendarCell, isSelected && styles.calendarCellSelected]}
-                  onPress={() => {
-                    onSelect(dayValue);
-                    onClose();
-                  }}
-                >
-                  <Text style={[styles.calendarDayText, isSelected && styles.calendarDayTextSelected]}>
-                    {day}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Pressable style={styles.calendarClose} onPress={onClose}>
-            <Text style={styles.calendarCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function getNowTime() {
-  const now = new Date();
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
-function TimePickerModal({
-  visible,
-  value,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  value: string;
-  onSelect: (next: string) => void;
-  onClose: () => void;
-}) {
-  const times = useMemo(() => {
-    const list: string[] = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        list.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-      }
-    }
-    return list;
-  }, []);
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.calendarOverlay}>
-        <View style={styles.calendarCard}>
-          <Text style={styles.calendarTitle}>Select time</Text>
-          <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-            {times.map((time) => {
-              const selected = time === value;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.timeItem, selected && styles.timeItemSelected]}
-                  onPress={() => {
-                    onSelect(time);
-                    onClose();
-                  }}
-                >
-                  <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{time}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.calendarClose} onPress={onClose}>
-            <Text style={styles.calendarCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function InventoryHubModal({
-  visible,
-  activeTab,
-  onTabChange,
-  onClose,
-  businessDate,
-  accessoryId,
-  editRefill,
-  onRefillSaved,
-  inventoryBefore,
-  cashBefore,
-  editingInventoryAdjust,
-  editingCashAdjust,
-  onInventoryAdjustSaved,
-  onCashAdjustSaved,
-  onCreateInventoryAdjust,
-  onUpdateInventoryAdjust,
-  onCreateCashAdjust,
-  onUpdateCashAdjust,
-}: {
-  visible: boolean;
-  activeTab: "refill" | "cash" | "inventory";
-  onTabChange: (next: "refill" | "cash" | "inventory") => void;
-  onClose: () => void;
-  businessDate: string;
-  accessoryId?: string;
-  editRefill: {
-    refill_id: string;
-    date: string;
-    time_of_day: "morning" | "evening";
-    buy12: number;
-    return12: number;
-    buy48: number;
-    return48: number;
-    effective_at?: string;
-  } | null;
-  onRefillSaved: () => void;
-  inventoryBefore: {
-    full12: number;
-    empty12: number;
-    full48: number;
-    empty48: number;
-  } | null;
-  cashBefore: number | null;
-  editingInventoryAdjust: InventoryAdjustment | null;
-  editingCashAdjust: CashAdjustment | null;
-  onInventoryAdjustSaved: () => void;
-  onCashAdjustSaved: () => void;
-  onCreateInventoryAdjust: (payload: {
-    date: string;
-    gas_type: "12kg" | "48kg";
-    delta_full: number;
-    delta_empty: number;
-    reason: string;
-  }) => Promise<void>;
-  onUpdateInventoryAdjust: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
-  onCreateCashAdjust: (payload: { date: string; delta_cash: number; reason?: string }) => Promise<void>;
-  onUpdateCashAdjust: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
-}) {
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.hubOverlay} onPress={Keyboard.dismiss}>
-        <Pressable style={styles.hubScreen} onPress={(event) => event.stopPropagation()}>
-          <SafeAreaView style={styles.hubSafeArea}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-              keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-              style={styles.hubScreenInner}
-            >
-              <View style={styles.hubHeaderRow}>
-                <Text style={styles.hubTitle}>Inventory</Text>
-                <Pressable onPress={onClose} style={styles.hubClose}>
-                  <Ionicons name="close" size={22} color="#0f172a" />
-                </Pressable>
-              </View>
-              <View style={styles.modeRow}>
-              {(["refill", "cash", "inventory"] as const).map((tab) => {
-                const label = tab === "refill" ? "Refill" : tab === "cash" ? "Adjust Cash" : "Adjust Inventory";
-                return (
-                  <Pressable
-                    key={tab}
-                    onPress={() => onTabChange(tab)}
-                    style={[styles.modeButton, activeTab === tab && styles.modeButtonActive]}
-                  >
-                    <Text style={[styles.modeText, activeTab === tab && styles.modeTextActive]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-              </View>
-              {activeTab === "refill" ? (
-              <RefillForm
-                visible={visible}
-                onClose={onClose}
-                onSaved={onRefillSaved}
-                accessoryId={accessoryId}
-                editEntry={editRefill}
-                showHeader={false}
-                useCard={false}
-                containerStyle={styles.hubFormContainer}
-                scrollStyle={styles.hubScroll}
-              />
-              ) : (
-              <ScrollView
-                contentContainerStyle={styles.hubContent}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-              >
-                {activeTab === "cash" ? (
-                  <CashAdjustForm
-                    visible={visible}
-                    entry={editingCashAdjust}
-                    date={businessDate}
-                    accessoryId={accessoryId}
-                    cashBefore={cashBefore}
-                    onCreate={onCreateCashAdjust}
-                    onUpdate={onUpdateCashAdjust}
-                    onSaved={onCashAdjustSaved}
-                    onCancel={onClose}
-                  />
-                ) : (
-                  <InventoryAdjustForm
-                    visible={visible}
-                    entry={editingInventoryAdjust}
-                    date={businessDate}
-                    accessoryId={accessoryId}
-                    inventoryBefore={inventoryBefore}
-                    onCreate={onCreateInventoryAdjust}
-                    onUpdate={onUpdateInventoryAdjust}
-                    onSaved={onInventoryAdjustSaved}
-                    onCancel={onClose}
-                  />
-                )}
-              </ScrollView>
-              )}
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-function InventoryAdjustForm({
-  visible,
-  entry,
-  date,
-  accessoryId,
-  inventoryBefore,
-  onCreate,
-  onUpdate,
-  onSaved,
-  onCancel,
-}: {
-  visible: boolean;
-  entry: InventoryAdjustment | null;
-  date: string;
-  accessoryId?: string;
-  inventoryBefore: { full12: number; empty12: number; full48: number; empty48: number } | null;
-  onCreate: (payload: {
-    date: string;
-    time?: string;
-    gas_type: "12kg" | "48kg";
-    delta_full: number;
-    delta_empty: number;
-    reason: string;
-  }) => Promise<void>;
-  onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
-  const [full12, setFull12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
-  const [empty12, setEmpty12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_empty ?? 0 : 0));
-  const [full48, setFull48] = useState(String(entry?.gas_type === "48kg" ? entry?.delta_full ?? 0 : 0));
-  const [empty48, setEmpty48] = useState(String(entry?.gas_type === "48kg" ? entry?.delta_empty ?? 0 : 0));
-  const [reason, setReason] = useState(entry?.reason ?? "");
-  const [adjustDate, setAdjustDate] = useState(() => date);
-  const [adjustTime, setAdjustTime] = useState(() => getNowTime());
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeOpen, setTimeOpen] = useState(false);
-
-  useEffect(() => {
-    if (!visible) return;
-    setGasType(entry?.gas_type ?? "12kg");
-    setFull12(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
-    setEmpty12(String(entry?.gas_type === "12kg" ? entry?.delta_empty ?? 0 : 0));
-    setFull48(String(entry?.gas_type === "48kg" ? entry?.delta_full ?? 0 : 0));
-    setEmpty48(String(entry?.gas_type === "48kg" ? entry?.delta_empty ?? 0 : 0));
-    setReason(entry?.reason ?? "");
-    if (entry?.effective_at) {
-      const parsed = new Date(entry.effective_at);
-      if (!Number.isNaN(parsed.getTime())) {
-        setAdjustDate(toDateKey(parsed));
-        setAdjustTime(formatTimeHM(parsed, { hour12: false }));
-      }
-    } else {
-      setAdjustDate(date);
-      setAdjustTime(getNowTime());
-    }
-  }, [entry, visible]);
-
-  const deltaFull12 = Number(full12) || 0;
-  const deltaEmpty12 = Number(empty12) || 0;
-  const deltaFull48 = Number(full48) || 0;
-  const deltaEmpty48 = Number(empty48) || 0;
-  const baseFull12 = inventoryBefore?.full12;
-  const baseEmpty12 = inventoryBefore?.empty12;
-  const baseFull48 = inventoryBefore?.full48;
-  const baseEmpty48 = inventoryBefore?.empty48;
-
-  const save = async () => {
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
-    try {
-      if (entry) {
-        const delta_full = gasType === "12kg" ? deltaFull12 : deltaFull48;
-        const delta_empty = gasType === "12kg" ? deltaEmpty12 : deltaEmpty48;
-        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason });
-      } else {
-        if (deltaFull12 || deltaEmpty12) {
-          await onCreate({
-            date: adjustDate,
-            time: adjustTime,
-            gas_type: "12kg",
-            delta_full: deltaFull12,
-            delta_empty: deltaEmpty12,
-            reason: trimmedReason,
-          });
-        }
-        if (deltaFull48 || deltaEmpty48) {
-          await onCreate({
-            date: adjustDate,
-            time: adjustTime,
-            gas_type: "48kg",
-            delta_full: deltaFull48,
-            delta_empty: deltaEmpty48,
-            reason: trimmedReason,
-          });
-        }
-      }
-      onSaved();
-    } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
-    }
-  };
-
-  const stepValue = (setter: (value: string) => void, value: string, delta: number) => {
-    const current = Number(value) || 0;
-    setter(String(current + delta));
-  };
-
-  return (
-    <View style={[styles.hubForm, styles.hubSectionCard]}>
-      <Text style={styles.modalLabel}>Date & time</Text>
-      <View style={styles.row}>
-        <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
-          <Text style={styles.dateText}>{adjustDate}</Text>
-          <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
-          <Text style={styles.dateText}>{adjustTime}</Text>
-          <Ionicons name="time-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-      </View>
-      {entry ? (
-        <>
-          <Text style={styles.modalLabel}>Gas type</Text>
-          <View style={styles.chipRow}>
-            {(["12kg", "48kg"] as const).map((type) => (
-              <Pressable
-                key={type}
-                onPress={() => !entry && setGasType(type)}
-                style={[styles.chip, gasType === type && styles.chipActive, styles.chipDisabled]}
-              >
-                <Text style={[styles.chipText, gasType === type && styles.chipTextActive]}>{type}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      <View style={styles.adjustGrid}>
-        <View style={styles.adjustColumn}>
-          <Text style={styles.modalLabel}>12kg</Text>
-          <Text style={styles.adjustLabel}>Full</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setFull12, full12, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={full12}
-              onChangeText={setFull12}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "12kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setFull12, full12, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          <Text style={styles.adjustLabel}>Empty</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setEmpty12, empty12, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={empty12}
-              onChangeText={setEmpty12}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "12kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setEmpty12, empty12, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          {baseFull12 !== undefined && baseEmpty12 !== undefined && (deltaFull12 || deltaEmpty12) ? (
-            <Text style={styles.impactLabel}>
-              {baseFull12} {"to"} {baseFull12 + deltaFull12} | {baseEmpty12} {"to"} {baseEmpty12 + deltaEmpty12}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.adjustColumn}>
-          <Text style={styles.modalLabel}>48kg</Text>
-          <Text style={styles.adjustLabel}>Full</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setFull48, full48, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={full48}
-              onChangeText={setFull48}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "48kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setFull48, full48, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          <Text style={styles.adjustLabel}>Empty</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setEmpty48, empty48, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={empty48}
-              onChangeText={setEmpty48}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "48kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setEmpty48, empty48, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          {baseFull48 !== undefined && baseEmpty48 !== undefined && (deltaFull48 || deltaEmpty48) ? (
-            <Text style={styles.impactLabel}>
-              {baseFull48} {"to"} {baseFull48 + deltaFull48} | {baseEmpty48} {"to"} {baseEmpty48 + deltaEmpty48}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
-      <TextInput
-        style={styles.modalInput}
-        placeholder="count_correction"
-        value={reason}
-        onChangeText={setReason}
-      />
-      <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
-
-      <View style={styles.modalActions}>
-        <Pressable style={styles.modalBtn} onPress={onCancel}>
-          <Text style={styles.modalBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-          <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-        </Pressable>
-      </View>
-      <CalendarModal
-        visible={calendarOpen}
-        value={adjustDate}
-        onSelect={(next) => {
-          setAdjustDate(next);
-          setCalendarOpen(false);
-        }}
-        onClose={() => setCalendarOpen(false)}
-      />
-      <TimePickerModal
-        visible={timeOpen}
-        value={adjustTime}
-        onSelect={(next) => {
-          setAdjustTime(next);
-          setTimeOpen(false);
-        }}
-        onClose={() => setTimeOpen(false)}
-      />
-    </View>
-  );
-}
-
-function CashAdjustForm({
-  visible,
-  entry,
-  date,
-  accessoryId,
-  cashBefore,
-  onCreate,
-  onUpdate,
-  onSaved,
-  onCancel,
-}: {
-  visible: boolean;
-  entry: CashAdjustment | null;
-  date: string;
-  accessoryId?: string;
-  cashBefore: number | null;
-  onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<void>;
-  onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
-  const [reason, setReason] = useState(entry?.reason ?? "");
-  const [adjustDate, setAdjustDate] = useState(() => date);
-  const [adjustTime, setAdjustTime] = useState(() => getNowTime());
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeOpen, setTimeOpen] = useState(false);
-
-  useEffect(() => {
-    if (!visible) return;
-    setDeltaCash(String(entry?.delta_cash ?? 0));
-    setReason(entry?.reason ?? "");
-    if (entry?.effective_at) {
-      const parsed = new Date(entry.effective_at);
-      if (!Number.isNaN(parsed.getTime())) {
-        setAdjustDate(toDateKey(parsed));
-        setAdjustTime(formatTimeHM(parsed, { hour12: false }));
-      }
-    } else {
-      setAdjustDate(date);
-      setAdjustTime(getNowTime());
-    }
-  }, [entry, visible]);
-
-  const deltaValue = Number(deltaCash) || 0;
-
-  const save = async () => {
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
-    if (!entry && deltaValue === 0) {
-      Alert.alert("No changes", "Enter a cash adjustment amount first.");
-      return;
-    }
-    try {
-      if (entry) {
-        await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason });
-      } else {
-        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason });
-      }
-      onSaved();
-    } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
-    }
-  };
-
-  const stepValue = (delta: number) => {
-    const current = Number(deltaCash) || 0;
-    setDeltaCash(String(current + delta));
-  };
-
-  return (
-    <View style={[styles.hubForm, styles.hubSectionCard]}>
-      <Text style={styles.modalLabel}>Date & time</Text>
-      <View style={styles.row}>
-        <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
-          <Text style={styles.dateText}>{adjustDate}</Text>
-          <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
-          <Text style={styles.dateText}>{adjustTime}</Text>
-          <Ionicons name="time-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-      </View>
-      <Text style={styles.modalLabel}>Amount</Text>
-      <View style={styles.stepperRow}>
-        <Pressable style={styles.stepperBtn} onPress={() => stepValue(-1)}>
-          <Ionicons name="remove" size={16} color="#0a7ea4" />
-        </Pressable>
-        <TextInput
-          style={[styles.modalInput, styles.stepperInput]}
-          placeholder="0"
-          keyboardType="number-pad"
-          value={deltaCash}
-          onChangeText={setDeltaCash}
-          inputAccessoryViewID={accessoryId}
-        />
-        <Pressable style={styles.stepperBtn} onPress={() => stepValue(1)}>
-          <Ionicons name="add" size={16} color="#0a7ea4" />
-        </Pressable>
-      </View>
-
-      {cashBefore !== null && deltaValue ? (
-        <Text style={styles.impactLabel}>
-          Impact: {cashBefore} NIS {"to"} {cashBefore + deltaValue} NIS
-        </Text>
-      ) : null}
-
-      <Text style={styles.modalLabel}>Reason</Text>
-      <TextInput
-        style={styles.modalInput}
-        placeholder="Required"
-        value={reason}
-        onChangeText={setReason}
-      />
-
-      <View style={styles.modalActions}>
-        <Pressable style={styles.modalBtn} onPress={onCancel}>
-          <Text style={styles.modalBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-          <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-        </Pressable>
-      </View>
-      <CalendarModal
-        visible={calendarOpen}
-        value={adjustDate}
-        onSelect={(next) => {
-          setAdjustDate(next);
-          setCalendarOpen(false);
-        }}
-        onClose={() => setCalendarOpen(false)}
-      />
-      <TimePickerModal
-        visible={timeOpen}
-        value={adjustTime}
-        onSelect={(next) => {
-          setAdjustTime(next);
-          setTimeOpen(false);
-        }}
-        onClose={() => setTimeOpen(false)}
-      />
-    </View>
-  );
-}
-
-function InventoryAdjustModal({
-  visible,
-  entry,
-  date,
-  onClose,
-  onCreate,
-  onUpdate,
-}: {
-  visible: boolean;
-  entry: InventoryAdjustment | null;
-  date: string;
-  onClose: () => void;
-  onCreate: (payload: {
-    date: string;
-    gas_type: "12kg" | "48kg";
-    delta_full: number;
-    delta_empty: number;
-    reason: string;
-  }) => Promise<void>;
-  onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
-}) {
-  const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
-  const [full, setFull] = useState(String(entry?.delta_full ?? 0));
-  const [empty, setEmpty] = useState(String(entry?.delta_empty ?? 0));
-  const [reason, setReason] = useState(entry?.reason ?? "");
-
-  useEffect(() => {
-    if (!visible) return;
-    setGasType(entry?.gas_type ?? "12kg");
-    setFull(String(entry?.delta_full ?? 0));
-    setEmpty(String(entry?.delta_empty ?? 0));
-    setReason(entry?.reason ?? "");
-  }, [visible, entry]);
-
-  const save = async () => {
-    const delta_full = Number(full) || 0;
-    const delta_empty = Number(empty) || 0;
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
-    try {
-      if (entry) {
-        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason });
-      } else {
-        await onCreate({ date, gas_type: gasType, delta_full, delta_empty, reason: trimmedReason });
-      }
-      onClose();
-    } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>{entry ? "Edit inventory adjustment" : "Adjust inventory"}</Text>
-          <Text style={styles.meta}>Date: {date}</Text>
-
-          <Text style={styles.modalLabel}>Type</Text>
-          <View style={styles.chipRow}>
-            {(["12kg", "48kg"] as const).map((type) => (
-              <Pressable
-                key={type}
-                onPress={() => !entry && setGasType(type)}
-                style={[
-                  styles.chip,
-                  gasType === type && styles.chipActive,
-                  entry && styles.chipDisabled,
-                ]}
-              >
-                <Text style={[styles.chipText, gasType === type && styles.chipTextActive]}>{type}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={styles.modalLabel}>Full delta</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="e.g. 5 or -3"
-            keyboardType="number-pad"
-            value={full}
-            onChangeText={setFull}
-          />
-
-          <Text style={styles.modalLabel}>Empty delta</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="e.g. 2 or -1"
-            keyboardType="number-pad"
-            value={empty}
-            onChangeText={setEmpty}
-          />
-
-          <Text style={styles.modalLabel}>Reason</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Required"
-            value={reason}
-            onChangeText={setReason}
-          />
-
-          <View style={styles.modalActions}>
-            <Pressable style={styles.modalBtn} onPress={onClose}>
-              <Text style={styles.modalBtnText}>Cancel</Text>
-            </Pressable>
-            <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-              <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function CashAdjustModal({
-  visible,
-  entry,
-  date,
-  onClose,
-  onCreate,
-  onUpdate,
-}: {
-  visible: boolean;
-  entry: CashAdjustment | null;
-  date: string;
-  onClose: () => void;
-  onCreate: (payload: { date: string; delta_cash: number; reason?: string }) => Promise<void>;
-  onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
-}) {
-  const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
-  const [reason, setReason] = useState(entry?.reason ?? "");
-
-  useEffect(() => {
-    if (!visible) return;
-    setDeltaCash(String(entry?.delta_cash ?? 0));
-    setReason(entry?.reason ?? "");
-  }, [visible, entry]);
-
-  const save = async () => {
-    const delta_cash = Number(deltaCash) || 0;
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
-    try {
-      if (entry) {
-        await onUpdate(entry.id, { delta_cash, reason: trimmedReason });
-      } else {
-        await onCreate({ date, delta_cash, reason: trimmedReason });
-      }
-      onClose();
-    } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>{entry ? "Edit cash adjustment" : "Adjust cash"}</Text>
-          <Text style={styles.meta}>Date: {date}</Text>
-
-          <Text style={styles.modalLabel}>Amount (positive or negative)</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="e.g. -200"
-            keyboardType="number-pad"
-            value={deltaCash}
-            onChangeText={setDeltaCash}
-          />
-
-          <Text style={styles.modalLabel}>Reason</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Required"
-            value={reason}
-            onChangeText={setReason}
-          />
-
-          <View style={styles.modalActions}>
-            <Pressable style={styles.modalBtn} onPress={onClose}>
-              <Text style={styles.modalBtnText}>Cancel</Text>
-            </Pressable>
-            <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-              <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
