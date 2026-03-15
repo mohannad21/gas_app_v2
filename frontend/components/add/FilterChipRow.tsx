@@ -45,6 +45,8 @@ export default function FilterChipRow<T extends string>({
 const styles = StyleSheet.create({
   scroll: {
     marginHorizontal: -20,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   row: {
     paddingHorizontal: 20,
