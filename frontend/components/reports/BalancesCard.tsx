@@ -1,25 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { Spacing } from "@/constants/spacing";
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import type { BalanceSummary, CompanySummary } from "@/hooks/useBalancesSummary";
 import { formatAggregateBalanceState, formatCurrentBalanceState } from "@/lib/balanceTransitions";
-
-type BalanceBucket = { count: number; total: number };
-export type BalanceSummary = {
-  money: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl12: { receivable: BalanceBucket; payable: BalanceBucket };
-  cyl48: { receivable: BalanceBucket; payable: BalanceBucket };
-};
-
-export type CompanySummary = {
-  give12: number;
-  receive12: number;
-  give48: number;
-  receive48: number;
-  payCash: number;
-  receiveCash: number;
-};
 
 type BalancesCardProps = {
   balanceSummary: BalanceSummary;
@@ -30,6 +15,7 @@ type BalancesCardProps = {
   companyBalancesReady?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 function buildCustomerLines(balanceSummary: BalanceSummary, formatMoney: (value: number) => string) {
@@ -95,6 +81,7 @@ export default function BalancesCard({
   companyBalancesReady = true,
   collapsed = false,
   onToggle,
+  containerStyle,
 }: BalancesCardProps) {
   const customerDisplayLines = buildCustomerLines(balanceSummary, formatMoney);
   const companyDisplayLines = buildCompanyLines(companySummary, formatMoney);
@@ -155,13 +142,13 @@ export default function BalancesCard({
 
   if (onToggle) {
     return (
-      <Pressable onPress={onToggle} style={[styles.topSummaryCard, styles.balancesCard]}>
+      <Pressable onPress={onToggle} style={[styles.topSummaryCard, styles.balancesCard, containerStyle]}>
         {content}
       </Pressable>
     );
   }
 
-  return <View style={[styles.topSummaryCard, styles.balancesCard]}>{content}</View>;
+  return <View style={[styles.topSummaryCard, styles.balancesCard, containerStyle]}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
