@@ -19,7 +19,6 @@ import {
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
-import BalancesCard from "@/components/reports/BalancesCard";
 import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
@@ -40,7 +39,6 @@ const getExpenseIcon = (type?: string | null) => {
 
 const formatMoney = (value: number) => Number(value || 0).toFixed(0);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
-const formatCustomerCount = (count: number) => `${count} customer${count === 1 ? "" : "s"}`;
 const formatMoneySigned = (value: number) => {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₪${formatMoney(Math.abs(value))}`;
@@ -91,7 +89,7 @@ const ReportDayCard = memo(function ReportDayCard({
       }
     : item.inventory_start;
 
-  const alertLines =
+  const alertLines: string[] =
     problemTransitions.length > 0
       ? formatBalanceTransitions(problemTransitions, {
           mode: "transition",
@@ -258,7 +256,6 @@ export default function ReportsScreen() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
   const [useCustomType, setUseCustomType] = useState(false);
-  const [balancesOpen, setBalancesOpen] = useState(true);
 
   // Sync tooltip
   const [syncInfoDate, setSyncInfoDate] = useState<string | null>(null);
@@ -277,11 +274,7 @@ export default function ReportsScreen() {
     setV2Expanded,
     v2DayByDate,
     setV2DayByDate,
-    balanceSummary,
-    companySummary,
-    companyBalancesQuery,
     refetchV2,
-    refetchCustomers,
   } = useDailyReportScreen();
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
@@ -370,8 +363,7 @@ export default function ReportsScreen() {
   useFocusEffect(
     useCallback(() => {
       refetchV2();
-      refetchCustomers();
-    }, [refetchV2, refetchCustomers])
+    }, [refetchV2])
   );
 
   // Clear cached day info when collapsing
@@ -444,18 +436,6 @@ export default function ReportsScreen() {
       </View>
         {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
         {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
-
-        <BalancesCard
-          balanceSummary={balanceSummary}
-          companySummary={companySummary}
-          formatCustomerCount={formatCustomerCount}
-          formatMoney={formatMoney}
-          formatCount={formatCount}
-          companyBalancesReady={companyBalancesQuery.isSuccess}
-          collapsed={!balancesOpen}
-          onToggle={() => setBalancesOpen((prev) => !prev)}
-        />
-
 
         <FlatList
           data={v2Rows}
