@@ -33,6 +33,11 @@ const formatCylinder = (value: number) => {
   return `${prefix}${Math.abs(value)}`;
 };
 
+const formatProfileField = (value?: string | null, fallback = "Not provided") => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+};
+
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
@@ -68,6 +73,10 @@ export default function CustomerDetailsScreen() {
       "48kg": 0,
     };
     orders.forEach((order) => {
+      const mode = order.order_mode ?? "replacement";
+      if (mode !== "replacement" && mode !== "sell_iron") {
+        return;
+      }
       const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
       totals[gas] += order.cylinders_installed ?? 0;
     });
@@ -114,23 +123,24 @@ export default function CustomerDetailsScreen() {
     },
   ];
 
-  const orderStats = [
+  const orderedStats = [
     {
-      label: "Orders 12kg",
+      label: "12kg",
       value: `${orderCylinders["12kg"]}`,
-      highlighted: orderCylinders["12kg"] === 0,
+      gas: "12kg" as const,
     },
     {
-      label: "Orders 48kg",
+      label: "48kg",
       value: `${orderCylinders["48kg"]}`,
-      highlighted: orderCylinders["48kg"] === 0,
+      gas: "48kg" as const,
     },
   ];
 
   const lastOrder = orders
     .slice()
     .sort((a, b) => new Date(b.delivered_at).getTime() - new Date(a.delivered_at).getTime())[0];
-  const lastOrderLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No orders yet";
+  const lastActivityLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No activity yet";
+  const activeSystems = systems.filter((system) => system.is_active !== false).length;
 
   const sendWhatsApp = () => {
     const msg = encodeURIComponent(
@@ -180,59 +190,80 @@ export default function CustomerDetailsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{customer.name}</Text>
-      <View style={styles.metaBlock}>
-        <Text style={styles.meta}>Phone: {customer.phone || "n/a"}</Text>
-        {customer.address ? (
-          <Text style={styles.meta}>Address: {customer.address}</Text>
-        ) : null}
-        {customer.note ? <Text style={styles.meta}>Note: {customer.note}</Text> : null}
-        <Text style={styles.meta}>Last order: {lastOrderLabel}</Text>
-      </View>
-      <View style={styles.box}>
-        <Text style={styles.boxTitle}>Balances</Text>
-        <View style={styles.balanceRow}>
-          {balanceStats.map((stat) => {
-            const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-            return (
-              <View key={stat.label} style={styles.balanceItem}>
-                <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                  {stat.label}
-                </Text>
-                <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                  {stat.value}
-                </Text>
-              </View>
-            );
-          })}
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeader}>
+          <View style={styles.heroTitleBlock}>
+            <Text style={styles.title}>{customer.name}</Text>
+            <Text style={styles.heroSubtitle}>Customer profile</Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeLabel}>Last activity</Text>
+            <Text style={styles.heroBadgeValue}>{lastActivityLabel}</Text>
+          </View>
         </View>
-        <Text style={styles.balanceNote}>
-          Positive = Customer owes (debt). Negative = Customer credit.
-        </Text>
+        <View style={styles.profileGrid}>
+          <View style={styles.profileItem}>
+            <Text style={styles.profileLabel}>Phone</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.phone, "No phone")}</Text>
+          </View>
+          <View style={styles.profileItem}>
+            <Text style={styles.profileLabel}>Location</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.address, "No location")}</Text>
+          </View>
+          <View style={[styles.profileItem, styles.profileItemWide]}>
+            <Text style={styles.profileLabel}>Description</Text>
+            <Text style={styles.profileValue}>{formatProfileField(customer.note, "No description")}</Text>
+          </View>
+        </View>
+        <View style={styles.headerMetaRow}>
+          <View style={styles.headerMetaChip}>
+            <Text style={styles.headerMetaLabel}>Active systems</Text>
+            <Text style={styles.headerMetaValue}>{activeSystems}</Text>
+          </View>
+          <View style={styles.headerMetaChip}>
+            <Text style={styles.headerMetaLabel}>Created</Text>
+            <Text style={styles.headerMetaValue}>{formatOrderDate(customer.created_at)}</Text>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.box}>
-        <Text style={styles.boxTitle}>Orders</Text>
-        <View style={styles.boxRow}>
-          {orderStats.map((stat) => {
-            const labelColor = stat.label.includes("12kg")
-              ? gasColor("12kg")
-              : stat.label.includes("48kg")
-                ? gasColor("48kg")
-                : undefined;
-            return (
-            <View key={stat.label} style={styles.boxItem}>
-              <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                {stat.label}
-              </Text>
-              <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                {stat.value}
-              </Text>
-            </View>
-          );
-          })}
+      <View style={styles.summaryGrid}>
+        <View style={[styles.box, styles.summaryCardWide]}>
+          <Text style={styles.boxTitle}>Balances</Text>
+          <View style={styles.balanceRow}>
+            {balanceStats.map((stat) => {
+              const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
+              return (
+                <View key={stat.label} style={styles.balanceItem}>
+                  <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
+                    {stat.label}
+                  </Text>
+                  <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
+                    {stat.value}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.balanceNote}>
+            Positive = Customer owes (debt). Negative = Customer credit.
+          </Text>
+        </View>
+
+        <View style={[styles.box, styles.summaryCard]}>
+          <Text style={styles.boxTitle}>Cylinders Ordered</Text>
+          <Text style={styles.boxSubtitle}>Lifetime cylinders installed or sold by gas type.</Text>
+          <View style={styles.boxRow}>
+            {orderedStats.map((stat) => (
+              <View key={stat.label} style={styles.boxItem}>
+                <Text style={[styles.statLabel, { color: gasColor(stat.gas) }]}>{stat.label}</Text>
+                <Text style={styles.statValue}>{stat.value}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
+
       <View style={styles.actions}>
         <Pressable
           accessibilityLabel="Edit customer"
@@ -264,7 +295,12 @@ export default function CustomerDetailsScreen() {
         </Pressable>
       </View>
 
-      <Text style={[styles.title, { fontSize: 18, marginTop: 12 }]}>Systems</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Systems</Text>
+        <Text style={styles.sectionMeta}>
+          {systems.length > 0 ? `${activeSystems} active` : "No systems yet"}
+        </Text>
+      </View>
       {systemsQuery.isLoading && <Text style={styles.meta}>Loading systems...</Text>}
       {systems.length === 0 && !systemsQuery.isLoading && <Text style={styles.meta}>No systems.</Text>}
       {systems.map((sys) => (
@@ -313,14 +349,19 @@ export default function CustomerDetailsScreen() {
         </View>
       ))}
 
-      <Text style={[styles.title, { fontSize: 18, marginTop: 12 }]}>Orders</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Order History</Text>
+        <Text style={styles.sectionMeta}>Existing history stays unchanged in this view.</Text>
+      </View>
       {ordersQuery.isLoading && <Text style={styles.meta}>Loading orders...</Text>}
       {orders.length === 0 && !ordersQuery.isLoading && (
         <Text style={styles.meta}>No orders for this customer.</Text>
       )}
       {orders.map((ord) => {
         const system = systems.find((s) => s.id === ord.system_id);
-        const unpaid = calcMoneyUiResult(ord.price_total, ord.paid_amount);
+        const totalAmount = ord.price_total ?? 0;
+        const paidAmount = ord.paid_amount ?? 0;
+        const unpaid = calcMoneyUiResult(totalAmount, paidAmount);
         const cylDelta = calcCustomerCylinderDelta(
           ord.order_mode ?? "replacement",
           ord.cylinders_installed ?? 0,
@@ -338,11 +379,11 @@ export default function CustomerDetailsScreen() {
             <Text style={styles.metaLine}>{ord.gas_type ?? "12kg"}</Text>
             <View style={styles.orderStatsRow}>
               {[
-                { label: "Total", value: formatCurrency(ord.price_total), highlight: false },
+                { label: "Total", value: formatCurrency(totalAmount), highlight: false },
                 {
                   label: "Paid",
-                  value: formatCurrency(ord.paid_amount),
-                  highlight: ord.paid_amount < ord.price_total,
+                  value: formatCurrency(paidAmount),
+                  highlight: paidAmount < totalAmount,
                 },
                 {
                   label: "Unpaid",
@@ -407,7 +448,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    gap: 8,
+    gap: 12,
   },
   center: {
     flex: 1,
@@ -417,17 +458,125 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    marginBottom: 8,
+    color: "#0f172a",
   },
   meta: {
     color: "#333",
     lineHeight: 20,
   },
-  metaBlock: {
-    paddingVertical: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  heroCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#dfe3e6",
-    marginBottom: 8,
+    gap: 14,
+  },
+  heroHeader: {
+    gap: 12,
+  },
+  heroTitleBlock: {
+    gap: 4,
+  },
+  heroSubtitle: {
+    color: "#64748b",
+    fontSize: 14,
+  },
+  heroBadge: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#dbe3ea",
+    alignSelf: "flex-start",
+    minWidth: 180,
+    gap: 2,
+  },
+  heroBadgeLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  heroBadgeValue: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  profileGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  profileItem: {
+    minWidth: 140,
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  profileItemWide: {
+    minWidth: "100%",
+  },
+  profileLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  profileValue: {
+    color: "#0f172a",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "600",
+  },
+  headerMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  headerMetaChip: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: "#eef6ff",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  headerMetaLabel: {
+    color: "#4b5563",
+    fontSize: 12,
+  },
+  headerMetaValue: {
+    color: "#0a7ea4",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  summaryGrid: {
+    gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  sectionMeta: {
+    flex: 1,
+    textAlign: "right",
+    color: "#64748b",
+    fontSize: 13,
   },
   statLabel: {
     fontSize: 12,
@@ -448,11 +597,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e4e7ea",
+    gap: 8,
   },
   boxTitle: {
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: 8,
+    color: "#0f172a",
+  },
+  boxSubtitle: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 18,
   },
   balanceRow: {
     flexDirection: "row",
@@ -479,11 +634,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 6,
   },
+  summaryCard: {
+    minHeight: 140,
+  },
+  summaryCardWide: {
+    minHeight: 150,
+  },
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
-    marginTop: 10,
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   },
   linkBtn: {
     paddingVertical: 6,
