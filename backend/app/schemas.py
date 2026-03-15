@@ -55,7 +55,11 @@ class CustomerAdjustmentOut(SQLModel):
   count_12kg: int
   count_48kg: int
   reason: Optional[str] = None
+  effective_at: datetime
   created_at: datetime
+  debt_cash: int = 0
+  debt_cylinders_12: int = 0
+  debt_cylinders_48: int = 0
 
 
 class CustomerOut(SQLModel):

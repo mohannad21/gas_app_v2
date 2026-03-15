@@ -181,7 +181,17 @@ export async function createCustomerAdjustment(
   return {
     ...parsed,
     amount_money: fromMinorUnits(parsed.amount_money),
+    debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
+}
+
+export async function listCustomerAdjustments(customerId: string): Promise<CustomerAdjustment[]> {
+  const { data } = await api.get(`/customer-adjustments/${customerId}`);
+  return parseArray(CustomerAdjustmentSchema, data).map((item) => ({
+    ...item,
+    amount_money: fromMinorUnits(item.amount_money),
+    debt_cash: item.debt_cash != null ? fromMinorUnits(item.debt_cash) : item.debt_cash,
+  }));
 }
 
 export async function updateCustomer(id: string, payload: CustomerUpdateInput): Promise<Customer> {

@@ -17,10 +17,15 @@ def _group_id() -> str:
   return str(uuid4())
 
 
+def _stable_txn_key(txn: CustomerTransaction) -> tuple:
+  return (txn.happened_at, txn.created_at, txn.id)
+
+
 def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
   if not txns:
     raise HTTPException(status_code=404, detail="Adjustment not found")
-  base = min(txns, key=lambda t: t.happened_at)
+  base = min(txns, key=_stable_txn_key)
+  after = max(txns, key=_stable_txn_key)
   money = sum(t.total - t.paid for t in txns if t.gas_type is None)
   count_12 = sum(t.installed - t.received for t in txns if t.gas_type == "12kg")
   count_48 = sum(t.installed - t.received for t in txns if t.gas_type == "48kg")
@@ -31,7 +36,11 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
     count_12kg=count_12,
     count_48kg=count_48,
     reason=base.note,
+    effective_at=base.happened_at,
     created_at=base.created_at,
+    debt_cash=after.debt_cash,
+    debt_cylinders_12=after.debt_cylinders_12,
+    debt_cylinders_48=after.debt_cylinders_48,
   )
 
 
