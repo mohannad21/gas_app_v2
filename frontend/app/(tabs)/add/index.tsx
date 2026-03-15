@@ -5,8 +5,10 @@ import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Mo
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
+import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import { useAllCustomerAdjustments, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
@@ -146,6 +148,7 @@ export default function AddChooserScreen() {
   const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
   const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
+  const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
@@ -163,6 +166,7 @@ export default function AddChooserScreen() {
   const customerAdjustmentsQuery = useAllCustomerAdjustments(customerIds, { enabled: isCustomerActivities });
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
+  const { companySummary, companyBalancesQuery } = useBalancesSummary();
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [collectionEditOpen, setCollectionEditOpen] = useState(false);
   const [collectionEditTarget, setCollectionEditTarget] = useState<any | null>(null);
@@ -875,11 +879,21 @@ const formatDateTime = (value?: string) => {
       ) : null}
 
       {isCompanyActivities ? (
-        <FilterChipRow
-          options={companyActivityFilters}
-          value={companyActivityFilter}
-          onChange={setCompanyActivityFilter}
-        />
+        <>
+          <FilterChipRow
+            options={companyActivityFilters}
+            value={companyActivityFilter}
+            onChange={setCompanyActivityFilter}
+          />
+          <CompanyBalancesSection
+            companySummary={companySummary}
+            companyBalancesReady={companyBalancesQuery.isSuccess}
+            collapsed={companyBalancesCollapsed}
+            onToggle={() => setCompanyBalancesCollapsed((prev) => !prev)}
+            formatMoney={(value) => Number(value || 0).toFixed(0)}
+            formatCount={(value) => Number(value || 0).toFixed(0)}
+          />
+        </>
       ) : null}
 
       {isExpenses ? (
