@@ -272,9 +272,9 @@ const formatDateTime = (value?: string) => {
     });
     setMode("ledger_adjustments");
     if (openParam === "adjust-inventory") {
-      router.push({ pathname: "/inventory/new", params: { tab: "inventory" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
     } else if (openParam === "adjust-cash") {
-      router.push({ pathname: "/inventory/new", params: { tab: "cash" } });
+      router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "cash" } });
     }
   }, [addParams.open, addParams.prices]);
 
@@ -308,7 +308,7 @@ const formatDateTime = (value?: string) => {
       const shortcut = consumeAddShortcut();
       if (shortcut?.mode === "inventory") {
         setMode("company_activities");
-        router.push({ pathname: "/inventory/new", params: { tab: "refill" } });
+        router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
       }
     }, [])
   );
@@ -523,14 +523,14 @@ const formatDateTime = (value?: string) => {
       return;
     }
     if (isCompanyActivities) {
-      router.push({ pathname: "/inventory/new", params: { tab: "refill" } });
+      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
       return;
     }
     if (isExpenses) {
       router.push("/expenses/new");
       return;
     }
-    router.push({ pathname: "/inventory/new", params: { tab: "inventory" } });
+    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
   };
 
   const primaryCtaLabel = isCustomerActivities
@@ -854,7 +854,7 @@ const formatDateTime = (value?: string) => {
                           if (isDeleted) return;
                           router.push({
                             pathname: "/inventory/new",
-                            params: { tab: "refill", refillId: refill.refill_id },
+                            params: { section: "company", tab: "refill", refillId: refill.refill_id },
                           });
                         }}
                         style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
@@ -932,7 +932,7 @@ const formatDateTime = (value?: string) => {
                             if (isDeleted) return;
                             router.push({
                               pathname: "/inventory/new",
-                              params: { tab: "inventory", adjustId: adjustment.id },
+                              params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
                             });
                           }}
                           style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
@@ -982,7 +982,7 @@ const formatDateTime = (value?: string) => {
                           if (isDeleted) return;
                           router.push({
                             pathname: "/inventory/new",
-                            params: { tab: "cash", cashId: adjustment.id },
+                            params: { section: "ledger", tab: "cash", cashId: adjustment.id },
                           });
                         }}
                         style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}

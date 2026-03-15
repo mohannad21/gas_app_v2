@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   InputAccessoryView,
@@ -34,6 +34,12 @@ import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
 import { formatDateLocale, formatTimeHM, toDateKey } from "@/lib/date";
 
 type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
+type InventorySection = "company" | "ledger";
+type CompanyInventoryTab = Extract<InventoryTab, "refill" | "return" | "payment" | "buy">;
+type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
+
+const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
+const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
 
 function getLocalDateString() {
   const now = new Date();
@@ -939,32 +945,54 @@ function CompanyPaymentForm({
 
 export default function InventoryNewScreen() {
   const params = useLocalSearchParams<{
+    section?: string | string[];
     tab?: string | string[];
     refillId?: string | string[];
     adjustId?: string | string[];
     cashId?: string | string[];
   }>();
+  const sectionParam = Array.isArray(params.section) ? params.section[0] : params.section;
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const refillId = Array.isArray(params.refillId) ? params.refillId[0] : params.refillId;
   const adjustId = Array.isArray(params.adjustId) ? params.adjustId[0] : params.adjustId;
   const cashId = Array.isArray(params.cashId) ? params.cashId[0] : params.cashId;
 
-  const resolveTab = (): InventoryTab => {
-    if (
-      tabParam === "cash" ||
-      tabParam === "inventory" ||
-      tabParam === "refill" ||
-      tabParam === "buy" ||
-      tabParam === "return" ||
-      tabParam === "payment"
-    )
-      return tabParam;
-    if (cashId) return "cash";
-    if (adjustId) return "inventory";
-    return "refill";
-  };
+  const section = useMemo<InventorySection>(() => {
+    if (sectionParam === "company" || sectionParam === "ledger") {
+      return sectionParam;
+    }
+    if (cashId || adjustId) {
+      return "ledger";
+    }
+    return "company";
+  }, [sectionParam, cashId, adjustId]);
+  const visibleTabs = section === "company" ? COMPANY_TABS : LEDGER_TABS;
 
-  const [activeTab, setActiveTab] = useState<InventoryTab>(resolveTab());
+  const resolveTab = useCallback(
+    (nextSection: InventorySection): InventoryTab => {
+      if (nextSection === "company") {
+        if (
+          tabParam === "refill" ||
+          tabParam === "buy" ||
+          tabParam === "return" ||
+          tabParam === "payment"
+        ) {
+          return tabParam;
+        }
+        if (refillId) return "refill";
+        return "refill";
+      }
+      if (tabParam === "cash" || tabParam === "inventory") {
+        return tabParam;
+      }
+      if (cashId) return "cash";
+      if (adjustId) return "inventory";
+      return "inventory";
+    },
+    [tabParam, refillId, cashId, adjustId]
+  );
+
+  const [activeTab, setActiveTab] = useState<InventoryTab>(resolveTab(section));
   const businessDate = getLocalDateString();
   const accessoryId = Platform.OS === "ios" ? "inventoryAccessory" : undefined;
 
@@ -1014,17 +1042,21 @@ export default function InventoryNewScreen() {
   const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
 
   useEffect(() => {
-    setActiveTab(resolveTab());
-  }, [tabParam, refillId, adjustId, cashId]);
+    setActiveTab(resolveTab(section));
+  }, [section, resolveTab]);
 
   useEffect(() => {
+    if (section === "ledger" && activeTab !== "cash" && activeTab !== "inventory") {
+      setActiveTab(resolveTab("ledger"));
+      return;
+    }
     if (activeTab === "payment" && paymentTabDisabled) {
       setActiveTab("refill");
     }
     if (activeTab === "return" && returnTabDisabled) {
       setActiveTab("refill");
     }
-  }, [activeTab, paymentTabDisabled, returnTabDisabled]);
+  }, [activeTab, paymentTabDisabled, returnTabDisabled, section, resolveTab]);
 
   return (
     <SafeAreaView style={styles.hubSafeArea}>
@@ -1034,10 +1066,12 @@ export default function InventoryNewScreen() {
         style={styles.hubScreenInner}
       >
         <View style={styles.hubHeaderRow}>
-          <Text style={styles.hubTitle}>Inventory</Text>
+          <Text style={styles.hubTitle}>
+            {section === "company" ? "Company Activities" : "Ledger Adjustments"}
+          </Text>
         </View>
         <View style={styles.modeRow}>
-          {(["refill", "return", "payment", "buy", "cash", "inventory"] as const).map((tab) => {
+          {visibleTabs.map((tab) => {
             const label =
               tab === "refill"
                 ? "Refill"
