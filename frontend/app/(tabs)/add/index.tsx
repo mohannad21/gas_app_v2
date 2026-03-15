@@ -6,7 +6,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
+import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
+import { buildCompanySummary } from "@/hooks/useBalancesSummary";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
@@ -59,6 +62,7 @@ export default function AddChooserScreen() {
   const isLedgerAdjustments = mode === "ledger_adjustments";
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
   const ordersQuery = useOrders();
+  const companyBalancesQuery = useCompanyBalances();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
@@ -174,6 +178,10 @@ const formatDateTime = (value?: string) => {
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
+  const companySummary = useMemo(
+    () => buildCompanySummary(companyBalancesQuery.data),
+    [companyBalancesQuery.data]
+  );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
   const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
@@ -589,6 +597,15 @@ const formatDateTime = (value?: string) => {
       <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
         <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
       </Pressable>
+
+      {isCompanyActivities ? (
+        <CompanyBalancesSection
+          companySummary={companySummary}
+          companyBalancesReady={companyBalancesQuery.isSuccess}
+          formatMoney={(value) => Number(value || 0).toFixed(0)}
+          formatCount={(value) => Number(value || 0).toFixed(0)}
+        />
+      ) : null}
 
       <Text style={styles.subtitle}>{sectionSubtitle}</Text>
       {isCustomerActivities ? (
