@@ -9,16 +9,13 @@ import {
   CustomerListTopFilter,
   getCustomerSubFilterOptions,
 } from "@/components/customers/customerListFilters";
-import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
-import { useBalancesSummary } from "@/hooks/useBalancesSummary";
+import CustomersTabBalances from "@/components/customers/CustomersTabBalances";
 import { AddCustomerEntryAction, AddCustomersSection } from "./add/index";
 
 export default function CustomersHomeScreen() {
-  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [topFilter, setTopFilter] = useState<CustomerListTopFilter>("all");
   const [subFilter, setSubFilter] = useState<CustomerListSubFilter>("all");
-  const { balanceSummary } = useBalancesSummary();
   const secondLevelOptions = useMemo(() => getCustomerSubFilterOptions(topFilter), [topFilter]);
 
   const handleTopFilterChange = (next: CustomerListTopFilter) => {
@@ -51,14 +48,7 @@ export default function CustomersHomeScreen() {
           />
         ) : null}
       </View>
-      <CustomerBalancesSection
-        balanceSummary={balanceSummary}
-        collapsed={balancesCollapsed}
-        onToggle={() => setBalancesCollapsed((prev) => !prev)}
-        formatMoney={(value) => Number(value || 0).toFixed(0)}
-        formatCustomerCount={(count) => `${count} customer${count === 1 ? "" : "s"}`}
-        containerStyle={styles.summaryCard}
-      />
+      <CustomersTabBalances />
       <View style={styles.listBlock}>
         <AddCustomersSection
           searchQuery={searchQuery}
@@ -82,11 +72,6 @@ const styles = StyleSheet.create({
   filtersBlock: {
     marginHorizontal: 16,
     marginTop: 4,
-  },
-  summaryCard: {
-    marginHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 8,
   },
   secondaryFilterRow: {
     paddingTop: 0,
