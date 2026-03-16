@@ -1,0 +1,10 @@
+Proposal / Product TODOs
+
+1. Merge `scripts/distributor_app_product_summary.txt` into `proposal.txt`.
+2. Keep one final proposal document and move open work into this TODO file.
+3. Rename user-facing `cash` wording to `Wallet` everywhere it should match the daily report top value.
+4. Add or standardize an `Add money from bank` action on distributor-paid flows.
+5. Review all payment-entry screens after the Wallet rename to keep wording consistent.
+6. Decide which parts of daily report wording still need future cleanup after the current reference wording is preserved.
+7. Verify customer `Cylinders Ordered` totals are exposed in the backend contract if frontend-derived totals become insufficient.
+8. Recheck Company Activities surfaces after the proposal/product-summary merge so list behavior and wording stay aligned.

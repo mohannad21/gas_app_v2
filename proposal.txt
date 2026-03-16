@@ -4,7 +4,18 @@ This project is a lightweight, distributor-first operations system for managing 
 
 Customer and company balances are shared relationship balances, not per-screen approximations. The backend remains the source of truth for reports and accounting state. The frontend still calculates some preview and display helpers today, but the long-term direction is to keep important accounting meaning aligned with backend truth.
 
+Operational money terminology also needs one clear direction:
+- Current
+  - the ledger account and some existing screens still use the term cash
+- Next
+  - the user-facing term should move toward Wallet for the distributor's on-hand money
+  - the daily report top cash value is the Wallet value from the ledger
+- Later
+  - remaining legacy cash wording can be cleaned up screen by screen without changing the accounting meaning
+
 The wording in this document is target wording direction, not a statement that every visible label in the UI is already finalized. Final wording is still being cleaned up across customer wording, company wording, filter wording, and card wording.
+
+The daily report wording in the frontend is currently the best active wording reference. It is treated as correct for the current phase, while still leaving room for future wording cleanup if product needs sharper phrasing later.
 
 The daily report is intentionally a layered operational surface:
 - Current Balances
@@ -164,16 +175,21 @@ Customer <-> distributor
 - customer detail is therefore a customer operational profile, not a system-balance view
 
 Customer summary metrics
-- Cylinders Ordered is a customer-level lifetime summary, not a count of event rows
-- Cylinders Ordered must be tracked separately for 12kg and 48kg
-- include:
-  - Replacement installed cylinders
-  - Sell Full cylinders
-- do not include:
-  - late payment / payment-only events
-  - return empties
-  - buy empty
-  - adjustments
+- Current
+  - the business wants cylinder counts by gas type to be the visible customer summary, not number of orders
+  - Cylinders Ordered is a customer-level lifetime summary, not a count of event rows
+  - Cylinders Ordered must be tracked separately for 12kg and 48kg
+- Next
+  - include:
+    - Replacement installed cylinders
+    - Sell Full cylinders
+  - do not include:
+    - late payment / payment-only events
+    - return empties
+    - buy empty
+    - adjustments
+- Later
+  - these 12kg / 48kg totals can feed dashboard and statistics views more directly than raw order counts
 
 Company <-> distributor
 - one shared company money balance
@@ -185,8 +201,24 @@ Operational
 - empty 12kg inventory
 - full 48kg inventory
 - empty 48kg inventory
-- cash
+- cash in the ledger, moving toward Wallet as the user-facing term
 - bank if used
+
+5.3.1 Wallet / Bank Operational Rule
+
+Current
+- the top money value in the daily report comes from the ledger cash balance
+
+Next
+- user-facing wording should call this Wallet
+- Wallet means the distributor's on-hand money tracked in the ledger
+- Wallet to Bank means moving money from ledger cash into bank
+- Bank to Wallet means moving money from bank into ledger cash
+- Wallet to Bank is limited by the current Wallet amount
+- Bank to Wallet can add however much the distributor chooses to move in
+
+Later
+- remaining screens can be renamed from cash to Wallet as wording cleanup continues
 
 5.4 Sign Meaning (Canonical Internal Model)
 
@@ -505,6 +537,8 @@ Use in:
 - Current Balances
 - any pure current-state display
 
+These examples are directionally correct, not frozen literal copy for every screen.
+
 Customer money
 - Customer owes you ₪X
 - You owe customer ₪X
@@ -616,6 +650,49 @@ Customer Management
 - Customers list + search
 - Customer detail as the main customer operational profile
 
+Customers tab should include
+- + New Customer as the first major action
+- search
+- grouped filters
+- customer balances
+- customer list
+- customer balances remain customer-only on this page
+
+7.4.1 Customers Tab Behavior (Recommended)
+
+Layout order
+- + New Customer button
+- customer search and filters
+- customer balances section
+- customer list
+
+Search behavior
+- search customer rows by:
+  - name
+  - phone
+  - description / note
+  - location description / address
+
+Filter behavior
+- top-level filters:
+  - All
+  - Money
+  - 12kg
+  - 48kg
+  - Systems
+  - Security check
+- second-level filters appear only when the selected top-level group needs them
+- second-level filters:
+  - Money -> All / Debt / Credit
+  - 12kg -> All / Debt / Credit
+  - 48kg -> All / Debt / Credit
+  - Systems -> All / Active / Inactive
+  - Security check -> All / Required / Not required
+
+Action behavior
+- + New Customer keeps opening the Add Customer flow
+- customer list row actions such as update, quick order, and delete remain operational actions, not balance semantics
+
 Customer detail should include
 - top customer header block
 - Last order for the current phase
@@ -628,7 +705,7 @@ Customer detail should include
 
 This page is no longer mainly an orders screen. It is the main place to understand a customer operationally over time.
 
-7.4.1 Customer Detail Page Behavior (Recommended)
+7.4.2 Customer Detail Page Behavior (Recommended)
 
 Header / summary direction
 - Current
@@ -647,7 +724,7 @@ Activity behavior
 - expandable activity detail should reuse the same structured explanation style already preferred for report expanded detail
 - systems appear as context where relevant, not as separate balance owners
 
-7.4.2 Balance Placement Rules (Current / Next / Later)
+7.4.3 Balance Placement Rules (Current / Next / Later)
 
 Customer pages
 - Current
@@ -662,14 +739,16 @@ Company Activities
 - Current
   - show company balances only
 - Next
+  - keep company balances below the filter row
   - place company balances under the add button
   - place company balances above the first list item
   - keep company balances collapsed by default
   - tap to expand / collapse
 - Later
   - additional company-activity wording cleanup can happen later without changing the placement rule
+  - company balances stay part of the Company Activities screen structure, not a separate reporting surface
 
-7.4.3 Future Customer vs System Metadata Direction
+7.4.4 Future Customer vs System Metadata Direction
 
 Future customer-level fields
 - active / inactive customer
@@ -704,8 +783,26 @@ Expense categories
   - expense filters should work with the categories already available in the app
 - Next
   - do not treat category management as finished
+  - keep distinguishing between the current expense entry flow and the later config-managed category model
 - Later
   - allow adding more expense types in Config / Settings
+
+7.4.5 Payment Funding Rule (Recommended)
+
+Current
+- the distributor pays some actions out of on-hand money tracked in the ledger
+
+Next
+- whenever the distributor needs to pay from distributor side, the UI should support an Add money from bank action
+- this applies to payment flows such as:
+  - Expense
+  - Refill
+  - Company Payment
+  - customer-side payout or any future distributor-paid action
+- the purpose is to fund the Wallet before completing a payment action when needed
+
+Later
+- the exact placement and shared component for Add money from bank can be standardized across entry screens
 
 8) Data Integrity & Consistency Strategy
 
@@ -753,6 +850,7 @@ Frontend
 - renders server-authored report truth for reports
 - still calculates some preview and display helpers today
 - uses shared transition helpers for visible wording direction
+- daily report wording in the frontend is currently the active wording reference
 - long-term goal is to keep important accounting logic in the backend
 
 9.2 Backend Modules (Recommended Boundaries)
