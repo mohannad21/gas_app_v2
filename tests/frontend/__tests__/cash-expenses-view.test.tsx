@@ -72,6 +72,7 @@ jest.mock("@/hooks/useBankDeposits", () => ({
       {
         id: "d1",
         amount: 100,
+        direction: "wallet_to_bank",
         note: "bank",
         happened_at: "2025-01-01T12:00:00",
       },
@@ -82,6 +83,15 @@ jest.mock("@/hooks/useBankDeposits", () => ({
   }),
   useCreateBankDeposit: () => ({ mutateAsync: mockCreateDeposit }),
   useDeleteBankDeposit: () => ({ mutateAsync: mockDeleteDeposit }),
+}));
+
+jest.mock("@/hooks/useReports", () => ({
+  useDailyReportDayV2: () => ({
+    data: { date: "2025-01-01", events: [] },
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
 }));
 
 jest.mock("@/hooks/useInventory", () => ({

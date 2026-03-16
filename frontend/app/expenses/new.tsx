@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   InputAccessoryView,
   Keyboard,
@@ -9,7 +9,7 @@ import {
   View,
   Platform,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import CashExpensesView from "@/components/CashExpensesView";
 import { useCreateExpense } from "@/hooks/useExpenses";
@@ -189,12 +189,17 @@ function TimePickerModal({
 }
 
 export default function NewExpenseScreen() {
-  const [expenseMode, setExpenseMode] = useState<"expense" | "deposit">("expense");
+  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[] }>();
+  const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+  const amountParam = Array.isArray(params.amount) ? params.amount[0] : params.amount;
+  const [expenseMode, setExpenseMode] = useState<"expense" | "wallet_to_bank" | "bank_to_wallet">(
+    tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet" ? tabParam : "expense"
+  );
   const [expenseType, setExpenseType] = useState("fuel");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
-  const [depositAmount, setDepositAmount] = useState("");
-  const [depositNote, setDepositNote] = useState("");
+  const [transferAmount, setTransferAmount] = useState(amountParam ?? "");
+  const [transferNote, setTransferNote] = useState("");
   const [expenseDate, setExpenseDate] = useState(getTodayDate());
   const [expenseTime, setExpenseTime] = useState(getNowTime());
   const [expenseTimeOpen, setExpenseTimeOpen] = useState(false);
@@ -207,12 +212,28 @@ export default function NewExpenseScreen() {
   const dailyReportQuery = useDailyReportsV2(todayDate, todayDate);
   const expenseTypes = ["fuel", "food", "insurance", "car", "other"];
 
+  useEffect(() => {
+    if (tabParam === "expense" || tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet") {
+      setExpenseMode(tabParam);
+    }
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (amountParam) {
+      setTransferAmount(amountParam);
+    }
+  }, [amountParam]);
+
   return (
     <View style={styles.screen}>
       <CashExpensesView
         cashBalance={dailyReportQuery.data?.[0]?.cash_end ?? null}
         onRefreshCash={() => dailyReportQuery.refetch()}
         onClose={() => router.back()}
+        onTransferNow={(shortfall) => {
+          setExpenseMode("bank_to_wallet");
+          setTransferAmount(shortfall.toFixed(0));
+        }}
         expenseDate={expenseDate}
         setExpenseDate={setExpenseDate}
         expenseTime={expenseTime}
@@ -230,10 +251,10 @@ export default function NewExpenseScreen() {
         setExpenseAmount={setExpenseAmount}
         expenseNote={expenseNote}
         setExpenseNote={setExpenseNote}
-        depositAmount={depositAmount}
-        setDepositAmount={setDepositAmount}
-        depositNote={depositNote}
-        setDepositNote={setDepositNote}
+        transferAmount={transferAmount}
+        setTransferAmount={setTransferAmount}
+        transferNote={transferNote}
+        setTransferNote={setTransferNote}
         accessoryId={accessoryId}
         createExpense={createExpense}
         createBankDeposit={createBankDeposit}
@@ -389,6 +410,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  fieldBlock: {
+    gap: 10,
+  },
+  transferAmountRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+  },
+  transferAmountButton: {
+    alignItems: "center",
+    backgroundColor: "#e0f2fe",
+    borderColor: "#bae6fd",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  transferAmountInput: {
+    minWidth: 120,
+    textAlign: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  transferHelperText: {
+    color: "#b00020",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
   walletTransition: {
     flexDirection: "row",

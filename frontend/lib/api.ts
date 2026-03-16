@@ -857,6 +857,7 @@ export async function createBankDeposit(payload: {
   date: string;
   time?: string;
   amount: number;
+  direction?: "wallet_to_bank" | "bank_to_wallet";
   note?: string;
   happened_at?: string;
 }): Promise<BankDeposit> {
@@ -864,6 +865,7 @@ export async function createBankDeposit(payload: {
     payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/bank_deposit", {
     amount: toMinorUnits(payload.amount),
+    direction: payload.direction ?? "wallet_to_bank",
     note: payload.note,
     happened_at,
   });

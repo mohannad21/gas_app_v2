@@ -820,6 +820,7 @@ export const BankDepositSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
   amount: z.number(),
+  direction: z.enum(["wallet_to_bank", "bank_to_wallet"]),
   note: z.string().nullish(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;

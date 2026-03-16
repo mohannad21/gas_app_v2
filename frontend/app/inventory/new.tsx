@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
@@ -675,6 +676,7 @@ function CompanyPaymentForm({
   date,
   accessoryId,
   companyBalance,
+  walletBalance,
   balanceReady,
   onCreate,
   onSaved,
@@ -684,6 +686,7 @@ function CompanyPaymentForm({
   date: string;
   accessoryId?: string;
   companyBalance: number;
+  walletBalance: number;
   balanceReady: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
@@ -731,6 +734,8 @@ function CompanyPaymentForm({
   const payDisabled = companyBalance <= 0;
   const receiveDisabled = companyBalance >= 0;
   const tableDisabled = !balanceReady || companyBalance === 0;
+  const companyPaymentShortfall =
+    paymentDirection === "pay" ? Math.max(amountValue - walletBalance, 0) : 0;
 
   const save = async () => {
     if (amountValue <= 0) {
@@ -884,6 +889,22 @@ function CompanyPaymentForm({
                 </Text>
               </Pressable>
             </View>
+            <InlineWalletFundingPrompt
+              walletAmount={walletBalance}
+              shortfall={companyPaymentShortfall}
+              onTransferNow={
+                companyPaymentShortfall > 0
+                  ? () =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: {
+                          tab: "bank_to_wallet",
+                          amount: companyPaymentShortfall.toFixed(0),
+                        },
+                      })
+                  : undefined
+              }
+            />
           </View>
           <View style={[styles.amountCell, styles.paymentCell]}>
             <Text style={styles.fieldName}>After</Text>
@@ -1125,6 +1146,7 @@ export default function InventoryNewScreen() {
             mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
             containerStyle={styles.hubFormContainer}
             scrollStyle={styles.hubScroll}
+            walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
           />
         ) : (
           <ScrollView
@@ -1138,6 +1160,7 @@ export default function InventoryNewScreen() {
                   date={businessDate}
                   accessoryId={accessoryId}
                   companyBalance={companyBalance}
+                  walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
                   balanceReady={companyBalanceReady}
                   onCreate={async (payload) => {
                     await createCompanyPayment.mutateAsync(payload);

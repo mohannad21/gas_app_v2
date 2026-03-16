@@ -10,6 +10,7 @@ from sqlmodel import Field, SQLModel
 GasType = Literal["12kg", "48kg"]
 OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
 InventoryAdjustReason = Literal["count_correction", "shrinkage", "damage"]
+TransferDirection = Literal["wallet_to_bank", "bank_to_wallet"]
 
 
 def new_id(prefix: str = "") -> str:
@@ -480,14 +481,21 @@ class CompanyBalancesOut(SQLModel):
 class BankDepositCreate(SQLModel):
   happened_at: Optional[datetime] = None
   amount: int
+  direction: TransferDirection = "wallet_to_bank"
   note: Optional[str] = None
   request_id: Optional[str] = None
+
+  @field_validator("amount")
+  @classmethod
+  def _validate_amount(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class BankDepositOut(SQLModel):
   id: str
   happened_at: datetime
   amount: int
+  direction: TransferDirection
   note: Optional[str] = None
 
 
@@ -872,6 +880,7 @@ class DailyReportV2Event(SQLModel):
   system_name: Optional[str] = None
   system_type: Optional[str] = None
   expense_type: Optional[str] = None
+  transfer_direction: Optional[TransferDirection] = None
   reason: Optional[str] = None
   buy12: Optional[int] = None
   return12: Optional[int] = None

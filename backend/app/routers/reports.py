@@ -139,6 +139,8 @@ def _event_label(event: DailyReportV2Event) -> str:
     return "Order"
   if event.event_type == "refill" and _is_company_settle_only_refill(event):
     return "Company Settle"
+  if event.event_type == "bank_deposit":
+    return "Bank to Wallet" if event.transfer_direction == "bank_to_wallet" else "Wallet to Bank"
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
 
 
@@ -556,7 +558,7 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
   if event.event_type == "cash_adjust":
     return Level3Hero(text="Cash Adjust")
   if event.event_type == "bank_deposit":
-    return Level3Hero(text="Bank Deposit")
+    return Level3Hero(text=_event_label(event))
   if event.event_type == "collection_payout":
     return Level3Hero(text="Customer Payout")
   if event.event_type == "customer_adjust":
@@ -794,6 +796,10 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
     return event.expense_type or "Expense"
   if event.event_type == "bank_deposit":
     amount = _safe_int(event.total_cost)
+    if event.transfer_direction == "bank_to_wallet":
+      if amount:
+        return f"Transferred {_format_money_major(amount, money_decimals)} to wallet"
+      return "Transferred to wallet"
     if amount:
       return f"Transferred {_format_money_major(amount, money_decimals)} to bank"
     return "Transferred to bank"
@@ -2934,6 +2940,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       system_name=None,
       system_type=None,
       expense_type=categories.get(expense.category_id),
+      transfer_direction="bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank",
       reason=expense.note,
       buy12=None,
       return12=None,

@@ -26,7 +26,9 @@ import { useCreateOrder } from "@/hooks/useOrders";
 import { useCreateCollection } from "@/hooks/useCollections";
 import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
+import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
@@ -46,6 +48,14 @@ type OrderFormValues = {
   note?: string;
 };
 type ActionMode = "replacement" | "payment" | "return" | "sell_iron" | "buy_iron";
+
+function getTodayDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function NewOrderScreen() {
   const { customerId, systemId } = useLocalSearchParams<{
@@ -85,6 +95,7 @@ export default function NewOrderScreen() {
   const inventoryLatest = useInventoryLatest();
   const systemsQuery = useSystems(selectedCustomer, { enabled: !!selectedCustomer });
   const pricesQuery = usePriceSettings();
+  const dailyReportQuery = useDailyReportsV2(getTodayDate(), getTodayDate());
   const pricesConfigured = (pricesQuery.data ?? []).length > 0;
   const createOrder = useCreateOrder();
   const createCollection = useCreateCollection();
@@ -167,6 +178,7 @@ export default function NewOrderScreen() {
   const isReturn = currentAction === "return";
   const showStickyPayment =
     focusTarget === "amounts" && effectiveKeyboardHeight > 0 && currentAction === "replacement";
+  const walletBalance = dailyReportQuery.data?.[0]?.cash_end ?? 0;
 
   const installed = Number(watch("cylinders_installed")) || 0;
   const received = Number(watch("cylinders_received")) || 0;
@@ -186,6 +198,8 @@ export default function NewOrderScreen() {
   const unpaid = moneyDelta;
   const moneyDeltaAbs = Math.abs(unpaid);
   const moneyDeltaIsOutflow = unpaid < 0;
+  const payoutWalletShortfall =
+    isPayment && paymentDirection === "payout" ? Math.max(paidInput - walletBalance, 0) : 0;
   const moneyResultLabel =
     unpaid > 0 ? "Customer owes (debt)" : unpaid < 0 ? "Customer credit" : "Settled";
   const cylinderResultLabel =
@@ -2354,6 +2368,24 @@ ${cylLine}
               </View>
               <View style={[styles.amountCell, styles.amountCellResult]} />
             </View>
+          ) : null}
+          {isPayment && paymentDirection === "payout" ? (
+            <InlineWalletFundingPrompt
+              walletAmount={walletBalance}
+              shortfall={payoutWalletShortfall}
+              onTransferNow={
+                payoutWalletShortfall > 0
+                  ? () =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: {
+                          tab: "bank_to_wallet",
+                          amount: payoutWalletShortfall.toFixed(0),
+                        },
+                      })
+                  : undefined
+              }
+            />
           ) : null}
           {selectedCustomerEntry ? (
             customerPreviewStatusLine ? (

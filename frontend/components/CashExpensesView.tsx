@@ -12,13 +12,17 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildHappenedAt } from "@/lib/date";
 
 const MODE_LABELS = {
   expense: "Expense",
-  deposit: "Bank deposit",
-};
+  wallet_to_bank: "Wallet to Bank",
+  bank_to_wallet: "Bank to Wallet",
+} as const;
+
+type ExpenseMode = keyof typeof MODE_LABELS;
 
 type CalendarModalProps = {
   visible: boolean;
@@ -31,6 +35,7 @@ type CashExpensesViewProps = {
   cashBalance?: number | null;
   onRefreshCash?: () => void;
   onClose?: () => void;
+  onTransferNow?: (shortfall: number) => void;
   expenseDate: string;
   setExpenseDate: (next: string) => void;
   expenseTime: string;
@@ -39,8 +44,8 @@ type CashExpensesViewProps = {
   setExpenseTimeOpen: (next: boolean) => void;
   expenseCalendarOpen: boolean;
   setExpenseCalendarOpen: (next: boolean) => void;
-  expenseMode: "expense" | "deposit";
-  setExpenseMode: (next: "expense" | "deposit") => void;
+  expenseMode: ExpenseMode;
+  setExpenseMode: (next: ExpenseMode) => void;
   expenseTypes: string[];
   expenseType: string;
   setExpenseType: (next: string) => void;
@@ -48,14 +53,20 @@ type CashExpensesViewProps = {
   setExpenseAmount: (next: string) => void;
   expenseNote: string;
   setExpenseNote: (next: string) => void;
-  depositAmount: string;
-  setDepositAmount: (next: string) => void;
-  depositNote: string;
-  setDepositNote: (next: string) => void;
+  transferAmount: string;
+  setTransferAmount: (next: string) => void;
+  transferNote: string;
+  setTransferNote: (next: string) => void;
   accessoryId?: string;
   createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown> };
   createBankDeposit: {
-    mutateAsync: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<unknown>;
+    mutateAsync: (payload: {
+      date: string;
+      time?: string;
+      amount: number;
+      direction?: "wallet_to_bank" | "bank_to_wallet";
+      note?: string;
+    }) => Promise<unknown>;
   };
   CalendarModal: React.ComponentType<CalendarModalProps>;
   TimePickerModal: React.ComponentType<{
@@ -75,10 +86,34 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   other: "ellipsis-horizontal",
 };
 
+function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet: number, amount: number) {
+  if (mode === "bank_to_wallet") {
+    if (amount <= 0) {
+      return `You have ${wallet.toFixed(0)} shekels in the wallet.`;
+    }
+    const projected = wallet + amount;
+    return `You will have ${projected.toFixed(0)} shekels in the wallet after moving ${amount.toFixed(
+      0
+    )} from bank. (was ${wallet.toFixed(0)})`;
+  }
+
+  if (amount <= 0) {
+    return `You have ${wallet.toFixed(0)} shekels in the wallet. You can move up to ${wallet.toFixed(
+      0
+    )} to bank.`;
+  }
+
+  const projected = Math.max(wallet - amount, 0);
+  return `You can move up to ${wallet.toFixed(0)} shekels from the wallet. You will have ${projected.toFixed(
+    0
+  )} shekels in the wallet after moving ${amount.toFixed(0)} to bank. (was ${wallet.toFixed(0)})`;
+}
+
 export default function CashExpensesView({
   cashBalance,
   onRefreshCash,
   onClose,
+  onTransferNow,
   expenseDate,
   setExpenseDate,
   expenseTime,
@@ -96,10 +131,10 @@ export default function CashExpensesView({
   setExpenseAmount,
   expenseNote,
   setExpenseNote,
-  depositAmount,
-  setDepositAmount,
-  depositNote,
-  setDepositNote,
+  transferAmount,
+  setTransferAmount,
+  transferNote,
+  setTransferNote,
   accessoryId,
   createExpense,
   createBankDeposit,
@@ -107,16 +142,23 @@ export default function CashExpensesView({
   TimePickerModal,
   styles,
 }: CashExpensesViewProps) {
-  const cashValue = typeof cashBalance === "number" ? cashBalance : 0;
+  const walletValue = typeof cashBalance === "number" ? cashBalance : 0;
   const expenseAmountValue = Number(expenseAmount) || 0;
-  const depositAmountValue = Number(depositAmount) || 0;
-  const activeAmount = expenseMode === "expense" ? expenseAmountValue : depositAmountValue;
-  const walletAfter = cashValue - activeAmount;
-  const showOverCash = expenseMode === "expense" && expenseAmountValue > cashValue;
+  const transferAmountValue = Number(transferAmount) || 0;
+  const isExpense = expenseMode === "expense";
+  const isBankToWallet = expenseMode === "bank_to_wallet";
+  const isWalletToBank = expenseMode === "wallet_to_bank";
+  const shortfall = isExpense ? Math.max(expenseAmountValue - walletValue, 0) : 0;
+  const transferDisabled = isWalletToBank && transferAmountValue > walletValue;
+  const walletAfter = isExpense
+    ? walletValue - expenseAmountValue
+    : isBankToWallet
+      ? walletValue + transferAmountValue
+      : walletValue - transferAmountValue;
   const canSaveExpense =
-    expenseMode === "expense"
+    isExpense
       ? Boolean(expenseType.trim()) && expenseAmountValue > 0
-      : depositAmountValue > 0;
+      : transferAmountValue > 0 && !transferDisabled;
 
   const setExpenseNow = () => {
     const now = new Date();
@@ -129,9 +171,14 @@ export default function CashExpensesView({
     setExpenseTime(`${hours}:${minutes}`);
   };
 
+  const stepTransferAmount = (delta: number) => {
+    const current = Number(transferAmount) || 0;
+    setTransferAmount(String(Math.max(current + delta, 0)));
+  };
+
   const handleSave = async (resetAfter: boolean) => {
     const happened_at = buildHappenedAt({ date: expenseDate, time: expenseTime });
-    if (expenseMode === "expense") {
+    if (isExpense) {
       const amount = expenseAmountValue;
       if (!amount || amount <= 0 || !expenseType.trim()) {
         Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
@@ -156,20 +203,25 @@ export default function CashExpensesView({
       return;
     }
 
-    const amount = depositAmountValue;
+    const amount = transferAmountValue;
     if (!amount || amount <= 0) {
       Alert.alert("Missing amount", "Enter a valid amount.");
+      return;
+    }
+    if (transferDisabled) {
+      Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
       return;
     }
     await createBankDeposit.mutateAsync({
       date: expenseDate,
       time: expenseTime,
       amount,
-      note: depositNote.trim() ? depositNote.trim() : undefined,
+      direction: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
+      note: transferNote.trim() ? transferNote.trim() : undefined,
     });
     if (resetAfter) {
-      setDepositAmount("");
-      setDepositNote("");
+      setTransferAmount("");
+      setTransferNote("");
     }
     onRefreshCash?.();
     if (!resetAfter) {
@@ -184,14 +236,14 @@ export default function CashExpensesView({
         <Text style={styles.expenseTitle}>Add Expense</Text>
       </View>
       <View style={styles.modeRow}>
-        {Object.entries(MODE_LABELS).map(([key, label]) => (
+        {(Object.keys(MODE_LABELS) as ExpenseMode[]).map((key) => (
           <Pressable
             key={key}
             style={[styles.modeButton, expenseMode === key && styles.modeButtonActive]}
-            onPress={() => setExpenseMode(key as "expense" | "deposit")}
+            onPress={() => setExpenseMode(key)}
           >
             <Text style={[styles.modeText, expenseMode === key && styles.modeTextActive]}>
-              {label}
+              {MODE_LABELS[key]}
             </Text>
           </Pressable>
         ))}
@@ -229,18 +281,12 @@ export default function CashExpensesView({
             onClose={() => setExpenseTimeOpen(false)}
           />
         </View>
-        <Text style={styles.walletSentence}>You have {cashValue.toFixed(0)}₪ in cash.</Text>
-        {showOverCash ? (
-          <View style={styles.walletWarning}>
-            <Text style={styles.walletWarningText}>Amount exceeds current truck cash</Text>
-          </View>
-        ) : null}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
         >
           <View style={styles.formCard}>
-            {expenseMode === "expense" ? (
+            {isExpense ? (
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Expense type</Text>
                 <View style={styles.expenseTypeGrid}>
@@ -250,23 +296,11 @@ export default function CashExpensesView({
                     return (
                       <Pressable
                         key={type}
-                        style={[
-                          styles.expenseTypeCard,
-                          selected && styles.expenseTypeCardActive,
-                        ]}
+                        style={[styles.expenseTypeCard, selected && styles.expenseTypeCardActive]}
                         onPress={() => setExpenseType(type)}
                       >
-                        <Ionicons
-                          name={iconName}
-                          size={18}
-                          color={selected ? "#fff" : "#0a7ea4"}
-                        />
-                        <Text
-                          style={[
-                            styles.expenseTypeText,
-                            selected && styles.expenseTypeTextActive,
-                          ]}
-                        >
+                        <Ionicons name={iconName} size={18} color={selected ? "#fff" : "#0a7ea4"} />
+                        <Text style={[styles.expenseTypeText, selected && styles.expenseTypeTextActive]}>
                           {type.charAt(0).toUpperCase() + type.slice(1)}
                         </Text>
                       </Pressable>
@@ -275,12 +309,18 @@ export default function CashExpensesView({
                 </View>
                 <Text style={styles.label}>Amount</Text>
                 <TextInput
+                  accessibilityLabel="Expense amount"
                   style={styles.expenseAmountInput}
                   placeholder="0"
                   keyboardType="numeric"
                   value={expenseAmount}
                   onChangeText={setExpenseAmount}
                   inputAccessoryViewID={accessoryId}
+                />
+                <InlineWalletFundingPrompt
+                  walletAmount={walletValue}
+                  shortfall={shortfall}
+                  onTransferNow={shortfall > 0 ? () => onTransferNow?.(shortfall) : undefined}
                 />
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput
@@ -293,27 +333,47 @@ export default function CashExpensesView({
             ) : (
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Amount</Text>
-                <TextInput
-                  style={styles.expenseAmountInput}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  value={depositAmount}
-                  onChangeText={setDepositAmount}
-                  inputAccessoryViewID={accessoryId}
-                />
+                <View style={styles.transferAmountRow}>
+                  <Pressable
+                    accessibilityLabel="Decrease transfer amount"
+                    style={styles.transferAmountButton}
+                    onPress={() => stepTransferAmount(-1)}
+                  >
+                    <Ionicons name="remove" size={16} color="#0a7ea4" />
+                  </Pressable>
+                  <TextInput
+                    accessibilityLabel="Transfer amount"
+                    style={styles.transferAmountInput}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    value={transferAmount}
+                    onChangeText={setTransferAmount}
+                    inputAccessoryViewID={accessoryId}
+                  />
+                  <Pressable
+                    accessibilityLabel="Increase transfer amount"
+                    style={styles.transferAmountButton}
+                    onPress={() => stepTransferAmount(1)}
+                  >
+                    <Ionicons name="add" size={16} color="#0a7ea4" />
+                  </Pressable>
+                </View>
+                <Text style={styles.transferHelperText}>
+                  {formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
+                </Text>
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Add a note"
-                  value={depositNote}
-                  onChangeText={setDepositNote}
+                  value={transferNote}
+                  onChangeText={setTransferNote}
                 />
               </View>
             )}
             <View style={styles.walletTransition}>
               <Text style={styles.walletTransitionLabel}>Wallet:</Text>
               <Text style={styles.walletTransitionValue}>
-                {`${cashValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
+                {`${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
               </Text>
             </View>
           </View>
@@ -324,20 +384,14 @@ export default function CashExpensesView({
           <Pressable
             onPress={() => handleSave(true)}
             disabled={!canSaveExpense}
-            style={[
-              styles.expenseFooterSecondary,
-              !canSaveExpense && styles.expenseFooterDisabled,
-            ]}
+            style={[styles.expenseFooterSecondary, !canSaveExpense && styles.expenseFooterDisabled]}
           >
             <Text style={styles.expenseFooterSecondaryText}>Save & Add Another</Text>
           </Pressable>
           <Pressable
             onPress={() => handleSave(false)}
             disabled={!canSaveExpense}
-            style={[
-              styles.expenseFooterPrimary,
-              !canSaveExpense && styles.expenseFooterDisabled,
-            ]}
+            style={[styles.expenseFooterPrimary, !canSaveExpense && styles.expenseFooterDisabled]}
           >
             <Text style={styles.expenseFooterPrimaryText}>Save</Text>
           </Pressable>
@@ -346,5 +400,3 @@ export default function CashExpensesView({
     </View>
   );
 }
-
-

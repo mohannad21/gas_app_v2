@@ -43,6 +43,15 @@ jest.mock("@/hooks/useBankDeposits", () => ({
   useDeleteBankDeposit: () => ({ mutateAsync: jest.fn() }),
 }));
 
+jest.mock("@/hooks/useReports", () => ({
+  useDailyReportDayV2: () => ({
+    data: { date: "2025-01-01", events: [] },
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
+}));
+
 jest.mock("@/hooks/useInventory", () => ({
   useCreateRefill: () => ({ mutateAsync: jest.fn() }),
   useInitInventory: () => ({ mutateAsync: jest.fn() }),

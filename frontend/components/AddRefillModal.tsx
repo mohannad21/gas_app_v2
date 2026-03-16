@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { AxiosError } from "axios";
+import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 
 import { gasColor } from "@/constants/gas";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
 import {
@@ -196,12 +198,14 @@ export function RefillForm({
   containerStyle,
   scrollStyle,
   mode = "refill",
+  walletBalance = 0,
 }: AddRefillModalProps & {
   showHeader?: boolean;
   useCard?: boolean;
   containerStyle?: any;
   scrollStyle?: any;
   mode?: "refill" | "buy" | "return";
+  walletBalance?: number;
 }) {
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
@@ -621,6 +625,7 @@ export function RefillForm({
   const canEditBuy = !isReturnMode;
   const canEditReturn = !isBuyMode;
   const canEditMoney = !isReturnMode;
+  const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
   const showReturnToggle = !isBuyMode && !isReturnMode;
   const showEmptyHint = !isBuyMode && !isReturnMode;
 
@@ -1496,6 +1501,24 @@ export function RefillForm({
                           extraPaid > 0 ? `Extra: company owes ${formatMoney(extraPaid)}â‚ª` : null
                         }
                       />
+                      {canEditMoney ? (
+                        <InlineWalletFundingPrompt
+                          walletAmount={walletBalance}
+                          shortfall={refillWalletShortfall}
+                          onTransferNow={
+                            refillWalletShortfall > 0
+                              ? () =>
+                                  router.push({
+                                    pathname: "/expenses/new",
+                                    params: {
+                                      tab: "bank_to_wallet",
+                                      amount: refillWalletShortfall.toFixed(0),
+                                    },
+                                  })
+                              : undefined
+                          }
+                        />
+                      ) : null}
                     </View>
                   </View>
                   {canEditMoney ? (

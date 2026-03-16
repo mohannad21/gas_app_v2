@@ -430,8 +430,12 @@ def build_expense_lines(expense: Expense) -> list[LedgerLine]:
       lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
     lines.append(LedgerLine(account=ACCOUNT_EXPENSE, unit=UNIT_MONEY, amount=expense.amount))
   elif expense.kind == "deposit":
-    lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
-    lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
+    if expense.paid_from == "bank":
+      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-expense.amount))
+      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=expense.amount))
+    else:
+      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
+      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
 
   return lines
 

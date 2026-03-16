@@ -5,10 +5,15 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import CashAdjustment, Expense
+from app.services.ledger import sum_cash
 from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
 from app.services.posting import derive_day, normalize_happened_at, post_cash_adjustment, post_expense, reverse_source
 
 router = APIRouter(prefix="/cash", tags=["cash"])
+
+
+def _transfer_direction(expense: Expense) -> str:
+  return "bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank"
 
 
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
@@ -190,6 +195,7 @@ def list_bank_deposits(
       id=row.id,
       happened_at=row.happened_at,
       amount=row.amount,
+      direction=_transfer_direction(row),
       note=row.note,
     )
     for row in rows
@@ -207,9 +213,21 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
         id=existing.id,
         happened_at=existing.happened_at,
         amount=existing.amount,
+        direction=_transfer_direction(existing),
         note=existing.note,
       )
   happened_at = normalize_happened_at(payload.happened_at)
+  if payload.direction == "wallet_to_bank":
+    wallet_available = sum_cash(session, up_to=happened_at)
+    if payload.amount > wallet_available:
+      raise HTTPException(
+        status_code=400,
+        detail={
+          "code": "wallet_insufficient",
+          "available": wallet_available,
+          "attempt": payload.amount,
+        },
+      )
   expense = Expense(
     request_id=payload.request_id,
     happened_at=happened_at,
@@ -217,7 +235,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
     kind="deposit",
     category_id=None,
     amount=payload.amount,
-    paid_from=None,
+    paid_from="bank" if payload.direction == "bank_to_wallet" else "cash",
     note=payload.note,
     vendor=None,
     is_reversed=False,
@@ -230,6 +248,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
     id=expense.id,
     happened_at=expense.happened_at,
     amount=expense.amount,
+    direction=payload.direction,
     note=expense.note,
   )
 

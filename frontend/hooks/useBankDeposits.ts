@@ -26,10 +26,12 @@ export function useCreateBankDeposit() {
     mutationFn: createBankDeposit,
     onError: (err) => {
       const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to save deposit: ${message}`);
+      showToast(`Failed to save transfer: ${message}`);
     },
     onSuccess: (_, variables) => {
-      showToast("Deposit saved");
+      const directionLabel =
+        variables.direction === "bank_to_wallet" ? "Bank to Wallet saved" : "Wallet to Bank saved";
+      showToast(directionLabel);
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
@@ -43,10 +45,10 @@ export function useDeleteBankDeposit() {
     mutationFn: ({ id }: { id: string; date: string }) => deleteBankDeposit(id),
     onError: (err) => {
       const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to remove deposit: ${message}`);
+      showToast(`Failed to remove transfer: ${message}`);
     },
     onSuccess: (_, variables) => {
-      showToast("Deposit removed");
+      showToast("Transfer removed");
       queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
