@@ -2,7 +2,9 @@
 
 This project is a lightweight, distributor-first operations system for managing LPG cylinder business workflows end-to-end: customer orders, cylinder exchanges, inventory movements, company refills and settlements, cash flow, and day-by-day reporting. The foundation remains ledger-first accounting: every real-world action posts canonical ledger entries, and all balances are derived deterministically from that ledger.
 
-Customer and company balances are shared relationship balances, not per-screen approximations. The UI does not invent accounting logic independently. It renders server-authored truth using a shared transition wording engine so that the same balance fact is described consistently in data-entry previews, Current Balances, day cards, event cards, and expanded event detail.
+Customer and company balances are shared relationship balances, not per-screen approximations. The backend remains the source of truth for reports and accounting state. The frontend still calculates some preview and display helpers today, but the long-term direction is to keep important accounting meaning aligned with backend truth.
+
+The wording in this document is target wording direction, not a statement that every visible label in the UI is already finalized. Final wording is still being cleaned up across customer wording, company wording, filter wording, and card wording.
 
 The daily report is intentionally a layered operational surface:
 - Current Balances
@@ -11,6 +13,11 @@ The daily report is intentionally a layered operational surface:
 - expanded event detail
 
 Day detail is intentionally lazy-loaded on expand rather than eagerly prefetched. Performance and determinism are product requirements because a slow or inconsistent report directly reduces user trust.
+
+Status framing used throughout this proposal:
+- Current = already in the app now
+- Next = being changed soon
+- Later = future work after current cleanup tickets
 
 2) Background & Problem Statement
 
@@ -109,12 +116,12 @@ Customer-side
 Company-side
 - Refill
 - Company payment
-- Company buy iron / empty shells
-- Company settle helper / settle-only actions
+- Buy Full
 
 Operational
 - Expense
-- Bank deposit
+- Wallet to Bank
+- Bank to Wallet
 - Inventory adjustment
 - Cash adjustment
 - Init / opening balances
@@ -395,26 +402,15 @@ Company Payment
 - Collapsed UI emphasizes resulting company money state
 - Expanded detail shows company money and cash before/after
 
-Company Buy Iron / Empty Shells
+Buy Full
 - Scope: company + operational
-- Operational meaning: buy empty shells/new iron from company
+- Operational meaning: company-side purchase activity shown in Company Activities under the Buy Full label
 - Changes:
   - company money
   - inventory
   - cash
-- Collapsed UI emphasizes bought shells and any unpaid remainder
+- Collapsed UI emphasizes the purchase and any unpaid remainder
 - Expanded detail shows company money, cash, and relevant inventory before/after
-
-Company Settle Helper / Settle-Only Company Actions
-- Scope: company + operational
-- Operational meaning: settlement-oriented cylinder action such as receive full only or return empty only
-- Implementation may reuse refill posting underneath, but product semantics remain settlement-oriented
-- Changes:
-  - company 12kg and/or 48kg
-  - inventory
-  - sometimes no money
-- Collapsed UI should distinguish settle-only from normal refill
-- Expanded detail shows company cylinder before/after and relevant inventory deltas
 
 6.3 Operational Events
 
@@ -425,14 +421,23 @@ Expense
 - Collapsed UI emphasizes expense amount and category
 - Expanded detail shows cash before/after
 
-Bank Deposit
+Wallet to Bank
 - Scope: operational
-- Operational meaning: transfer from cash to bank, not outside money received
+- Operational meaning: move money from wallet / cash to bank
 - Changes:
   - cash
   - bank
 - Collapsed UI emphasizes transfer semantics
 - Expanded detail shows cash before/after and bank before/after
+
+Bank to Wallet
+- Scope: operational
+- Operational meaning: move money from bank to wallet / cash
+- Changes:
+  - bank
+  - cash
+- Collapsed UI emphasizes transfer semantics
+- Expanded detail shows bank before/after and cash before/after
 
 Inventory Adjustment
 - Scope: operational
@@ -477,7 +482,21 @@ Deterministic ordering
 - Users must trust that before/after is correct.
 - Timeline order and boundaries must remain stable.
 
-7.2 Wording Contract (Normative)
+7.2 Wording Direction (Target, Not Final)
+
+This section describes the target wording direction.
+
+Current
+- The app already uses shared wording helpers in several places.
+- Some screens still use older wording or placeholder wording.
+
+Next
+- Keep moving visible wording toward one shared contract across balances, previews, day cards, event rows, and expanded detail.
+- Keep customer wording, company wording, filter wording, and card wording aligned where practical.
+
+Later
+- Final wording cleanup can happen after the active screen/layout cleanup work is complete.
+- Exact literal strings can still change before wording is considered frozen.
 
 A. Current-State Wording
 
@@ -535,11 +554,8 @@ Rules
 - use "now" only for:
   - zero -> nonzero
   - the second line of a cross-zero transition
-- settled wording must stay exactly:
-  - Money settled ✅
-  - 12kg settled ✅
-  - 48kg settled ✅
-  - All settled ✅
+- settled wording should stay simple and consistent across screens
+- exact final literals are still being cleaned up in the UI
 
 C. Cross-Zero Wording
 
@@ -602,7 +618,7 @@ Customer Management
 
 Customer detail should include
 - top customer header block
-- Last activity
+- Last order for the current phase
 - balances
 - Cylinders Ordered
 - systems
@@ -615,7 +631,14 @@ This page is no longer mainly an orders screen. It is the main place to understa
 7.4.1 Customer Detail Page Behavior (Recommended)
 
 Header / summary direction
-- use Last activity rather than Last order as the primary recent-state summary concept
+- Current
+  - customer header uses Last order
+  - Phone and Last order sit together in the header
+  - customer pages show customer balances only
+- Next
+  - customer balances stay collapsed by default and expand on tap
+- Later
+  - Last activity can be reconsidered later if product direction changes
 - balances remain customer-level summaries
 - Cylinders Ordered is a customer-level lifetime summary of installed / sold cylinders by gas type
 
@@ -624,7 +647,29 @@ Activity behavior
 - expandable activity detail should reuse the same structured explanation style already preferred for report expanded detail
 - systems appear as context where relevant, not as separate balance owners
 
-7.4.2 Future Customer vs System Metadata Direction
+7.4.2 Balance Placement Rules (Current / Next / Later)
+
+Customer pages
+- Current
+  - show customer balances only
+- Next
+  - keep customer balances collapsed by default
+  - tap to expand / collapse
+- Later
+  - wording polish can continue without changing the placement rule
+
+Company Activities
+- Current
+  - show company balances only
+- Next
+  - place company balances under the add button
+  - place company balances above the first list item
+  - keep company balances collapsed by default
+  - tap to expand / collapse
+- Later
+  - additional company-activity wording cleanup can happen later without changing the placement rule
+
+7.4.3 Future Customer vs System Metadata Direction
 
 Future customer-level fields
 - active / inactive customer
@@ -643,7 +688,7 @@ Canonical ownership rule
 
 Company
 - Company balance and history
-- Refill and settle history
+- Refill / Company Payment / Buy Full history
 
 Reporting
 - Day report
@@ -652,6 +697,15 @@ Reporting
 Admin / Settings
 - Users / roles
 - Catalog / configuration
+
+Expense categories
+- Current
+  - expenses use the currently available categories
+  - expense filters should work with the categories already available in the app
+- Next
+  - do not treat category management as finished
+- Later
+  - allow adding more expense types in Config / Settings
 
 8) Data Integrity & Consistency Strategy
 
@@ -696,11 +750,14 @@ Backend
 - builds report payloads from canonical ledger truth
 
 Frontend
-- renders server-authored report truth
-- uses shared transition formatter for visible wording
-- caches report data but does not invent accounting semantics
+- renders server-authored report truth for reports
+- still calculates some preview and display helpers today
+- uses shared transition helpers for visible wording direction
+- long-term goal is to keep important accounting logic in the backend
 
 9.2 Backend Modules (Recommended Boundaries)
+
+These boundaries are directional and do not imply that every folder or file is already in its final form.
 
 routers/
 - domain write endpoints and report endpoints
@@ -800,10 +857,10 @@ Minimum event set
 - customer_adjust
 - refill
 - company_payment
-- company_buy_iron
-- company_settle helper / settle-only company actions
+- buy_full
 - expense
-- bank_deposit
+- wallet_to_bank
+- bank_to_wallet
 - adjust
 - cash_adjust
 - init / opening events
@@ -817,8 +874,9 @@ Expansion is not limited to cash + inventory. It can show any relevant relations
 10.2.3 Server/UI Responsibility Boundary (MUST)
 
 Frontend
-- renders current-state and transition wording using the shared formatter
-- does not compute authoritative running balances
+- renders current-state and transition wording using shared helpers
+- may still compute preview/display helpers locally
+- does not own authoritative report balances
 
 Backend
 - provides event ordering, balance transitions, and before/after fields
@@ -889,19 +947,19 @@ Edits use reverse + repost
 11.3 Logical Components
 
 Backend
-- routers/*: API surfaces
-- services/posting.py: business-to-ledger mapping, reversal logic
-- services/ledger.py: sums, snapshots, boundaries
-- services/reports.py: daily_v2 and day_v2 assembly
-- models.py: source tables + ledger entries
-- schemas.py: validators and report contracts
+- API surfaces
+- posting logic
+- ledger helpers
+- report assembly
+- source tables + ledger entries
+- schemas and report contracts
 
 Frontend
-- lib/api.ts: typed client
-- types/domain.ts: schemas and types
-- lib/balanceTransitions.ts: shared visible wording path
-- app/(tabs)/reports/*: report screen
-- hooks/*: data fetching and caching
+- typed API client
+- schemas and types
+- shared wording helpers
+- report screen
+- data fetching and caching
 
 11.4 Data Model (Architecture-Relevant Fields)
 
