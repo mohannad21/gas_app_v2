@@ -14,6 +14,13 @@ jest.mock("@/hooks/useCustomers", () => ({
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
+jest.mock("@/hooks/useCompanyBalances", () => ({
+  useCompanyBalances: () => ({
+    data: { company_money: 0, company_cyl_12: 0, company_cyl_48: 0 },
+    isSuccess: true,
+  }),
+}));
+
 jest.mock("@/hooks/useCollections", () => ({
   useCollections: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCollection: () => ({ mutateAsync: jest.fn() }),
