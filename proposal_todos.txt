@@ -1,146 +1,254 @@
 Proposal / Product TODOs
 
-This file lists open items only.
+This file is the working backlog based on the latest product direction and comments.
 
-Already verified in code and removed from the open backlog:
-- bottom tabs currently exist as `Dashboard`, `Customers`, `New`, `Daily`, and `Account`
-- `Customers` is a real destination with `+ New Customer`
-- Customers tab already has search, grouped filters, customer-only balances, and customer list layout
-- customer balances on customer-facing pages are customer-only and collapsible
-- customer header currently uses `Last order`
-- customer detail already shows `Cylinders Ordered` by `12kg` and `48kg`
-- `New` already has the 4 operational sections
-- New-page top chrome cleanup and filter-row placement are already implemented
-- Company Activities already has a collapsible company-balances section on the New page
-- New-page filter labels already use `Company Payment`, `Buy Full`, `Wallet to Bank`, `Bank to Wallet`, `Inventory Adjustment`, and `Cash Adjustment`
-- report contracts already use `day_v2` / `daily_v2`
-- day expansion is already lazy-loaded and the report screen already uses `FlatList` and memoized day rows
-- deterministic report ordering, grouped-event behavior, reverse-plus-repost edit behavior, and opening/init visibility are already implemented in backend/report code
-- report/backend/frontend test coverage already exists for many report-contract, ordering, grouping, and expanded-detail cases
+Principle
+- first fix structure of tabs, pages, lists, and visible distributor information
+- then implement missing functional parts
+- then do one full pass for design, style, wording, and UI consistency
 
-1. Documentation and alignment
+1. Immediate cleanup and consistency audit
 
-- Merge `scripts/distributor_app_product_summary.txt` into `proposal.txt`.
-- Keep one final proposal document and maintain open work in this TODO file.
-- Recheck the merged document for duplicated sections, outdated wording, and conflicting roadmap items.
-- Confirm one event catalog shared across proposal, product direction, backend contracts, and frontend labels.
-- Confirm one wording contract shared across balances, previews, day cards, event rows, and expanded detail.
+- scan backend and frontend for redundant code, dead code, unused code, and stale code paths
+- remove dead code left behind from earlier UI iterations
+- verify all entry screens show newly created activities in the list directly below the add-activity bar
+- fix any place where data is entered but the new item does not appear in the visible list
+- specifically fix the current gap where refills appear in Daily but do not appear correctly under Add Company Activity
+- verify this list-sync rule everywhere data is entered:
+  - Customer Activities
+  - Company Activities
+  - Expenses
+  - Ledger Adjustments
+  - any other add/update flow that should immediately reflect in the visible operational list
 
 2. Structure of tabs, pages, and visible distributor information
 
 This category should be finished first.
 
-- Recheck the full page/tab structure end to end so the distributor sees the right information in the right destination.
-- Keep `Customers`, `New`, `Daily`, `Dashboard`, and `Account` conceptually clean and non-overlapping.
-- Recheck Company Activities list behavior after the proposal/product merge so it matches the intended product model end to end.
-- Complete the Expenses section end to end around Expense, Wallet to Bank, and Bank to Wallet.
-- Keep business settings under Settings, not personal Profile.
-- Finalize the full Settings catalog list.
-- Build the full Dashboard with KPIs and charts.
-- Finalize the version-1 dashboard chart list.
-- Add billing screen in Account.
+- recheck the full page/tab structure end to end so the distributor sees the right information in the right destination
+- keep `Customers`, `New`, `Daily`, `Dashboard`, and `Account` conceptually clean and non-overlapping
+- keep business settings under Settings, not personal Profile
+- finalize the full Settings catalog list
+- complete the Expenses section end to end around:
+  - Expense
+  - Wallet to Bank
+  - Bank to Wallet
 
-3. Missing functional parts after structure is stable
+3. Balance and list structure changes
 
-This category should be handled after the page/tab structure is stable.
+Customers / add customer destination
+- on the customer-facing add/list screen, replace the current balance section with 6 top summary boxes
+- first row, in this exact order:
+  - cash debt
+  - 12kg debt
+  - 48kg debt
+- second row, in this exact order:
+  - cash credit
+  - 12kg credit
+  - 48kg credit
+- each box should show:
+  - number of customers
+  - total amount / total cylinders
+- keep the wording compact because there is not enough room for full sentences
+- each box can use 2 short values, for example:
+  - customer count
+  - amount / cylinders count
+- each value can have one short label only
+- never show negative numbers in these customer debt/credit boxes
+- the debt/credit label itself should carry the meaning
+- after these boxes are implemented, remove the old balance section from that screen
 
-Customers and systems
-- Recheck whether Security Check needs a third level later: `All / Done / Undone`.
-- Improve Add / Update Systems UI.
-- Block activities on negative systems.
-- Finalize the exact technical definition of a negative system.
-- Verify whether backend contracts should expose `Cylinders Ordered` totals directly instead of relying on frontend-derived totals.
+Company Activities
+- on Add Company Activity, replace the current balance section with 3 top summary boxes:
+  - wallet balance
+  - 12kg balance
+  - 48kg balance
+- signed values are allowed here
+- use the backend sign meaning unless product decides to remap it visually
+- current backend meaning to verify in UI wording:
+  - positive money means: you owe company
+  - negative money means: company owes you
+- cylinder wording must also be checked against backend semantics before the final note is frozen
+- after these boxes are implemented, remove the old company balance section from that screen
+
+Customer history / customer view
+- apply the same balance-display idea to the list of activities inside the customer view where it makes sense
+- keep customer history cards aligned with the same operational meaning used in Daily and Add lists
+
+4. Missing functional parts after structure is stable
+
+Customer and system behavior
+- recheck whether Security Check needs a third level later: `All / Done / Undone`
+- improve Add / Update Systems UI
+- remove the unnecessary search field from system-type selection where it should not exist
+- replace that with a button to manage the list of system types
+- allow adding more system types
+- allow removing a system type only if it has never been used by any customer
+- allow renaming an existing system type
+- clarify whether "negative systems" really means inactive systems or something else
+- finalize the exact technical definition of a negative system
+- block activities on that invalid system state once the definition is final
+- verify whether backend contracts should expose `Cylinders Ordered` totals directly instead of relying on frontend-derived totals
 
 Company / wallet / payment flows
-- Finalize the exact Company Activities type list after full code review.
-- Enforce that `Wallet to Bank` is limited by the current Wallet amount.
-- Ensure `Bank to Wallet` is supported cleanly across the intended entry flow.
-- Add or standardize an `Add money from bank` action on distributor-paid flows.
-- Apply that funding action to flows such as Expense, Refill, Company Payment, customer payout, and future distributor-paid actions.
-- Support negative-cash prevention or warning on refill and similar payment-heavy flows.
+- finalize the exact Company Activities type list after full code review
+- enforce that `Wallet to Bank` is limited by the current Wallet amount
+- ensure `Bank to Wallet` is supported cleanly across the intended entry flow
+- add or standardize an `Add money from bank` action on distributor-paid flows
+- apply that funding action to flows such as:
+  - Expense
+  - Refill
+  - Company Payment
+  - customer payout
+  - any future distributor-paid action
+- support negative-cash prevention or warning on refill and similar payment-heavy flows
+
+Expenses and settings
+- add a button for expense-type adjustment / management
+- that button should lead to the page where expense types can be managed and new ones can be added
+- keep expense-category creation/management under Config / Settings
+
+Ledger adjustments
+- fix ledger adjustment money behavior
+- fix ledger adjustment cylinder behavior
+- verify ledger adjustments work correctly both in saving and in visible list/report output
 
 Daily report / reporting logic
-- Fix remaining daily-report issues where activities are missing from lists or reports.
-- Fix any remaining wrong ordering in the daily report.
-- Prevent customer initialization from appearing as a normal day activity when it should stay out of the day timeline.
-- Remove balances that should not appear at daily report level 4.
-- When expanding a day, remove redundant end-of-day balance boxes that do not belong there.
-- Keep expanding a day focused on activities, not unrelated redundant balance boxes.
-- Track report-generation latency, day-detail fetch latency, payload size, and posting/report errors.
+- fix remaining daily-report issues where activities are missing from lists or reports
+- fix any remaining wrong ordering in the daily report
+- when an expanded activity shows ledger-change boxes, keep the order stable everywhere when possible
+- if 3 boxes are shown, use this order:
+  - full
+  - empty
+  - wallet / cash
+- if 5 boxes are shown, use this order:
+  - full
+  - empty
+  - full
+  - empty
+  - wallet / cash
+- customer initialization should be included in customer activity view
+- customer initialization should not appear in Daily as a normal day activity
+- remove balances that should not appear at daily report level 4
+- remove the redundant end-of-day ledger summary boxes shown at the end of each day
+- keep expanded day content focused on activities, not redundant closing balance boxes
+- track report-generation latency, day-detail fetch latency, payload size, and posting/report errors
 
-Auth / permissions / reminders / pricing
-- Build the proper auth foundation beyond the current stub state.
-- Implement first-login credential flow, forced password change for temporary credentials, and biometric unlock/session unlock.
-- Implement worker roles and restrictions.
-- Define the detailed role matrix for owner / manager / worker.
-- Build the minimum reminder version for incomplete payment, incomplete empties, and follow-up cases.
-- Add reminder list and basic reminder actions.
-- Finalize the reminder schema and quick actions.
-- Enforce monthly prices before the first refill of the month.
-- Save selling price at sale time.
-- Begin cost-layer / FIFO design for later true profitability.
+5. Deferred design, style, wording, and UX polish
 
-4. Deferred design, style, wording, and UX polish
+This category should be handled later in one full pass, after structure and missing functional parts are stable.
 
-This category should be handled later in one pass, after structure and missing functional parts are stable.
+- continue cleaning up wording across customer wording, company wording, filter wording, and card wording
+- rename remaining user-facing `cash` wording to `Wallet` wherever it refers to the distributor's on-hand ledger money
+- keep the daily-report top money value as the user-facing Wallet reference
+- finish applying `Wallet to Bank` / `Bank to Wallet` wording consistently across entry forms and supporting screens
+- review all payment-entry screens after the Wallet rename to keep wording and behavior consistent
+- keep customer activities visually aligned with Daily activities as much as practical
+- keep the styles of all history/card lists aligned across the entire app, especially under:
+  - Add Customer Activity
+  - Add Company Activity
+  - Add Customer / Customers destination
+- keep company balance wording structurally aligned with customer balance wording and Daily
+- remove the confusing third/result box everywhere it still exists in the 4 add tabs:
+  - Customer Activities
+  - Company Activities
+  - Expenses
+  - Ledger Adjustments
+- improve wording around the interactive balance/red box where it still exists
+- unify notification style across the app
+- keep notifications short and easy to understand
+- align tabs and layouts consistently
+- remove confusing or redundant information across screens
+- keep forms simple and mobile-friendly
+- finalize the icon system for all activity types
+- keep the customer/company/distributor relationship icon direction available for replacement/exchange semantics
+- finalize customer balance labels
+- finalize company balance labels
 
-- Continue cleaning up wording across customer wording, company wording, filter wording, and card wording.
-- Rename remaining user-facing `cash` wording to `Wallet` wherever it refers to the distributor's on-hand ledger money.
-- Keep the daily-report top money value as the user-facing Wallet reference.
-- Finish applying `Wallet to Bank` / `Bank to Wallet` wording consistently across entry forms and supporting screens.
-- Review all payment-entry screens after the Wallet rename to keep wording and behavior consistent.
-- Keep customer activities visually aligned with Daily activities as much as practical.
-- Keep company balance wording structurally aligned with customer balance wording.
-- Remove the confusing third/result box from the daily-report UX everywhere it still exists.
-- Improve wording around the interactive balance/red box where still needed.
-- Unify notification style across the app.
-- Keep notifications short and easy to understand.
-- Align tabs and layouts consistently.
-- Remove confusing or redundant information across screens.
-- Keep forms simple and mobile-friendly.
-- Finalize the icon system for all activity types.
-- Keep the customer/company/distributor relationship icon direction available for replacement/exchange semantics.
-- Finalize customer balance labels.
-- Finalize company balance labels.
+6. Documentation and alignment
 
-5. Testing and review workflow
+- merge `scripts/distributor_app_product_summary.txt` into `proposal.txt`
+- keep one final proposal document and maintain open work in this TODO file
+- recheck the merged document for duplicated sections, outdated wording, and conflicting roadmap items
+- confirm one event catalog shared across proposal, product direction, backend contracts, and frontend labels
+- confirm one wording contract shared across balances, previews, day cards, event rows, and expanded detail
 
-- Expand regression coverage where current tests still leave gaps.
-- Improve screenshot/testing workflow through stable web/demo rendering and browser screenshots for fast UI review.
+7. Testing and review workflow
 
-6. Backoffice, billing, and subscription administration
+- expand regression coverage where current tests still leave gaps
+- improve screenshot/testing workflow through stable web/demo rendering and browser screenshots for fast UI review
 
-- Build the developer backoffice web app.
-- Add distributor management for add/deactivate/reactivate, billing history, suspension, invites, resets, and plan/status view.
-- Add subscription and billing controls for plan changes, price changes, paid months, manual payments, and active/suspended distributor management.
-- Keep billing history immutable and effective-date-based.
-- Finalize the subscription plan structure and pricing model in Backoffice.
+8. Auth, roles, logging, and security
 
-7. Near future
+- build the proper auth foundation beyond the current stub state
+- implement first-login credential flow, forced password change for temporary credentials, and biometric unlock/session unlock
+- implement worker roles and restrictions
+- define the detailed role matrix for owner / manager / worker
+- improve logging beyond current simple behavior
+- add structured logs, request tracing, actor/user context, and better error context
+- keep security and authorization separated cleanly by role
 
-- Add better role/permission management polish.
-- Add worker/team management polish.
-- Add audit history improvements.
-- Add exports.
-- Add full subscription administration flows.
-- Add multilingual support for system types and catalogs.
-- Finalize multilingual implementation timing and scope.
-- Add richer reminder workflows and filters.
+9. Reminders
 
-8. Far future
+- build the minimum reminder version for incomplete payment, incomplete empties, and follow-up cases
+- add reminder list and basic reminder actions
+- finalize the reminder schema and quick actions
+- add richer reminder workflows and filters
 
-- Build the future customer app.
-- Build the future company web/mobile app.
-- Add reward / loyalty features if still desired later.
-- Add forecasting / prediction for sales and customer ordering.
-- Add more advanced company-distributor linking workflows.
-- Add map pin support for customer location while keeping text location description.
-- Add signed health/security-check workflow linked to customer/system records.
-- Add photo capture/upload for stove, system, and cylinder place as part of that safety workflow.
-- Add future system/safety metadata such as gas type, stove type, burners, and related fields if still needed.
+10. Pricing, costing, and profitability
 
-9. Open questions to finalize later
+- enforce monthly prices before the first refill of the month
+- save selling price at sale time
+- begin cost-layer / FIFO design for later true profitability
+- keep later profitability/costing logic on the roadmap without mixing it into current operational cleanup work
 
-- Finalize the full health/security-check schema and workflow.
-- Decide exact future scope for multilingual labels and catalogs.
-- Decide exact future scope for support details and feature flags in Backoffice.
+11. Backoffice, billing, and subscription administration
+
+- build the developer backoffice web app
+- add distributor management for:
+  - add
+  - deactivate / reactivate
+  - billing history
+  - suspension
+  - invites
+  - resets
+  - plan / status view
+- add subscription and billing controls for:
+  - plan changes
+  - price changes
+  - paid months
+  - manual payments
+  - active / suspended distributor management
+- keep billing history immutable and effective-date-based
+- finalize the subscription plan structure and pricing model in Backoffice
+
+12. Near future
+
+- add billing screen in Account
+- build the full Dashboard with KPIs and charts
+- finalize the version-1 dashboard chart list
+- add better role/permission management polish
+- add worker/team management polish
+- add audit history improvements
+- add exports
+- add full subscription administration flows
+- add multilingual support for system types and catalogs
+- finalize multilingual implementation timing and scope
+
+13. Far future
+
+- build the future customer app
+- build the future company web/mobile app
+- add reward / loyalty features if still desired later
+- add forecasting / prediction for sales and customer ordering
+- add more advanced company-distributor linking workflows
+- add map pin support for customer location while keeping text location description
+- add signed health/security-check workflow linked to customer/system records
+- add photo capture/upload for stove, system, and cylinder place as part of that safety workflow
+- add future system/safety metadata such as gas type, stove type, burners, and related fields if still needed
+
+14. Open questions to finalize later
+
+- finalize the full health/security-check schema and workflow
+- decide exact future scope for multilingual labels and catalogs
+- decide exact future scope for support details and feature flags in Backoffice
