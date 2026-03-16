@@ -5,6 +5,10 @@ import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Mo
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
+import {
+  CustomerListSubFilter,
+  CustomerListTopFilter,
+} from "@/components/customers/customerListFilters";
 import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useDeleteCashAdjustment } from "@/hooks/useCash";
@@ -31,20 +35,6 @@ import {
   gasTypes,
 } from "@/components/PriceMatrix";
 import { BankDeposit, CashAdjustment, CollectionEvent, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
-
-type CustomerFilter =
-  | "all"
-  | "money_debt"
-  | "money_credit"
-  | "missing_12kg"
-  | "credit_12kg"
-  | "missing_48kg"
-  | "credit_48kg"
-  | "system_active"
-  | "system_requires_check"
-  | "system_no_check"
-  | "system_future_check"
-  | "system_due_check";
 
 type AddMode =
   | "customer_activities"
@@ -1546,14 +1536,21 @@ const formatDateTime = (value?: string) => {
   );
 }
 
-export function AddCustomersSection() {
+export function AddCustomersSection({
+  searchQuery = "",
+  topFilter = "all",
+  subFilter = "all",
+}: {
+  searchQuery?: string;
+  topFilter?: CustomerListTopFilter;
+  subFilter?: CustomerListSubFilter;
+}) {
   const customersQuery = useCustomers();
   const ordersQuery = useOrders();
   const systemsQuery = useSystems();
   const deleteCustomer = useDeleteCustomer();
   const customers = customersQuery.data ?? [];
   const orders = ordersQuery.data ?? [];
-  const [customerFilter, setCustomerFilter] = useState<CustomerFilter>("all");
   const [confirmCustomerId, setConfirmCustomerId] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
@@ -1575,67 +1572,64 @@ export function AddCustomersSection() {
   }, [systemsQuery.data]);
 
   const todayKey = toDateKey(new Date());
-  const customerFilters = [
-    { id: "all", label: "All" },
-    { id: "money_debt", label: "Money debt" },
-    { id: "money_credit", label: "Money credit" },
-    { id: "missing_12kg", label: "Missing 12kg" },
-    { id: "credit_12kg", label: "Credit 12kg" },
-    { id: "missing_48kg", label: "Missing 48kg" },
-    { id: "credit_48kg", label: "Credit 48kg" },
-    { id: "system_active", label: "Active systems" },
-    { id: "system_requires_check", label: "Requires health check" },
-    { id: "system_no_check", label: "No health check" },
-    { id: "system_future_check", label: "Future check" },
-    { id: "system_due_check", label: "Check due" },
-  ] as const;
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
 
   const filteredCustomers = useMemo(() => {
     const rows = customers.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    if (customerFilter === "all") return rows;
     return rows.filter((customer) => {
+      if (deferredSearchQuery) {
+        const haystack = [
+          customer.name,
+          customer.phone,
+          customer.note,
+          customer.address,
+        ]
+          .map((value) => (value ?? "").toLowerCase())
+          .join("\n");
+        if (!haystack.includes(deferredSearchQuery)) {
+          return false;
+        }
+      }
+
       const money = Number(customer.money_balance ?? 0);
       const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
       const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
       const systems = systemsByCustomer.get(customer.id) ?? [];
       const hasActive = systems.some((system) => system.is_active);
       const requiresCheck = systems.some((system) => system.requires_security_check);
-      const noCheck = systems.some((system) => !system.requires_security_check);
-      const dueCheck = systems.some(
-        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
-      );
-      const futureCheck = systems.some(
-        (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
-      );
+      const inactiveSystems = systems.length === 0 || !hasActive;
 
-      switch (customerFilter) {
-        case "money_debt":
-          return money > 0;
-        case "money_credit":
-          return money < 0;
-        case "missing_12kg":
-          return cyl12 > 0;
-        case "credit_12kg":
-          return cyl12 < 0;
-        case "missing_48kg":
-          return cyl48 > 0;
-        case "credit_48kg":
-          return cyl48 < 0;
-        case "system_active":
-          return hasActive;
-        case "system_requires_check":
-          return requiresCheck;
-        case "system_no_check":
-          return noCheck;
-        case "system_future_check":
-          return futureCheck;
-        case "system_due_check":
-          return dueCheck;
+      switch (topFilter) {
+        case "money":
+          if (subFilter === "debt") return money > 0;
+          if (subFilter === "credit") return money < 0;
+          return true;
+        case "cyl12":
+          if (subFilter === "debt") return cyl12 > 0;
+          if (subFilter === "credit") return cyl12 < 0;
+          return true;
+        case "cyl48":
+          if (subFilter === "debt") return cyl48 > 0;
+          if (subFilter === "credit") return cyl48 < 0;
+          return true;
+        case "systems":
+          if (subFilter === "active") return hasActive;
+          if (subFilter === "inactive") return inactiveSystems;
+          return true;
+        case "security_check":
+          if (subFilter === "required") return requiresCheck;
+          if (subFilter === "not_required") return !requiresCheck;
+          return true;
         default:
           return true;
       }
     });
-  }, [customerFilter, customers, systemsByCustomer, todayKey]);
+  }, [customers, deferredSearchQuery, subFilter, systemsByCustomer, topFilter]);
+
+  const customerListEmptyMessage =
+    deferredSearchQuery || topFilter !== "all" || subFilter !== "all"
+      ? "No customers match these filters."
+      : "No customers yet.";
 
   useFocusEffect(
     useCallback(() => {
@@ -1667,37 +1661,20 @@ export function AddCustomersSection() {
           </Pressable>
         </View>
       )}
-      <View style={styles.filterSection}>
-        <View style={styles.filterRow}>
-          {customerFilters.map((filter) => {
-            const active = customerFilter === filter.id;
-            return (
-              <Pressable
-                key={filter.id}
-                onPress={() => setCustomerFilter(filter.id)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
       <FlatList
         key="customers-list"
         data={filteredCustomers}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ gap: 10, paddingTop: 6 }}
-        ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>No customers yet.</Text> : null}
+        ListEmptyComponent={!customersQuery.isLoading ? <Text style={styles.meta}>{customerListEmptyMessage}</Text> : null}
         renderItem={({ item }) => {
           const money = Number(item.money_balance ?? 0);
           const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
           const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
           const systems = systemsByCustomer.get(item.id) ?? [];
+          const hasActive = systems.some((system) => system.is_active);
           const requiresCheck = systems.some((system) => system.requires_security_check);
-          const noCheck = systems.some((system) => !system.requires_security_check);
+          const noCheck = !requiresCheck;
           const dueCheck = systems.some(
             (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") <= todayKey
           );
@@ -1705,11 +1682,11 @@ export function AddCustomersSection() {
             (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
           );
           const activeSystems = systems.filter((system) => system.is_active).length;
-
-          const showMoney = customerFilter.startsWith("money") || customerFilter === "all";
-          const show12 = customerFilter.includes("12kg") || customerFilter === "all";
-          const show48 = customerFilter.includes("48kg") || customerFilter === "all";
-          const showSystemFlags = customerFilter.startsWith("system") || customerFilter === "all";
+          const showMoney = topFilter === "all" || topFilter === "money";
+          const show12 = topFilter === "all" || topFilter === "cyl12";
+          const show48 = topFilter === "all" || topFilter === "cyl48";
+          const showSystems = topFilter === "all" || topFilter === "systems";
+          const showSecurity = topFilter === "all" || topFilter === "security_check";
 
           const moneyLabel =
             money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
@@ -1729,6 +1706,7 @@ export function AddCustomersSection() {
                   <Text style={styles.meta}>
                     Address: {item.address ?? "-"} | Systems: {systemCounts[item.id] ?? 0}
                   </Text>
+                  {item.phone ? <Text style={styles.metaLine}>Phone: {item.phone}</Text> : null}
                   {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
                   <View style={styles.pillRow}>
                     {showMoney ? <Text style={[styles.pill, styles.pillPrimary]}>{moneyLabel}</Text> : null}
@@ -1738,19 +1716,22 @@ export function AddCustomersSection() {
                     {show48 ? (
                       <Text style={[styles.pill, cyl48 > 0 ? styles.pillWarn : styles.pillPrimary]}>{cyl48Label}</Text>
                     ) : null}
-                    {showSystemFlags && activeSystems > 0 ? (
+                    {showSystems && activeSystems > 0 ? (
                       <Text style={[styles.pill, styles.pillPrimary]}>{`Active ${activeSystems}`}</Text>
                     ) : null}
-                    {showSystemFlags && requiresCheck ? (
+                    {showSystems && !hasActive ? (
+                      <Text style={[styles.pill, styles.pillMuted]}>Inactive</Text>
+                    ) : null}
+                    {showSecurity && requiresCheck ? (
                       <Text style={[styles.pill, styles.pillWarn]}>Needs check</Text>
                     ) : null}
-                    {showSystemFlags && noCheck ? (
+                    {showSecurity && noCheck ? (
                       <Text style={[styles.pill, styles.pillMuted]}>No check</Text>
                     ) : null}
-                    {showSystemFlags && dueCheck ? (
+                    {showSecurity && dueCheck ? (
                       <Text style={[styles.pill, styles.pillWarn]}>Check due</Text>
                     ) : null}
-                    {showSystemFlags && futureCheck ? (
+                    {showSecurity && futureCheck ? (
                       <Text style={[styles.pill, styles.pillPrimary]}>Future check</Text>
                     ) : null}
                   </View>
@@ -2848,45 +2829,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2e8f0",
     color: "#1f2937",
   },
-  filterRow: {
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    gap: 8,
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  filterSection: {
-    marginBottom: 6,
-  },
   secondaryFilterRow: {
     paddingTop: 0,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 78,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#e8eef1",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterChipActive: {
-    backgroundColor: "#e8eef1",
-    borderColor: "#0a7ea4",
-  },
-  filterChipText: {
-    fontWeight: "700",
-    fontSize: 12,
-    color: "#1f2937",
-    textAlign: "center",
-    lineHeight: 14,
-  },
-  filterChipTextActive: {
-    color: "#0a7ea4",
   },
   linkBtn: {
     paddingVertical: 4,
