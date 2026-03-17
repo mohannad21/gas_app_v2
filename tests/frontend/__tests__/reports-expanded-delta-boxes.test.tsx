@@ -214,9 +214,14 @@ jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
 }));
 
+const rowChildTestIds = (node: any) =>
+  React.Children.toArray(node.props.children)
+    .map((child: any) => child?.props?.testID)
+    .filter(Boolean);
+
 describe("ReportsScreen expanded DeltaBox", () => {
-  it("renders customer operational boxes for replacement", () => {
-    const { getByText, getAllByText } = render(<ReportsScreen />);
+  it("renders customer operational boxes in full-empty-wallet order", () => {
+    const { getByText, getAllByText, getByTestId } = render(<ReportsScreen />);
 
     expect(getByText("Installed 1x12kg")).toBeTruthy();
 
@@ -225,6 +230,7 @@ describe("ReportsScreen expanded DeltaBox", () => {
     expect(getAllByText("12kg F").length).toBeGreaterThan(0);
     expect(getAllByText("12kg E").length).toBeGreaterThan(0);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
+    expect(rowChildTestIds(getByTestId("12kg-triplet"))).toEqual(["12kg-full", "12kg-empty", "12kg-cash"]);
   });
 
   it("renders company relationship boxes for company payment and buy iron", () => {
@@ -248,19 +254,31 @@ describe("ReportsScreen expanded DeltaBox", () => {
     expect(getAllByText("48kg E").length).toBeGreaterThan(0);
   });
 
-  it("renders split company relationship result for refill", () => {
-    const { getAllByText } = render(<ReportsScreen />);
+  it("renders split company relationship result on fixed 2-2-1 rows", () => {
+    const { getAllByText, getByTestId } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Refill")[0]);
     expect(getAllByText("12kg E").length).toBeGreaterThan(0);
     expect(getAllByText("48kg F").length).toBeGreaterThan(0);
+    expect(rowChildTestIds(getByTestId("mixed-12-row"))).toEqual(["mixed-12-full", "mixed-12-empty"]);
+    expect(rowChildTestIds(getByTestId("mixed-48-row"))).toEqual(["mixed-48-full", "mixed-48-empty"]);
+    expect(rowChildTestIds(getByTestId("mixed-cash-row"))).toEqual([
+      "mixed-cash-left",
+      "mixed-cash",
+      "mixed-cash-right",
+    ]);
   });
 
-  it("renders bank deposit as transfer with wallet box", () => {
-    const { getAllByText, queryByText } = render(<ReportsScreen />);
+  it("renders bank deposit as a centered wallet-only row", () => {
+    const { getAllByText, getByTestId, queryByText } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Transferred ₪500 to bank")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
+    expect(rowChildTestIds(getByTestId("bank_deposit-cash-row"))).toEqual([
+      "bank_deposit-cash-left",
+      "bank_deposit-cash",
+      "bank_deposit-cash-right",
+    ]);
     expect(queryByText("Received ₪500")).toBeNull();
   });
 });

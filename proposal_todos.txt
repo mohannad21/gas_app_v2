@@ -37,42 +37,16 @@ This category should be finished first.
 3. Balance and list structure changes
 
 Customers / add customer destination
-- on the customer-facing add/list screen, replace the current balance section with 6 top summary boxes
-- first row, in this exact order:
-  - cash debt
-  - 12kg debt
-  - 48kg debt
-- second row, in this exact order:
-  - cash credit
-  - 12kg credit
-  - 48kg credit
-- each box should show:
-  - number of customers
-  - total amount / total cylinders
-- keep the wording compact because there is not enough room for full sentences
-- each box can use 2 short values, for example:
-  - customer count
-  - amount / cylinders count
-- each value can have one short label only
-- never show negative numbers in these customer debt/credit boxes
-- the debt/credit label itself should carry the meaning
-- after these boxes are implemented, remove the old balance section from that screen
+- keep the current 6 compact summary boxes below filters and above the list
+- keep the wording compact and the values aligned with backend truth
+- preserve positive-only debt/credit display in the customer summary boxes
 
 Company Activities
-- on Add Company Activity, replace the current balance section with 3 top summary boxes:
-  - wallet balance
-  - 12kg balance
-  - 48kg balance
-- signed values are allowed here
-- use the backend sign meaning unless product decides to remap it visually
-- current backend meaning to verify in UI wording:
-  - positive money means: you owe company
-  - negative money means: company owes you
-- cylinder wording must also be checked against backend semantics before the final note is frozen
-- after these boxes are implemented, remove the old company balance section from that screen
+- keep the current 3 compact company summary boxes below filters and above the list
+- keep the short sign note aligned with backend sign meaning
 
 Customer history / customer view
-- apply the same balance-display idea to the list of activities inside the customer view where it makes sense
+- keep the current compact customer-detail balance boxes below filters and above the activity list
 - keep customer history cards aligned with the same operational meaning used in Daily and Add lists
 
 4. Missing functional parts after structure is stable
@@ -92,15 +66,8 @@ Customer and system behavior
 
 Company / wallet / payment flows
 - finalize the exact Company Activities type list after full code review
-- enforce that `Wallet to Bank` is limited by the current Wallet amount
-- ensure `Bank to Wallet` is supported cleanly across the intended entry flow
-- add or standardize an `Add money from bank` action on distributor-paid flows
-- apply that funding action to flows such as:
-  - Expense
-  - Refill
-  - Company Payment
-  - customer payout
-  - any future distributor-paid action
+- keep the current minimal inline funding prompt behavior on distributor-paid flows
+- verify the `Transfer now` shortcut continues to open `Bank to Wallet` with shortfall prefill where possible
 - support negative-cash prevention or warning on refill and similar payment-heavy flows
 
 Expenses and settings
@@ -116,17 +83,9 @@ Ledger adjustments
 Daily report / reporting logic
 - fix remaining daily-report issues where activities are missing from lists or reports
 - fix any remaining wrong ordering in the daily report
-- when an expanded activity shows ledger-change boxes, keep the order stable everywhere when possible
-- if 3 boxes are shown, use this order:
-  - full
-  - empty
-  - wallet / cash
-- if 5 boxes are shown, use this order:
-  - full
-  - empty
-  - full
-  - empty
-  - wallet / cash
+- verify and merge the stable expanded ledger-box ordering work:
+  - 3 boxes = full, empty, wallet
+  - 5 boxes = line 1 full + empty, line 2 full + empty, line 3 wallet
 - customer initialization should be included in customer activity view
 - customer initialization should not appear in Daily as a normal day activity
 - remove balances that should not appear at daily report level 4
@@ -139,10 +98,7 @@ Daily report / reporting logic
 This category should be handled later in one full pass, after structure and missing functional parts are stable.
 
 - continue cleaning up wording across customer wording, company wording, filter wording, and card wording
-- rename remaining user-facing `cash` wording to `Wallet` wherever it refers to the distributor's on-hand ledger money
-- keep the daily-report top money value as the user-facing Wallet reference
-- finish applying `Wallet to Bank` / `Bank to Wallet` wording consistently across entry forms and supporting screens
-- review all payment-entry screens after the Wallet rename to keep wording and behavior consistent
+- keep Wallet wording consistent on new and touched frontend surfaces
 - keep customer activities visually aligned with Daily activities as much as practical
 - keep the styles of all history/card lists aligned across the entire app, especially under:
   - Add Customer Activity

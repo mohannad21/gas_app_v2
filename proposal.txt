@@ -6,12 +6,13 @@ Customer and company balances are shared relationship balances, not per-screen a
 
 Operational money terminology also needs one clear direction:
 - Current
-  - the ledger account and some existing screens still use the term cash
+  - the ledger account still uses the term cash internally
+  - the user-facing frontend term is Wallet for the distributor's on-hand money
+  - the daily report top money value is the Wallet value from the ledger
 - Next
-  - the user-facing term should move toward Wallet for the distributor's on-hand money
-  - the daily report top cash value is the Wallet value from the ledger
+  - keep Wallet wording consistent on new and touched frontend surfaces
 - Later
-  - remaining legacy cash wording can be cleaned up screen by screen without changing the accounting meaning
+  - remaining internal naming can be cleaned up only where it improves maintainability without changing accounting meaning
 
 The wording in this document is target wording direction, not a statement that every visible label in the UI is already finalized. Final wording is still being cleaned up across customer wording, company wording, filter wording, and card wording.
 
@@ -134,7 +135,7 @@ Operational
 - Wallet to Bank
 - Bank to Wallet
 - Inventory adjustment
-- Cash adjustment
+- Wallet adjustment
 - Init / opening balances
 
 5) Domain Model & Source-of-Truth (Core Accounting Semantics)
@@ -201,24 +202,22 @@ Operational
 - empty 12kg inventory
 - full 48kg inventory
 - empty 48kg inventory
-- cash in the ledger, moving toward Wallet as the user-facing term
+- cash in the ledger, shown as Wallet in user-facing frontend wording
 - bank if used
 
 5.3.1 Wallet / Bank Operational Rule
 
 Current
 - the top money value in the daily report comes from the ledger cash balance
-
-Next
-- user-facing wording should call this Wallet
 - Wallet means the distributor's on-hand money tracked in the ledger
 - Wallet to Bank means moving money from ledger cash into bank
 - Bank to Wallet means moving money from bank into ledger cash
+- the transfer UI has exactly two fixed tabs:
+  - Wallet to Bank
+  - Bank to Wallet
+- there is no direction selector inside the transfer UI
 - Wallet to Bank is limited by the current Wallet amount
 - Bank to Wallet can add however much the distributor chooses to move in
-
-Later
-- remaining screens can be renamed from cash to Wallet as wording cleanup continues
 
 5.4 Sign Meaning (Canonical Internal Model)
 
@@ -627,6 +626,9 @@ C. Event Feed
 
 D. Expanded Event Detail
 - structured before/after delta panel, not a raw ledger line-item UI
+- when expanded ledger/info boxes are shown, keep the layout stable:
+  - 3-box pattern = full, empty, wallet
+  - 5-box pattern = line 1 full + empty, line 2 full + empty, line 3 wallet
 - can show:
   - customer money before/after
   - customer 12kg before/after
@@ -712,8 +714,7 @@ Header / summary direction
   - customer header uses Last order
   - Phone and Last order sit together in the header
   - customer pages show customer balances only
-- Next
-  - customer balances stay collapsed by default and expand on tap
+-  - customer detail shows 3 compact balance boxes below the activity filters and above the activity list
 - Later
   - Last activity can be reconsidered later if product direction changes
 - balances remain customer-level summaries
@@ -728,22 +729,20 @@ Activity behavior
 
 Customer pages
 - Current
-  - show customer balances only
+  - customer list / add-customer destination uses 6 compact summary boxes
+  - customer detail uses 3 compact balance boxes
+  - both appear below the filters and above the list
 - Next
-  - keep customer balances collapsed by default
-  - tap to expand / collapse
+  - keep compact summary-box wording and counts aligned with backend truth
 - Later
   - wording polish can continue without changing the placement rule
 
 Company Activities
 - Current
-  - show company balances only
+  - show 3 compact company summary boxes
+  - place company balances below the filter row and above the first list item
 - Next
-  - keep company balances below the filter row
-  - place company balances under the add button
-  - place company balances above the first list item
-  - keep company balances collapsed by default
-  - tap to expand / collapse
+  - keep company sign wording short and consistent without changing placement
 - Later
   - additional company-activity wording cleanup can happen later without changing the placement rule
   - company balances stay part of the Company Activities screen structure, not a separate reporting surface
@@ -772,6 +771,7 @@ Company
 Reporting
 - Day report
 - Range report (week/month) if needed later
+- newly created activities should appear immediately in the visible list below the add bar on the relevant entry screen
 
 Admin / Settings
 - Users / roles
@@ -791,18 +791,20 @@ Expense categories
 
 Current
 - the distributor pays some actions out of on-hand money tracked in the ledger
-
-Next
-- whenever the distributor needs to pay from distributor side, the UI should support an Add money from bank action
+- distributor-paid payment flows show a minimal inline wallet message below the Paid field
+- when wallet is insufficient, the UI shows only:
+  - a short insufficient-wallet prompt
+  - a small Transfer now button
 - this applies to payment flows such as:
   - Expense
   - Refill
   - Company Payment
   - customer-side payout or any future distributor-paid action
-- the purpose is to fund the Wallet before completing a payment action when needed
+- Transfer now opens Bank to Wallet and should prefill the shortfall when possible
+- the goal is to fund the Wallet before completing the payment without adding large helper panels
 
 Later
-- the exact placement and shared component for Add money from bank can be standardized across entry screens
+- the exact shared implementation can be further standardized across entry screens without changing the minimal inline behavior
 
 8) Data Integrity & Consistency Strategy
 

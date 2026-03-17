@@ -723,14 +723,14 @@ function V2Timeline({
   const buildDeltaRow = (boxes: ReactNode[], key: string) => {
     if (boxes.length === 0) return null;
     return (
-      <View key={key} style={styles.eventExpandedRow}>
+      <View key={key} testID={key} style={styles.eventExpandedRow}>
         {boxes}
       </View>
     );
   };
 
   const placeholderBox = (key: string) => (
-    <View key={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
+    <View key={key} testID={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
   );
 
   return (
@@ -805,6 +805,7 @@ function V2Timeline({
         }) => (
           <DeltaBox
             key={key}
+            testID={key}
             label={label}
             before={valueOrZero(before)}
             after={valueOrZero(after)}
@@ -931,34 +932,7 @@ function V2Timeline({
           ], `${targetGasType}-triplet`);
         };
 
-        const renderCashTriplet = () =>
-          renderFixedRow([
-            renderTopStateBox({
-              key: "cash-only-cash",
-              label: "Wallet",
-              before: cashBefore,
-              after: cashAfter,
-              format: formatMoney,
-            }),
-            renderTopStateBox({
-              key: "cash-only-12-full",
-              label: "12kg Full",
-              before: full12Before,
-              after: full12After,
-              format: formatCount,
-              accent: gasColor("12kg"),
-            }),
-            renderTopStateBox({
-              key: "cash-only-48-full",
-              label: "48kg Full",
-              before: full48Before,
-              after: full48After,
-              format: formatCount,
-              accent: gasColor("48kg"),
-            }),
-          ], "cash-triplet");
-
-        const renderCenteredCashOnly = (keyPrefix: string) =>
+        const renderCenteredWalletOnly = (keyPrefix: string) =>
           buildDeltaRow(
             [
               placeholderBox(`${keyPrefix}-cash-left`),
@@ -984,11 +958,11 @@ function V2Timeline({
           }
 
           if (eventType === "collection_money" || eventType === "collection_payout") {
-            return renderCenteredCashOnly(eventType);
+            return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") {
-            return renderCashTriplet();
+            return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "refill" || eventType === "company_buy_iron") {
@@ -1002,7 +976,7 @@ function V2Timeline({
             }
             if (touches12) return renderGasTriplet("12kg");
             if (touches48) return renderGasTriplet("48kg");
-            if (hasCash) return renderCashTriplet();
+            if (hasCash) return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "adjust") {
@@ -1079,7 +1053,7 @@ function V2Timeline({
             return renderGasTriplet(inferredGasType);
           }
           if (hasCash) {
-            return renderCashTriplet();
+            return renderCenteredWalletOnly(eventType);
           }
           return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
         };
@@ -1098,6 +1072,7 @@ function V2Timeline({
 }
 
 function DeltaBox({
+  testID,
   label,
   before,
   after,
@@ -1110,6 +1085,7 @@ function DeltaBox({
   singleValue,
   showNoChange,
 }: {
+  testID?: string;
   label: string;
   before: number;
   after: number;
@@ -1136,7 +1112,10 @@ function DeltaBox({
           ? styles.deltaBadgePositive
           : styles.deltaBadgeNegative;
   return (
-    <View style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}>
+    <View
+      testID={testID}
+      style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}
+    >
       <Text style={styles.deltaBoxLabel}>{label}</Text>
       <View
         style={[
