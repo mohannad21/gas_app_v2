@@ -1162,10 +1162,15 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import CashAdjustment, Expense
+from app.services.ledger import sum_cash
 from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
 from app.services.posting import derive_day, normalize_happened_at, post_cash_adjustment, post_expense, reverse_source
 
 router = APIRouter(prefix="/cash", tags=["cash"])
+
+
+def _transfer_direction(expense: Expense) -> str:
+  return "bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank"
 
 
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
@@ -1347,6 +1352,7 @@ def list_bank_deposits(
       id=row.id,
       happened_at=row.happened_at,
       amount=row.amount,
+      direction=_transfer_direction(row),
       note=row.note,
     )
     for row in rows
@@ -1364,9 +1370,21 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
         id=existing.id,
         happened_at=existing.happened_at,
         amount=existing.amount,
+        direction=_transfer_direction(existing),
         note=existing.note,
       )
   happened_at = normalize_happened_at(payload.happened_at)
+  if payload.direction == "wallet_to_bank":
+    wallet_available = sum_cash(session, up_to=happened_at)
+    if payload.amount > wallet_available:
+      raise HTTPException(
+        status_code=400,
+        detail={
+          "code": "wallet_insufficient",
+          "available": wallet_available,
+          "attempt": payload.amount,
+        },
+      )
   expense = Expense(
     request_id=payload.request_id,
     happened_at=happened_at,
@@ -1374,7 +1392,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
     kind="deposit",
     category_id=None,
     amount=payload.amount,
-    paid_from=None,
+    paid_from="bank" if payload.direction == "bank_to_wallet" else "cash",
     note=payload.note,
     vendor=None,
     is_reversed=False,
@@ -1387,6 +1405,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
     id=expense.id,
     happened_at=expense.happened_at,
     amount=expense.amount,
+    direction=payload.direction,
     note=expense.note,
   )
 
@@ -3793,6 +3812,8 @@ def _event_label(event: DailyReportV2Event) -> str:
     return "Order"
   if event.event_type == "refill" and _is_company_settle_only_refill(event):
     return "Company Settle"
+  if event.event_type == "bank_deposit":
+    return "Bank to Wallet" if event.transfer_direction == "bank_to_wallet" else "Wallet to Bank"
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
 
 
@@ -4210,7 +4231,7 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
   if event.event_type == "cash_adjust":
     return Level3Hero(text="Cash Adjust")
   if event.event_type == "bank_deposit":
-    return Level3Hero(text="Bank Deposit")
+    return Level3Hero(text=_event_label(event))
   if event.event_type == "collection_payout":
     return Level3Hero(text="Customer Payout")
   if event.event_type == "customer_adjust":
@@ -4448,6 +4469,10 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
     return event.expense_type or "Expense"
   if event.event_type == "bank_deposit":
     amount = _safe_int(event.total_cost)
+    if event.transfer_direction == "bank_to_wallet":
+      if amount:
+        return f"Transferred {_format_money_major(amount, money_decimals)} to wallet"
+      return "Transferred to wallet"
     if amount:
       return f"Transferred {_format_money_major(amount, money_decimals)} to bank"
     return "Transferred to bank"
@@ -6588,6 +6613,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       system_name=None,
       system_type=None,
       expense_type=categories.get(expense.category_id),
+      transfer_direction="bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank",
       reason=expense.note,
       buy12=None,
       return12=None,
@@ -7311,6 +7337,7 @@ from sqlmodel import Field, SQLModel
 GasType = Literal["12kg", "48kg"]
 OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
 InventoryAdjustReason = Literal["count_correction", "shrinkage", "damage"]
+TransferDirection = Literal["wallet_to_bank", "bank_to_wallet"]
 
 
 def new_id(prefix: str = "") -> str:
@@ -7781,14 +7808,21 @@ class CompanyBalancesOut(SQLModel):
 class BankDepositCreate(SQLModel):
   happened_at: Optional[datetime] = None
   amount: int
+  direction: TransferDirection = "wallet_to_bank"
   note: Optional[str] = None
   request_id: Optional[str] = None
+
+  @field_validator("amount")
+  @classmethod
+  def _validate_amount(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class BankDepositOut(SQLModel):
   id: str
   happened_at: datetime
   amount: int
+  direction: TransferDirection
   note: Optional[str] = None
 
 
@@ -8173,6 +8207,7 @@ class DailyReportV2Event(SQLModel):
   system_name: Optional[str] = None
   system_type: Optional[str] = None
   expense_type: Optional[str] = None
+  transfer_direction: Optional[TransferDirection] = None
   reason: Optional[str] = None
   buy12: Optional[int] = None
   return12: Optional[int] = None
@@ -8850,8 +8885,12 @@ def build_expense_lines(expense: Expense) -> list[LedgerLine]:
       lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
     lines.append(LedgerLine(account=ACCOUNT_EXPENSE, unit=UNIT_MONEY, amount=expense.amount))
   elif expense.kind == "deposit":
-    lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
-    lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
+    if expense.paid_from == "bank":
+      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-expense.amount))
+      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=expense.amount))
+    else:
+      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
+      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
 
   return lines
 

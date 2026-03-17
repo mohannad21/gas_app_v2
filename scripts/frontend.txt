@@ -134,6 +134,7 @@ import {
 } from "@/hooks/useInventory";
 import { InventoryActivityItem, useInventoryActivity } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
+import { useDailyReportDayV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeLocale, toDateKey } from "@/lib/date";
@@ -145,7 +146,7 @@ import {
   PriceMatrixSection,
   gasTypes,
 } from "@/components/PriceMatrix";
-import { BankDeposit, CashAdjustment, CollectionEvent, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
+import { BankDeposit, CashAdjustment, CollectionEvent, CustomerAdjustment, DailyReportV2Event, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
 
 type AddMode =
   | "customer_activities"
@@ -209,6 +210,22 @@ type ExpenseListItem =
       data: BankDeposit;
     };
 
+type CompanyActivityListItem =
+  | {
+      id: string;
+      kind: "refill";
+      sortAt: string;
+      is_deleted: boolean;
+      data: Extract<InventoryActivityItem, { kind: "refill" }>["data"];
+    }
+  | {
+      id: string;
+      kind: "company_payment";
+      sortAt: string;
+      is_deleted: false;
+      data: DailyReportV2Event;
+    };
+
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "replacement", label: "Replacement" },
@@ -237,7 +254,7 @@ const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "inventory_adjustment", label: "Inventory Adjustment" },
-  { id: "cash_adjustment", label: "Cash Adjustment" },
+  { id: "cash_adjustment", label: "Wallet Adjustment" },
 ];
 
 export default function AddChooserScreen() {
@@ -249,7 +266,6 @@ export default function AddChooserScreen() {
   const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
   const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
-  const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
@@ -294,6 +310,7 @@ const formatDateTime = (value?: string) => {
   };
   const todayDate = getLocalDateString();
   const inventoryActivity = useInventoryActivity(todayDate);
+  const dayReportQuery = useDailyReportDayV2(todayDate);
   const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
   const bankDepositsQuery = useBankDeposits(todayDate, { enabled: isExpenses });
   const deleteBankDeposit = useDeleteBankDeposit();
@@ -377,13 +394,30 @@ const formatDateTime = (value?: string) => {
       }),
     [inventoryActivity.items]
   );
-  const companyActivityItems = useMemo(
-    () =>
-      filteredInventoryItems.filter(
-        (entry): entry is Extract<InventoryActivityItem, { kind: "refill" }> => entry.kind === "refill"
-      ),
-    [filteredInventoryItems]
-  );
+  const companyActivityItems = useMemo<CompanyActivityListItem[]>(() => {
+    const refillItems = filteredInventoryItems
+      .filter((entry): entry is Extract<InventoryActivityItem, { kind: "refill" }> => entry.kind === "refill")
+      .map((entry) => ({
+        id: `refill-${entry.data.refill_id}`,
+        kind: "refill" as const,
+        sortAt: entry.created_at,
+        is_deleted: entry.is_deleted,
+        data: entry.data,
+      }));
+    const companyPaymentItems = (dayReportQuery.data?.events ?? [])
+      .filter((event) => event.event_type === "company_payment")
+      .map((event) => ({
+        id: `company-payment-${event.source_id ?? event.effective_at}`,
+        kind: "company_payment" as const,
+        sortAt: event.effective_at,
+        is_deleted: false as const,
+        data: event,
+      }));
+
+    return [...refillItems, ...companyPaymentItems].sort(
+      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
+    );
+  }, [dayReportQuery.data?.events, filteredInventoryItems, toSafeTime]);
   const ledgerAdjustmentItems = useMemo(
     () =>
       filteredInventoryItems.filter(
@@ -437,6 +471,9 @@ const formatDateTime = (value?: string) => {
         if (companyActivityFilter === "all") {
           return true;
         }
+        if (entry.kind === "company_payment") {
+          return companyActivityFilter === "company_payment";
+        }
         const refill = entry.data;
         const totalBuys = Number(refill.buy12 ?? 0) + Number(refill.buy48 ?? 0);
         const totalReturns = Number(refill.return12 ?? 0) + Number(refill.return48 ?? 0);
@@ -460,7 +497,7 @@ const formatDateTime = (value?: string) => {
     const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
       id: `bank-deposit-${item.id}`,
       kind: "bank_transfer" as const,
-      direction: item.amount >= 0 ? ("wallet_to_bank" as const) : ("bank_to_wallet" as const),
+      direction: item.direction,
       sortAt: item.happened_at,
       data: item,
     }));
@@ -827,7 +864,7 @@ const formatDateTime = (value?: string) => {
   };
 
   const handleDeleteCashAdjustment = (entry: CashAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the cash adjustment.", [
+    Alert.alert("Remove adjustment?", "This will delete the wallet adjustment.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -989,8 +1026,6 @@ const formatDateTime = (value?: string) => {
           <CompanyBalancesSection
             companySummary={companySummary}
             companyBalancesReady={companyBalancesQuery.isSuccess}
-            collapsed={companyBalancesCollapsed}
-            onToggle={() => setCompanyBalancesCollapsed((prev) => !prev)}
             formatMoney={(value) => Number(value || 0).toFixed(0)}
             formatCount={(value) => Number(value || 0).toFixed(0)}
           />
@@ -1302,6 +1337,28 @@ const formatDateTime = (value?: string) => {
         <View style={styles.formCard}>
           <View style={styles.listBlock}>
             {filteredCompanyActivityItems.map((entry) => {
+              if (entry.kind === "company_payment") {
+                const amount = Number(entry.data.total_cost ?? 0);
+                return (
+                  <View key={entry.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.titleBlock}>
+                        <View style={styles.inventoryLabelRow}>
+                          <View style={styles.inventoryTypeBadge}>
+                            <Text style={styles.inventoryTypeBadgeText}>Company Payment</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.metaLine}>{formatDateTime(entry.data.effective_at)}</Text>
+                        {entry.data.reason ? <Text style={styles.note}>{entry.data.reason}</Text> : null}
+                      </View>
+                      <View style={styles.headerRight}>
+                        <Text style={styles.expenseAmount}>{amount.toFixed(0)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              }
+
               const refill = entry.data;
               const isDeleted = entry.is_deleted;
               return (
@@ -1430,7 +1487,7 @@ const formatDateTime = (value?: string) => {
                     <View style={styles.titleBlock}>
                       <View style={styles.inventoryLabelRow}>
                         <View style={styles.inventoryTypeBadge}>
-                          <Text style={styles.inventoryTypeBadgeText}>Cash Adjustment</Text>
+                          <Text style={styles.inventoryTypeBadgeText}>Wallet Adjustment</Text>
                         </View>
                         {isDeleted && (
                           <View style={styles.inventoryBadge}>
@@ -1444,7 +1501,7 @@ const formatDateTime = (value?: string) => {
                     </View>
                     <View style={styles.actionsCompact}>
                       <Pressable
-                        accessibilityLabel="Update cash adjustment"
+                        accessibilityLabel="Update wallet adjustment"
                         onPress={() => {
                           if (isDeleted) return;
                           router.push({
@@ -1457,7 +1514,7 @@ const formatDateTime = (value?: string) => {
                         <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
                       </Pressable>
                       <Pressable
-                        accessibilityLabel="Remove cash adjustment"
+                        accessibilityLabel="Remove wallet adjustment"
                         onPress={() => {
                           if (isDeleted) return;
                           handleDeleteCashAdjustment(adjustment);
@@ -3411,7 +3468,7 @@ const ReportDayCard = memo(function ReportDayCard({
                 </View>
               </View>
               <View style={styles.v2InvCompactBox}>
-                <Text style={styles.v2InvCompactLabel}>Cash</Text>
+                <Text style={styles.v2InvCompactLabel}>Wallet</Text>
                 <View style={styles.v2DeltaBlock}>
                   <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
                 </View>
@@ -3912,14 +3969,14 @@ function V2Timeline({
   const buildDeltaRow = (boxes: ReactNode[], key: string) => {
     if (boxes.length === 0) return null;
     return (
-      <View key={key} style={styles.eventExpandedRow}>
+      <View key={key} testID={key} style={styles.eventExpandedRow}>
         {boxes}
       </View>
     );
   };
 
   const placeholderBox = (key: string) => (
-    <View key={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
+    <View key={key} testID={key} style={[styles.deltaBox, styles.deltaBoxCompact, styles.deltaBoxPlaceholder]} />
   );
 
   return (
@@ -3994,6 +4051,7 @@ function V2Timeline({
         }) => (
           <DeltaBox
             key={key}
+            testID={key}
             label={label}
             before={valueOrZero(before)}
             after={valueOrZero(after)}
@@ -4078,7 +4136,7 @@ function V2Timeline({
                     placeholderBox(`${keyPrefix}-cash-left`),
                     renderTopStateBox({
                       key: `${keyPrefix}-cash`,
-                      label: "Cash",
+                      label: "Wallet",
                       before: cashBefore,
                       after: cashAfter,
                       format: formatMoney,
@@ -4112,7 +4170,7 @@ function V2Timeline({
             }),
             renderTopStateBox({
               key: `${targetGasType}-cash`,
-              label: "Cash",
+              label: "Wallet",
               before: cashBefore,
               after: cashAfter,
               format: formatMoney,
@@ -4120,40 +4178,13 @@ function V2Timeline({
           ], `${targetGasType}-triplet`);
         };
 
-        const renderCashTriplet = () =>
-          renderFixedRow([
-            renderTopStateBox({
-              key: "cash-only-cash",
-              label: "Cash",
-              before: cashBefore,
-              after: cashAfter,
-              format: formatMoney,
-            }),
-            renderTopStateBox({
-              key: "cash-only-12-full",
-              label: "12kg Full",
-              before: full12Before,
-              after: full12After,
-              format: formatCount,
-              accent: gasColor("12kg"),
-            }),
-            renderTopStateBox({
-              key: "cash-only-48-full",
-              label: "48kg Full",
-              before: full48Before,
-              after: full48After,
-              format: formatCount,
-              accent: gasColor("48kg"),
-            }),
-          ], "cash-triplet");
-
-        const renderCenteredCashOnly = (keyPrefix: string) =>
+        const renderCenteredWalletOnly = (keyPrefix: string) =>
           buildDeltaRow(
             [
               placeholderBox(`${keyPrefix}-cash-left`),
               renderTopStateBox({
                 key: `${keyPrefix}-cash`,
-                label: "Cash",
+                label: "Wallet",
                 before: cashBefore,
                 after: cashAfter,
                 format: formatMoney,
@@ -4173,11 +4204,11 @@ function V2Timeline({
           }
 
           if (eventType === "collection_money" || eventType === "collection_payout") {
-            return renderCenteredCashOnly(eventType);
+            return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") {
-            return renderCashTriplet();
+            return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "refill" || eventType === "company_buy_iron") {
@@ -4191,7 +4222,7 @@ function V2Timeline({
             }
             if (touches12) return renderGasTriplet("12kg");
             if (touches48) return renderGasTriplet("48kg");
-            if (hasCash) return renderCashTriplet();
+            if (hasCash) return renderCenteredWalletOnly(eventType);
           }
 
           if (eventType === "adjust") {
@@ -4253,7 +4284,7 @@ function V2Timeline({
                 [
                   renderTopStateBox({
                     key: "adjust-cash",
-                    label: "Cash",
+                    label: "Wallet",
                     before: cashBefore,
                     after: cashAfter,
                     format: formatMoney,
@@ -4268,7 +4299,7 @@ function V2Timeline({
             return renderGasTriplet(inferredGasType);
           }
           if (hasCash) {
-            return renderCashTriplet();
+            return renderCenteredWalletOnly(eventType);
           }
           return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
         };
@@ -4287,6 +4318,7 @@ function V2Timeline({
 }
 
 function DeltaBox({
+  testID,
   label,
   before,
   after,
@@ -4299,6 +4331,7 @@ function DeltaBox({
   singleValue,
   showNoChange,
 }: {
+  testID?: string;
   label: string;
   before: number;
   after: number;
@@ -4325,7 +4358,10 @@ function DeltaBox({
           ? styles.deltaBadgePositive
           : styles.deltaBadgeNegative;
   return (
-    <View style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}>
+    <View
+      testID={testID}
+      style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}
+    >
       <Text style={styles.deltaBoxLabel}>{label}</Text>
       <View
         style={[
@@ -5439,8 +5475,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
-
-import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 import { useCollections } from "@/hooks/useCollections";
 import {
   useCustomerAdjustments,
@@ -5572,6 +5606,23 @@ function ActivityDeltaBox({
         <Text style={styles.deltaBoxArrow}>{"->"}</Text>
         <Text style={styles.deltaBoxValue}>{format(after)}</Text>
       </View>
+    </View>
+  );
+}
+
+function DetailBalanceBox({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <View style={styles.balanceBox}>
+      <Text style={[styles.balanceBoxLabel, accent ? { color: accent } : null]}>{label}</Text>
+      <Text style={styles.balanceBoxValue}>{value}</Text>
     </View>
   );
 }
@@ -5752,7 +5803,6 @@ export default function CustomerDetailsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
   const [selectedSystemId, setSelectedSystemId] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
-  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections();
@@ -5866,18 +5916,15 @@ export default function CustomerDetailsScreen() {
     {
       label: "Money balance",
       value: formatCurrency(moneyBalance),
-      highlighted: moneyBalance > 0,
     },
     {
       label: "12kg balance",
       value: formatCylinder(cylBalance12),
-      highlighted: cylBalance12 > 0,
       gas: "12kg" as const,
     },
     {
       label: "48kg balance",
       value: formatCylinder(cylBalance48),
-      highlighted: cylBalance48 > 0,
       gas: "48kg" as const,
     },
   ];
@@ -5987,35 +6034,6 @@ export default function CustomerDetailsScreen() {
       </View>
 
       <View style={styles.summaryGrid}>
-        <CollapsibleSectionCard
-          title="Balances"
-          collapsed={balancesCollapsed}
-          onToggle={() => setBalancesCollapsed((prev) => !prev)}
-          containerStyle={[styles.box, styles.summaryCardWide]}
-          titleStyle={styles.boxTitle}
-        >
-          <View style={styles.balanceContent}>
-            <View style={styles.balanceRow}>
-              {balanceStats.map((stat) => {
-                const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-                return (
-                  <View key={stat.label} style={styles.balanceItem}>
-                    <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                      {stat.label}
-                    </Text>
-                    <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                      {stat.value}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-            <Text style={styles.balanceNote}>
-              Positive = Customer owes (debt). Negative = Customer credit.
-            </Text>
-          </View>
-        </CollapsibleSectionCard>
-
         <View style={[styles.box, styles.summaryCard]}>
           <Text style={styles.boxTitle}>Cylinders Ordered</Text>
           <Text style={styles.boxSubtitle}>Lifetime cylinders installed or sold by gas type.</Text>
@@ -6173,6 +6191,20 @@ export default function CustomerDetailsScreen() {
           })}
         </ScrollView>
       ) : null}
+
+      <View style={styles.detailBalancesBlock}>
+        <View style={styles.detailBalancesRow}>
+          {balanceStats.map((stat) => (
+            <DetailBalanceBox
+              key={stat.label}
+              label={stat.label}
+              value={stat.value}
+              accent={stat.gas ? gasColor(stat.gas) : undefined}
+            />
+          ))}
+        </View>
+        <Text style={styles.balanceNote}>Positive = Customer owes. Negative = Customer credit.</Text>
+      </View>
 
       {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
       {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
@@ -6374,9 +6406,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  warningText: {
-    color: "#b00020",
-  },
   box: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -6395,21 +6424,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  balanceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  balanceContent: {
-    gap: 8,
-  },
-  balanceItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 6,
-  },
   balanceNote: {
-    marginTop: 8,
     fontSize: 12,
     color: "#64748b",
   },
@@ -6425,9 +6440,6 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     minHeight: 140,
-  },
-  summaryCardWide: {
-    minHeight: 150,
   },
   actions: {
     flexDirection: "row",
@@ -6535,6 +6547,36 @@ const styles = StyleSheet.create({
   },
   secondaryFilterChipTextActive: {
     color: "#0a7ea4",
+  },
+  detailBalancesBlock: {
+    gap: 8,
+  },
+  detailBalancesRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  balanceBox: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  balanceBoxLabel: {
+    fontSize: 12,
+    color: "#475569",
+    fontWeight: "800",
+  },
+  balanceBoxValue: {
+    color: "#0f172a",
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: "900",
+    marginTop: "auto",
   },
   activityCard: {
     backgroundColor: "#fff",
@@ -7869,7 +7911,7 @@ const styles = StyleSheet.create({
 
 
 FILE: frontend/app/expenses/new.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   InputAccessoryView,
   Keyboard,
@@ -7880,7 +7922,7 @@ import {
   View,
   Platform,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import CashExpensesView from "@/components/CashExpensesView";
 import { useCreateExpense } from "@/hooks/useExpenses";
@@ -8060,12 +8102,17 @@ function TimePickerModal({
 }
 
 export default function NewExpenseScreen() {
-  const [expenseMode, setExpenseMode] = useState<"expense" | "deposit">("expense");
+  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[] }>();
+  const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+  const amountParam = Array.isArray(params.amount) ? params.amount[0] : params.amount;
+  const [expenseMode, setExpenseMode] = useState<"expense" | "wallet_to_bank" | "bank_to_wallet">(
+    tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet" ? tabParam : "expense"
+  );
   const [expenseType, setExpenseType] = useState("fuel");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
-  const [depositAmount, setDepositAmount] = useState("");
-  const [depositNote, setDepositNote] = useState("");
+  const [transferAmount, setTransferAmount] = useState(amountParam ?? "");
+  const [transferNote, setTransferNote] = useState("");
   const [expenseDate, setExpenseDate] = useState(getTodayDate());
   const [expenseTime, setExpenseTime] = useState(getNowTime());
   const [expenseTimeOpen, setExpenseTimeOpen] = useState(false);
@@ -8078,12 +8125,28 @@ export default function NewExpenseScreen() {
   const dailyReportQuery = useDailyReportsV2(todayDate, todayDate);
   const expenseTypes = ["fuel", "food", "insurance", "car", "other"];
 
+  useEffect(() => {
+    if (tabParam === "expense" || tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet") {
+      setExpenseMode(tabParam);
+    }
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (amountParam) {
+      setTransferAmount(amountParam);
+    }
+  }, [amountParam]);
+
   return (
     <View style={styles.screen}>
       <CashExpensesView
         cashBalance={dailyReportQuery.data?.[0]?.cash_end ?? null}
         onRefreshCash={() => dailyReportQuery.refetch()}
         onClose={() => router.back()}
+        onTransferNow={(shortfall) => {
+          setExpenseMode("bank_to_wallet");
+          setTransferAmount(shortfall.toFixed(0));
+        }}
         expenseDate={expenseDate}
         setExpenseDate={setExpenseDate}
         expenseTime={expenseTime}
@@ -8101,10 +8164,10 @@ export default function NewExpenseScreen() {
         setExpenseAmount={setExpenseAmount}
         expenseNote={expenseNote}
         setExpenseNote={setExpenseNote}
-        depositAmount={depositAmount}
-        setDepositAmount={setDepositAmount}
-        depositNote={depositNote}
-        setDepositNote={setDepositNote}
+        transferAmount={transferAmount}
+        setTransferAmount={setTransferAmount}
+        transferNote={transferNote}
+        setTransferNote={setTransferNote}
         accessoryId={accessoryId}
         createExpense={createExpense}
         createBankDeposit={createBankDeposit}
@@ -8260,6 +8323,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  fieldBlock: {
+    gap: 10,
+  },
+  transferAmountRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+  },
+  transferAmountButton: {
+    alignItems: "center",
+    backgroundColor: "#e0f2fe",
+    borderColor: "#bae6fd",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  transferAmountInput: {
+    minWidth: 120,
+    textAlign: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  transferHelperText: {
+    color: "#b00020",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
   walletTransition: {
     flexDirection: "row",
@@ -8480,6 +8581,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
@@ -9137,6 +9239,7 @@ function CompanyPaymentForm({
   date,
   accessoryId,
   companyBalance,
+  walletBalance,
   balanceReady,
   onCreate,
   onSaved,
@@ -9146,6 +9249,7 @@ function CompanyPaymentForm({
   date: string;
   accessoryId?: string;
   companyBalance: number;
+  walletBalance: number;
   balanceReady: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
@@ -9193,6 +9297,8 @@ function CompanyPaymentForm({
   const payDisabled = companyBalance <= 0;
   const receiveDisabled = companyBalance >= 0;
   const tableDisabled = !balanceReady || companyBalance === 0;
+  const companyPaymentShortfall =
+    paymentDirection === "pay" ? Math.max(amountValue - walletBalance, 0) : 0;
 
   const save = async () => {
     if (amountValue <= 0) {
@@ -9346,6 +9452,22 @@ function CompanyPaymentForm({
                 </Text>
               </Pressable>
             </View>
+            <InlineWalletFundingPrompt
+              walletAmount={walletBalance}
+              shortfall={companyPaymentShortfall}
+              onTransferNow={
+                companyPaymentShortfall > 0
+                  ? () =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: {
+                          tab: "bank_to_wallet",
+                          amount: companyPaymentShortfall.toFixed(0),
+                        },
+                      })
+                  : undefined
+              }
+            />
           </View>
           <View style={[styles.amountCell, styles.paymentCell]}>
             <Text style={styles.fieldName}>After</Text>
@@ -9543,8 +9665,8 @@ export default function InventoryNewScreen() {
                     ? "Payment"
                 : tab === "buy"
                   ? "Buy"
-                  : tab === "cash"
-                    ? "Adjust Cash"
+                : tab === "cash"
+                    ? "Adjust Wallet"
                     : "Adjust Inventory";
             const disabled =
               tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled : false;
@@ -9587,6 +9709,7 @@ export default function InventoryNewScreen() {
             mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
             containerStyle={styles.hubFormContainer}
             scrollStyle={styles.hubScroll}
+            walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
           />
         ) : (
           <ScrollView
@@ -9600,6 +9723,7 @@ export default function InventoryNewScreen() {
                   date={businessDate}
                   accessoryId={accessoryId}
                   companyBalance={companyBalance}
+                  walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
                   balanceReady={companyBalanceReady}
                   onCreate={async (payload) => {
                     await createCompanyPayment.mutateAsync(payload);
@@ -10756,7 +10880,9 @@ import { useCreateOrder } from "@/hooks/useOrders";
 import { useCreateCollection } from "@/hooks/useCollections";
 import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
+import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
@@ -10776,6 +10902,14 @@ type OrderFormValues = {
   note?: string;
 };
 type ActionMode = "replacement" | "payment" | "return" | "sell_iron" | "buy_iron";
+
+function getTodayDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function NewOrderScreen() {
   const { customerId, systemId } = useLocalSearchParams<{
@@ -10815,6 +10949,7 @@ export default function NewOrderScreen() {
   const inventoryLatest = useInventoryLatest();
   const systemsQuery = useSystems(selectedCustomer, { enabled: !!selectedCustomer });
   const pricesQuery = usePriceSettings();
+  const dailyReportQuery = useDailyReportsV2(getTodayDate(), getTodayDate());
   const pricesConfigured = (pricesQuery.data ?? []).length > 0;
   const createOrder = useCreateOrder();
   const createCollection = useCreateCollection();
@@ -10897,6 +11032,7 @@ export default function NewOrderScreen() {
   const isReturn = currentAction === "return";
   const showStickyPayment =
     focusTarget === "amounts" && effectiveKeyboardHeight > 0 && currentAction === "replacement";
+  const walletBalance = dailyReportQuery.data?.[0]?.cash_end ?? 0;
 
   const installed = Number(watch("cylinders_installed")) || 0;
   const received = Number(watch("cylinders_received")) || 0;
@@ -10916,6 +11052,8 @@ export default function NewOrderScreen() {
   const unpaid = moneyDelta;
   const moneyDeltaAbs = Math.abs(unpaid);
   const moneyDeltaIsOutflow = unpaid < 0;
+  const payoutWalletShortfall =
+    isPayment && paymentDirection === "payout" ? Math.max(paidInput - walletBalance, 0) : 0;
   const moneyResultLabel =
     unpaid > 0 ? "Customer owes (debt)" : unpaid < 0 ? "Customer credit" : "Settled";
   const cylinderResultLabel =
@@ -13084,6 +13222,24 @@ ${cylLine}
               </View>
               <View style={[styles.amountCell, styles.amountCellResult]} />
             </View>
+          ) : null}
+          {isPayment && paymentDirection === "payout" ? (
+            <InlineWalletFundingPrompt
+              walletAmount={walletBalance}
+              shortfall={payoutWalletShortfall}
+              onTransferNow={
+                payoutWalletShortfall > 0
+                  ? () =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: {
+                          tab: "bank_to_wallet",
+                          amount: payoutWalletShortfall.toFixed(0),
+                        },
+                      })
+                  : undefined
+              }
+            />
           ) : null}
           {selectedCustomerEntry ? (
             customerPreviewStatusLine ? (
@@ -15452,11 +15608,11 @@ export default function WelcomeScreen() {
       },
       {
         id: "cash_start",
-        title: "Cash",
-        question: "How much money is in your pocket/register to start the day?",
-        explanation: "This is your physical cash on hand right now.",
+        title: "Wallet",
+        question: "How much money is in your wallet to start the day?",
+        explanation: "This is your wallet balance right now.",
         type: "inputs",
-        fields: [{ key: "cashStart", label: "Starting cash (₪)", placeholder: "0", unit: "money" }],
+        fields: [{ key: "cashStart", label: "Starting wallet (₪)", placeholder: "0", unit: "money" }],
       },
       {
         id: "review",
@@ -15532,7 +15688,7 @@ export default function WelcomeScreen() {
         `Inventory empty: ${count(state.inventoryEmpty12)}x 12kg, ${count(state.inventoryEmpty48)}x 48kg`
       );
     }
-    if (money(state.cashStart) > 0) lines.push(`Cash on hand: ${money(state.cashStart)}₪`);
+    if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}₪`);
 
     return lines.length > 0 ? lines : ["No opening balances provided."];
   }, [state, companyBalances]);
@@ -16219,6 +16375,7 @@ const styles = StyleSheet.create({
 FILE: frontend/components/AddRefillModal.tsx
 import { Ionicons } from "@expo/vector-icons";
 import type { AxiosError } from "axios";
+import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -16236,6 +16393,7 @@ import {
 } from "react-native";
 
 import { gasColor } from "@/constants/gas";
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
 import {
@@ -16415,12 +16573,14 @@ export function RefillForm({
   containerStyle,
   scrollStyle,
   mode = "refill",
+  walletBalance = 0,
 }: AddRefillModalProps & {
   showHeader?: boolean;
   useCard?: boolean;
   containerStyle?: any;
   scrollStyle?: any;
   mode?: "refill" | "buy" | "return";
+  walletBalance?: number;
 }) {
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
@@ -16840,6 +17000,7 @@ export function RefillForm({
   const canEditBuy = !isReturnMode;
   const canEditReturn = !isBuyMode;
   const canEditMoney = !isReturnMode;
+  const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
   const showReturnToggle = !isBuyMode && !isReturnMode;
   const showEmptyHint = !isBuyMode && !isReturnMode;
 
@@ -17715,6 +17876,24 @@ export function RefillForm({
                           extraPaid > 0 ? `Extra: company owes ${formatMoney(extraPaid)}â‚ª` : null
                         }
                       />
+                      {canEditMoney ? (
+                        <InlineWalletFundingPrompt
+                          walletAmount={walletBalance}
+                          shortfall={refillWalletShortfall}
+                          onTransferNow={
+                            refillWalletShortfall > 0
+                              ? () =>
+                                  router.push({
+                                    pathname: "/expenses/new",
+                                    params: {
+                                      tab: "bank_to_wallet",
+                                      amount: refillWalletShortfall.toFixed(0),
+                                    },
+                                  })
+                              : undefined
+                          }
+                        />
+                      ) : null}
                     </View>
                   </View>
                   {canEditMoney ? (
@@ -18768,13 +18947,17 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildHappenedAt } from "@/lib/date";
 
 const MODE_LABELS = {
   expense: "Expense",
-  deposit: "Bank deposit",
-};
+  wallet_to_bank: "Wallet to Bank",
+  bank_to_wallet: "Bank to Wallet",
+} as const;
+
+type ExpenseMode = keyof typeof MODE_LABELS;
 
 type CalendarModalProps = {
   visible: boolean;
@@ -18787,6 +18970,7 @@ type CashExpensesViewProps = {
   cashBalance?: number | null;
   onRefreshCash?: () => void;
   onClose?: () => void;
+  onTransferNow?: (shortfall: number) => void;
   expenseDate: string;
   setExpenseDate: (next: string) => void;
   expenseTime: string;
@@ -18795,8 +18979,8 @@ type CashExpensesViewProps = {
   setExpenseTimeOpen: (next: boolean) => void;
   expenseCalendarOpen: boolean;
   setExpenseCalendarOpen: (next: boolean) => void;
-  expenseMode: "expense" | "deposit";
-  setExpenseMode: (next: "expense" | "deposit") => void;
+  expenseMode: ExpenseMode;
+  setExpenseMode: (next: ExpenseMode) => void;
   expenseTypes: string[];
   expenseType: string;
   setExpenseType: (next: string) => void;
@@ -18804,14 +18988,20 @@ type CashExpensesViewProps = {
   setExpenseAmount: (next: string) => void;
   expenseNote: string;
   setExpenseNote: (next: string) => void;
-  depositAmount: string;
-  setDepositAmount: (next: string) => void;
-  depositNote: string;
-  setDepositNote: (next: string) => void;
+  transferAmount: string;
+  setTransferAmount: (next: string) => void;
+  transferNote: string;
+  setTransferNote: (next: string) => void;
   accessoryId?: string;
   createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown> };
   createBankDeposit: {
-    mutateAsync: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<unknown>;
+    mutateAsync: (payload: {
+      date: string;
+      time?: string;
+      amount: number;
+      direction?: "wallet_to_bank" | "bank_to_wallet";
+      note?: string;
+    }) => Promise<unknown>;
   };
   CalendarModal: React.ComponentType<CalendarModalProps>;
   TimePickerModal: React.ComponentType<{
@@ -18831,10 +19021,34 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   other: "ellipsis-horizontal",
 };
 
+function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet: number, amount: number) {
+  if (mode === "bank_to_wallet") {
+    if (amount <= 0) {
+      return `You have ${wallet.toFixed(0)} shekels in the wallet.`;
+    }
+    const projected = wallet + amount;
+    return `You will have ${projected.toFixed(0)} shekels in the wallet after moving ${amount.toFixed(
+      0
+    )} from bank. (was ${wallet.toFixed(0)})`;
+  }
+
+  if (amount <= 0) {
+    return `You have ${wallet.toFixed(0)} shekels in the wallet. You can move up to ${wallet.toFixed(
+      0
+    )} to bank.`;
+  }
+
+  const projected = Math.max(wallet - amount, 0);
+  return `You can move up to ${wallet.toFixed(0)} shekels from the wallet. You will have ${projected.toFixed(
+    0
+  )} shekels in the wallet after moving ${amount.toFixed(0)} to bank. (was ${wallet.toFixed(0)})`;
+}
+
 export default function CashExpensesView({
   cashBalance,
   onRefreshCash,
   onClose,
+  onTransferNow,
   expenseDate,
   setExpenseDate,
   expenseTime,
@@ -18852,10 +19066,10 @@ export default function CashExpensesView({
   setExpenseAmount,
   expenseNote,
   setExpenseNote,
-  depositAmount,
-  setDepositAmount,
-  depositNote,
-  setDepositNote,
+  transferAmount,
+  setTransferAmount,
+  transferNote,
+  setTransferNote,
   accessoryId,
   createExpense,
   createBankDeposit,
@@ -18863,16 +19077,23 @@ export default function CashExpensesView({
   TimePickerModal,
   styles,
 }: CashExpensesViewProps) {
-  const cashValue = typeof cashBalance === "number" ? cashBalance : 0;
+  const walletValue = typeof cashBalance === "number" ? cashBalance : 0;
   const expenseAmountValue = Number(expenseAmount) || 0;
-  const depositAmountValue = Number(depositAmount) || 0;
-  const activeAmount = expenseMode === "expense" ? expenseAmountValue : depositAmountValue;
-  const walletAfter = cashValue - activeAmount;
-  const showOverCash = expenseMode === "expense" && expenseAmountValue > cashValue;
+  const transferAmountValue = Number(transferAmount) || 0;
+  const isExpense = expenseMode === "expense";
+  const isBankToWallet = expenseMode === "bank_to_wallet";
+  const isWalletToBank = expenseMode === "wallet_to_bank";
+  const shortfall = isExpense ? Math.max(expenseAmountValue - walletValue, 0) : 0;
+  const transferDisabled = isWalletToBank && transferAmountValue > walletValue;
+  const walletAfter = isExpense
+    ? walletValue - expenseAmountValue
+    : isBankToWallet
+      ? walletValue + transferAmountValue
+      : walletValue - transferAmountValue;
   const canSaveExpense =
-    expenseMode === "expense"
+    isExpense
       ? Boolean(expenseType.trim()) && expenseAmountValue > 0
-      : depositAmountValue > 0;
+      : transferAmountValue > 0 && !transferDisabled;
 
   const setExpenseNow = () => {
     const now = new Date();
@@ -18885,9 +19106,14 @@ export default function CashExpensesView({
     setExpenseTime(`${hours}:${minutes}`);
   };
 
+  const stepTransferAmount = (delta: number) => {
+    const current = Number(transferAmount) || 0;
+    setTransferAmount(String(Math.max(current + delta, 0)));
+  };
+
   const handleSave = async (resetAfter: boolean) => {
     const happened_at = buildHappenedAt({ date: expenseDate, time: expenseTime });
-    if (expenseMode === "expense") {
+    if (isExpense) {
       const amount = expenseAmountValue;
       if (!amount || amount <= 0 || !expenseType.trim()) {
         Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
@@ -18912,20 +19138,25 @@ export default function CashExpensesView({
       return;
     }
 
-    const amount = depositAmountValue;
+    const amount = transferAmountValue;
     if (!amount || amount <= 0) {
       Alert.alert("Missing amount", "Enter a valid amount.");
+      return;
+    }
+    if (transferDisabled) {
+      Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
       return;
     }
     await createBankDeposit.mutateAsync({
       date: expenseDate,
       time: expenseTime,
       amount,
-      note: depositNote.trim() ? depositNote.trim() : undefined,
+      direction: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
+      note: transferNote.trim() ? transferNote.trim() : undefined,
     });
     if (resetAfter) {
-      setDepositAmount("");
-      setDepositNote("");
+      setTransferAmount("");
+      setTransferNote("");
     }
     onRefreshCash?.();
     if (!resetAfter) {
@@ -18940,14 +19171,14 @@ export default function CashExpensesView({
         <Text style={styles.expenseTitle}>Add Expense</Text>
       </View>
       <View style={styles.modeRow}>
-        {Object.entries(MODE_LABELS).map(([key, label]) => (
+        {(Object.keys(MODE_LABELS) as ExpenseMode[]).map((key) => (
           <Pressable
             key={key}
             style={[styles.modeButton, expenseMode === key && styles.modeButtonActive]}
-            onPress={() => setExpenseMode(key as "expense" | "deposit")}
+            onPress={() => setExpenseMode(key)}
           >
             <Text style={[styles.modeText, expenseMode === key && styles.modeTextActive]}>
-              {label}
+              {MODE_LABELS[key]}
             </Text>
           </Pressable>
         ))}
@@ -18985,18 +19216,12 @@ export default function CashExpensesView({
             onClose={() => setExpenseTimeOpen(false)}
           />
         </View>
-        <Text style={styles.walletSentence}>You have {cashValue.toFixed(0)}₪ in cash.</Text>
-        {showOverCash ? (
-          <View style={styles.walletWarning}>
-            <Text style={styles.walletWarningText}>Amount exceeds current truck cash</Text>
-          </View>
-        ) : null}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
         >
           <View style={styles.formCard}>
-            {expenseMode === "expense" ? (
+            {isExpense ? (
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Expense type</Text>
                 <View style={styles.expenseTypeGrid}>
@@ -19006,23 +19231,11 @@ export default function CashExpensesView({
                     return (
                       <Pressable
                         key={type}
-                        style={[
-                          styles.expenseTypeCard,
-                          selected && styles.expenseTypeCardActive,
-                        ]}
+                        style={[styles.expenseTypeCard, selected && styles.expenseTypeCardActive]}
                         onPress={() => setExpenseType(type)}
                       >
-                        <Ionicons
-                          name={iconName}
-                          size={18}
-                          color={selected ? "#fff" : "#0a7ea4"}
-                        />
-                        <Text
-                          style={[
-                            styles.expenseTypeText,
-                            selected && styles.expenseTypeTextActive,
-                          ]}
-                        >
+                        <Ionicons name={iconName} size={18} color={selected ? "#fff" : "#0a7ea4"} />
+                        <Text style={[styles.expenseTypeText, selected && styles.expenseTypeTextActive]}>
                           {type.charAt(0).toUpperCase() + type.slice(1)}
                         </Text>
                       </Pressable>
@@ -19031,12 +19244,18 @@ export default function CashExpensesView({
                 </View>
                 <Text style={styles.label}>Amount</Text>
                 <TextInput
+                  accessibilityLabel="Expense amount"
                   style={styles.expenseAmountInput}
                   placeholder="0"
                   keyboardType="numeric"
                   value={expenseAmount}
                   onChangeText={setExpenseAmount}
                   inputAccessoryViewID={accessoryId}
+                />
+                <InlineWalletFundingPrompt
+                  walletAmount={walletValue}
+                  shortfall={shortfall}
+                  onTransferNow={shortfall > 0 ? () => onTransferNow?.(shortfall) : undefined}
                 />
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput
@@ -19049,27 +19268,47 @@ export default function CashExpensesView({
             ) : (
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Amount</Text>
-                <TextInput
-                  style={styles.expenseAmountInput}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  value={depositAmount}
-                  onChangeText={setDepositAmount}
-                  inputAccessoryViewID={accessoryId}
-                />
+                <View style={styles.transferAmountRow}>
+                  <Pressable
+                    accessibilityLabel="Decrease transfer amount"
+                    style={styles.transferAmountButton}
+                    onPress={() => stepTransferAmount(-1)}
+                  >
+                    <Ionicons name="remove" size={16} color="#0a7ea4" />
+                  </Pressable>
+                  <TextInput
+                    accessibilityLabel="Transfer amount"
+                    style={styles.transferAmountInput}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    value={transferAmount}
+                    onChangeText={setTransferAmount}
+                    inputAccessoryViewID={accessoryId}
+                  />
+                  <Pressable
+                    accessibilityLabel="Increase transfer amount"
+                    style={styles.transferAmountButton}
+                    onPress={() => stepTransferAmount(1)}
+                  >
+                    <Ionicons name="add" size={16} color="#0a7ea4" />
+                  </Pressable>
+                </View>
+                <Text style={styles.transferHelperText}>
+                  {formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
+                </Text>
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Add a note"
-                  value={depositNote}
-                  onChangeText={setDepositNote}
+                  value={transferNote}
+                  onChangeText={setTransferNote}
                 />
               </View>
             )}
             <View style={styles.walletTransition}>
               <Text style={styles.walletTransitionLabel}>Wallet:</Text>
               <Text style={styles.walletTransitionValue}>
-                {`${cashValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
+                {`${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
               </Text>
             </View>
           </View>
@@ -19080,20 +19319,14 @@ export default function CashExpensesView({
           <Pressable
             onPress={() => handleSave(true)}
             disabled={!canSaveExpense}
-            style={[
-              styles.expenseFooterSecondary,
-              !canSaveExpense && styles.expenseFooterDisabled,
-            ]}
+            style={[styles.expenseFooterSecondary, !canSaveExpense && styles.expenseFooterDisabled]}
           >
             <Text style={styles.expenseFooterSecondaryText}>Save & Add Another</Text>
           </Pressable>
           <Pressable
             onPress={() => handleSave(false)}
             disabled={!canSaveExpense}
-            style={[
-              styles.expenseFooterPrimary,
-              !canSaveExpense && styles.expenseFooterDisabled,
-            ]}
+            style={[styles.expenseFooterPrimary, !canSaveExpense && styles.expenseFooterDisabled]}
           >
             <Text style={styles.expenseFooterPrimaryText}>Save</Text>
           </Pressable>
@@ -19102,8 +19335,6 @@ export default function CashExpensesView({
     </View>
   );
 }
-
-
 
 FILE: frontend/components/customers/customerListFilters.ts
 export type CustomerListTopFilter =
@@ -19160,23 +19391,19 @@ export function getCustomerSubFilterOptions(topFilter: CustomerListTopFilter) {
 }
 
 FILE: frontend/components/customers/CustomersTabBalances.tsx
-import { useState } from "react";
 import { StyleSheet } from "react-native";
 
 import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 
 export default function CustomersTabBalances() {
-  const [collapsed, setCollapsed] = useState(true);
   const { balanceSummary } = useBalancesSummary();
 
   return (
     <CustomerBalancesSection
       balanceSummary={balanceSummary}
-      collapsed={collapsed}
-      onToggle={() => setCollapsed((prev) => !prev)}
       formatMoney={(value) => Number(value || 0).toFixed(0)}
-      formatCustomerCount={(count) => `${count} customer${count === 1 ? "" : "s"}`}
+      formatCustomerCount={(count) => `${count} cust`}
       containerStyle={styles.card}
     />
   );
@@ -19187,6 +19414,74 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 6,
     marginBottom: 8,
+  },
+});
+
+FILE: frontend/components/InlineWalletFundingPrompt.tsx
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+type InlineWalletFundingPromptProps = {
+  walletAmount: number;
+  shortfall?: number;
+  onTransferNow?: () => void;
+};
+
+export default function InlineWalletFundingPrompt({
+  walletAmount,
+  shortfall = 0,
+  onTransferNow,
+}: InlineWalletFundingPromptProps) {
+  const showTransfer = shortfall > 0 && !!onTransferNow;
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.walletText}>You have {walletAmount.toFixed(0)} shekels in the wallet.</Text>
+      {showTransfer ? (
+        <View style={styles.promptRow}>
+          <Text style={styles.promptText}>Want to move money from bank to wallet?</Text>
+          <Pressable onPress={onTransferNow} style={styles.button}>
+            <Text style={styles.buttonText}>Transfer now</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    gap: 6,
+    marginTop: 8,
+  },
+  walletText: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  promptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  promptText: {
+    color: "#b00020",
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  button: {
+    borderColor: "#b00020",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  buttonText: {
+    color: "#b00020",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
 
@@ -19625,31 +19920,41 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
-import { formatCurrentBalanceState } from "@/lib/balanceTransitions";
-import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 
 type CompanyBalancesSectionProps = {
   companySummary: CompanySummary;
   companyBalancesReady: boolean;
   formatMoney: (value: number) => string;
   formatCount: (value: number) => string;
-  collapsed?: boolean;
-  onToggle?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-function buildCompanyLines(companySummary: CompanySummary, formatMoney: (value: number) => string) {
+type CompanySummaryBox = {
+  label: string;
+  value: string;
+};
+
+function formatSignedValue(value: number, formatter: (value: number) => string, suffix?: string) {
+  const numeric = Number(value || 0);
+  const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
+  const formatted = formatter(Math.abs(numeric));
+  return suffix ? `${sign}${formatted} ${suffix}` : `${sign}${formatted}`;
+}
+
+function buildCompanyBoxes(
+  companySummary: CompanySummary,
+  formatMoney: (value: number) => string,
+  formatCount: (value: number) => string
+): CompanySummaryBox[] {
   const moneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
   const cyl12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
   const cyl48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
 
-  const lines = [
-    moneyNet !== 0 ? formatCurrentBalanceState("company", "money", moneyNet, { formatMoney }) : null,
-    cyl12Net !== 0 ? formatCurrentBalanceState("company", "cyl_12", cyl12Net, { formatMoney }) : null,
-    cyl48Net !== 0 ? formatCurrentBalanceState("company", "cyl_48", cyl48Net, { formatMoney }) : null,
-  ].filter(Boolean) as string[];
-
-  return lines.length > 0 ? lines : ["All settled"];
+  return [
+    { label: "Wallet balance", value: formatSignedValue(moneyNet, formatMoney, "shekels") },
+    { label: "12kg balance", value: formatSignedValue(cyl12Net, formatCount, "cyl") },
+    { label: "48kg balance", value: formatSignedValue(cyl48Net, formatCount, "cyl") },
+  ];
 }
 
 export default function CompanyBalancesSection({
@@ -19657,66 +19962,72 @@ export default function CompanyBalancesSection({
   companyBalancesReady,
   formatMoney,
   formatCount,
-  collapsed = false,
-  onToggle,
   containerStyle,
 }: CompanyBalancesSectionProps) {
-  const companyLines = buildCompanyLines(companySummary, formatMoney);
+  const companyBoxes = buildCompanyBoxes(companySummary, formatMoney, formatCount);
 
   return (
-    <CollapsibleSectionCard
-      title="Company Balances"
-      collapsed={collapsed}
-      onToggle={onToggle ?? (() => undefined)}
-      containerStyle={[styles.card, containerStyle]}
-      titleStyle={styles.title}
-    >
-      <View style={styles.content}>
-        {!companyBalancesReady ? (
-          <Text style={styles.line}>Current company balances unavailable</Text>
-        ) : (
-          companyLines.map((line) => (
-            <Text key={line} style={styles.line}>
-              {line}
-            </Text>
-          ))
-        )}
-        {companyBalancesReady ? (
-          <Text style={styles.meta}>
-            12kg {formatCount(companySummary.receive12 + companySummary.give12)} | 48kg{" "}
-            {formatCount(companySummary.receive48 + companySummary.give48)}
-          </Text>
-        ) : null}
-      </View>
-    </CollapsibleSectionCard>
+    <View style={[styles.card, containerStyle]}>
+      {companyBalancesReady ? (
+        <>
+          <View style={styles.row}>
+            {companyBoxes.map((box) => (
+              <View key={box.label} style={styles.box}>
+                <Text style={styles.label}>{box.label}</Text>
+                <Text style={styles.value}>{box.value}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.meta}>+ = you owe company. - = company owes you.</Text>
+        </>
+      ) : (
+        <View style={styles.box}>
+          <Text style={styles.label}>Wallet balance</Text>
+          <Text style={styles.value}>Unavailable</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginTop: 12,
-  },
-  title: {
-    fontSize: FontSizes.md,
-    fontWeight: "900",
-    color: "#0f172a",
-    fontFamily: FontFamilies.extrabold,
-  },
-  content: {
     gap: 8,
   },
-  line: {
-    color: "#0f172a",
-    fontWeight: "600",
+  row: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  box: {
+    flex: 1,
+    minHeight: 78,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  label: {
+    color: "#475569",
+    fontWeight: "800",
     fontFamily: FontFamilies.regular,
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.xs,
+  },
+  value: {
+    color: "#0f172a",
+    fontWeight: "900",
+    fontFamily: FontFamilies.extrabold,
+    fontSize: FontSizes.sm,
+    lineHeight: 18,
   },
   meta: {
     color: "#64748b",
     fontWeight: "600",
     fontFamily: FontFamilies.regular,
-    fontSize: FontSizes.sm,
-    marginTop: 2,
+    fontSize: FontSizes.xs,
   },
 });
 
@@ -19725,129 +20036,128 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { BalanceSummary } from "@/hooks/useBalancesSummary";
-import { formatAggregateBalanceState } from "@/lib/balanceTransitions";
-
-import CollapsibleSectionCard from "./CollapsibleSectionCard";
 
 type CustomerBalancesSectionProps = {
   balanceSummary: BalanceSummary;
   formatMoney: (value: number) => string;
   formatCustomerCount: (count: number) => string;
-  collapsed?: boolean;
-  onToggle?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-function buildCustomerLines(balanceSummary: BalanceSummary, formatMoney: (value: number) => string) {
-  const lines = [
-    balanceSummary.money.receivable.total > 0
-      ? formatAggregateBalanceState("customer", "money", balanceSummary.money.receivable.total, {
-          count: balanceSummary.money.receivable.count,
-          formatMoney,
-        })
-      : null,
-    balanceSummary.money.payable.total > 0
-      ? formatAggregateBalanceState("customer", "money", -balanceSummary.money.payable.total, {
-          count: balanceSummary.money.payable.count,
-          formatMoney,
-        })
-      : null,
-    balanceSummary.cyl12.receivable.total > 0
-      ? formatAggregateBalanceState("customer", "cyl_12", balanceSummary.cyl12.receivable.total, {
-          count: balanceSummary.cyl12.receivable.count,
-          formatMoney,
-        })
-      : null,
-    balanceSummary.cyl12.payable.total > 0
-      ? formatAggregateBalanceState("customer", "cyl_12", -balanceSummary.cyl12.payable.total, {
-          count: balanceSummary.cyl12.payable.count,
-          formatMoney,
-        })
-      : null,
-    balanceSummary.cyl48.receivable.total > 0
-      ? formatAggregateBalanceState("customer", "cyl_48", balanceSummary.cyl48.receivable.total, {
-          count: balanceSummary.cyl48.receivable.count,
-          formatMoney,
-        })
-      : null,
-    balanceSummary.cyl48.payable.total > 0
-      ? formatAggregateBalanceState("customer", "cyl_48", -balanceSummary.cyl48.payable.total, {
-          count: balanceSummary.cyl48.payable.count,
-          formatMoney,
-        })
-      : null,
-  ].filter(Boolean) as string[];
+type CustomerSummaryBox = {
+  label: string;
+  countLabel: string;
+  value: string;
+};
 
-  return lines.length > 0 ? lines : ["All settled"];
+function buildCustomerBoxes(
+  balanceSummary: BalanceSummary,
+  formatMoney: (value: number) => string,
+  formatCustomerCount: (count: number) => string
+): CustomerSummaryBox[] {
+  return [
+    {
+      label: "Wallet debt",
+      count: balanceSummary.money.receivable.count,
+      value: formatMoney(balanceSummary.money.receivable.total),
+    },
+    {
+      label: "12kg debt",
+      count: balanceSummary.cyl12.receivable.count,
+      value: String(balanceSummary.cyl12.receivable.total),
+    },
+    {
+      label: "48kg debt",
+      count: balanceSummary.cyl48.receivable.count,
+      value: String(balanceSummary.cyl48.receivable.total),
+    },
+    {
+      label: "Wallet credit",
+      count: balanceSummary.money.payable.count,
+      value: formatMoney(balanceSummary.money.payable.total),
+    },
+    {
+      label: "12kg credit",
+      count: balanceSummary.cyl12.payable.count,
+      value: String(balanceSummary.cyl12.payable.total),
+    },
+    {
+      label: "48kg credit",
+      count: balanceSummary.cyl48.payable.count,
+      value: String(balanceSummary.cyl48.payable.total),
+    },
+  ].map((entry) => ({
+    value: entry.label.startsWith("Wallet") ? `${entry.value} shekels` : `${entry.value} cyl`,
+    countLabel: formatCustomerCount(entry.count),
+    label: entry.label,
+  }));
 }
 
 export default function CustomerBalancesSection({
   balanceSummary,
   formatMoney,
   formatCustomerCount,
-  collapsed = false,
-  onToggle,
   containerStyle,
 }: CustomerBalancesSectionProps) {
-  const customerLines = buildCustomerLines(balanceSummary, formatMoney);
-  const customerCounts = [
-    balanceSummary.money.receivable.count,
-    balanceSummary.money.payable.count,
-    balanceSummary.cyl12.receivable.count,
-    balanceSummary.cyl12.payable.count,
-    balanceSummary.cyl48.receivable.count,
-    balanceSummary.cyl48.payable.count,
-  ].reduce((max, value) => Math.max(max, value), 0);
+  const customerBoxes = buildCustomerBoxes(balanceSummary, formatMoney, formatCustomerCount);
+  const rows = [customerBoxes.slice(0, 3), customerBoxes.slice(3, 6)];
 
   return (
-    <CollapsibleSectionCard
-      title="Customer Balances"
-      collapsed={collapsed}
-      onToggle={onToggle ?? (() => undefined)}
-      containerStyle={[styles.card, containerStyle]}
-      titleStyle={styles.title}
-    >
-      <View style={styles.content}>
-        {customerLines.map((line) => (
-          <Text key={line} style={styles.line}>
-            {line}
-          </Text>
-        ))}
-        {customerCounts > 0 ? (
-          <Text style={styles.meta}>
-            {formatCustomerCount(customerCounts)} tracked across money / 12kg / 48kg
-          </Text>
-        ) : null}
-      </View>
-    </CollapsibleSectionCard>
+    <View style={[styles.card, containerStyle]}>
+      {rows.map((row, rowIndex) => (
+        <View key={`customer-summary-row-${rowIndex}`} style={styles.row}>
+          {row.map((box) => (
+            <View key={box.label} style={styles.box}>
+              <Text style={styles.label}>{box.label}</Text>
+              <Text style={styles.value}>{box.value}</Text>
+              <Text style={styles.meta}>{box.countLabel}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginTop: 12,
-  },
-  title: {
-    fontSize: FontSizes.md,
-    fontWeight: "900",
-    color: "#0f172a",
-    fontFamily: FontFamilies.extrabold,
-  },
-  content: {
     gap: 8,
   },
-  line: {
-    color: "#0f172a",
-    fontWeight: "600",
+  row: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  box: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  label: {
+    color: "#475569",
+    fontWeight: "800",
     fontFamily: FontFamilies.regular,
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.xs,
+  },
+  value: {
+    color: "#0f172a",
+    fontWeight: "900",
+    fontFamily: FontFamilies.extrabold,
+    fontSize: FontSizes.sm,
+    lineHeight: 16,
   },
   meta: {
+    marginTop: "auto",
     color: "#64748b",
-    fontWeight: "600",
+    fontWeight: "700",
     fontFamily: FontFamilies.regular,
-    fontSize: FontSizes.sm,
-    marginTop: 2,
+    fontSize: FontSizes.xs,
   },
 });
 
@@ -19890,7 +20200,7 @@ export default function ReportHeader({
           <Text style={styles.adjustButtonText}>Adjust Inventory</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onAdjustCash} activeOpacity={0.85} style={styles.adjustButton}>
-          <Text style={styles.adjustButtonText}>Adjust Cash</Text>
+          <Text style={styles.adjustButtonText}>Adjust Wallet</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -20145,10 +20455,10 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
     return event.expense_type ?? "Expense";
   }
   if (event.event_type === "cash_adjust") {
-    return "Cash Adjustment";
+    return "Wallet Adjustment";
   }
   if (event.event_type === "bank_deposit") {
-    return "Deposit";
+    return event.label ?? event.display_name ?? "Wallet Transfer";
   }
   return event.label ?? null;
 };
@@ -21224,10 +21534,12 @@ export function useCreateBankDeposit() {
     mutationFn: createBankDeposit,
     onError: (err) => {
       const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to save deposit: ${message}`);
+      showToast(`Failed to save transfer: ${message}`);
     },
     onSuccess: (_, variables) => {
-      showToast("Deposit saved");
+      const directionLabel =
+        variables.direction === "bank_to_wallet" ? "Bank to Wallet saved" : "Wallet to Bank saved";
+      showToast(directionLabel);
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
@@ -21241,10 +21553,10 @@ export function useDeleteBankDeposit() {
     mutationFn: ({ id }: { id: string; date: string }) => deleteBankDeposit(id),
     onError: (err) => {
       const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to remove deposit: ${message}`);
+      showToast(`Failed to remove transfer: ${message}`);
     },
     onSuccess: (_, variables) => {
-      showToast("Deposit removed");
+      showToast("Transfer removed");
       queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
@@ -23297,6 +23609,7 @@ export async function createBankDeposit(payload: {
   date: string;
   time?: string;
   amount: number;
+  direction?: "wallet_to_bank" | "bank_to_wallet";
   note?: string;
   happened_at?: string;
 }): Promise<BankDeposit> {
@@ -23304,6 +23617,7 @@ export async function createBankDeposit(payload: {
     payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/bank_deposit", {
     amount: toMinorUnits(payload.amount),
+    direction: payload.direction ?? "wallet_to_bank",
     note: payload.note,
     happened_at,
   });
@@ -23915,7 +24229,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "refill") return "Refill";
   if (type === "company_payment") return "PayCompany";
   if (type === "company_buy_iron") return "BuyIron";
-  if (type === "cash_adjust") return "CashAdjust";
+  if (type === "cash_adjust") return "WalletAdjust";
   if (type === "adjust") return "InvAdjust";
   if (type === "init_balance") return "Init Co";
   if (type === "init_credit") return "Init Cr";
@@ -24363,7 +24677,7 @@ export function summarizeEventTypes(events: any[]) {
     expense: "Expense",
     init: "Init",
     adjust: "InvAdjust",
-    cash_adjust: "CashAdjust",
+    cash_adjust: "WalletAdjust",
     collection_money: "LatePay",
     collection_payout: "Payout",
     collection_empty: "ReturnEmp",
@@ -25345,6 +25659,7 @@ export const BankDepositSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
   amount: z.number(),
+  direction: z.enum(["wallet_to_bank", "bank_to_wallet"]),
   note: z.string().nullish(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;
