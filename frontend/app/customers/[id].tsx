@@ -6,8 +6,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
-
-import CollapsibleSectionCard from "@/components/reports/CollapsibleSectionCard";
 import { useCollections } from "@/hooks/useCollections";
 import {
   useCustomerAdjustments,
@@ -139,6 +137,23 @@ function ActivityDeltaBox({
         <Text style={styles.deltaBoxArrow}>{"->"}</Text>
         <Text style={styles.deltaBoxValue}>{format(after)}</Text>
       </View>
+    </View>
+  );
+}
+
+function DetailBalanceBox({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <View style={styles.balanceBox}>
+      <Text style={[styles.balanceBoxLabel, accent ? { color: accent } : null]}>{label}</Text>
+      <Text style={styles.balanceBoxValue}>{value}</Text>
     </View>
   );
 }
@@ -319,7 +334,6 @@ export default function CustomerDetailsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
   const [selectedSystemId, setSelectedSystemId] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
-  const [balancesCollapsed, setBalancesCollapsed] = useState(true);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections();
@@ -433,18 +447,15 @@ export default function CustomerDetailsScreen() {
     {
       label: "Money balance",
       value: formatCurrency(moneyBalance),
-      highlighted: moneyBalance > 0,
     },
     {
       label: "12kg balance",
       value: formatCylinder(cylBalance12),
-      highlighted: cylBalance12 > 0,
       gas: "12kg" as const,
     },
     {
       label: "48kg balance",
       value: formatCylinder(cylBalance48),
-      highlighted: cylBalance48 > 0,
       gas: "48kg" as const,
     },
   ];
@@ -554,35 +565,6 @@ export default function CustomerDetailsScreen() {
       </View>
 
       <View style={styles.summaryGrid}>
-        <CollapsibleSectionCard
-          title="Balances"
-          collapsed={balancesCollapsed}
-          onToggle={() => setBalancesCollapsed((prev) => !prev)}
-          containerStyle={[styles.box, styles.summaryCardWide]}
-          titleStyle={styles.boxTitle}
-        >
-          <View style={styles.balanceContent}>
-            <View style={styles.balanceRow}>
-              {balanceStats.map((stat) => {
-                const labelColor = stat.gas ? gasColor(stat.gas) : undefined;
-                return (
-                  <View key={stat.label} style={styles.balanceItem}>
-                    <Text style={[styles.statLabel, labelColor ? { color: labelColor } : null]}>
-                      {stat.label}
-                    </Text>
-                    <Text style={[styles.statValue, stat.highlighted && styles.warningText]}>
-                      {stat.value}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-            <Text style={styles.balanceNote}>
-              Positive = Customer owes (debt). Negative = Customer credit.
-            </Text>
-          </View>
-        </CollapsibleSectionCard>
-
         <View style={[styles.box, styles.summaryCard]}>
           <Text style={styles.boxTitle}>Cylinders Ordered</Text>
           <Text style={styles.boxSubtitle}>Lifetime cylinders installed or sold by gas type.</Text>
@@ -740,6 +722,20 @@ export default function CustomerDetailsScreen() {
           })}
         </ScrollView>
       ) : null}
+
+      <View style={styles.detailBalancesBlock}>
+        <View style={styles.detailBalancesRow}>
+          {balanceStats.map((stat) => (
+            <DetailBalanceBox
+              key={stat.label}
+              label={stat.label}
+              value={stat.value}
+              accent={stat.gas ? gasColor(stat.gas) : undefined}
+            />
+          ))}
+        </View>
+        <Text style={styles.balanceNote}>Positive = Customer owes. Negative = Customer credit.</Text>
+      </View>
 
       {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
       {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
@@ -941,9 +937,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  warningText: {
-    color: "#b00020",
-  },
   box: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -962,21 +955,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  balanceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  balanceContent: {
-    gap: 8,
-  },
-  balanceItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 6,
-  },
   balanceNote: {
-    marginTop: 8,
     fontSize: 12,
     color: "#64748b",
   },
@@ -992,9 +971,6 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     minHeight: 140,
-  },
-  summaryCardWide: {
-    minHeight: 150,
   },
   actions: {
     flexDirection: "row",
@@ -1102,6 +1078,36 @@ const styles = StyleSheet.create({
   },
   secondaryFilterChipTextActive: {
     color: "#0a7ea4",
+  },
+  detailBalancesBlock: {
+    gap: 8,
+  },
+  detailBalancesRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  balanceBox: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  balanceBoxLabel: {
+    fontSize: 12,
+    color: "#475569",
+    fontWeight: "800",
+  },
+  balanceBoxValue: {
+    color: "#0f172a",
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: "900",
+    marginTop: "auto",
   },
   activityCard: {
     backgroundColor: "#fff",

@@ -155,7 +155,6 @@ export default function AddChooserScreen() {
   const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
   const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
-  const [companyBalancesCollapsed, setCompanyBalancesCollapsed] = useState(true);
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
@@ -916,8 +915,6 @@ const formatDateTime = (value?: string) => {
           <CompanyBalancesSection
             companySummary={companySummary}
             companyBalancesReady={companyBalancesQuery.isSuccess}
-            collapsed={companyBalancesCollapsed}
-            onToggle={() => setCompanyBalancesCollapsed((prev) => !prev)}
             formatMoney={(value) => Number(value || 0).toFixed(0)}
             formatCount={(value) => Number(value || 0).toFixed(0)}
           />
