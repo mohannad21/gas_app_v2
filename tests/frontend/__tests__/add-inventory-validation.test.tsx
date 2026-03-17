@@ -144,4 +144,13 @@ describe("Add screen navigation", () => {
       params: { section: "ledger", tab: "inventory" },
     });
   });
+
+  it("uses wallet wording for ledger adjustment filters", () => {
+    const { getByText, queryByText } = render(<AddChooserScreen />);
+
+    fireEvent.press(getByText("Ledger\nAdjustments"));
+
+    expect(getByText("Wallet Adjustment")).toBeTruthy();
+    expect(queryByText("Cash Adjustment")).toBeNull();
+  });
 });

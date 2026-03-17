@@ -189,11 +189,11 @@ export default function WelcomeScreen() {
       },
       {
         id: "cash_start",
-        title: "Cash",
-        question: "How much money is in your pocket/register to start the day?",
-        explanation: "This is your physical cash on hand right now.",
+        title: "Wallet",
+        question: "How much money is in your wallet to start the day?",
+        explanation: "This is your wallet balance right now.",
         type: "inputs",
-        fields: [{ key: "cashStart", label: "Starting cash (₪)", placeholder: "0", unit: "money" }],
+        fields: [{ key: "cashStart", label: "Starting wallet (₪)", placeholder: "0", unit: "money" }],
       },
       {
         id: "review",
@@ -269,7 +269,7 @@ export default function WelcomeScreen() {
         `Inventory empty: ${count(state.inventoryEmpty12)}x 12kg, ${count(state.inventoryEmpty48)}x 48kg`
       );
     }
-    if (money(state.cashStart) > 0) lines.push(`Cash on hand: ${money(state.cashStart)}₪`);
+    if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}₪`);
 
     return lines.length > 0 ? lines : ["No opening balances provided."];
   }, [state, companyBalances]);

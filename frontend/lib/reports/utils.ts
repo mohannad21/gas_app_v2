@@ -25,7 +25,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "refill") return "Refill";
   if (type === "company_payment") return "PayCompany";
   if (type === "company_buy_iron") return "BuyIron";
-  if (type === "cash_adjust") return "CashAdjust";
+  if (type === "cash_adjust") return "WalletAdjust";
   if (type === "adjust") return "InvAdjust";
   if (type === "init_balance") return "Init Co";
   if (type === "init_credit") return "Init Cr";
@@ -473,7 +473,7 @@ export function summarizeEventTypes(events: any[]) {
     expense: "Expense",
     init: "Init",
     adjust: "InvAdjust",
-    cash_adjust: "CashAdjust",
+    cash_adjust: "WalletAdjust",
     collection_money: "LatePay",
     collection_payout: "Payout",
     collection_empty: "ReturnEmp",

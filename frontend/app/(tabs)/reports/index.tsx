@@ -222,7 +222,7 @@ const ReportDayCard = memo(function ReportDayCard({
                 </View>
               </View>
               <View style={styles.v2InvCompactBox}>
-                <Text style={styles.v2InvCompactLabel}>Cash</Text>
+                <Text style={styles.v2InvCompactLabel}>Wallet</Text>
                 <View style={styles.v2DeltaBlock}>
                   <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
                 </View>
@@ -889,7 +889,7 @@ function V2Timeline({
                     placeholderBox(`${keyPrefix}-cash-left`),
                     renderTopStateBox({
                       key: `${keyPrefix}-cash`,
-                      label: "Cash",
+                      label: "Wallet",
                       before: cashBefore,
                       after: cashAfter,
                       format: formatMoney,
@@ -923,7 +923,7 @@ function V2Timeline({
             }),
             renderTopStateBox({
               key: `${targetGasType}-cash`,
-              label: "Cash",
+              label: "Wallet",
               before: cashBefore,
               after: cashAfter,
               format: formatMoney,
@@ -935,7 +935,7 @@ function V2Timeline({
           renderFixedRow([
             renderTopStateBox({
               key: "cash-only-cash",
-              label: "Cash",
+              label: "Wallet",
               before: cashBefore,
               after: cashAfter,
               format: formatMoney,
@@ -964,7 +964,7 @@ function V2Timeline({
               placeholderBox(`${keyPrefix}-cash-left`),
               renderTopStateBox({
                 key: `${keyPrefix}-cash`,
-                label: "Cash",
+                label: "Wallet",
                 before: cashBefore,
                 after: cashAfter,
                 format: formatMoney,
@@ -1064,7 +1064,7 @@ function V2Timeline({
                 [
                   renderTopStateBox({
                     key: "adjust-cash",
-                    label: "Cash",
+                    label: "Wallet",
                     before: cashBefore,
                     after: cashAfter,
                     format: formatMoney,

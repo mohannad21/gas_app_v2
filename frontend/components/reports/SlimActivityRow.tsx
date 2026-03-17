@@ -136,10 +136,10 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
     return event.expense_type ?? "Expense";
   }
   if (event.event_type === "cash_adjust") {
-    return "Cash Adjustment";
+    return "Wallet Adjustment";
   }
   if (event.event_type === "bank_deposit") {
-    return "Deposit";
+    return event.label ?? event.display_name ?? "Wallet Transfer";
   }
   return event.label ?? null;
 };

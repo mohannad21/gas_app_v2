@@ -33,7 +33,7 @@ function buildCompanyBoxes(
   const cyl48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
 
   return [
-    { label: "Cash balance", value: formatSignedValue(moneyNet, formatMoney, "shekels") },
+    { label: "Wallet balance", value: formatSignedValue(moneyNet, formatMoney, "shekels") },
     { label: "12kg balance", value: formatSignedValue(cyl12Net, formatCount, "cyl") },
     { label: "48kg balance", value: formatSignedValue(cyl48Net, formatCount, "cyl") },
   ];
@@ -64,7 +64,7 @@ export default function CompanyBalancesSection({
         </>
       ) : (
         <View style={styles.box}>
-          <Text style={styles.label}>Cash balance</Text>
+          <Text style={styles.label}>Wallet balance</Text>
           <Text style={styles.value}>Unavailable</Text>
         </View>
       )}

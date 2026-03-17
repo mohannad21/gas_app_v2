@@ -36,10 +36,10 @@ describe("Customer summary boxes", () => {
   it("renders the 6 compact boxes in the required order between filters and list", () => {
     const { getByText, queryByText, toJSON } = render(<CustomersHomeScreen />);
 
-    expect(getByText("Cash debt")).toBeTruthy();
+    expect(getByText("Wallet debt")).toBeTruthy();
     expect(getByText("12kg debt")).toBeTruthy();
     expect(getByText("48kg debt")).toBeTruthy();
-    expect(getByText("Cash credit")).toBeTruthy();
+    expect(getByText("Wallet credit")).toBeTruthy();
     expect(getByText("12kg credit")).toBeTruthy();
     expect(getByText("48kg credit")).toBeTruthy();
     expect(queryByText("Customer Balances")).toBeNull();
@@ -54,12 +54,12 @@ describe("Customer summary boxes", () => {
     expect(queryByText("-4 cyl")).toBeNull();
 
     const tree = JSON.stringify(toJSON());
-    expect(tree.indexOf("Replacement")).toBeLessThan(tree.indexOf("Cash debt"));
-    expect(tree.indexOf("Cash debt")).toBeLessThan(tree.indexOf("Customer list marker"));
-    expect(tree.indexOf("Cash debt")).toBeLessThan(tree.indexOf("12kg debt"));
+    expect(tree.indexOf("Replacement")).toBeLessThan(tree.indexOf("Wallet debt"));
+    expect(tree.indexOf("Wallet debt")).toBeLessThan(tree.indexOf("Customer list marker"));
+    expect(tree.indexOf("Wallet debt")).toBeLessThan(tree.indexOf("12kg debt"));
     expect(tree.indexOf("12kg debt")).toBeLessThan(tree.indexOf("48kg debt"));
-    expect(tree.indexOf("48kg debt")).toBeLessThan(tree.indexOf("Cash credit"));
-    expect(tree.indexOf("Cash credit")).toBeLessThan(tree.indexOf("12kg credit"));
+    expect(tree.indexOf("48kg debt")).toBeLessThan(tree.indexOf("Wallet credit"));
+    expect(tree.indexOf("Wallet credit")).toBeLessThan(tree.indexOf("12kg credit"));
     expect(tree.indexOf("12kg credit")).toBeLessThan(tree.indexOf("48kg credit"));
   });
 });

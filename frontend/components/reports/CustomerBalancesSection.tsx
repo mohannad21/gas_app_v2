@@ -23,7 +23,7 @@ function buildCustomerBoxes(
 ): CustomerSummaryBox[] {
   return [
     {
-      label: "Cash debt",
+      label: "Wallet debt",
       count: balanceSummary.money.receivable.count,
       value: formatMoney(balanceSummary.money.receivable.total),
     },
@@ -38,7 +38,7 @@ function buildCustomerBoxes(
       value: String(balanceSummary.cyl48.receivable.total),
     },
     {
-      label: "Cash credit",
+      label: "Wallet credit",
       count: balanceSummary.money.payable.count,
       value: formatMoney(balanceSummary.money.payable.total),
     },
@@ -53,7 +53,7 @@ function buildCustomerBoxes(
       value: String(balanceSummary.cyl48.payable.total),
     },
   ].map((entry) => ({
-    value: entry.label.startsWith("Cash") ? `${entry.value} shekels` : `${entry.value} cyl`,
+    value: entry.label.startsWith("Wallet") ? `${entry.value} shekels` : `${entry.value} cyl`,
     countLabel: formatCustomerCount(entry.count),
     label: entry.label,
   }));

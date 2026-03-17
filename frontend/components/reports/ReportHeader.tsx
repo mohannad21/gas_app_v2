@@ -36,7 +36,7 @@ export default function ReportHeader({
           <Text style={styles.adjustButtonText}>Adjust Inventory</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onAdjustCash} activeOpacity={0.85} style={styles.adjustButton}>
-          <Text style={styles.adjustButtonText}>Adjust Cash</Text>
+          <Text style={styles.adjustButtonText}>Adjust Wallet</Text>
         </TouchableOpacity>
       </View>
     </View>

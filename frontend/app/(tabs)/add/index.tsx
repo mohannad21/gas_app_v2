@@ -143,7 +143,7 @@ const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "inventory_adjustment", label: "Inventory Adjustment" },
-  { id: "cash_adjustment", label: "Cash Adjustment" },
+  { id: "cash_adjustment", label: "Wallet Adjustment" },
 ];
 
 export default function AddChooserScreen() {
@@ -753,7 +753,7 @@ const formatDateTime = (value?: string) => {
   };
 
   const handleDeleteCashAdjustment = (entry: CashAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the cash adjustment.", [
+    Alert.alert("Remove adjustment?", "This will delete the wallet adjustment.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -1376,7 +1376,7 @@ const formatDateTime = (value?: string) => {
                     <View style={styles.titleBlock}>
                       <View style={styles.inventoryLabelRow}>
                         <View style={styles.inventoryTypeBadge}>
-                          <Text style={styles.inventoryTypeBadgeText}>Cash Adjustment</Text>
+                          <Text style={styles.inventoryTypeBadgeText}>Wallet Adjustment</Text>
                         </View>
                         {isDeleted && (
                           <View style={styles.inventoryBadge}>
@@ -1390,7 +1390,7 @@ const formatDateTime = (value?: string) => {
                     </View>
                     <View style={styles.actionsCompact}>
                       <Pressable
-                        accessibilityLabel="Update cash adjustment"
+                        accessibilityLabel="Update wallet adjustment"
                         onPress={() => {
                           if (isDeleted) return;
                           router.push({
@@ -1403,7 +1403,7 @@ const formatDateTime = (value?: string) => {
                         <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
                       </Pressable>
                       <Pressable
-                        accessibilityLabel="Remove cash adjustment"
+                        accessibilityLabel="Remove wallet adjustment"
                         onPress={() => {
                           if (isDeleted) return;
                           handleDeleteCashAdjustment(adjustment);

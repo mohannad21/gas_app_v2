@@ -1102,8 +1102,8 @@ export default function InventoryNewScreen() {
                     ? "Payment"
                 : tab === "buy"
                   ? "Buy"
-                  : tab === "cash"
-                    ? "Adjust Cash"
+                : tab === "cash"
+                    ? "Adjust Wallet"
                     : "Adjust Inventory";
             const disabled =
               tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled : false;

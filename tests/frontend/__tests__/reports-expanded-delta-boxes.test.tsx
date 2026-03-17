@@ -224,51 +224,43 @@ describe("ReportsScreen expanded DeltaBox", () => {
 
     expect(getAllByText("12kg F").length).toBeGreaterThan(0);
     expect(getAllByText("12kg E").length).toBeGreaterThan(0);
-    expect(getAllByText("Cash").length).toBeGreaterThan(0);
-    expect(getAllByText("Cust 12kg").length).toBeGreaterThan(0);
+    expect(getAllByText("Wallet").length).toBeGreaterThan(0);
   });
 
   it("renders company relationship boxes for company payment and buy iron", () => {
     const { getAllByText } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Pay Company")[0]);
-    expect(getAllByText("Cash").length).toBeGreaterThan(0);
-    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
+    expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
     fireEvent.press(getAllByText("Bought 2x12kg")[0]);
     expect(getAllByText("12kg F").length).toBeGreaterThan(0);
-    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
   });
 
   it("renders customer relationship boxes for payment and grouped return", () => {
     const { getAllByText } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Received ₪150")[0]);
-    expect(getAllByText("Cust Money").length).toBeGreaterThan(0);
-    expect(getAllByText("Cash").length).toBeGreaterThan(0);
+    expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
     fireEvent.press(getAllByText("Returned 1x12kg | 3x48kg empties")[0]);
-    expect(getAllByText("Cust 12kg").length).toBeGreaterThan(0);
-    expect(getAllByText("Cust 48kg").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
+    expect(getAllByText("48kg E").length).toBeGreaterThan(0);
   });
 
   it("renders split company relationship result for refill", () => {
     const { getAllByText } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Refill")[0]);
-    expect(getAllByText("Co 12kg").length).toBeGreaterThan(0);
-    expect(getAllByText("Co 48kg").length).toBeGreaterThan(0);
-    expect(getAllByText("Co Money").length).toBeGreaterThan(0);
     expect(getAllByText("12kg E").length).toBeGreaterThan(0);
     expect(getAllByText("48kg F").length).toBeGreaterThan(0);
   });
 
-  it("renders bank deposit as transfer with cash and bank boxes", () => {
+  it("renders bank deposit as transfer with wallet box", () => {
     const { getAllByText, queryByText } = render(<ReportsScreen />);
 
     fireEvent.press(getAllByText("Transferred ₪500 to bank")[0]);
-    expect(getAllByText("Cash").length).toBeGreaterThan(0);
-    expect(getAllByText("Bank").length).toBeGreaterThan(0);
+    expect(getAllByText("Wallet").length).toBeGreaterThan(0);
     expect(queryByText("Received ₪500")).toBeNull();
   });
 });

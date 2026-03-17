@@ -125,7 +125,7 @@ describe("Company summary boxes", () => {
 
     fireEvent.press(getByText("Company\nActivities"));
 
-    expect(getByText("Cash balance")).toBeTruthy();
+    expect(getByText("Wallet balance")).toBeTruthy();
     expect(getByText("12kg balance")).toBeTruthy();
     expect(getByText("48kg balance")).toBeTruthy();
     expect(getByText("+120 shekels")).toBeTruthy();
@@ -135,9 +135,9 @@ describe("Company summary boxes", () => {
     expect(queryByText("Company Balances")).toBeNull();
 
     const tree = JSON.stringify(toJSON());
-    expect(tree.indexOf("Refill")).toBeLessThan(tree.indexOf("Cash balance"));
-    expect(tree.indexOf("Cash balance")).toBeLessThan(tree.indexOf("Fuel settlement"));
-    expect(tree.indexOf("Cash balance")).toBeLessThan(tree.indexOf("12kg balance"));
+    expect(tree.indexOf("Refill")).toBeLessThan(tree.indexOf("Wallet balance"));
+    expect(tree.indexOf("Wallet balance")).toBeLessThan(tree.indexOf("Fuel settlement"));
+    expect(tree.indexOf("Wallet balance")).toBeLessThan(tree.indexOf("12kg balance"));
     expect(tree.indexOf("12kg balance")).toBeLessThan(tree.indexOf("48kg balance"));
   });
 });
