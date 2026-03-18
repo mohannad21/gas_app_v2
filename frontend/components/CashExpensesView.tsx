@@ -12,9 +12,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import BigBox from "@/components/entry/BigBox";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildHappenedAt } from "@/lib/date";
+import { CUSTOMER_WORDING } from "@/lib/wording";
 
 const MODE_LABELS = {
   expense: "Expense",
@@ -85,6 +88,12 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   car: "car-sport",
   other: "ellipsis-horizontal",
 };
+const MONEY_STEPPERS: FieldStepper[] = [
+  { delta: 20, label: "+20", position: "top" },
+  { delta: -5, label: "-5", position: "left" },
+  { delta: 5, label: "+5", position: "right" },
+  { delta: -20, label: "-20", position: "bottom" },
+];
 
 function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet: number, amount: number) {
   if (mode === "bank_to_wallet") {
@@ -307,16 +316,22 @@ export default function CashExpensesView({
                     );
                   })}
                 </View>
-                <Text style={styles.label}>Amount</Text>
-                <TextInput
-                  accessibilityLabel="Expense amount"
-                  style={styles.expenseAmountInput}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  value={expenseAmount}
-                  onChangeText={setExpenseAmount}
-                  inputAccessoryViewID={accessoryId}
-                />
+                <BigBox
+                  title="Amount"
+                  statusLine={`Wallet ${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
+                  statusIsAlert={walletAfter < 0}
+                >
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Amount"
+                      value={expenseAmountValue}
+                      onIncrement={() => setExpenseAmount(String(Math.max(expenseAmountValue + 5, 0)))}
+                      onDecrement={() => setExpenseAmount(String(Math.max(expenseAmountValue - 5, 0)))}
+                      onChangeText={setExpenseAmount}
+                      steppers={MONEY_STEPPERS}
+                    />
+                  </View>
+                </BigBox>
                 <InlineWalletFundingPrompt
                   walletAmount={walletValue}
                   shortfall={shortfall}
@@ -332,35 +347,22 @@ export default function CashExpensesView({
               </View>
             ) : (
               <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Amount</Text>
-                <View style={styles.transferAmountRow}>
-                  <Pressable
-                    accessibilityLabel="Decrease transfer amount"
-                    style={styles.transferAmountButton}
-                    onPress={() => stepTransferAmount(-1)}
-                  >
-                    <Ionicons name="remove" size={16} color="#0a7ea4" />
-                  </Pressable>
-                  <TextInput
-                    accessibilityLabel="Transfer amount"
-                    style={styles.transferAmountInput}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    value={transferAmount}
-                    onChangeText={setTransferAmount}
-                    inputAccessoryViewID={accessoryId}
-                  />
-                  <Pressable
-                    accessibilityLabel="Increase transfer amount"
-                    style={styles.transferAmountButton}
-                    onPress={() => stepTransferAmount(1)}
-                  >
-                    <Ionicons name="add" size={16} color="#0a7ea4" />
-                  </Pressable>
-                </View>
-                <Text style={styles.transferHelperText}>
-                  {formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
-                </Text>
+                <BigBox
+                  title={CUSTOMER_WORDING.money}
+                  statusLine={formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
+                  statusIsAlert={isWalletToBank && transferDisabled}
+                >
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Amount"
+                      value={transferAmountValue}
+                      onIncrement={() => stepTransferAmount(5)}
+                      onDecrement={() => stepTransferAmount(-5)}
+                      onChangeText={setTransferAmount}
+                      steppers={MONEY_STEPPERS}
+                    />
+                  </View>
+                </BigBox>
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput
                   style={styles.input}
@@ -370,12 +372,6 @@ export default function CashExpensesView({
                 />
               </View>
             )}
-            <View style={styles.walletTransition}>
-              <Text style={styles.walletTransitionLabel}>Wallet:</Text>
-              <Text style={styles.walletTransitionValue}>
-                {`${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
-              </Text>
-            </View>
           </View>
         </KeyboardAvoidingView>
       </ScrollView>

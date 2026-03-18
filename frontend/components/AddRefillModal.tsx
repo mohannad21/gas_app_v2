@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { gasColor } from "@/constants/gas";
+import BigBox from "@/components/entry/BigBox";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
@@ -34,6 +35,7 @@ import {
 } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
+import { CUSTOMER_WORDING } from "@/lib/wording";
 
 type SavedRefillEntry = {
   id: string;
@@ -329,12 +331,12 @@ export function RefillForm({
       if (!refillDetails) return null;
       return {
         as_of: refillDetails.effective_at,
-        full12: refillDetails.before_full_12,
-        empty12: refillDetails.before_empty_12,
-        total12: refillDetails.before_full_12 + refillDetails.before_empty_12,
-        full48: refillDetails.before_full_48,
-        empty48: refillDetails.before_empty_48,
-        total48: refillDetails.before_full_48 + refillDetails.before_empty_48,
+        full12: refillDetails.before_full_12 ?? 0,
+        empty12: refillDetails.before_empty_12 ?? 0,
+        total12: (refillDetails.before_full_12 ?? 0) + (refillDetails.before_empty_12 ?? 0),
+        full48: refillDetails.before_full_48 ?? 0,
+        empty48: refillDetails.before_empty_48 ?? 0,
+        total48: (refillDetails.before_full_48 ?? 0) + (refillDetails.before_empty_48 ?? 0),
         reason: null,
       };
     }
@@ -419,7 +421,6 @@ export function RefillForm({
   const return48Invalid = ret48Value > availableEmpty48;
   const liveMoneyNet = baseMoneyNet + moneyResult;
   const liveMoneyGive = Math.max(liveMoneyNet, 0);
-  const liveMoneyReceive = Math.max(-liveMoneyNet, 0);
   const originalDelta12 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy12, editEntry.return12) : 0;
   const originalDelta48 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy48, editEntry.return48) : 0;
   // Only actual swaps affect company cylinders (new shells do not).
@@ -486,6 +487,16 @@ export function RefillForm({
     isBuyMode,
     isReturnMode,
   ]);
+  const cylinderStatusLine = !companyBalanceReady
+    ? "Current company balances unavailable. Preview is disabled until balances load."
+    : balanceAlertLines.length > 0
+      ? balanceAlertLines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
+  const moneyStatusLine = !companyBalanceReady
+    ? "Current company balances unavailable. Preview is disabled until balances load."
+    : companyMoneyTransitionLines.length > 0
+      ? companyMoneyTransitionLines.join("\n")
+      : CUSTOMER_WORDING.moneySettled;
 
   useEffect(() => {
     if (disableReturn12 && ret12Value !== 0) {
@@ -506,10 +517,10 @@ export function RefillForm({
   const empty12Color = ret12Value > 0 ? "#f97316" : "#64748b";
   const empty48Color = ret48Value > 0 ? "#f97316" : "#64748b";
 
-  const afterFull12 = base ? base.full12 + totalBuy12 : null;
-  const afterEmpty12 = base ? base.empty12 - ret12Value : null;
-  const afterFull48 = base ? base.full48 + totalBuy48 : null;
-  const afterEmpty48 = base ? base.empty48 - ret48Value : null;
+  const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
+  const afterEmpty12 = base ? (base.empty12 ?? 0) - ret12Value : null;
+  const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
+  const afterEmpty48 = base ? (base.empty48 ?? 0) - ret48Value : null;
   const gasLabelStyle = (gas: "12kg" | "48kg") => ({
     color: gasColor(gas),
     fontWeight: "700" as const,
@@ -828,25 +839,12 @@ export function RefillForm({
                 </View>
               </View>
 
-              {!companyBalanceReady ? (
-                <View style={styles.alertBox}>
-                  <Text style={styles.alertText}>
-                    Current company balances unavailable. Preview is disabled until balances load.
-                  </Text>
-                </View>
-              ) : balanceAlertLines.length > 0 ? (
-                <View style={styles.alertBox}>
-                  {balanceAlertLines.map((line) => (
-                    <Text key={line} style={styles.alertText}>
-                      {line}
-                    </Text>
-                  ))}
-                </View>
-              ) : null}
-
               <View style={styles.section}>
-                <Text style={styles.label}>Cylinders</Text>
-                <View style={styles.fieldBox}>
+                <BigBox
+                  title={CUSTOMER_WORDING.cylinders}
+                  statusLine={cylinderStatusLine}
+                  statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
+                >
                   <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
                   <View
                     style={[styles.amountsRow, disableReturn12 && styles.sectionDisabled]}
@@ -947,14 +945,6 @@ export function RefillForm({
                         />
                       )}
                     </View>
-                    <View style={[styles.amountCell, styles.amountCellResult]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Remaining / Extra</Text>
-                        <Text style={styles.helperText}> </Text>
-                      </View>
-                      <View style={styles.stepperSpacer} />
-                      <RemainingExtraChips lines={company12TransitionLines} unavailable={!companyBalanceReady} />
-                    </View>
                   </View>
                   {return12Invalid && !disableReturn12 ? (
                     <Text style={styles.errorText}>
@@ -962,70 +952,58 @@ export function RefillForm({
                     </Text>
                   ) : null}
                   {isReturnMode && owedReturn12 > 0 ? (
-                    <View style={[styles.amountsRow, styles.actionRow]}>
-                      <View style={styles.amountCell} />
-                      <View style={styles.amountCell}>
-                        <View style={styles.inlineActionRow}>
-                          {(() => {
-                            const isAllReturned = ret12Value === owedReturn12;
-                            return (
-                              <Pressable
-                                style={[
-                                  styles.inlineActionButton,
-                                  isAllReturned ? null : styles.inlineActionButtonSuccess,
-                                ]}
-                                onPress={() => {
-                                  setRet12Touched(true);
-                                  if (isAllReturned) {
-                                    setRet12("0");
-                                  } else {
-                                    setRet12(String(owedReturn12));
-                                  }
-                                }}
-                              >
-                                <Text style={styles.inlineActionText}>
-                                  {isAllReturned ? "Didnt return" : "Return all"}
-                                </Text>
-                              </Pressable>
-                            );
-                          })()}
-                        </View>
-                      </View>
-                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    <View style={styles.inlineActionRow}>
+                      {(() => {
+                        const isAllReturned = ret12Value === owedReturn12;
+                        return (
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              isAllReturned ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              setRet12Touched(true);
+                              if (isAllReturned) {
+                                setRet12("0");
+                              } else {
+                                setRet12(String(owedReturn12));
+                              }
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {isAllReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                     </View>
                   ) : showReturnToggle ? (
-                    <View style={[styles.amountsRow, styles.actionRow]}>
-                      <View style={styles.amountCell} />
-                      <View style={styles.amountCell}>
-                        <View style={styles.inlineActionRow}>
-                          {(() => {
-                            const isReturned = buy12Value > 0 && ret12Value === buy12Value;
-                            return (
-                              <Pressable
-                                style={[
-                                  styles.inlineActionButton,
-                                  isReturned ? null : styles.inlineActionButtonSuccess,
-                                ]}
-                                onPress={() => {
-                                  if (buy12Value <= 0) return;
-                                  if (isReturned) {
-                                    setRet12Touched(true);
-                                    setRet12("0");
-                                    return;
-                                  }
-                                  setRet12Touched(true);
-                                  setRet12(String(buy12Value));
-                                }}
-                              >
-                                <Text style={styles.inlineActionText}>
-                                  {isReturned ? "Didnt return" : "Returned"}
-                                </Text>
-                              </Pressable>
-                            );
-                          })()}
-                        </View>
-                      </View>
-                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    <View style={styles.inlineActionRow}>
+                      {(() => {
+                        const isReturned = buy12Value > 0 && ret12Value === buy12Value;
+                        return (
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              isReturned ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              if (buy12Value <= 0) return;
+                              if (isReturned) {
+                                setRet12Touched(true);
+                                setRet12("0");
+                                return;
+                              }
+                              setRet12Touched(true);
+                              setRet12(String(buy12Value));
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {isReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                     </View>
                   ) : null}
 
@@ -1129,14 +1107,6 @@ export function RefillForm({
                         />
                       )}
                     </View>
-                    <View style={[styles.amountCell, styles.amountCellResult]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Remaining / Extra</Text>
-                        <Text style={styles.helperText}> </Text>
-                      </View>
-                      <View style={styles.stepperSpacer} />
-                      <RemainingExtraChips lines={company48TransitionLines} unavailable={!companyBalanceReady} />
-                    </View>
                   </View>
                   {return48Invalid && !disableReturn48 ? (
                     <Text style={styles.errorText}>
@@ -1144,79 +1114,70 @@ export function RefillForm({
                     </Text>
                   ) : null}
                   {isReturnMode && owedReturn48 > 0 ? (
-                    <View style={[styles.amountsRow, styles.actionRow]}>
-                      <View style={styles.amountCell} />
-                      <View style={styles.amountCell}>
-                        <View style={styles.inlineActionRow}>
-                          {(() => {
-                            const isAllReturned = ret48Value === owedReturn48;
-                            return (
-                              <Pressable
-                                style={[
-                                  styles.inlineActionButton,
-                                  isAllReturned ? null : styles.inlineActionButtonSuccess,
-                                ]}
-                                onPress={() => {
-                                  setRet48Touched(true);
-                                  if (isAllReturned) {
-                                    setRet48("0");
-                                  } else {
-                                    setRet48(String(owedReturn48));
-                                  }
-                                }}
-                              >
-                                <Text style={styles.inlineActionText}>
-                                  {isAllReturned ? "Didnt return" : "Return all"}
-                                </Text>
-                              </Pressable>
-                            );
-                          })()}
-                        </View>
-                      </View>
-                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    <View style={styles.inlineActionRow}>
+                      {(() => {
+                        const isAllReturned = ret48Value === owedReturn48;
+                        return (
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              isAllReturned ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              setRet48Touched(true);
+                              if (isAllReturned) {
+                                setRet48("0");
+                              } else {
+                                setRet48(String(owedReturn48));
+                              }
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {isAllReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                     </View>
                   ) : showReturnToggle ? (
-                    <View style={[styles.amountsRow, styles.actionRow]}>
-                      <View style={styles.amountCell} />
-                      <View style={styles.amountCell}>
-                        <View style={styles.inlineActionRow}>
-                          {(() => {
-                            const isReturned = buy48Value > 0 && ret48Value === buy48Value;
-                            return (
-                              <Pressable
-                                style={[
-                                  styles.inlineActionButton,
-                                  isReturned ? null : styles.inlineActionButtonSuccess,
-                                ]}
-                                onPress={() => {
-                                  if (buy48Value <= 0) return;
-                                  if (isReturned) {
-                                    setRet48Touched(true);
-                                    setRet48("0");
-                                    return;
-                                  }
-                                  setRet48Touched(true);
-                                  setRet48(String(buy48Value));
-                                }}
-                              >
-                                <Text style={styles.inlineActionText}>
-                                  {isReturned ? "Didnt return" : "Returned"}
-                                </Text>
-                              </Pressable>
-                            );
-                          })()}
-                        </View>
-                      </View>
-                      <View style={[styles.amountCell, styles.amountCellResult]} />
+                    <View style={styles.inlineActionRow}>
+                      {(() => {
+                        const isReturned = buy48Value > 0 && ret48Value === buy48Value;
+                        return (
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              isReturned ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              if (buy48Value <= 0) return;
+                              if (isReturned) {
+                                setRet48Touched(true);
+                                setRet48("0");
+                                return;
+                              }
+                              setRet48Touched(true);
+                              setRet48(String(buy48Value));
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {isReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                     </View>
                   ) : null}
-                </View>
+                </BigBox>
               </View>
 
               {!isReturnMode ? (
                 <View style={styles.section}>
-                  <Text style={styles.label}>Money</Text>
-                  <View style={styles.fieldBox}>
+                  <BigBox
+                    title={CUSTOMER_WORDING.money}
+                    statusLine={moneyStatusLine}
+                    statusIsAlert={liveMoneyNet > 0}
+                  >
                   <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
                   <View style={styles.amountsRow}>
                     <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
@@ -1549,7 +1510,7 @@ export function RefillForm({
                       <View style={[styles.amountCell, styles.amountCellResult]} />
                     </View>
                   ) : null}
-                  </View>
+                  </BigBox>
                 </View>
               ) : null}
               <View style={styles.section}>

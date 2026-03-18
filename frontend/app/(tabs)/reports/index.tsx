@@ -150,8 +150,8 @@ const ReportDayCard = memo(function ReportDayCard({
                 ))}
               </View>
               <View style={styles.collapsedCashMath}>
-                {cashMathLines.map((line) => (
-                  <Text key={line.label} style={styles.cashLine} numberOfLines={1} ellipsizeMode="tail">
+                {cashMathLines.map((line, index) => (
+                  <Text key={`${line.label}-${index}`} style={styles.cashLine} numberOfLines={1} ellipsizeMode="tail">
                     {line.label} {formatMoneySigned(line.value)}
                   </Text>
                 ))}

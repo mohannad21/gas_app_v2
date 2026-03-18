@@ -18,11 +18,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
+import BigBox from "@/components/entry/BigBox";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { CUSTOMER_WORDING } from "@/lib/wording";
 import {
   useAdjustInventory,
   useInventoryAdjustments,
@@ -41,6 +44,12 @@ type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
 
 const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
 const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
+const MONEY_STEPPERS: FieldStepper[] = [
+  { delta: 20, label: "+20", position: "top" },
+  { delta: -5, label: "-5", position: "left" },
+  { delta: 5, label: "+5", position: "right" },
+  { delta: -20, label: "-20", position: "bottom" },
+];
 
 function getLocalDateString() {
   const now = new Date();
@@ -278,6 +287,14 @@ function InventoryAdjustForm({
   const baseEmpty12 = inventoryBefore?.empty12;
   const baseFull48 = inventoryBefore?.full48;
   const baseEmpty48 = inventoryBefore?.empty48;
+  const status12 =
+    baseFull12 !== undefined && baseEmpty12 !== undefined
+      ? `Full ${baseFull12} to ${baseFull12 + deltaFull12} | Empty ${baseEmpty12} to ${baseEmpty12 + deltaEmpty12}`
+      : null;
+  const status48 =
+    baseFull48 !== undefined && baseEmpty48 !== undefined
+      ? `Full ${baseFull48} to ${baseFull48 + deltaFull48} | Empty ${baseEmpty48} to ${baseEmpty48 + deltaEmpty48}`
+      : null;
 
   const save = async () => {
     const trimmedReason = reason.trim();
@@ -353,145 +370,70 @@ function InventoryAdjustForm({
         </>
       ) : null}
 
-      <View style={styles.adjustGrid}>
-        <View style={styles.adjustColumn}>
-          <Text style={styles.modalLabel}>12kg</Text>
-          <Text style={styles.adjustLabel}>Full</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setFull12, full12, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={full12}
-              onChangeText={setFull12}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "12kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setFull12, full12, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          <Text style={styles.adjustLabel}>Empty</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setEmpty12, empty12, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={empty12}
-              onChangeText={setEmpty12}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "12kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "12kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "12kg") return;
-                stepValue(setEmpty12, empty12, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          {baseFull12 !== undefined && baseEmpty12 !== undefined && (deltaFull12 || deltaEmpty12) ? (
-            <Text style={styles.impactLabel}>
-              {baseFull12} {"to"} {baseFull12 + deltaFull12} | {baseEmpty12} {"to"} {baseEmpty12 + deltaEmpty12}
-            </Text>
-          ) : null}
+      <BigBox title="12kg" statusLine={status12} statusIsAlert={(deltaFull12 || deltaEmpty12) !== 0}>
+        <View style={styles.entryFieldPair}>
+          <FieldCell
+            title="Full"
+            value={deltaFull12}
+            onIncrement={() => {
+              if (entry && gasType !== "12kg") return;
+              stepValue(setFull12, full12, 1);
+            }}
+            onDecrement={() => {
+              if (entry && gasType !== "12kg") return;
+              stepValue(setFull12, full12, -1);
+            }}
+            onChangeText={(value) => setFull12(value)}
+            editable={!entry || gasType === "12kg"}
+          />
+          <FieldCell
+            title="Empty"
+            value={deltaEmpty12}
+            onIncrement={() => {
+              if (entry && gasType !== "12kg") return;
+              stepValue(setEmpty12, empty12, 1);
+            }}
+            onDecrement={() => {
+              if (entry && gasType !== "12kg") return;
+              stepValue(setEmpty12, empty12, -1);
+            }}
+            onChangeText={(value) => setEmpty12(value)}
+            editable={!entry || gasType === "12kg"}
+          />
         </View>
-
-        <View style={styles.adjustColumn}>
-          <Text style={styles.modalLabel}>48kg</Text>
-          <Text style={styles.adjustLabel}>Full</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setFull48, full48, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={full48}
-              onChangeText={setFull48}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "48kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setFull48, full48, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          <Text style={styles.adjustLabel}>Empty</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setEmpty48, empty48, -1);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#0a7ea4" />
-            </Pressable>
-            <TextInput
-              style={[styles.modalInput, styles.stepperInput]}
-              placeholder="0"
-              keyboardType="number-pad"
-              value={empty48}
-              onChangeText={setEmpty48}
-              inputAccessoryViewID={accessoryId}
-              editable={!entry || gasType === "48kg"}
-            />
-            <Pressable
-              style={[styles.stepperBtn, entry && gasType !== "48kg" && styles.stepperBtnDisabled]}
-              onPress={() => {
-                if (entry && gasType !== "48kg") return;
-                stepValue(setEmpty48, empty48, 1);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#0a7ea4" />
-            </Pressable>
-          </View>
-          {baseFull48 !== undefined && baseEmpty48 !== undefined && (deltaFull48 || deltaEmpty48) ? (
-            <Text style={styles.impactLabel}>
-              {baseFull48} {"to"} {baseFull48 + deltaFull48} | {baseEmpty48} {"to"} {baseEmpty48 + deltaEmpty48}
-            </Text>
-          ) : null}
+      </BigBox>
+      <BigBox title="48kg" statusLine={status48} statusIsAlert={(deltaFull48 || deltaEmpty48) !== 0}>
+        <View style={styles.entryFieldPair}>
+          <FieldCell
+            title="Full"
+            value={deltaFull48}
+            onIncrement={() => {
+              if (entry && gasType !== "48kg") return;
+              stepValue(setFull48, full48, 1);
+            }}
+            onDecrement={() => {
+              if (entry && gasType !== "48kg") return;
+              stepValue(setFull48, full48, -1);
+            }}
+            onChangeText={(value) => setFull48(value)}
+            editable={!entry || gasType === "48kg"}
+          />
+          <FieldCell
+            title="Empty"
+            value={deltaEmpty48}
+            onIncrement={() => {
+              if (entry && gasType !== "48kg") return;
+              stepValue(setEmpty48, empty48, 1);
+            }}
+            onDecrement={() => {
+              if (entry && gasType !== "48kg") return;
+              stepValue(setEmpty48, empty48, -1);
+            }}
+            onChangeText={(value) => setEmpty48(value)}
+            editable={!entry || gasType === "48kg"}
+          />
         </View>
-      </View>
+      </BigBox>
 
       <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
       <TextInput
@@ -577,6 +519,8 @@ function CashAdjustForm({
   }, [entry, visible, date]);
 
   const deltaValue = Number(deltaCash) || 0;
+  const cashStatusLine =
+    cashBefore !== null ? `Cash ${cashBefore.toFixed(0)} to ${(cashBefore + deltaValue).toFixed(0)}` : null;
 
   const save = async () => {
     const trimmedReason = reason.trim();
@@ -614,29 +558,18 @@ function CashAdjustForm({
           <Ionicons name="time-outline" size={16} color="#0a7ea4" />
         </Pressable>
       </View>
-      <Text style={styles.modalLabel}>Amount</Text>
-      <View style={styles.stepperRow}>
-        <Pressable style={styles.stepperBtn} onPress={() => stepValue(-1)}>
-          <Ionicons name="remove" size={16} color="#0a7ea4" />
-        </Pressable>
-        <TextInput
-          style={[styles.modalInput, styles.stepperInput]}
-          placeholder="0"
-          keyboardType="number-pad"
-          value={deltaCash}
-          onChangeText={setDeltaCash}
-          inputAccessoryViewID={accessoryId}
-        />
-        <Pressable style={styles.stepperBtn} onPress={() => stepValue(1)}>
-          <Ionicons name="add" size={16} color="#0a7ea4" />
-        </Pressable>
-      </View>
-
-      {cashBefore !== null && deltaValue ? (
-        <Text style={styles.impactLabel}>
-          Impact: {cashBefore} NIS {"to"} {cashBefore + deltaValue} NIS
-        </Text>
-      ) : null}
+      <BigBox title="Amount" statusLine={cashStatusLine} statusIsAlert={deltaValue < 0}>
+        <View style={styles.entryFieldPairSingle}>
+          <FieldCell
+            title="Amount"
+            value={deltaValue}
+            onIncrement={() => stepValue(5)}
+            onDecrement={() => stepValue(-5)}
+            onChangeText={setDeltaCash}
+            steppers={MONEY_STEPPERS}
+          />
+        </View>
+      </BigBox>
 
       <Text style={styles.modalLabel}>Reason</Text>
       <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
@@ -719,7 +652,6 @@ function CompanyPaymentForm({
 
   const amountValue = Number(amount) || 0;
   const totalDue = Math.abs(companyBalance);
-  const resultValue = totalDue - amountValue;
   const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
   const companyBalanceAfter = companyBalance - normalizedAmount;
   const companyPreviewLines = formatBalanceTransitions(
@@ -736,6 +668,7 @@ function CompanyPaymentForm({
   const tableDisabled = !balanceReady || companyBalance === 0;
   const companyPaymentShortfall =
     paymentDirection === "pay" ? Math.max(amountValue - walletBalance, 0) : 0;
+  const paymentStatusLine = companyPreviewLines.join("\n");
 
   const save = async () => {
     if (amountValue <= 0) {
@@ -773,19 +706,6 @@ function CompanyPaymentForm({
           <Ionicons name="time-outline" size={16} color="#0a7ea4" />
         </Pressable>
       </View>
-      {!balanceReady ? (
-        <View style={styles.alertBox}>
-          <Text style={styles.alertText}>Current company balances unavailable. Preview is disabled until balances load.</Text>
-        </View>
-      ) : totalDue > 0 ? (
-        <View style={styles.alertBox}>
-          {companyPreviewLines.map((line) => (
-            <Text key={line} style={styles.alertText}>
-              {line}
-            </Text>
-          ))}
-        </View>
-      ) : null}
       <Text style={styles.modalLabel}>Payment direction</Text>
       <View style={styles.modeRow}>
         <Pressable
@@ -833,96 +753,76 @@ function CompanyPaymentForm({
           </Text>
         </Pressable>
       </View>
-      <View style={[styles.fieldBox, tableDisabled && styles.sectionDisabled]} pointerEvents={tableDisabled ? "none" : "auto"}>
-        <View style={styles.amountsRow}>
-          <View style={[styles.amountCell, styles.paymentCell]}>
-            <Text style={styles.fieldName}>Total</Text>
-            <TextInput
-              style={[styles.modalInput, styles.amountInput, styles.inputReadOnly]}
-              value="0"
-              editable={false}
-              placeholder="0"
-            />
-          </View>
-          <View style={[styles.amountCell, styles.paymentCell]}>
-            <Text style={styles.fieldName}>Paid</Text>
-            <View style={styles.stepperStack}>
-              <Pressable style={styles.stepperTiny} onPress={() => stepValue(50)}>
-                <Ionicons name="add" size={10} color="#0a7ea4" />
-              </Pressable>
-              <View style={styles.amountGroup}>
-                <Pressable style={styles.stepperBtnSmall} onPress={() => stepValue(-1)}>
-                  <Ionicons name="remove" size={10} color="#0a7ea4" />
-                </Pressable>
-                <TextInput
-                  style={[styles.modalInput, styles.amountInput]}
-                  placeholder="0"
-                  keyboardType="number-pad"
-                  value={amount}
-                  onChangeText={setAmount}
-                  inputAccessoryViewID={accessoryId}
-                />
-                <Pressable style={styles.stepperBtnSmall} onPress={() => stepValue(1)}>
-                  <Ionicons name="add" size={10} color="#0a7ea4" />
-                </Pressable>
-              </View>
-              <Pressable style={styles.stepperTiny} onPress={() => stepValue(-50)}>
-                <Ionicons name="remove" size={10} color="#0a7ea4" />
-              </Pressable>
-            </View>
-            <View style={[styles.inlineActionRow, styles.paymentActionRow]}>
-              <Pressable
-                style={[
-                  styles.inlineActionButton,
-                  amountValue === 0 ? styles.inlineActionButtonSuccess : null,
-                ]}
-                onPress={() => {
-                  if (amountValue === 0) {
-                    setAmount(totalDue.toFixed(0));
-                  } else {
-                    setAmount("0");
-                  }
-                }}
-              >
-                <Text style={styles.inlineActionText}>
-                  {paymentDirection === "receive" ? "Receive all" : "Pay all"}
-                </Text>
-              </Pressable>
-            </View>
-            <InlineWalletFundingPrompt
-              walletAmount={walletBalance}
-              shortfall={companyPaymentShortfall}
-              onTransferNow={
-                companyPaymentShortfall > 0
-                  ? () =>
-                      router.push({
-                        pathname: "/expenses/new",
-                        params: {
-                          tab: "bank_to_wallet",
-                          amount: companyPaymentShortfall.toFixed(0),
-                        },
-                      })
-                  : undefined
-              }
-            />
-          </View>
-          <View style={[styles.amountCell, styles.paymentCell]}>
-            <Text style={styles.fieldName}>After</Text>
-            <TextInput
-              style={[
-                styles.modalInput,
-                styles.amountInput,
-                styles.inputReadOnly,
-                styles.resultInputLight,
-                resultValue > 0 ? styles.negativeValue : resultValue < 0 ? styles.positiveValue : null,
-              ]}
-              value={resultValue.toFixed(0)}
-              editable={false}
-              placeholder="0"
-            />
-          </View>
+      <BigBox
+        title={CUSTOMER_WORDING.money}
+        statusLine={
+          !balanceReady
+            ? "Current company balances unavailable. Preview is disabled until balances load."
+            : paymentStatusLine
+        }
+        statusIsAlert={companyBalanceAfter > 0}
+      >
+        <View
+          style={[styles.entryFieldPair, tableDisabled && styles.sectionDisabled]}
+          pointerEvents={tableDisabled ? "none" : "auto"}
+        >
+          <FieldCell
+            title={CUSTOMER_WORDING.total}
+            comment={paymentDirection === "receive" ? "Company owes you" : "You owe company"}
+            value={totalDue}
+            onIncrement={() => {}}
+            onDecrement={() => {}}
+            editable={false}
+          />
+          <FieldCell
+            title={CUSTOMER_WORDING.paid}
+            value={amountValue}
+            onIncrement={() => stepValue(5)}
+            onDecrement={() => stepValue(-5)}
+            onChangeText={setAmount}
+            steppers={MONEY_STEPPERS}
+          />
         </View>
-      </View>
+        <View style={styles.bigBoxActionRow}>
+          <Pressable
+            style={[
+              styles.inlineActionButton,
+              amountValue === 0 ? styles.inlineActionButtonSuccess : null,
+            ]}
+            onPress={() => {
+              if (amountValue === 0) {
+                setAmount(totalDue.toFixed(0));
+              } else {
+                setAmount("0");
+              }
+            }}
+          >
+            <Text style={styles.inlineActionText}>
+              {amountValue === 0
+                ? paymentDirection === "receive"
+                  ? "Receive all"
+                  : CUSTOMER_WORDING.payAll
+                : CUSTOMER_WORDING.didntPay}
+            </Text>
+          </Pressable>
+        </View>
+        <InlineWalletFundingPrompt
+          walletAmount={walletBalance}
+          shortfall={companyPaymentShortfall}
+          onTransferNow={
+            companyPaymentShortfall > 0
+              ? () =>
+                  router.push({
+                    pathname: "/expenses/new",
+                    params: {
+                      tab: "bank_to_wallet",
+                      amount: companyPaymentShortfall.toFixed(0),
+                    },
+                  })
+              : undefined
+          }
+        />
+      </BigBox>
       <Text style={styles.modalLabel}>Note</Text>
       <TextInput
         style={styles.modalInput}
@@ -1275,6 +1175,13 @@ const styles = StyleSheet.create({
   hubForm: {
     gap: 8,
   },
+  entryFieldPair: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  entryFieldPairSingle: {
+    flexDirection: "row",
+  },
   hubFormContainer: {
     flexGrow: 1,
     width: "100%",
@@ -1404,6 +1311,11 @@ const styles = StyleSheet.create({
   },
   paymentActionRow: {
     marginTop: 20,
+  },
+  bigBoxActionRow: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   inlineActionButton: {
     borderRadius: 8,

@@ -15,22 +15,17 @@ import {
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders, useUpdateOrder } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
-import { GasType } from "@/types/domain";
-import { gasColor } from "@/constants/gas";
+import type { GasType } from "@/types/domain";
+import BigBox from "@/components/entry/BigBox";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
+import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { CUSTOMER_WORDING } from "@/lib/wording";
 
 /**
  * 🔴 BACKEND CONTRACT (IMPORTANT)
  * Replace this with your real API / React Query hook later.
  */
-async function fetchLatestUnitPrice(
-  gasType: GasType,
-  customerType: "private" | "industrial" | "any"
-): Promise<number> {
-  // TODO: backend
-  if (gasType === "12kg") return customerType === "industrial" ? 100 : 120;
-  return customerType === "industrial" ? 200 : 240;
-}
 
 type OrderFormValues = {
   customer_id: string;
@@ -86,7 +81,6 @@ export default function EditOrderScreen() {
     [systemsQuery.data]
   );
 
-  const selectedSystemId = watch("system_id");
   const selectedGas = watch("gas_type");
   const selectedCustomerEntry = useMemo(
     () => (customersQuery.data ?? []).find((c) => c.id === selectedCustomer),
@@ -105,6 +99,27 @@ export default function EditOrderScreen() {
 
   const diff = calcCustomerCylinderDelta("replacement", installed, received);
   const remaining = calcMoneyUiResult(total, paid);
+  const cylinderBefore =
+    selectedGas === "12kg"
+      ? Number(selectedCustomerEntry?.cylinder_balance_12kg ?? 0)
+      : Number(selectedCustomerEntry?.cylinder_balance_48kg ?? 0);
+  const moneyBefore = Number(selectedCustomerEntry?.money_balance ?? 0);
+  const cylinderAfter = cylinderBefore + diff;
+  const moneyAfter = moneyBefore + remaining;
+  const cylinderStatusLine = formatBalanceTransitions(
+    [makeBalanceTransition("customer", selectedGas === "12kg" ? "cyl_12" : "cyl_48", cylinderBefore, cylinderAfter)],
+    { mode: "transition", formatMoney: (value) => value.toFixed(0) }
+  ).join("\n");
+  const moneyStatusLine = formatBalanceTransitions(
+    [makeBalanceTransition("customer", "money", moneyBefore, moneyAfter)],
+    { mode: "transition", formatMoney: (value) => value.toFixed(0) }
+  ).join("\n");
+  const moneySteppers: FieldStepper[] = [
+    { delta: 20, label: "+20", position: "top" },
+    { delta: -5, label: "-5", position: "left" },
+    { delta: 5, label: "+5", position: "right" },
+    { delta: -20, label: "-20", position: "bottom" },
+  ];
 
   const updateOrder = useUpdateOrder();
 
@@ -125,6 +140,9 @@ export default function EditOrderScreen() {
       paid_amount: String(order.paid_amount),
       note: order.note ?? "",
     });
+    if (order.cylinders_installed > 0) {
+      setUnitPrice(order.price_total / order.cylinders_installed);
+    }
   }, [order, reset]);
 
 
@@ -280,145 +298,165 @@ export default function EditOrderScreen() {
       />
       <FieldError message={errors.system_id?.message} />
 
-      {/* INSTALLED / RECEIVED */}
-      <FieldLabel>Installed / Received</FieldLabel>
-      <View style={styles.row}>
-        <Controller
-          control={control}
-          name="cylinders_installed"
-          rules={{
-            required: "Enter installed cylinders",
-            validate: (val) =>
-              (Number(val) || 0) > 0 || "Installed must be greater than zero",
-          }}
-          render={({ field }) => (
-            <TextInput
-              style={[
-                styles.input,
-                styles.half,
-                errors.cylinders_installed && styles.inputError,
-              ]}
-              accessibilityLabel="Installed cylinders"
-              accessibilityHint="Enter number of cylinders installed"
-              keyboardType="numeric"
-              value={field.value}
-              ref={(node) => (inputRefs.current.cylinders_installed = node)}
-              onChangeText={(text) => {
-                field.onChange(text);
-
-                const qty = Number(text) || 0;
-                const total = qty * unitPrice;
-
-                setValue("cylinders_received", text);
-                setValue("price_total", String(total));
-                setValue("paid_amount", String(total));
-              }}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="cylinders_received"
-          rules={{
-            required: "Enter received cylinders",
-            validate: (val) =>
-              (Number(val) || 0) >= 0 || "Received cannot be negative",
-          }}
-          render={({ field }) => (
-            <TextInput
-              style={[
-                styles.input,
-                styles.half,
-                errors.cylinders_received && styles.inputError,
-              ]}
-              accessibilityLabel="Received cylinders"
-              accessibilityHint="Enter number of cylinders received"
-              keyboardType="numeric"
-              value={field.value}
-              ref={(node) => (inputRefs.current.cylinders_received = node)}
-              onChangeText={field.onChange}
-            />
-          )}
-        />
-      </View>
+      <BigBox
+        title={CUSTOMER_WORDING.cylinders}
+        statusLine={cylinderStatusLine}
+        statusIsAlert={cylinderAfter > 0}
+      >
+        <View style={styles.entryFieldPair}>
+          <Controller
+            control={control}
+            name="cylinders_installed"
+            rules={{
+              required: "Enter installed cylinders",
+              validate: (val) =>
+                (Number(val) || 0) > 0 || "Installed must be greater than zero",
+            }}
+            render={({ field }) => (
+              <FieldCell
+                title={CUSTOMER_WORDING.installed}
+                value={Number(field.value) || 0}
+                onIncrement={() => {
+                  const next = Math.max((Number(field.value) || 0) + 1, 0);
+                  field.onChange(String(next));
+                  const nextTotal = next * unitPrice;
+                  setValue("cylinders_received", String(next));
+                  setValue("price_total", String(nextTotal));
+                  setValue("paid_amount", String(nextTotal));
+                }}
+                onDecrement={() => {
+                  const next = Math.max((Number(field.value) || 0) - 1, 0);
+                  field.onChange(String(next));
+                  const nextTotal = next * unitPrice;
+                  setValue("cylinders_received", String(next));
+                  setValue("price_total", String(nextTotal));
+                  setValue("paid_amount", String(nextTotal));
+                }}
+                onChangeText={(text) => {
+                  field.onChange(text);
+                  const qty = Number(text) || 0;
+                  const nextTotal = qty * unitPrice;
+                  setValue("cylinders_received", String(qty));
+                  setValue("price_total", String(nextTotal));
+                  setValue("paid_amount", String(nextTotal));
+                }}
+                error={Boolean(errors.cylinders_installed)}
+                inputRef={(node) => {
+                  inputRefs.current.cylinders_installed = node;
+                }}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="cylinders_received"
+            rules={{
+              required: "Enter received cylinders",
+              validate: (val) =>
+                (Number(val) || 0) >= 0 || "Received cannot be negative",
+            }}
+            render={({ field }) => (
+              <FieldCell
+                title={CUSTOMER_WORDING.received}
+                value={Number(field.value) || 0}
+                onIncrement={() => field.onChange(String(Math.max((Number(field.value) || 0) + 1, 0)))}
+                onDecrement={() => field.onChange(String(Math.max((Number(field.value) || 0) - 1, 0)))}
+                onChangeText={field.onChange}
+                error={Boolean(errors.cylinders_received)}
+                inputRef={(node) => {
+                  inputRefs.current.cylinders_received = node;
+                }}
+              />
+            )}
+          />
+        </View>
+      </BigBox>
       <FieldError message={errors.cylinders_installed?.message} />
       <FieldError message={errors.cylinders_received?.message} />
 
-      <Text style={styles.meta}>
-        Diff: {diff}{" "}
-        <Text style={[styles.meta, { color: gasColor(selectedGas), fontWeight: "700" }]}>
-          {selectedGas}
-        </Text>
-      </Text>
-
-      {/* TOTAL / PAID */}
-      <FieldLabel>Total / Paid</FieldLabel>
-      <View style={styles.row}>
-        <Controller
-          control={control}
-          name="price_total"
-          rules={{
-            required: "Enter total price",
-            validate: (val) =>
-              (Number(val) || 0) >= 0 || "Total cannot be negative",
-          }}
-          render={({ field }) => (
-            <TextInput
-              style={[
-                styles.input,
-                styles.half,
-                errors.price_total && styles.inputError,
-              ]}
-              accessibilityLabel="Total price"
-              accessibilityHint="Enter total price"
-              keyboardType="numeric"
-              value={field.value}
-              ref={(node) => (inputRefs.current.price_total = node)}
-              onChangeText={(text) => {
-                field.onChange(text);
-
-                // total drives paid when user edits total
-                setValue("paid_amount", text);
-              }}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="paid_amount"
-          rules={{
-            required: "Enter paid amount",
-            validate: (val) =>
-              (Number(val) || 0) >= 0 || "Paid cannot be negative",
-          }}
-          render={({ field }) => (
-            <TextInput
-              style={[
-                styles.input,
-                styles.half,
-                errors.paid_amount && styles.inputError,
-              ]}
-              accessibilityLabel="Paid amount"
-              accessibilityHint="Enter amount paid"
-              keyboardType="numeric"
-              value={field.value}
-              ref={(node) => (inputRefs.current.paid_amount = node)}
-              onChangeText={field.onChange}
-            />
-          )}
-        />
-      </View>
+      <BigBox
+        title={CUSTOMER_WORDING.money}
+        statusLine={moneyStatusLine}
+        statusIsAlert={moneyAfter > 0}
+      >
+        <View style={styles.entryFieldPair}>
+          <Controller
+            control={control}
+            name="price_total"
+            rules={{
+              required: "Enter total price",
+              validate: (val) =>
+                (Number(val) || 0) >= 0 || "Total cannot be negative",
+            }}
+            render={({ field }) => (
+              <FieldCell
+                title={CUSTOMER_WORDING.total}
+                value={Number(field.value) || 0}
+                onIncrement={() => {
+                  const next = Math.max((Number(field.value) || 0) + 5, 0);
+                  field.onChange(String(next));
+                  setValue("paid_amount", String(next));
+                }}
+                onDecrement={() => {
+                  const next = Math.max((Number(field.value) || 0) - 5, 0);
+                  field.onChange(String(next));
+                  setValue("paid_amount", String(next));
+                }}
+                onChangeText={(text) => {
+                  field.onChange(text);
+                  setValue("paid_amount", text);
+                }}
+                steppers={moneySteppers}
+                error={Boolean(errors.price_total)}
+                inputRef={(node) => {
+                  inputRefs.current.price_total = node;
+                }}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="paid_amount"
+            rules={{
+              required: "Enter paid amount",
+              validate: (val) =>
+                (Number(val) || 0) >= 0 || "Paid cannot be negative",
+            }}
+            render={({ field }) => (
+              <FieldCell
+                title={CUSTOMER_WORDING.paid}
+                value={Number(field.value) || 0}
+                onIncrement={() => field.onChange(String(Math.max((Number(field.value) || 0) + 5, 0)))}
+                onDecrement={() => field.onChange(String(Math.max((Number(field.value) || 0) - 5, 0)))}
+                onChangeText={field.onChange}
+                steppers={moneySteppers}
+                error={Boolean(errors.paid_amount)}
+                inputRef={(node) => {
+                  inputRefs.current.paid_amount = node;
+                }}
+              />
+            )}
+          />
+        </View>
+      </BigBox>
       <FieldError message={errors.price_total?.message} />
       <FieldError message={errors.paid_amount?.message} />
 
-      <Text style={styles.meta}>
-        {remaining > 0
-          ? `Remaining: $${remaining}`
-          : remaining < 0
-            ? `Extra: $${Math.abs(remaining)}`
-            : "Settled"}
-      </Text>
+      <BigBox title={CUSTOMER_WORDING.notes}>
+        <Controller
+          control={control}
+          name="note"
+          render={({ field }) => (
+            <TextInput
+              style={styles.input}
+              value={field.value ?? ""}
+              onChangeText={field.onChange}
+              placeholder="Add a note"
+              multiline
+            />
+          )}
+        />
+      </BigBox>
 
       <Pressable
         onPress={onSubmit}
@@ -455,6 +493,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   meta: { color: "#666" },
+  entryFieldPair: {
+    flexDirection: "row",
+    gap: 12,
+  },
   primary: {
     backgroundColor: "#0a7ea4",
     padding: 14,

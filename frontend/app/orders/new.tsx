@@ -29,10 +29,13 @@ import { usePriceSettings } from "@/hooks/usePrices";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import BigBox from "@/components/entry/BigBox";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
+import { CUSTOMER_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
 
@@ -56,6 +59,8 @@ function getTodayDate() {
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+type ReplacementToggleState = "matched" | "with_old" | "none" | "custom";
 
 export default function NewOrderScreen() {
   const { customerId, systemId } = useLocalSearchParams<{
@@ -307,8 +312,8 @@ export default function NewOrderScreen() {
   const orderCylinderAfter48 =
     selectedGas === "48kg" ? cylinder48Before + orderCylinderDelta : cylinder48Before;
   const collectionBusy = createCollection.isPending;
-  const previousCustomerRef = useRef<string | undefined>();
-  const formatMoneyAmount = (value: number) => Math.abs(value).toFixed(0);
+  const previousCustomerRef = useRef<string | undefined>(undefined);
+  const formatMoneyAmount = useCallback((value: number) => Math.abs(value).toFixed(0), []);
   const sharedCustomerPreviewTransitions = useMemo(() => {
     if (!selectedCustomerEntry || !customerPreviewReady) return [];
     const transitions = [
@@ -356,6 +361,61 @@ export default function NewOrderScreen() {
       }),
     [formatMoneyAmount, previewIntent, sharedCustomerPreviewTransitions]
   );
+  const cylinderDebtBeforeForGas = selectedGas === "48kg" ? Math.max(cylinder48Before, 0) : Math.max(cylinder12Before, 0);
+  const cylinderDebtAfterForGas = selectedGas === "48kg" ? orderCylinderAfter48 : orderCylinderAfter12;
+  const moneyDebtBefore = Math.max(balanceBefore, 0);
+  const cylinderStatusLine =
+    cylinderDebtAfterForGas > 0
+      ? CUSTOMER_WORDING.cylinderDebt(cylinderDebtAfterForGas, selectedGas || "12kg")
+      : cylinderDebtAfterForGas < 0
+        ? CUSTOMER_WORDING.cylinderCredit(Math.abs(cylinderDebtAfterForGas), selectedGas || "12kg")
+        : CUSTOMER_WORDING.cylinderSettled;
+  const cylinderStatusIsAlert = cylinderDebtAfterForGas > 0;
+  const moneyStatusLine =
+    balanceAfter > 0
+      ? CUSTOMER_WORDING.moneyDebt(formatMoneyAmount(balanceAfter))
+      : balanceAfter < 0
+        ? CUSTOMER_WORDING.moneyCredit(formatMoneyAmount(Math.abs(balanceAfter)))
+        : CUSTOMER_WORDING.moneySettled;
+  const moneyStatusIsAlert = balanceAfter > 0;
+  const replacementReceivedToggleState: ReplacementToggleState =
+    received === installed
+      ? "matched"
+      : cylinderDebtBeforeForGas > 0 && received === installed + cylinderDebtBeforeForGas
+        ? "with_old"
+        : received === 0
+          ? "none"
+          : "custom";
+  const replacementPaidToggleState: ReplacementToggleState =
+    paidInput === totalAmount
+      ? "matched"
+      : moneyDebtBefore > 0 && paidInput === totalAmount + moneyDebtBefore
+        ? "with_old"
+        : paidInput === 0
+          ? "none"
+          : "custom";
+  const paymentModeStatusLine =
+    balanceAfter > 0
+      ? CUSTOMER_WORDING.moneyDebt(formatMoneyAmount(balanceAfter))
+      : balanceAfter < 0
+        ? CUSTOMER_WORDING.moneyCredit(formatMoneyAmount(Math.abs(balanceAfter)))
+        : CUSTOMER_WORDING.moneySettled;
+  const returnModeStatusLine =
+    cylinderDebtAfterForGas > 0
+      ? CUSTOMER_WORDING.cylinderDebt(cylinderDebtAfterForGas, selectedGas || "12kg")
+      : cylinderDebtAfterForGas < 0
+        ? CUSTOMER_WORDING.cylinderCredit(Math.abs(cylinderDebtAfterForGas), selectedGas || "12kg")
+        : CUSTOMER_WORDING.cylinderSettled;
+  const replacementMoneySteppers: FieldStepper[] = [
+    { delta: 20, label: "+20", position: "top" },
+    { delta: -5, label: "-5", position: "left" },
+    { delta: 5, label: "+5", position: "right" },
+    { delta: -20, label: "-20", position: "bottom" },
+  ];
+  const quantitySteppers: FieldStepper[] = [
+    { delta: -1, label: "-1", position: "left" },
+    { delta: 1, label: "+1", position: "right" },
+  ];
 
   const adjustPriceTotal = (delta: number) => {
     if (!canEditTotal) return;
@@ -942,8 +1002,11 @@ ${cylLine}
     handleInvalid
   );
 
+  const navigateToTodayReport = () => {
+    router.replace({ pathname: "/(tabs)/reports", params: { date: getTodayDate() } });
+  };
 
-  const runSavePayment = async () => {
+  const runSavePayment = async (resetAfter = false) => {
     if (!selectedCustomer) {
       Alert.alert("Missing customer", "Please select a customer.");
       return;
@@ -966,16 +1029,20 @@ ${cylLine}
         effective_at: effectiveAt,
         note: values.note || undefined,
       });
-      setValue("paid_amount", "");
-      setValue("note", "");
-      setPaidDirty(false);
+      if (resetAfter) {
+        setValue("paid_amount", "");
+        setValue("note", "");
+        setPaidDirty(false);
+      } else {
+        navigateToTodayReport();
+      }
     } catch (err) {
       const axiosError = err as AxiosError;
       Alert.alert("Payment failed", axiosError.response?.data?.detail ?? axiosError.message);
     }
   };
 
-  const runSaveReturn = async () => {
+  const runSaveReturn = async (resetAfter = false) => {
     if (!selectedCustomer) {
       Alert.alert("Missing customer", "Please select a customer.");
       return;
@@ -1012,18 +1079,22 @@ ${cylLine}
         effective_at: effectiveAt,
         note: values.note || undefined,
       });
-      setValue("cylinders_received", "");
-      setValue("note", "");
+      if (resetAfter) {
+        setValue("cylinders_received", "");
+        setValue("note", "");
+      } else {
+        navigateToTodayReport();
+      }
     } catch (err) {
       const axiosError = err as AxiosError;
       Alert.alert("Return failed", axiosError.response?.data?.detail ?? axiosError.message);
     }
   };
 
-  const handleSavePayment = () => runSavePayment();
-  const handleSavePaymentAndAddAnother = () => runSavePayment();
-  const handleSaveReturn = () => runSaveReturn();
-  const handleSaveReturnAndAddAnother = () => runSaveReturn();
+  const handleSavePayment = () => runSavePayment(false);
+  const handleSavePaymentAndAddAnother = () => runSavePayment(true);
+  const handleSaveReturn = () => runSaveReturn(false);
+  const handleSaveReturnAndAddAnother = () => runSaveReturn(true);
   const savePrimaryLabel = isOrderAction
     ? "Save Order"
     : isPayment
@@ -1079,10 +1150,55 @@ ${cylLine}
     setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
   };
 
+  const cycleReplacementReceived = () => {
+    if (cylinderDebtBeforeForGas <= 0) {
+      const next = replacementReceivedToggleState === "matched" ? 0 : installed;
+      setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+      return;
+    }
+    const next =
+      replacementReceivedToggleState === "matched"
+        ? installed + cylinderDebtBeforeForGas
+        : replacementReceivedToggleState === "with_old"
+          ? 0
+          : installed;
+    setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const cycleReplacementPaid = () => {
+    setPaidDirty(true);
+    if (moneyDebtBefore <= 0) {
+      const next = replacementPaidToggleState === "matched" ? 0 : totalAmount;
+      setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
+      return;
+    }
+    const next =
+      replacementPaidToggleState === "matched"
+        ? totalAmount + moneyDebtBefore
+        : replacementPaidToggleState === "with_old"
+          ? 0
+          : totalAmount;
+    setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const togglePaymentModeAmount = () => {
+    setPaidDirty(true);
+    const settleAmount =
+      paymentDirection === "payout" ? Math.max(0, Math.abs(balanceBefore)) : Math.max(0, balanceBefore);
+    const next = paidInput === settleAmount ? 0 : settleAmount;
+    setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const toggleReturnModeAmount = () => {
+    const settleAmount = Math.max(0, cylinderDebtBeforeForGas);
+    const next = received === settleAmount ? 0 : settleAmount;
+    setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+  };
+
   const exitAfterWhatsApp = () => {
     setWhatsappOpen(false);
     setWhatsappOrderId(null);
-    router.replace({ pathname: "/", params: { flash: "order-created" } });
+    navigateToTodayReport();
   };
 
   const openWhatsAppConfirmation = async () => {
@@ -1485,16 +1601,21 @@ ${cylLine}
             </View>
           ) : null}
 
-          {hasCustomer && customerPreviewStatusLine ? (
+          {hasCustomer && !isPayment && !isReturn && currentAction !== "replacement" && customerPreviewStatusLine ? (
             <View style={styles.alertBox}>
               <Text style={styles.alertText}>{customerPreviewStatusLine}</Text>
             </View>
           ) : null}
 
-          {hasCustomer && !customerPreviewStatusLine && sharedCustomerAlertLines.length > 0 ? (
+          {hasCustomer &&
+          !isPayment &&
+          !isReturn &&
+          currentAction !== "replacement" &&
+          !customerPreviewStatusLine &&
+          sharedCustomerAlertLines.length > 0 ? (
             <View style={styles.alertBox}>
-              {sharedCustomerAlertLines.map((line) => (
-                <Text key={line} style={styles.alertText}>
+              {sharedCustomerAlertLines.map((line, index) => (
+                <Text key={`${line}-${index}`} style={styles.alertText}>
                   {line}
                 </Text>
               ))}
@@ -1609,6 +1730,323 @@ ${cylLine}
             </View>
           ) : null}
 
+          {currentAction === "replacement" ? (
+            <>
+              <View
+                onLayout={(event) => {
+                  setAmountsLayoutY(event.nativeEvent.layout.y);
+                }}
+              >
+                <BigBox
+                  title={CUSTOMER_WORDING.cylinders}
+                  statusLine={customerPreviewStatusLine ?? cylinderStatusLine}
+                  statusIsAlert={customerPreviewStatusLine ? true : cylinderStatusIsAlert}
+                >
+                  <View style={styles.entryFieldPair}>
+                    <Controller
+                      control={control}
+                      name="cylinders_installed"
+                      rules={{
+                        validate: (val) => (Number(val) || 0) > 0 || "Installed must be greater than 0",
+                      }}
+                      render={({ field }) => (
+                        <FieldCell
+                          title={CUSTOMER_WORDING.installed}
+                          value={Number(field.value) || 0}
+                          onIncrement={() => adjustInstalled(1)}
+                          onDecrement={() => adjustInstalled(-1)}
+                          onChangeText={(text) => {
+                            field.onChange(text);
+                            setValue("cylinders_received", text);
+                            setManualPrice(false);
+                          }}
+                          error={Boolean(errors.cylinders_installed)}
+                          inputRef={(node) => {
+                            inputRefs.current.cylinders_installed = node;
+                          }}
+                          onFocus={() => {
+                            setAvoidKeyboard(true);
+                            setFocusTarget("amounts");
+                            scrollToAmountsAndTotals();
+                          }}
+                          onBlur={() => setFocusTarget(null)}
+                          steppers={quantitySteppers}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="cylinders_received"
+                      rules={{
+                        validate: (val) => (Number(val) || 0) >= 0 || "Received cannot be negative",
+                      }}
+                      render={({ field }) => (
+                        <FieldCell
+                          title={CUSTOMER_WORDING.received}
+                          value={Number(field.value) || 0}
+                          onIncrement={() => adjustReceived(1)}
+                          onDecrement={() => adjustReceived(-1)}
+                          onChangeText={field.onChange}
+                          error={Boolean(errors.cylinders_received)}
+                          inputRef={(node) => {
+                            inputRefs.current.cylinders_received = node;
+                          }}
+                          onFocus={() => {
+                            setAvoidKeyboard(true);
+                            setFocusTarget("amounts");
+                            scrollToAmountsAndTotals();
+                          }}
+                          onBlur={() => setFocusTarget(null)}
+                          steppers={quantitySteppers}
+                        />
+                      )}
+                    />
+                  </View>
+                  <View style={styles.bigBoxActionRow}>
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        replacementReceivedToggleState === "none"
+                          ? styles.inlineActionButtonDanger
+                          : replacementReceivedToggleState === "with_old"
+                            ? styles.inlineActionButtonAlt
+                            : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={cycleReplacementReceived}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {replacementReceivedToggleState === "with_old"
+                          ? CUSTOMER_WORDING.returnedWithOld
+                          : replacementReceivedToggleState === "none"
+                            ? CUSTOMER_WORDING.didntReturn
+                            : CUSTOMER_WORDING.returned}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </BigBox>
+                <BigBox
+                  title={CUSTOMER_WORDING.money}
+                  statusLine={customerPreviewStatusLine ?? moneyStatusLine}
+                  statusIsAlert={customerPreviewStatusLine ? true : moneyStatusIsAlert}
+                >
+                  <View
+                    style={styles.entryFieldPair}
+                    onLayout={(event) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      setTotalsLayout({ y, height });
+                    }}
+                  >
+                    <Controller
+                      control={control}
+                      name="price_total"
+                      rules={{
+                        validate: (val) => (Number(val) || 0) >= 0 || "Total cannot be negative",
+                      }}
+                      render={({ field }) => (
+                        <FieldCell
+                          title={CUSTOMER_WORDING.total}
+                          value={Number(field.value) || 0}
+                          onIncrement={() => adjustPriceTotal(5)}
+                          onDecrement={() => adjustPriceTotal(-5)}
+                          onChangeText={(text) => {
+                            setManualPrice(true);
+                            field.onChange(text);
+                            if (!paidDirty) {
+                              setValue("paid_amount", text);
+                            }
+                          }}
+                          error={Boolean(errors.price_total)}
+                          inputRef={(node) => {
+                            inputRefs.current.price_total = node;
+                          }}
+                          onFocus={() => {
+                            setAvoidKeyboard(true);
+                            setFocusTarget("payments");
+                          }}
+                          onBlur={() => setFocusTarget(null)}
+                          steppers={replacementMoneySteppers}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="paid_amount"
+                      rules={{
+                        validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                      }}
+                      render={({ field }) => (
+                        <FieldCell
+                          title={CUSTOMER_WORDING.paid}
+                          value={Number(field.value) || 0}
+                          onIncrement={() => adjustPaidAmount(5)}
+                          onDecrement={() => adjustPaidAmount(-5)}
+                          onChangeText={(text) => {
+                            setPaidDirty(true);
+                            field.onChange(text);
+                          }}
+                          error={Boolean(errors.paid_amount)}
+                          inputRef={(node) => {
+                            inputRefs.current.paid_amount = node;
+                          }}
+                          onFocus={() => {
+                            setPaidDirty(true);
+                            setAvoidKeyboard(true);
+                            setFocusTarget("payments");
+                          }}
+                          onBlur={() => setFocusTarget(null)}
+                          steppers={replacementMoneySteppers}
+                        />
+                      )}
+                    />
+                  </View>
+                  <View style={styles.bigBoxActionRow}>
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        replacementPaidToggleState === "none"
+                          ? styles.inlineActionButtonDanger
+                          : replacementPaidToggleState === "with_old"
+                            ? styles.inlineActionButtonAlt
+                            : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={cycleReplacementPaid}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {replacementPaidToggleState === "with_old"
+                          ? CUSTOMER_WORDING.paidWithDebt
+                          : replacementPaidToggleState === "none"
+                            ? CUSTOMER_WORDING.didntPay
+                            : CUSTOMER_WORDING.paid_}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </BigBox>
+              </View>
+              <FieldError message={errors.cylinders_installed?.message} />
+              <FieldError message={errors.cylinders_received?.message} />
+              <FieldError message={errors.price_total?.message} />
+              <FieldError message={errors.paid_amount?.message} />
+            </>
+          ) : null}
+
+          {isPayment ? (
+            <>
+              <BigBox
+                title={CUSTOMER_WORDING.money}
+                statusLine={customerPreviewStatusLine ?? paymentModeStatusLine}
+                statusIsAlert={customerPreviewStatusLine ? true : balanceAfter > 0}
+              >
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="paid_amount"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustPaidAmount(5)}
+                        onDecrement={() => adjustPaidAmount(-5)}
+                        onChangeText={(text) => {
+                          setPaidDirty(true);
+                          field.onChange(text);
+                        }}
+                        error={Boolean(errors.paid_amount)}
+                        inputRef={(node) => {
+                          inputRefs.current.paid_amount = node;
+                        }}
+                        onFocus={() => {
+                          setPaidDirty(true);
+                          setAvoidKeyboard(true);
+                          setFocusTarget("payments");
+                        }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={replacementMoneySteppers}
+                      />
+                    )}
+                  />
+                </View>
+                <View style={styles.bigBoxActionRow}>
+                  <Pressable
+                    style={[
+                      styles.inlineActionButton,
+                      paidInput === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
+                    ]}
+                    onPress={togglePaymentModeAmount}
+                  >
+                    <Text style={styles.inlineActionText}>
+                      {paidInput === 0
+                        ? paymentDirection === "payout"
+                          ? "Pay all"
+                          : "Receive all"
+                        : CUSTOMER_WORDING.didntPay}
+                    </Text>
+                  </Pressable>
+                </View>
+              </BigBox>
+              <FieldError message={errors.paid_amount?.message} />
+            </>
+          ) : null}
+
+          {isReturn ? (
+            <>
+              <BigBox
+                title={CUSTOMER_WORDING.cylinders}
+                statusLine={customerPreviewStatusLine ?? returnModeStatusLine}
+                statusIsAlert={customerPreviewStatusLine ? true : cylinderDebtAfterForGas > 0}
+              >
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="cylinders_received"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Received cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.received}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustReceived(1)}
+                        onDecrement={() => adjustReceived(-1)}
+                        onChangeText={field.onChange}
+                        error={Boolean(errors.cylinders_received)}
+                        inputRef={(node) => {
+                          inputRefs.current.cylinders_received = node;
+                        }}
+                        onFocus={() => {
+                          setAvoidKeyboard(true);
+                          setFocusTarget("amounts");
+                          scrollToAmountsAndTotals();
+                        }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={quantitySteppers}
+                      />
+                    )}
+                  />
+                </View>
+                <View style={styles.bigBoxActionRow}>
+                  <Pressable
+                    style={[
+                      styles.inlineActionButton,
+                      received === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
+                    ]}
+                    onPress={toggleReturnModeAmount}
+                  >
+                    <Text style={styles.inlineActionText}>
+                      {received === Math.max(0, cylinderDebtBeforeForGas)
+                        ? CUSTOMER_WORDING.didntReturn
+                        : CUSTOMER_WORDING.returnAll}
+                    </Text>
+                  </Pressable>
+                </View>
+              </BigBox>
+              <FieldError message={errors.cylinders_received?.message} />
+            </>
+          ) : null}
+
+          {!isPayment && !isReturn && currentAction !== "replacement" ? (
       <View
         onLayout={(event) => {
           setAmountsLayoutY(event.nativeEvent.layout.y);
@@ -2400,9 +2838,10 @@ ${cylLine}
         <FieldError message={errors.price_total?.message} />
         <FieldError message={errors.paid_amount?.message} />
       </View>
+          ) : null}
 
       <View style={styles.sectionCard}>
-        <FieldLabel>Note (optional)</FieldLabel>
+        <FieldLabel>{CUSTOMER_WORDING.notes}</FieldLabel>
         <Controller
           control={control}
           name="note"
@@ -2643,7 +3082,7 @@ ${cylLine}
               style={[styles.stickyPayment, { bottom: footerHeight + 8 }]}
             >
               <Text style={styles.stickyLabel}>Total / Paid</Text>
-              <View style={styles.amountsRow}>
+              <View style={styles.entryFieldPair}>
                 <View style={styles.amountCell}>
                   <Controller
                     control={control}
@@ -2694,14 +3133,6 @@ ${cylLine}
                     )}
                   />
                 </View>
-                <View style={styles.amountCell}>
-                  <TextInput
-                    style={[styles.input, styles.inputReadOnly]}
-                    value={unpaid.toString()}
-                    editable={false}
-                    placeholder="Unp"
-                  />
-                </View>
               </View>
             </View>
           )}
@@ -2733,8 +3164,8 @@ function BalancePreviewCard({ lines, title = "New Balance" }: { lines: string[];
   return (
     <View style={styles.balancePreviewCard}>
       <Text style={styles.balancePreviewTitle}>{title}</Text>
-      {lines.map((line) => (
-        <Text key={line} style={styles.balancePreviewLine}>
+      {lines.map((line, index) => (
+        <Text key={`${line}-${index}`} style={styles.balancePreviewLine}>
           {line}
         </Text>
       ))}
@@ -3054,6 +3485,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   quarter: { flex: 1 },
+  entryFieldPair: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "stretch",
+  },
+  entryFieldPairSingle: {
+    width: "50%",
+    minWidth: 160,
+    alignSelf: "center",
+  },
+  bigBoxActionRow: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   nowButton: {
     alignSelf: "stretch",
     paddingHorizontal: 12,

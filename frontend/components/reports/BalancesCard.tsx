@@ -106,8 +106,8 @@ export default function BalancesCard({
         <View style={styles.balanceSplitRow}>
           <View style={styles.balanceColumn}>
             <Text style={styles.balancePanelTitle}>Customers</Text>
-            {customerDisplayLines.map((line) => (
-              <Text key={line} style={styles.relationshipLine}>
+            {customerDisplayLines.map((line, index) => (
+              <Text key={`${line}-${index}`} style={styles.relationshipLine}>
                 {line}
               </Text>
             ))}
@@ -122,8 +122,8 @@ export default function BalancesCard({
             {!companyBalancesReady ? (
               <Text style={styles.relationshipLine}>Current company balances unavailable</Text>
             ) : (
-              companyDisplayLines.map((line) => (
-                <Text key={line} style={styles.relationshipLine}>
+              companyDisplayLines.map((line, index) => (
+                <Text key={`${line}-${index}`} style={styles.relationshipLine}>
                   {line}
                 </Text>
               ))

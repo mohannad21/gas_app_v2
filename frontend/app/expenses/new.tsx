@@ -327,6 +327,9 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     fontSize: 12,
   },
+  entryFieldPairSingle: {
+    flexDirection: "row",
+  },
   row: {
     flexDirection: "row",
     gap: 8,
