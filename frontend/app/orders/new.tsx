@@ -30,12 +30,7 @@ import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { getOrderWhatsappLink } from "@/lib/api";
-import {
-  formatBalanceTransitionLines,
-  formatBalanceTransitions,
-  makeBalanceTransition,
-  type FormattedBalanceTransitionLine,
-} from "@/lib/balanceTransitions";
+import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { GasType, OrderCreateInput } from "@/types/domain";
@@ -53,12 +48,6 @@ type OrderFormValues = {
   note?: string;
 };
 type ActionMode = "replacement" | "payment" | "return" | "sell_iron" | "buy_iron";
-
-type DraftHelperState = {
-  kind: "match_installed" | "include_due_empties" | "match_total" | "include_due_amount";
-  previousValue: number;
-  targetValue: number;
-};
 
 function getTodayDate() {
   const now = new Date();
@@ -171,8 +160,6 @@ export default function NewOrderScreen() {
     const minutes = String(now.getMinutes()).padStart(2, "0");
     return `${hours}:${minutes}`;
   });
-  const [receivedHelperState, setReceivedHelperState] = useState<DraftHelperState | null>(null);
-  const [paidHelperState, setPaidHelperState] = useState<DraftHelperState | null>(null);
 
   const currentAction: ActionMode = entryMode === "order" ? orderMode : entryMode;
   const setActionMode = (mode: ActionMode) => {
@@ -313,9 +300,6 @@ export default function NewOrderScreen() {
   const payoutPaymentDisabled = !customerPreviewReady || balanceBefore >= 0;
   const hasReturnDebt12 = cylinder12Before > 0;
   const hasReturnDebt48 = cylinder48Before > 0;
-  const dueEmptyDebt =
-    selectedGas === "48kg" ? Math.max(0, cylinder48Before) : Math.max(0, cylinder12Before);
-  const collectibleDueAmount = Math.max(0, balanceBefore);
   const returnTabEnabled = customerPreviewReady && (hasReturnDebt12 || hasReturnDebt48);
   const orderCylinderDelta = cylinderResult;
   const orderCylinderAfter12 =
@@ -323,8 +307,8 @@ export default function NewOrderScreen() {
   const orderCylinderAfter48 =
     selectedGas === "48kg" ? cylinder48Before + orderCylinderDelta : cylinder48Before;
   const collectionBusy = createCollection.isPending;
-  const previousCustomerRef = useRef<string | undefined>(undefined);
-  const formatMoneyAmount = useCallback((value: number) => Math.abs(value).toFixed(0), []);
+  const previousCustomerRef = useRef<string | undefined>();
+  const formatMoneyAmount = (value: number) => Math.abs(value).toFixed(0);
   const sharedCustomerPreviewTransitions = useMemo(() => {
     if (!selectedCustomerEntry || !customerPreviewReady) return [];
     const transitions = [
@@ -372,50 +356,6 @@ export default function NewOrderScreen() {
       }),
     [formatMoneyAmount, previewIntent, sharedCustomerPreviewTransitions]
   );
-  const replacementCylinderLines = useMemo<FormattedBalanceTransitionLine[]>(() => {
-    if (currentAction !== "replacement") return [];
-    if (customerPreviewStatusLine) {
-      return [{ text: customerPreviewStatusLine, tone: "neutral" }];
-    }
-    if (!selectedCustomerEntry || !customerPreviewReady || !selectedGas) return [];
-    const component = selectedGas === "48kg" ? "cyl_48" : "cyl_12";
-    const before = selectedGas === "48kg" ? cylinder48Before : cylinder12Before;
-    const after = selectedGas === "48kg" ? orderCylinderAfter48 : orderCylinderAfter12;
-    return formatBalanceTransitionLines([makeBalanceTransition("customer", component, before, after)], {
-      mode: "transition",
-      formatMoney: formatMoneyAmount,
-    });
-  }, [
-    currentAction,
-    customerPreviewReady,
-    customerPreviewStatusLine,
-    cylinder12Before,
-    cylinder48Before,
-    formatMoneyAmount,
-    orderCylinderAfter12,
-    orderCylinderAfter48,
-    selectedCustomerEntry,
-    selectedGas,
-  ]);
-  const replacementMoneyLines = useMemo<FormattedBalanceTransitionLine[]>(() => {
-    if (currentAction !== "replacement") return [];
-    if (customerPreviewStatusLine) {
-      return [{ text: customerPreviewStatusLine, tone: "neutral" }];
-    }
-    if (!selectedCustomerEntry || !customerPreviewReady) return [];
-    return formatBalanceTransitionLines([makeBalanceTransition("customer", "money", balanceBefore, balanceAfter)], {
-      mode: "transition",
-      formatMoney: formatMoneyAmount,
-    });
-  }, [
-    balanceAfter,
-    balanceBefore,
-    currentAction,
-    customerPreviewReady,
-    customerPreviewStatusLine,
-    formatMoneyAmount,
-    selectedCustomerEntry,
-  ]);
 
   const adjustPriceTotal = (delta: number) => {
     if (!canEditTotal) return;
@@ -644,7 +584,7 @@ export default function NewOrderScreen() {
     }
   }, [customersQuery.isLoading, inventoryLatest.isLoading, inventoryInitBlocked]);
 
-  const previousSystemRef = useRef<string | undefined>(undefined);
+  const previousSystemRef = useRef<string | undefined>();
   // System selection sets defaults ONCE
   useEffect(() => {
     if (currentAction !== "replacement") return;
@@ -698,8 +638,6 @@ export default function NewOrderScreen() {
 
   useEffect(() => {
     setPaidDirty(false);
-    setReceivedHelperState(null);
-    setPaidHelperState(null);
     if (currentAction === "sell_iron") {
       setValue("cylinders_received", "0");
       setGasPriceDirty(false);
@@ -728,25 +666,6 @@ export default function NewOrderScreen() {
       setManualPrice(false);
     }
   }, [currentAction, setValue]);
-
-  useEffect(() => {
-    if (!receivedHelperState) return;
-    if (received !== receivedHelperState.targetValue) {
-      setReceivedHelperState(null);
-    }
-  }, [received, receivedHelperState]);
-
-  useEffect(() => {
-    if (!paidHelperState) return;
-    if (paidInput !== paidHelperState.targetValue) {
-      setPaidHelperState(null);
-    }
-  }, [paidHelperState, paidInput]);
-
-  useEffect(() => {
-    setReceivedHelperState(null);
-    setPaidHelperState(null);
-  }, [selectedCustomer, selectedGas, selectedSystemId]);
 
   const activeDate = entryMode === "order" ? deliveryDate : collectionDate;
   const activeTime = entryMode === "order" ? deliveryTime : collectionTime;
@@ -1160,44 +1079,6 @@ ${cylLine}
     setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
   };
 
-  const applyReceivedHelper = (
-    kind: DraftHelperState["kind"],
-    nextValue: number,
-    previousValue = receivedHelperState?.previousValue ?? received
-  ) => {
-    setValue("cylinders_received", String(nextValue), { shouldDirty: true, shouldValidate: true });
-    setReceivedHelperState({ kind, previousValue, targetValue: nextValue });
-  };
-
-  const cancelReceivedHelper = () => {
-    if (!receivedHelperState) return;
-    setValue("cylinders_received", String(receivedHelperState.previousValue), {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    setReceivedHelperState(null);
-  };
-
-  const applyPaidHelper = (
-    kind: DraftHelperState["kind"],
-    nextValue: number,
-    previousValue = paidHelperState?.previousValue ?? paidInput
-  ) => {
-    setPaidDirty(true);
-    setValue("paid_amount", String(nextValue), { shouldDirty: true, shouldValidate: true });
-    setPaidHelperState({ kind, previousValue, targetValue: nextValue });
-  };
-
-  const cancelPaidHelper = () => {
-    if (!paidHelperState) return;
-    setPaidDirty(true);
-    setValue("paid_amount", String(paidHelperState.previousValue), {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    setPaidHelperState(null);
-  };
-
   const exitAfterWhatsApp = () => {
     setWhatsappOpen(false);
     setWhatsappOrderId(null);
@@ -1604,16 +1485,13 @@ ${cylLine}
             </View>
           ) : null}
 
-          {hasCustomer && currentAction !== "replacement" && customerPreviewStatusLine ? (
+          {hasCustomer && customerPreviewStatusLine ? (
             <View style={styles.alertBox}>
               <Text style={styles.alertText}>{customerPreviewStatusLine}</Text>
             </View>
           ) : null}
 
-          {hasCustomer &&
-          currentAction !== "replacement" &&
-          !customerPreviewStatusLine &&
-          sharedCustomerAlertLines.length > 0 ? (
+          {hasCustomer && !customerPreviewStatusLine && sharedCustomerAlertLines.length > 0 ? (
             <View style={styles.alertBox}>
               {sharedCustomerAlertLines.map((line) => (
                 <Text key={line} style={styles.alertText}>
@@ -1731,374 +1609,12 @@ ${cylLine}
             </View>
           ) : null}
 
-          {currentAction === "replacement" ? (
-            <>
-              <View
-                style={styles.replacementSectionCard}
-                onLayout={(event) => {
-                  setAmountsLayoutY(event.nativeEvent.layout.y);
-                }}
-              >
-                <View style={styles.replacementSectionHeader}>
-                  <Text style={[styles.replacementSectionTitle, styles.cylindersSectionTitle]}>Cylinders</Text>
-                </View>
-                <View style={styles.replacementPairRow}>
-                  <View style={styles.replacementPairCell}>
-                    <Text style={styles.replacementFieldName}>Installed</Text>
-                    <View style={styles.amountGroup}>
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustInstalled(-1)}>
-                        <Ionicons name="remove" size={10} color="#0a7ea4" />
-                      </Pressable>
-                      <Controller
-                        control={control}
-                        name="cylinders_installed"
-                        rules={{
-                          validate: (val) => {
-                            const count = Number(val) || 0;
-                            if (count <= 0) {
-                              return "Installed must be greater than 0";
-                            }
-                            return true;
-                          },
-                        }}
-                        render={({ field }) => (
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.amountInput,
-                              styles.replacementAmountInput,
-                              errors.cylinders_installed && styles.inputError,
-                            ]}
-                            accessibilityLabel="Installed cylinders"
-                            accessibilityHint="Enter number of cylinders installed"
-                            keyboardType="numeric"
-                            inputMode="numeric"
-                            placeholder="0"
-                            value={field.value}
-                            {...doneInputProps}
-                            ref={(node) => {
-                              inputRefs.current.cylinders_installed = node;
-                            }}
-                            onFocus={() => {
-                              setAvoidKeyboard(true);
-                              setFocusTarget("amounts");
-                              scrollToAmountsAndTotals();
-                            }}
-                            onBlur={() => setFocusTarget(null)}
-                            onChangeText={(t) => {
-                              field.onChange(t);
-                              setValue("cylinders_received", t);
-                              setManualPrice(false);
-                            }}
-                          />
-                        )}
-                      />
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustInstalled(1)}>
-                        <Ionicons name="add" size={10} color="#0a7ea4" />
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <View style={styles.replacementPairCell}>
-                    <Text style={styles.replacementFieldName}>Received</Text>
-                    <View style={styles.amountGroup}>
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustReceived(-1)}>
-                        <Ionicons name="remove" size={10} color="#0a7ea4" />
-                      </Pressable>
-                      <Controller
-                        control={control}
-                        name="cylinders_received"
-                        rules={{
-                          validate: (val) => (Number(val) || 0) >= 0 || "Received cannot be negative",
-                        }}
-                        render={({ field }) => (
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.amountInput,
-                              styles.replacementAmountInput,
-                              errors.cylinders_received && styles.inputError,
-                            ]}
-                            accessibilityLabel="Received cylinders"
-                            accessibilityHint="Enter number of cylinders received"
-                            keyboardType="numeric"
-                            inputMode="numeric"
-                            placeholder="0"
-                            value={field.value}
-                            {...doneInputProps}
-                            ref={(node) => {
-                              inputRefs.current.cylinders_received = node;
-                            }}
-                            onFocus={() => {
-                              setAvoidKeyboard(true);
-                              setFocusTarget("amounts");
-                              scrollToAmountsAndTotals();
-                            }}
-                            onBlur={() => setFocusTarget(null)}
-                            onChangeText={field.onChange}
-                          />
-                        )}
-                      />
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustReceived(1)}>
-                        <Ionicons name="add" size={10} color="#0a7ea4" />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-                <ReplacementTransitionSummary lines={replacementCylinderLines} />
-                <View style={styles.replacementHelperRow}>
-                  {receivedHelperState?.kind !== "include_due_empties" && dueEmptyDebt > 0 ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                      onPress={() =>
-                        applyReceivedHelper(
-                          "include_due_empties",
-                          installed + dueEmptyDebt,
-                          receivedHelperState?.previousValue ?? received
-                        )
-                      }
-                    >
-                      <Text style={styles.inlineActionText}>Include due empties (+{dueEmptyDebt})</Text>
-                    </Pressable>
-                  ) : null}
-                  {!receivedHelperState && received !== installed ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                      onPress={() => applyReceivedHelper("match_installed", installed)}
-                    >
-                      <Text style={styles.inlineActionText}>Match installed</Text>
-                    </Pressable>
-                  ) : null}
-                  {receivedHelperState ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonDanger]}
-                      onPress={cancelReceivedHelper}
-                    >
-                      <Text style={styles.inlineActionText}>Cancel helper</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-
-              <View
-                style={[
-                  styles.replacementSectionCard,
-                  showStickyPayment ? styles.hidden : undefined,
-                ]}
-              >
-                <View style={styles.replacementSectionHeader}>
-                  <Text style={[styles.replacementSectionTitle, styles.moneySectionTitle]}>Money</Text>
-                </View>
-                <View style={styles.replacementPairRow}>
-                  <View
-                    style={styles.replacementPairCell}
-                    onLayout={(event) => {
-                      const { y, height } = event.nativeEvent.layout;
-                      setTotalsLayout({ y, height });
-                    }}
-                  >
-                    <Text style={styles.replacementFieldName}>Total</Text>
-                    <Controller
-                      control={control}
-                      name="price_total"
-                      rules={{
-                        validate: (val) => (Number(val) || 0) >= 0 || "Total cannot be negative",
-                      }}
-                      render={({ field }) => (
-                        <View style={styles.stepperStack}>
-                          <Pressable
-                            style={styles.stepperTiny}
-                            onPress={() => adjustPriceTotal(50)}
-                            accessibilityLabel="Increase total by 50"
-                          >
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => adjustPriceTotal(-10)}
-                              accessibilityLabel="Decrease total by 10"
-                            >
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[
-                                styles.input,
-                                styles.amountInput,
-                                styles.replacementAmountInput,
-                                errors.price_total && styles.inputError,
-                              ]}
-                              accessibilityLabel="Total price"
-                              accessibilityHint="Enter total price"
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={field.value}
-                              {...doneInputProps}
-                              ref={(node) => {
-                                inputRefs.current.price_total = node;
-                              }}
-                              onFocus={() => {
-                                setAvoidKeyboard(true);
-                                setFocusTarget("payments");
-                              }}
-                              onBlur={() => setFocusTarget(null)}
-                              onChangeText={(t) => {
-                                setManualPrice(true);
-                                field.onChange(t);
-                                if (!paidDirty) {
-                                  setValue("paid_amount", t);
-                                }
-                              }}
-                            />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => adjustPriceTotal(10)}
-                              accessibilityLabel="Increase total by 10"
-                            >
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable
-                            style={styles.stepperTiny}
-                            onPress={() => adjustPriceTotal(-50)}
-                            accessibilityLabel="Decrease total by 50"
-                          >
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      )}
-                    />
-                  </View>
-
-                  <View style={styles.replacementPairCell}>
-                    <Text style={styles.replacementFieldName}>Paid</Text>
-                    <Controller
-                      control={control}
-                      name="paid_amount"
-                      rules={{
-                        validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
-                      }}
-                      render={({ field }) => (
-                        <View style={styles.stepperStack}>
-                          <Pressable
-                            style={styles.stepperTiny}
-                            onPress={() => adjustPaidAmount(20)}
-                            accessibilityLabel="Increase paid amount by 20"
-                          >
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => adjustPaidAmount(-5)}
-                              accessibilityLabel="Decrease paid amount by 5"
-                            >
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[
-                                styles.input,
-                                styles.amountInput,
-                                styles.replacementAmountInput,
-                                errors.paid_amount && styles.inputError,
-                              ]}
-                              accessibilityLabel="Paid amount"
-                              accessibilityHint="Enter amount paid"
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={field.value}
-                              {...doneInputProps}
-                              ref={(node) => {
-                                inputRefs.current.paid_amount = node;
-                              }}
-                              onFocus={() => {
-                                setPaidDirty(true);
-                                setAvoidKeyboard(true);
-                                setFocusTarget("payments");
-                              }}
-                              onBlur={() => setFocusTarget(null)}
-                              onChangeText={(t) => {
-                                setPaidDirty(true);
-                                field.onChange(t);
-                              }}
-                            />
-                            <Pressable
-                              style={styles.stepperBtn}
-                              onPress={() => adjustPaidAmount(5)}
-                              accessibilityLabel="Increase paid amount by 5"
-                            >
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable
-                            style={styles.stepperTiny}
-                            onPress={() => adjustPaidAmount(-20)}
-                            accessibilityLabel="Decrease paid amount by 20"
-                          >
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      )}
-                    />
-                  </View>
-                </View>
-                <ReplacementTransitionSummary lines={replacementMoneyLines} />
-                <View style={styles.replacementHelperRow}>
-                  {paidHelperState?.kind !== "include_due_amount" && collectibleDueAmount > 0 ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                      onPress={() =>
-                        applyPaidHelper(
-                          "include_due_amount",
-                          totalAmount + collectibleDueAmount,
-                          paidHelperState?.previousValue ?? paidInput
-                        )
-                      }
-                    >
-                      <Text style={styles.inlineActionText}>
-                        Include due amount (+EUR {formatMoneyAmount(collectibleDueAmount)})
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {!paidHelperState && paidInput !== totalAmount ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                      onPress={() => applyPaidHelper("match_total", totalAmount)}
-                    >
-                      <Text style={styles.inlineActionText}>Match total</Text>
-                    </Pressable>
-                  ) : null}
-                  {paidHelperState ? (
-                    <Pressable
-                      style={[styles.inlineActionButton, styles.inlineActionButtonDanger]}
-                      onPress={cancelPaidHelper}
-                    >
-                      <Text style={styles.inlineActionText}>Cancel helper</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            </>
-          ) : null}
-          {currentAction === "replacement" ? (
-            <>
-              <FieldError message={errors.cylinders_installed?.message} />
-              <FieldError message={errors.cylinders_received?.message} />
-              <FieldError message={errors.price_total?.message} />
-              <FieldError message={errors.paid_amount?.message} />
-            </>
-          ) : null}
-
-          {currentAction !== "replacement" ? (
-            <>
-              <View
-                onLayout={(event) => {
-                  setAmountsLayoutY(event.nativeEvent.layout.y);
-                }}
-              >
-                <View style={styles.fieldBox}>
+      <View
+        onLayout={(event) => {
+          setAmountsLayoutY(event.nativeEvent.layout.y);
+        }}
+      >
+        <View style={styles.fieldBox}>
           <View style={styles.amountsRow}>
             <View style={styles.amountCell}>
               <Text style={styles.fieldName}>Installed</Text>
@@ -2116,7 +1632,7 @@ ${cylLine}
                   rules={{
                     validate: (val) => {
                       const count = Number(val) || 0;
-                      if (isSellIron && count <= 0) {
+                      if ((currentAction === "replacement" || isSellIron) && count <= 0) {
                         return "Installed must be greater than 0";
                       }
                       return true;
@@ -2138,9 +1654,7 @@ ${cylLine}
                       value={field.value}
                       {...doneInputProps}
                       editable={canEditInstalled}
-                      ref={(node) => {
-                        inputRefs.current.cylinders_installed = node;
-                      }}
+                      ref={(node) => (inputRefs.current.cylinders_installed = node)}
                       onFocus={() => {
                         if (!canEditInstalled) return;
                         setAvoidKeyboard(true);
@@ -2148,7 +1662,13 @@ ${cylLine}
                         scrollToAmountsAndTotals();
                       }}
                       onBlur={() => setFocusTarget(null)}
-                      onChangeText={field.onChange}
+                      onChangeText={(t) => {
+                        field.onChange(t);
+                        if (currentAction === "replacement") {
+                          setValue("cylinders_received", t);
+                          setManualPrice(false);
+                        }
+                      }}
                     />
                   )}
                 />
@@ -2195,9 +1715,7 @@ ${cylLine}
                       value={field.value}
                       {...doneInputProps}
                       editable={canEditReceived}
-                      ref={(node) => {
-                        inputRefs.current.cylinders_received = node;
-                      }}
+                      ref={(node) => (inputRefs.current.cylinders_received = node)}
                       onFocus={() => {
                         if (!canEditReceived) return;
                         setAvoidKeyboard(true);
@@ -2229,10 +1747,37 @@ ${cylLine}
               />
             </View>
           </View>
-          {isReturn ? (
+          {currentAction === "replacement" || isReturn ? (
             <View style={[styles.amountsRow, styles.actionRow]}>
               <View style={styles.amountCell} />
               <View style={styles.amountCell}>
+                {currentAction === "replacement" ? (
+                  <View style={styles.inlineActionRow}>
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        received === 0 ? styles.inlineActionButtonSuccess : null,
+                      ]}
+                      onPress={() => {
+                        if (received === 0) {
+                          setValue("cylinders_received", String(installed), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        } else {
+                          setValue("cylinders_received", "0", {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                      }}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {received === 0 ? "Returned" : "Didnt return"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 {isReturn ? (
                   <View style={styles.inlineActionRow}>
                     {(() => {
@@ -2532,9 +2077,7 @@ ${cylLine}
                           value={field.value}
                           {...doneInputProps}
                           editable={canEditTotal}
-                          ref={(node) => {
-                            inputRefs.current.price_total = node;
-                          }}
+                          ref={(node) => (inputRefs.current.price_total = node)}
                           onFocus={() => {
                             if (!canEditTotal) return;
                             setAvoidKeyboard(true);
@@ -2589,9 +2132,7 @@ ${cylLine}
                       value={field.value}
                       {...doneInputProps}
                       editable={canEditTotal}
-                      ref={(node) => {
-                        inputRefs.current.price_total = node;
-                      }}
+                      ref={(node) => (inputRefs.current.price_total = node)}
                       onFocus={() => {
                         if (!canEditTotal) return;
                         setAvoidKeyboard(true);
@@ -2662,9 +2203,7 @@ ${cylLine}
                           value={field.value}
                           {...doneInputProps}
                           editable={canEditPaid}
-                          ref={(node) => {
-                            inputRefs.current.paid_amount = node;
-                          }}
+                          ref={(node) => (inputRefs.current.paid_amount = node)}
                           onFocus={() => {
                             if (!canEditPaid) return;
                             setPaidDirty(true);
@@ -2717,9 +2256,7 @@ ${cylLine}
                       value={field.value}
                       {...doneInputProps}
                       editable={canEditPaid}
-                      ref={(node) => {
-                        inputRefs.current.paid_amount = node;
-                      }}
+                      ref={(node) => (inputRefs.current.paid_amount = node)}
                       onFocus={() => {
                         if (!canEditPaid) return;
                         setAvoidKeyboard(true);
@@ -2850,36 +2387,22 @@ ${cylLine}
               }
             />
           ) : null}
-                  {selectedCustomerEntry ? (
-                    customerPreviewStatusLine ? (
-                      <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
-                    ) : (
-                      <BalancePreviewCard lines={sharedBalancePreviewLines} />
-                    )
-                  ) : null}
-                </View>
-                <FieldError message={errors.cylinders_installed?.message} />
-                <FieldError message={errors.cylinders_received?.message} />
-                <FieldError message={errors.price_total?.message} />
-                <FieldError message={errors.paid_amount?.message} />
-              </View>
-            </>
+          {selectedCustomerEntry ? (
+            customerPreviewStatusLine ? (
+              <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
+            ) : (
+              <BalancePreviewCard lines={sharedBalancePreviewLines} />
+            )
           ) : null}
+        </View>
+        <FieldError message={errors.cylinders_installed?.message} />
+        <FieldError message={errors.cylinders_received?.message} />
+        <FieldError message={errors.price_total?.message} />
+        <FieldError message={errors.paid_amount?.message} />
+      </View>
 
-      <View
-        style={[
-          styles.sectionCard,
-          currentAction === "replacement" ? styles.replacementSectionCard : null,
-        ]}
-      >
-        <Text
-          style={[
-            styles.label,
-            currentAction === "replacement" ? styles.notesSectionTitle : null,
-          ]}
-        >
-          {currentAction === "replacement" ? "Notes" : "Note (optional)"}
-        </Text>
+      <View style={styles.sectionCard}>
+        <FieldLabel>Note (optional)</FieldLabel>
         <Controller
           control={control}
           name="note"
@@ -3120,7 +2643,7 @@ ${cylLine}
               style={[styles.stickyPayment, { bottom: footerHeight + 8 }]}
             >
               <Text style={styles.stickyLabel}>Total / Paid</Text>
-              <View style={styles.replacementPairRow}>
+              <View style={styles.amountsRow}>
                 <View style={styles.amountCell}>
                   <Controller
                     control={control}
@@ -3171,6 +2694,14 @@ ${cylLine}
                     )}
                   />
                 </View>
+                <View style={styles.amountCell}>
+                  <TextInput
+                    style={[styles.input, styles.inputReadOnly]}
+                    value={unpaid.toString()}
+                    editable={false}
+                    placeholder="Unp"
+                  />
+                </View>
               </View>
             </View>
           )}
@@ -3205,31 +2736,6 @@ function BalancePreviewCard({ lines, title = "New Balance" }: { lines: string[];
       {lines.map((line) => (
         <Text key={line} style={styles.balancePreviewLine}>
           {line}
-        </Text>
-      ))}
-    </View>
-  );
-}
-
-function ReplacementTransitionSummary({ lines }: { lines: FormattedBalanceTransitionLine[] }) {
-  if (!lines.length) return null;
-  return (
-    <View style={styles.replacementSummary}>
-      {lines.map((line, index) => (
-        <Text
-          key={`${line.text}-${index}`}
-          style={[
-            styles.replacementSummaryLine,
-            line.tone === "debt"
-              ? styles.replacementSummaryDebt
-              : line.tone === "credit"
-                ? styles.replacementSummaryCredit
-                : line.tone === "settled"
-                  ? styles.replacementSummarySettled
-                  : styles.replacementSummaryNeutral,
-          ]}
-        >
-          {line.text}
         </Text>
       ))}
     </View>
@@ -3431,10 +2937,6 @@ const styles = StyleSheet.create({
   modeTextActive: { color: "#fff" },
   modeTextDisabled: { color: "#94a3b8" },
   label: { fontWeight: "700", marginTop: 6, color: "#0f172a" },
-  notesSectionTitle: {
-    color: "#475569",
-    marginTop: 0,
-  },
   sectionCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -3442,84 +2944,6 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
-  },
-  replacementSectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#dbe4ee",
-  },
-  replacementSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  replacementSectionTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  cylindersSectionTitle: {
-    color: "#0f766e",
-  },
-  moneySectionTitle: {
-    color: "#3730a3",
-  },
-  replacementPairRow: {
-    flexDirection: "row",
-    gap: 14,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  replacementPairCell: {
-    flex: 1,
-    gap: 8,
-    maxWidth: 220,
-    alignItems: "center",
-  },
-  replacementFieldName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1f2937",
-    textAlign: "center",
-  },
-  replacementAmountInput: {
-    minWidth: 84,
-  },
-  replacementSummary: {
-    borderRadius: 12,
-    backgroundColor: "#f8fafc",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 4,
-  },
-  replacementSummaryLine: {
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  replacementSummaryDebt: {
-    color: "#9a3412",
-  },
-  replacementSummaryCredit: {
-    color: "#6d28d9",
-  },
-  replacementSummarySettled: {
-    color: "#15803d",
-  },
-  replacementSummaryNeutral: {
-    color: "#475569",
-  },
-  replacementHelperRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
   },
   balancePreviewCard: {
     backgroundColor: "#f8fafc",
