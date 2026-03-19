@@ -2046,7 +2046,7 @@ ${cylLine}
             </>
           ) : null}
 
-          {!isPayment && !isReturn && currentAction !== "replacement" ? (
+          {!isPayment && !isReturn && !isSellIron && !isBuyIron && currentAction !== "replacement" ? (
       <View
         onLayout={(event) => {
           setAmountsLayoutY(event.nativeEvent.layout.y);
@@ -2260,196 +2260,220 @@ ${cylLine}
 
           {isSellIron ? (
             <>
-              <View style={styles.amountsRow}>
-                <View style={styles.amountCell}>
-                  <Text style={styles.fieldName}>Gas Qty</Text>
-                  <View style={styles.stackAlign}>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={installed.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
-                  </View>
-                </View>
-                <View style={styles.amountCell}>
-                  <Text style={styles.fieldName}>Gas Price</Text>
-                  <View style={styles.stepperColumn}>
-                    <Pressable style={styles.stepperTiny} onPress={() => adjustGasPrice(50)}>
-                      <Ionicons name="add" size={10} color="#0a7ea4" />
-                    </Pressable>
-                    <View style={styles.amountGroup}>
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustGasPrice(-10)}>
-                        <Ionicons name="remove" size={10} color="#0a7ea4" />
-                      </Pressable>
-                      <TextInput
-                        style={[styles.input, styles.amountInput]}
-                        accessibilityLabel="Gas price"
-                        accessibilityHint="Enter gas price per unit"
-                        keyboardType="numeric"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={gasPriceInput}
-                        {...doneInputProps}
-                        onFocus={() => {
-                          setAvoidKeyboard(true);
-                          setFocusTarget("payments");
-                        }}
+              {/* Cylinders — user enters how many installed */}
+              <BigBox title={CUSTOMER_WORDING.cylinders}>
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="cylinders_installed"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) > 0 || "Installed must be greater than 0",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.installed}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustInstalled(1)}
+                        onDecrement={() => adjustInstalled(-1)}
+                        onChangeText={field.onChange}
+                        error={Boolean(errors.cylinders_installed)}
+                        inputRef={(node) => { inputRefs.current.cylinders_installed = node; }}
+                        onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
                         onBlur={() => setFocusTarget(null)}
-                        onChangeText={(t) => {
-                          setGasPriceDirty(true);
-                          setGasPriceInput(t);
-                        }}
+                        steppers={quantitySteppers}
                       />
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustGasPrice(10)}>
-                        <Ionicons name="add" size={10} color="#0a7ea4" />
-                      </Pressable>
-                    </View>
-                    <Pressable style={styles.stepperTiny} onPress={() => adjustGasPrice(-50)}>
-                      <Ionicons name="remove" size={10} color="#0a7ea4" />
-                    </Pressable>
+                    )}
+                  />
+                </View>
+              </BigBox>
+
+              {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
+              <BigBox title="Iron">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                  </View>
+                  <FieldCell
+                    title="Iron Price"
+                    value={Number(ironPriceInput) || 0}
+                    onIncrement={() => adjustIronPrice(5)}
+                    onDecrement={() => adjustIronPrice(-5)}
+                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
                   </View>
                 </View>
-                <View style={[styles.amountCell, styles.amountCellResult]}>
-                  <Text style={styles.fieldName}>Gas Total</Text>
-                  <View style={styles.stackAlign}>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={gasLineTotal.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
+              </BigBox>
+
+              {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
+              <BigBox title="Gas Price">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                  </View>
+                  <FieldCell
+                    title="Gas Price"
+                    value={Number(gasPriceInput) || 0}
+                    onIncrement={() => adjustGasPrice(5)}
+                    onDecrement={() => adjustGasPrice(-5)}
+                    onChangeText={(t) => { setGasPriceDirty(true); setGasPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{gasLineTotal}</Text>
                   </View>
                 </View>
-              </View>
-              <View style={styles.amountsRow}>
-                <View style={styles.amountCell}>
-                  <Text style={styles.fieldName}>Iron Qty</Text>
-                  <View style={styles.stackAlign}>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={installed.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
-                  </View>
-                </View>
-                <View style={styles.amountCell}>
-                  <Text style={styles.fieldName}>Iron Price</Text>
-                  <View style={styles.stepperColumn}>
-                    <Pressable style={styles.stepperTiny} onPress={() => adjustIronPrice(50)}>
-                      <Ionicons name="add" size={10} color="#0a7ea4" />
-                    </Pressable>
-                    <View style={styles.amountGroup}>
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustIronPrice(-10)}>
-                        <Ionicons name="remove" size={10} color="#0a7ea4" />
-                      </Pressable>
-                      <TextInput
-                        style={[styles.input, styles.amountInput]}
-                        accessibilityLabel="Iron price"
-                        accessibilityHint="Enter iron price per unit"
-                        keyboardType="numeric"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={ironPriceInput}
-                        {...doneInputProps}
-                        onFocus={() => {
-                          setAvoidKeyboard(true);
-                          setFocusTarget("payments");
-                        }}
+              </BigBox>
+
+              {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
+              <BigBox title={CUSTOMER_WORDING.money}>
+                <View
+                  style={styles.entryFieldPair}
+                  onLayout={(event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    setTotalsLayout({ y, height });
+                  }}
+                >
+                  <FieldCell
+                    title={CUSTOMER_WORDING.total}
+                    value={computedTradeTotal}
+                    onIncrement={() => {}}
+                    onDecrement={() => {}}
+                    editable={false}
+                  />
+                  <Controller
+                    control={control}
+                    name="paid_amount"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustPaidAmount(5)}
+                        onDecrement={() => adjustPaidAmount(-5)}
+                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        error={Boolean(errors.paid_amount)}
+                        inputRef={(node) => { inputRefs.current.paid_amount = node; }}
+                        onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
                         onBlur={() => setFocusTarget(null)}
-                        onChangeText={(t) => {
-                          setIronPriceDirty(true);
-                          setIronPriceInput(t);
-                        }}
+                        steppers={replacementMoneySteppers}
                       />
-                      <Pressable style={styles.stepperBtn} onPress={() => adjustIronPrice(10)}>
-                        <Ionicons name="add" size={10} color="#0a7ea4" />
-                      </Pressable>
-                    </View>
-                    <Pressable style={styles.stepperTiny} onPress={() => adjustIronPrice(-50)}>
-                      <Ionicons name="remove" size={10} color="#0a7ea4" />
-                    </Pressable>
-                  </View>
+                    )}
+                  />
                 </View>
-                <View style={[styles.amountCell, styles.amountCellResult]}>
-                  <Text style={styles.fieldName}>Iron Total</Text>
-                  <View style={styles.stackAlign}>
-                    <TextInput
-                      style={[styles.input, styles.inputReadOnly]}
-                      value={ironLineTotal.toString()}
-                      editable={false}
-                      placeholder="0"
-                    />
-                  </View>
-                </View>
-              </View>
+              </BigBox>
+              <FieldError message={errors.cylinders_installed?.message} />
+              <FieldError message={errors.paid_amount?.message} />
             </>
           ) : null}
 
           {isBuyIron ? (
-            <View style={styles.amountsRow}>
-              <View style={styles.amountCell}>
-                <Text style={styles.fieldName}>Iron Qty</Text>
-                <View style={styles.stackAlign}>
-                  <TextInput
-                    style={[styles.input, styles.inputReadOnly]}
-                    value={received.toString()}
-                    editable={false}
-                    placeholder="0"
+            <>
+              {/* Cylinders — user enters how many received (buying empty cylinders) */}
+              <BigBox title={CUSTOMER_WORDING.cylinders}>
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="cylinders_received"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) > 0 || "Received must be greater than 0",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.received}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustReceived(1)}
+                        onDecrement={() => adjustReceived(-1)}
+                        onChangeText={field.onChange}
+                        error={Boolean(errors.cylinders_received)}
+                        inputRef={(node) => { inputRefs.current.cylinders_received = node; }}
+                        onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={quantitySteppers}
+                      />
+                    )}
                   />
                 </View>
-              </View>
-              <View style={styles.amountCell}>
-                <Text style={styles.fieldName}>Iron Price</Text>
-                <View style={styles.stepperColumn}>
-                  <Pressable style={styles.stepperTiny} onPress={() => adjustIronPrice(50)}>
-                    <Ionicons name="add" size={10} color="#0a7ea4" />
-                  </Pressable>
-                  <View style={styles.amountGroup}>
-                    <Pressable style={styles.stepperBtn} onPress={() => adjustIronPrice(-10)}>
-                      <Ionicons name="remove" size={10} color="#0a7ea4" />
-                    </Pressable>
-                    <TextInput
-                      style={[styles.input, styles.amountInput]}
-                      accessibilityLabel="Iron price"
-                      accessibilityHint="Enter iron price per unit"
-                      keyboardType="numeric"
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={ironPriceInput}
-                      {...doneInputProps}
-                      onFocus={() => {
-                        setAvoidKeyboard(true);
-                        setFocusTarget("payments");
-                      }}
-                      onBlur={() => setFocusTarget(null)}
-                      onChangeText={(t) => {
-                        setIronPriceDirty(true);
-                        setIronPriceInput(t);
-                      }}
-                    />
-                    <Pressable style={styles.stepperBtn} onPress={() => adjustIronPrice(10)}>
-                      <Ionicons name="add" size={10} color="#0a7ea4" />
-                    </Pressable>
+              </BigBox>
+
+              {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
+              <BigBox title="Iron">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{received}</Text>
                   </View>
-                  <Pressable style={styles.stepperTiny} onPress={() => adjustIronPrice(-50)}>
-                    <Ionicons name="remove" size={10} color="#0a7ea4" />
-                  </Pressable>
+                  <FieldCell
+                    title="Iron Price"
+                    value={Number(ironPriceInput) || 0}
+                    onIncrement={() => adjustIronPrice(5)}
+                    onDecrement={() => adjustIronPrice(-5)}
+                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={[styles.amountCell, styles.amountCellResult]}>
-                <Text style={styles.fieldName}>Iron Total</Text>
-                <View style={styles.stackAlign}>
-                  <TextInput
-                    style={[styles.input, styles.inputReadOnly]}
-                    value={ironLineTotal.toString()}
+              </BigBox>
+
+              {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
+              <BigBox title={CUSTOMER_WORDING.money}>
+                <View
+                  style={styles.entryFieldPair}
+                  onLayout={(event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    setTotalsLayout({ y, height });
+                  }}
+                >
+                  <FieldCell
+                    title={CUSTOMER_WORDING.total}
+                    value={computedTradeTotal}
+                    onIncrement={() => {}}
+                    onDecrement={() => {}}
                     editable={false}
-                    placeholder="0"
+                  />
+                  <Controller
+                    control={control}
+                    name="paid_amount"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustPaidAmount(5)}
+                        onDecrement={() => adjustPaidAmount(-5)}
+                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        error={Boolean(errors.paid_amount)}
+                        inputRef={(node) => { inputRefs.current.paid_amount = node; }}
+                        onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={replacementMoneySteppers}
+                      />
+                    )}
                   />
                 </View>
-              </View>
-            </View>
+              </BigBox>
+              <FieldError message={errors.cylinders_received?.message} />
+              <FieldError message={errors.paid_amount?.message} />
+            </>
           ) : null}
 
           <View
@@ -2838,6 +2862,224 @@ ${cylLine}
         <FieldError message={errors.price_total?.message} />
         <FieldError message={errors.paid_amount?.message} />
       </View>
+          ) : null}
+
+          {isSellIron ? (
+            <>
+              {/* Cylinders — user enters how many installed */}
+              <BigBox title={CUSTOMER_WORDING.cylinders}>
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="cylinders_installed"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) > 0 || "Installed must be greater than 0",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.installed}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustInstalled(1)}
+                        onDecrement={() => adjustInstalled(-1)}
+                        onChangeText={field.onChange}
+                        error={Boolean(errors.cylinders_installed)}
+                        inputRef={(node) => { inputRefs.current.cylinders_installed = node; }}
+                        onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={quantitySteppers}
+                      />
+                    )}
+                  />
+                </View>
+              </BigBox>
+
+              {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
+              <BigBox title="Iron">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                  </View>
+                  <FieldCell
+                    title="Iron Price"
+                    value={Number(ironPriceInput) || 0}
+                    onIncrement={() => adjustIronPrice(5)}
+                    onDecrement={() => adjustIronPrice(-5)}
+                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                  </View>
+                </View>
+              </BigBox>
+
+              {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
+              <BigBox title="Gas Price">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                  </View>
+                  <FieldCell
+                    title="Gas Price"
+                    value={Number(gasPriceInput) || 0}
+                    onIncrement={() => adjustGasPrice(5)}
+                    onDecrement={() => adjustGasPrice(-5)}
+                    onChangeText={(t) => { setGasPriceDirty(true); setGasPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{gasLineTotal}</Text>
+                  </View>
+                </View>
+              </BigBox>
+
+              {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
+              <BigBox title={CUSTOMER_WORDING.money}>
+                <View
+                  style={styles.entryFieldPair}
+                  onLayout={(event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    setTotalsLayout({ y, height });
+                  }}
+                >
+                  <FieldCell
+                    title={CUSTOMER_WORDING.total}
+                    value={computedTradeTotal}
+                    onIncrement={() => {}}
+                    onDecrement={() => {}}
+                    editable={false}
+                  />
+                  <Controller
+                    control={control}
+                    name="paid_amount"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustPaidAmount(5)}
+                        onDecrement={() => adjustPaidAmount(-5)}
+                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        error={Boolean(errors.paid_amount)}
+                        inputRef={(node) => { inputRefs.current.paid_amount = node; }}
+                        onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={replacementMoneySteppers}
+                      />
+                    )}
+                  />
+                </View>
+              </BigBox>
+              <FieldError message={errors.cylinders_installed?.message} />
+              <FieldError message={errors.paid_amount?.message} />
+            </>
+          ) : null}
+
+          {isBuyIron ? (
+            <>
+              {/* Cylinders — user enters how many received (buying empty cylinders) */}
+              <BigBox title={CUSTOMER_WORDING.cylinders}>
+                <View style={styles.entryFieldPairSingle}>
+                  <Controller
+                    control={control}
+                    name="cylinders_received"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) > 0 || "Received must be greater than 0",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.received}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustReceived(1)}
+                        onDecrement={() => adjustReceived(-1)}
+                        onChangeText={field.onChange}
+                        error={Boolean(errors.cylinders_received)}
+                        inputRef={(node) => { inputRefs.current.cylinders_received = node; }}
+                        onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={quantitySteppers}
+                      />
+                    )}
+                  />
+                </View>
+              </BigBox>
+
+              {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
+              <BigBox title="Iron">
+                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>QTY</Text>
+                    <Text style={styles.tradeStatValue}>{received}</Text>
+                  </View>
+                  <FieldCell
+                    title="Iron Price"
+                    value={Number(ironPriceInput) || 0}
+                    onIncrement={() => adjustIronPrice(5)}
+                    onDecrement={() => adjustIronPrice(-5)}
+                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                    steppers={replacementMoneySteppers}
+                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                    onBlur={() => setFocusTarget(null)}
+                  />
+                  <View style={styles.tradeStatCell}>
+                    <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                  </View>
+                </View>
+              </BigBox>
+
+              {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
+              <BigBox title={CUSTOMER_WORDING.money}>
+                <View
+                  style={styles.entryFieldPair}
+                  onLayout={(event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    setTotalsLayout({ y, height });
+                  }}
+                >
+                  <FieldCell
+                    title={CUSTOMER_WORDING.total}
+                    value={computedTradeTotal}
+                    onIncrement={() => {}}
+                    onDecrement={() => {}}
+                    editable={false}
+                  />
+                  <Controller
+                    control={control}
+                    name="paid_amount"
+                    rules={{
+                      validate: (val) => (Number(val) || 0) >= 0 || "Paid cannot be negative",
+                    }}
+                    render={({ field }) => (
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={Number(field.value) || 0}
+                        onIncrement={() => adjustPaidAmount(5)}
+                        onDecrement={() => adjustPaidAmount(-5)}
+                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        error={Boolean(errors.paid_amount)}
+                        inputRef={(node) => { inputRefs.current.paid_amount = node; }}
+                        onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                        onBlur={() => setFocusTarget(null)}
+                        steppers={replacementMoneySteppers}
+                      />
+                    )}
+                  />
+                </View>
+              </BigBox>
+              <FieldError message={errors.cylinders_received?.message} />
+              <FieldError message={errors.paid_amount?.message} />
+            </>
           ) : null}
 
       <View style={styles.sectionCard}>
@@ -3649,6 +3891,25 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 12,
+  },
+  tradeStatCell: {
+    width: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  tradeStatLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  tradeStatValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textAlign: "center",
   },
   inlineActionButtonAlt: {
     borderRadius: 8,
