@@ -17,7 +17,6 @@ import {
   View,
 } from "react-native";
 
-import { gasColor } from "@/constants/gas";
 import BigBox from "@/components/entry/BigBox";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
@@ -152,7 +151,7 @@ export function RefillForm({
     { delta: -20, label: "-20", position: "bottom" },
   ];
   const FIELD_QTY_STEPPERS: FieldStepper[] = [
-    { delta: -1, label: "−", position: "left" },
+    { delta: -1, label: "âˆ’", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
   const createRefill = useCreateRefill();
@@ -382,10 +381,6 @@ export function RefillForm({
   const disableReturn48 = isReturnMode && owedReturn48 <= 0;
   const liveCompanyNet12 = adjustedBase12 + delta12;
   const liveCompanyNet48 = adjustedBase48 + delta48;
-  const liveReceive12 = Math.max(liveCompanyNet12, 0);
-  const liveReceive48 = Math.max(liveCompanyNet48, 0);
-  const liveGive12 = Math.max(-liveCompanyNet12, 0);
-  const liveGive48 = Math.max(-liveCompanyNet48, 0);
   const companyMoneyTransitionLines = formatBalanceTransitions(
     [makeBalanceTransition("company", "money", baseMoneyNet, liveMoneyNet)],
     {
@@ -436,6 +431,16 @@ export function RefillForm({
     : balanceAlertLines.length > 0
       ? balanceAlertLines.join("\n")
       : CUSTOMER_WORDING.cylinderSettled;
+
+  // Cylinder-only status: excludes money lines so they don't bleed into Cylinder BigBox
+  const cylinderOnlyLines = [...company12TransitionLines, ...company48TransitionLines].filter(
+    (line) => line !== "All settled \u2705"
+  );
+  const cylinderOnlyStatusLine = !companyBalanceReady
+    ? "Current company balances unavailable."
+    : cylinderOnlyLines.length > 0
+      ? cylinderOnlyLines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
   const moneyStatusLine = !companyBalanceReady
     ? "Current company balances unavailable. Preview is disabled until balances load."
     : companyMoneyTransitionLines.length > 0
@@ -456,19 +461,8 @@ export function RefillForm({
     }
   }, [disableReturn48, ret48Value]);
 
-  const full12Color = totalBuy12 > 0 ? "#f97316" : "#64748b";
-  const full48Color = totalBuy48 > 0 ? "#f97316" : "#64748b";
-  const empty12Color = ret12Value > 0 ? "#f97316" : "#64748b";
-  const empty48Color = ret48Value > 0 ? "#f97316" : "#64748b";
-
   const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
-  const afterEmpty12 = base ? (base.empty12 ?? 0) - ret12Value : null;
   const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
-  const afterEmpty48 = base ? (base.empty48 ?? 0) - ret48Value : null;
-  const gasLabelStyle = (gas: "12kg" | "48kg") => ({
-    color: gasColor(gas),
-    fontWeight: "700" as const,
-  });
 
   const disableSave =
     !companyBalanceReady ||
@@ -695,102 +689,17 @@ export function RefillForm({
                 </View>
               </View>
 
-              <View style={styles.section}>
-                <View style={styles.liveRow}>
-                  <View style={styles.liveCard}>
-                    <Text style={styles.liveTitle}>Live inventory</Text>
-                    {inventoryNotInitialized ? (
-                      <View style={styles.noticeInline}>
-                        <Text style={styles.noticeText}>
-                          Inventory not initialized. Set starting inventory first.
-                        </Text>
-                        <Pressable style={styles.noticeButton} onPress={() => setInitOpen(true)}>
-                          <Text style={styles.noticeButtonText}>Initialize inventory</Text>
-                        </Pressable>
-                      </View>
-                    ) : (
-                      <View style={styles.balanceBlock}>
-                        <Text style={styles.balanceLine}>
-                          <Text style={gasLabelStyle("12kg")}>12kg</Text> Full {formatCount(base?.full12)}{" "}
-                          <Text style={styles.balanceArrow}>-&gt;</Text>{" "}
-                          <Text style={[styles.balanceNew, { color: full12Color }]}>{formatCount(afterFull12)}</Text>
-                        </Text>
-                        {!isBuyMode ? (
-                          <Text style={styles.balanceLine}>
-                            <Text style={gasLabelStyle("12kg")}>12kg</Text> Empty {formatCount(base?.empty12)}{" "}
-                            <Text style={styles.balanceArrow}>-&gt;</Text>{" "}
-                            <Text style={[styles.balanceNew, { color: empty12Color }]}>{formatCount(afterEmpty12)}</Text>
-                          </Text>
-                        ) : null}
-                        <Text style={styles.balanceLine}>
-                          <Text style={gasLabelStyle("48kg")}>48kg</Text> Full {formatCount(base?.full48)}{" "}
-                          <Text style={styles.balanceArrow}>-&gt;</Text>{" "}
-                          <Text style={[styles.balanceNew, { color: full48Color }]}>{formatCount(afterFull48)}</Text>
-                        </Text>
-                        {!isBuyMode ? (
-                          <Text style={styles.balanceLine}>
-                            <Text style={gasLabelStyle("48kg")}>48kg</Text> Empty {formatCount(base?.empty48)}{" "}
-                            <Text style={styles.balanceArrow}>-&gt;</Text>{" "}
-                            <Text style={[styles.balanceNew, { color: empty48Color }]}>{formatCount(afterEmpty48)}</Text>
-                          </Text>
-                        ) : null}
-                      </View>
-                    )}
-                  </View>
-                  {!isBuyMode ? (
-                    <View style={styles.companyCard}>
-                      <Text style={styles.companyTitle}>Company balance</Text>
-                      <Text
-                        style={styles.companyLine}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.85}
-                      >
-                        <Text style={[styles.companyGasLabel, { color: gasColor("12kg") }]}>12kg</Text> company give:{" "}
-                        <Text style={styles.companyAlertValue}>{liveReceive12}</Text>
-                      </Text>
-                      <Text
-                        style={styles.companyLine}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.85}
-                      >
-                        <Text style={[styles.companyGasLabel, { color: gasColor("12kg") }]}>12kg</Text> you return:{" "}
-                        <Text style={styles.companyAlertValue}>{liveGive12}</Text>
-                      </Text>
-                      <Text
-                        style={styles.companyLine}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.85}
-                      >
-                        <Text style={[styles.companyGasLabel, { color: gasColor("48kg") }]}>48kg</Text> company give:{" "}
-                        <Text style={styles.companyAlertValue}>{liveReceive48}</Text>
-                      </Text>
-                      <Text
-                        style={styles.companyLine}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.85}
-                      >
-                        <Text style={[styles.companyGasLabel, { color: gasColor("48kg") }]}>48kg</Text> you return:{" "}
-                        <Text style={styles.companyAlertValue}>{liveGive48}</Text>
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
 
-              {/* ════════════════════════════════════════════
+              {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                   CYLINDERS
                   - Refill:  [Buy 12kg] [Return 12kg] side by side in ONE BigBox
                              [Buy 48kg] [Return 48kg] side by side in same BigBox
                   - Return:  [Return 12kg] centered  /  [Return 48kg] centered (2 BigBoxes)
                   - Buy:     ONE BigBox with [Buy 12kg left] [Buy 48kg right]
-              ════════════════════════════════════════════ */}
+              â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
               {isBuyMode ? (
-                /* BUY — one Cylinders BigBox, 12kg left / 48kg right */
+                /* BUY â€” one Cylinders BigBox, 12kg left / 48kg right */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={cylinderStatusLine}
@@ -816,7 +725,7 @@ export function RefillForm({
                   </View>
                 </BigBox>
               ) : isReturnMode ? (
-                /* RETURN — separate BigBox per gas type */
+                /* RETURN â€” separate BigBox per gas type */
                 <>
                   <BigBox
                     title="12kg Cylinders"
@@ -836,7 +745,7 @@ export function RefillForm({
                       />
                     </View>
                     {owedReturn12 > 0 ? (
-                      <View style={styles.bigBoxActionRow}>
+                      <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
                         <Pressable
                           style={[
                             styles.inlineActionButton,
@@ -878,7 +787,7 @@ export function RefillForm({
                       />
                     </View>
                     {owedReturn48 > 0 ? (
-                      <View style={styles.bigBoxActionRow}>
+                      <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
                         <Pressable
                           style={[
                             styles.inlineActionButton,
@@ -903,12 +812,19 @@ export function RefillForm({
                   </BigBox>
                 </>
               ) : (
-                /* REFILL — one BigBox, 12kg top / 48kg bottom */
+                /* REFILL â€” one BigBox, 12kg top / 48kg bottom */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
-                  statusLine={cylinderStatusLine}
+                  statusLine={cylinderOnlyStatusLine}
                   statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
                 >
+                  {/* 12kg inventory hint — shown above the pair so both FieldCells stay same height */}
+                  <View style={styles.inventoryHintRow}>
+                    <Text style={styles.inventoryHint}>
+                      12kg — Full: {formatCount(base?.full12)} → {formatCount(afterFull12)}{"  "}
+                      Empties on hand: {availableEmpty12}
+                    </Text>
+                  </View>
                   {/* 12kg row */}
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
@@ -929,11 +845,13 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                  {/* 12kg Return toggle */}
-                  <View style={styles.bigBoxActionRow}>
+                  {/* 12kg Return toggle — sits under the Return (right) field only */}
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <View style={{ flex: 1 }} />
                     <Pressable
                       style={[
                         styles.inlineActionButton,
+                        { flex: 1 },
                         buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
                       ]}
                       onPress={() => {
@@ -953,8 +871,15 @@ export function RefillForm({
                     </Text>
                   ) : null}
 
+                  {/* 48kg inventory hint */}
+                  <View style={styles.inventoryHintRow}>
+                    <Text style={styles.inventoryHint}>
+                      48kg — Full: {formatCount(base?.full48)} → {formatCount(afterFull48)}{"  "}
+                      Empties on hand: {availableEmpty48}
+                    </Text>
+                  </View>
                   {/* 48kg row */}
-                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 12 }}>
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 4 }}>
                     <FieldCell
                       title="48kg Buy"
                       value={buy48Value}
@@ -973,11 +898,13 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                  {/* 48kg Return toggle */}
-                  <View style={styles.bigBoxActionRow}>
+                  {/* 48kg Return toggle — sits under the Return (right) field only */}
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <View style={{ flex: 1 }} />
                     <Pressable
                       style={[
                         styles.inlineActionButton,
+                        { flex: 1 },
                         buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
                       ]}
                       onPress={() => {
@@ -999,17 +926,17 @@ export function RefillForm({
                 </BigBox>
               )}
 
-              {/* ════════════════════════════════════════════
+              {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                   GAS PRICE + IRON PRICE + MONEY
                   Only shown on Refill and Buy tabs (not Return)
-              ════════════════════════════════════════════ */}
+              â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
               {!isReturnMode ? (
                 <>
                   {/* Gas Price 12kg
                       QTY and TOTAL are plain text (tradeStatCell style).
                       Price is a read-only FieldCell (grey, no buttons).
                       A "Set price" button below navigates to the config page
-                      (that page is not yet built — the button is a placeholder). */}
+                      (that page is not yet built â€” the button is a placeholder). */}
                   <BigBox title="Gas Price 12kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -1028,7 +955,7 @@ export function RefillForm({
                         <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
                       </View>
                     </View>
-                    <View style={styles.bigBoxActionRow}>
+                    <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
                       <Pressable
                         style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
                         onPress={() => {
@@ -1041,7 +968,7 @@ export function RefillForm({
                     </View>
                   </BigBox>
 
-                  {/* Gas Price 48kg — same structure */}
+                  {/* Gas Price 48kg â€” same structure */}
                   <BigBox title="Gas Price 48kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -1060,7 +987,7 @@ export function RefillForm({
                         <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
                       </View>
                     </View>
-                    <View style={styles.bigBoxActionRow}>
+                    <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
                       <Pressable
                         style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
                         onPress={() => {
@@ -1072,7 +999,7 @@ export function RefillForm({
                     </View>
                   </BigBox>
 
-                  {/* Iron Price — Buy tab only.
+                  {/* Iron Price â€” Buy tab only.
                       QTY and TOTAL are plain text at the same vertical level as
                       the Iron Price FieldCell buttons (alignItems: "center"). */}
                   {isBuyMode ? (
@@ -1124,8 +1051,8 @@ export function RefillForm({
                   {/* Money BigBox.
                       statusLine shows the money debt/credit alert (red if owing).
                       Total is read-only. Paid is adjustable.
-                      Toggle button: when paid=0 → "Paid all" (green) sets paid=total.
-                                     when paid>0 → "Didn't pay" (red) sets paid=0.
+                      Toggle button: when paid=0 â†’ "Paid all" (green) sets paid=total.
+                                     when paid>0 â†’ "Didn't pay" (red) sets paid=0.
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
@@ -1154,10 +1081,13 @@ export function RefillForm({
                         steppers={FIELD_MONEY_STEPPERS}
                       />
                     </View>
-                    <View style={styles.bigBoxActionRow}>
+                    {/* Paid all toggle — sits under Paid (right) field only */}
+                    <View style={{ flexDirection: "row", gap: 12 }}>
+                      <View style={{ flex: 1 }} />
                       <Pressable
                         style={[
                           styles.inlineActionButton,
+                          { flex: 1 },
                           paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
                         ]}
                         onPress={() => {
@@ -1835,11 +1765,6 @@ const styles = StyleSheet.create({
     minWidth: 160,
     alignSelf: "center",
   },
-  bigBoxActionRow: {
-    marginTop: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   inlineActionButton: {
     borderRadius: 8,
     paddingVertical: 6,
@@ -2130,6 +2055,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#94a3b8",
+    textAlign: "center",
+  },
+  inventoryHintRow: {
+    marginBottom: 4,
+  },
+  inventoryHint: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
     textAlign: "center",
   },
 });
