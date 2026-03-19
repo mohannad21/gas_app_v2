@@ -19,6 +19,7 @@ import {
 
 import { gasColor } from "@/constants/gas";
 import BigBox from "@/components/entry/BigBox";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
@@ -124,71 +125,6 @@ function sanitizeCountInput(value: string) {
   return String(Math.max(0, parsed));
 }
 
-function RemainingExtraChips({
-  lines,
-  remainingText,
-  extraText,
-  unavailable = false,
-}: {
-  lines?: string[] | null;
-  remainingText?: string | null;
-  extraText?: string | null;
-  unavailable?: boolean;
-}) {
-  if (unavailable) {
-    return (
-      <View style={styles.remainingExtraStack}>
-        <View style={[styles.statusChip, styles.statusChipRemaining]}>
-          <Text style={[styles.statusChipText, styles.statusChipRemainingText]} numberOfLines={1}>
-            Preview unavailable
-          </Text>
-        </View>
-      </View>
-    );
-  }
-  // Fallback-only adapter for older props. Active previews should pass structured `lines`.
-  const parseLegacyLineFallback = (value?: string | null) => {
-    if (!value) return null;
-    const moneyMatch = value.match(/(\d+)/);
-    const cylMatch = value.match(/(\d+)x(12kg|48kg)\s+(empty|full)/i);
-    if (cylMatch) {
-      const qty = Number(cylMatch[1] ?? 0);
-      const component = cylMatch[2] === "12kg" ? "cyl_12" : "cyl_48";
-      const after = cylMatch[3]?.toLowerCase() === "full" ? qty : -qty;
-      return formatBalanceTransitions([makeBalanceTransition("company", component, after, after)], {
-        mode: "current",
-      });
-    }
-    if (moneyMatch) {
-      const amount = Number(moneyMatch[1] ?? 0);
-      const after = value.toLowerCase().includes("company owes") ? -amount : amount;
-      return formatBalanceTransitions([makeBalanceTransition("company", "money", after, after)], {
-        mode: "current",
-        formatMoney,
-      });
-    }
-    return [value];
-  };
-  const visibleLines =
-    Array.isArray(lines) && lines.length > 0
-      ? lines.filter(Boolean)
-      : [...(parseLegacyLineFallback(remainingText) ?? []), ...(parseLegacyLineFallback(extraText) ?? [])];
-  if (visibleLines.length === 0) {
-    return <Text style={styles.settledText}>Settled</Text>;
-  }
-  return (
-    <View style={styles.remainingExtraStack}>
-      {visibleLines.map((line, index) => (
-        <View key={`${line}-${index}`} style={[styles.statusChip, styles.statusChipRemaining]}>
-          <Text style={[styles.statusChipText, styles.statusChipRemainingText]} numberOfLines={1}>
-            {line}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export function RefillForm({
   visible,
   onClose,
@@ -215,6 +151,16 @@ export function RefillForm({
   const refillDetailsQuery = useInventoryRefillDetails(editEntry?.refill_id);
   const refillDetails = refillDetailsQuery.data;
   const pricesQuery = usePriceSettings();
+  const FIELD_MONEY_STEPPERS: FieldStepper[] = [
+    { delta: 20, label: "+20", position: "top" },
+    { delta: -5, label: "-5", position: "left" },
+    { delta: 5, label: "+5", position: "right" },
+    { delta: -20, label: "-20", position: "bottom" },
+  ];
+  const FIELD_QTY_STEPPERS: FieldStepper[] = [
+    { delta: -1, label: "\u2212", position: "left" },
+    { delta: 1, label: "+", position: "right" },
+  ];
   const [date, setDate] = useState(getNowDate());
   const [time, setTime] = useState(getNowTime());
   const companyBalancesQuery = useCompanyBalances();
@@ -412,8 +358,6 @@ export function RefillForm({
 
   const paidNowValue = Number(paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
-  const remainingPay = Math.max(totalCost - paidNowValue, 0);
-  const extraPaid = Math.max(paidNowValue - totalCost, 0);
 
   const availableEmpty12 = base?.empty12 ?? 0;
   const availableEmpty48 = base?.empty48 ?? 0;
@@ -473,7 +417,7 @@ export function RefillForm({
   const balanceAlertLines = useMemo(() => {
     if (isReturnMode) {
       return [...company12TransitionLines, ...company48TransitionLines].filter(
-        (line) => line !== "All settled ✅"
+        (line) => line !== "All settled \u2705"
       );
     }
     if (isBuyMode) {
@@ -549,14 +493,14 @@ export function RefillForm({
     if (return12Invalid) {
       Alert.alert(
         "Invalid return",
-        `You only have ${availableEmpty12} empty 12kg cylinders. You entered return=${ret12Value}.`
+              {/* -- 12kg Cylinders -- */}
       );
       return;
     }
     if (return48Invalid) {
       Alert.alert(
         "Invalid return",
-        `You only have ${availableEmpty48} empty 48kg cylinders. You entered return=${ret48Value}.`
+              {/* -- 48kg Cylinders -- */}
       );
       return;
     }
@@ -638,7 +582,6 @@ export function RefillForm({
   const canEditMoney = !isReturnMode;
   const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
   const showReturnToggle = !isBuyMode && !isReturnMode;
-  const showEmptyHint = !isBuyMode && !isReturnMode;
 
   const adjustBuy12 = (delta: number) => {
     if (!canEditBuy) return;
@@ -839,679 +782,366 @@ export function RefillForm({
                 </View>
               </View>
 
-              <View style={styles.section}>
-                <BigBox
-                  title={CUSTOMER_WORDING.cylinders}
-                  statusLine={cylinderStatusLine}
-                  statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
-                >
-                  <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
-                  <View
-                    style={[styles.amountsRow, disableReturn12 && styles.sectionDisabled]}
-                    pointerEvents={disableReturn12 ? "none" : "auto"}
-                  >
-                    <View style={styles.amountCell}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Buy</Text>
-                        <Text style={styles.helperText}>
-                          {showEmptyHint ? `Empties on hand: ${availableEmpty12}` : " "}
-                        </Text>
-                      </View>
-                      {canEditBuy ? (
-                        <View style={styles.stepperStack}>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy12(10)}>
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy12(-1)}>
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[styles.input, styles.amountInput]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={buy12}
-                              editable
-                              onChangeText={handleBuy12Change}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy12(1)}>
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy12(-10)}>
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <TextInput
-                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                          keyboardType="numeric"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={buy12}
-                          editable={false}
-                        />
-                      )}
-                    </View>
-                    <View style={styles.amountCell}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Return</Text>
-                        <Text style={styles.helperText}> </Text>
-                      </View>
-                      {canEditReturn && !disableReturn12 ? (
-                        <View style={styles.stepperStack}>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn12(10)}>
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(-1)}>
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[
-                                styles.input,
-                                styles.amountInput,
-                                return12Invalid && styles.inputError,
-                              ]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={ret12}
-                              editable
-                              onChangeText={(value) => {
-                                setRet12Touched(true);
-                                setRet12(sanitizeCountInput(value));
-                              }}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn12(1)}>
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn12(-10)}>
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <TextInput
-                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                          keyboardType="numeric"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={ret12}
-                          editable={false}
-                        />
-                      )}
-                    </View>
+              {/* -- 12kg Cylinders -- */}
+              <BigBox
+                title="12kg Cylinders"
+                statusLine={cylinderStatusLine}
+                statusIsAlert={liveCompanyNet12 < 0}
+              >
+                {isReturnMode ? (
+                  // Return tab: only Return field, centered
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Return"
+                      value={ret12Value}
+                      onIncrement={() => adjustReturn12(1)}
+                      onDecrement={() => adjustReturn12(-1)}
+                      onChangeText={(text) => {
+                        setRet12Touched(true);
+                        setRet12(sanitizeCountInput(text));
+                      }}
+                      editable={!disableReturn12}
+                      error={return12Invalid}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
                   </View>
-                  {return12Invalid && !disableReturn12 ? (
-                    <Text style={styles.errorText}>
-                      You only have {availableEmpty12} empty 12kg cylinders. You entered return={ret12Value}.
-                    </Text>
-                  ) : null}
-                  {isReturnMode && owedReturn12 > 0 ? (
-                    <View style={styles.inlineActionRow}>
-                      {(() => {
-                        const isAllReturned = ret12Value === owedReturn12;
-                        return (
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              isAllReturned ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              setRet12Touched(true);
-                              if (isAllReturned) {
-                                setRet12("0");
-                              } else {
-                                setRet12(String(owedReturn12));
-                              }
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {isAllReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                            </Text>
-                          </Pressable>
-                        );
-                      })()}
-                    </View>
-                  ) : showReturnToggle ? (
-                    <View style={styles.inlineActionRow}>
-                      {(() => {
-                        const isReturned = buy12Value > 0 && ret12Value === buy12Value;
-                        return (
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              isReturned ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              if (buy12Value <= 0) return;
-                              if (isReturned) {
-                                setRet12Touched(true);
-                                setRet12("0");
-                                return;
-                              }
-                              setRet12Touched(true);
-                              setRet12(String(buy12Value));
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {isReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                            </Text>
-                          </Pressable>
-                        );
-                      })()}
-                    </View>
-                  ) : null}
+                ) : isBuyMode ? (
+                  // Buy tab: only Buy field, centered
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Buy"
+                      value={buy12Value}
+                      onIncrement={() => adjustBuy12(1)}
+                      onDecrement={() => adjustBuy12(-1)}
+                      onChangeText={handleBuy12Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                ) : (
+                  // Refill tab: Buy + Return side by side
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                    <FieldCell
+                      title="Buy"
+                      value={buy12Value}
+                      onIncrement={() => adjustBuy12(1)}
+                      onDecrement={() => adjustBuy12(-1)}
+                      onChangeText={handleBuy12Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                    <FieldCell
+                      title="Return"
+                      value={ret12Value}
+                      onIncrement={() => adjustReturn12(1)}
+                      onDecrement={() => adjustReturn12(-1)}
+                      onChangeText={(text) => {
+                        setRet12Touched(true);
+                        setRet12(sanitizeCountInput(text));
+                      }}
+                      error={return12Invalid}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                )}
+                {/* Return toggle - shown on Refill and Return tabs */}
+                {!isBuyMode ? (
+                  <View style={styles.bigBoxActionRow}>
+                    {isReturnMode && owedReturn12 > 0 ? (
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          setRet12Touched(true);
+                          setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                        </Text>
+                      </Pressable>
+                    ) : showReturnToggle ? (
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          if (buy12Value <= 0) return;
+                          setRet12Touched(true);
+                          setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+                {return12Invalid && !disableReturn12 ? (
+                  <Text style={styles.errorText}>
+                    Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
+                  </Text>
+                ) : null}
 
-                  <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg</Text>
-                  <View
-                    style={[styles.amountsRow, disableReturn48 && styles.sectionDisabled]}
-                    pointerEvents={disableReturn48 ? "none" : "auto"}
-                  >
-                    <View style={styles.amountCell}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Buy</Text>
-                        <Text style={styles.helperText}>
-                          {showEmptyHint ? `Empties on hand: ${availableEmpty48}` : " "}
-                        </Text>
-                      </View>
-                      {canEditBuy ? (
-                        <View style={styles.stepperStack}>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy48(10)}>
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy48(-1)}>
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[styles.input, styles.amountInput]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={buy48}
-                              editable
-                              onChangeText={handleBuy48Change}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustBuy48(1)}>
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustBuy48(-10)}>
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <TextInput
-                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                          keyboardType="numeric"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={buy48}
-                          editable={false}
-                        />
-                      )}
-                    </View>
-                    <View style={styles.amountCell}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Return</Text>
-                        <Text style={styles.helperText}> </Text>
-                      </View>
-                      {canEditReturn && !disableReturn48 ? (
-                        <View style={styles.stepperStack}>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn48(10)}>
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <View style={styles.amountGroup}>
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(-1)}>
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[
-                                styles.input,
-                                styles.amountInput,
-                                return48Invalid && styles.inputError,
-                              ]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={ret48}
-                              editable
-                              onChangeText={(value) => {
-                                setRet48Touched(true);
-                                setRet48(sanitizeCountInput(value));
-                              }}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable style={styles.stepperBtn} onPress={() => adjustReturn48(1)}>
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                          <Pressable style={styles.stepperTiny} onPress={() => adjustReturn48(-10)}>
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <TextInput
-                          style={[styles.input, styles.amountInput, styles.inputReadOnly]}
-                          keyboardType="numeric"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={ret48}
-                          editable={false}
-                        />
-                      )}
-                    </View>
+              </BigBox>
+
+              {/* -- 48kg Cylinders -- */}
+              <BigBox
+                title="48kg Cylinders"
+                statusLine={cylinderStatusLine}
+                statusIsAlert={liveCompanyNet48 < 0}
+              >
+                {isReturnMode ? (
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Return"
+                      value={ret48Value}
+                      onIncrement={() => adjustReturn48(1)}
+                      onDecrement={() => adjustReturn48(-1)}
+                      onChangeText={(text) => {
+                        setRet48Touched(true);
+                        setRet48(sanitizeCountInput(text));
+                      }}
+                      editable={!disableReturn48}
+                      error={return48Invalid}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
                   </View>
-                  {return48Invalid && !disableReturn48 ? (
-                    <Text style={styles.errorText}>
-                      You only have {availableEmpty48} empty 48kg cylinders. You entered return={ret48Value}.
-                    </Text>
-                  ) : null}
-                  {isReturnMode && owedReturn48 > 0 ? (
-                    <View style={styles.inlineActionRow}>
-                      {(() => {
-                        const isAllReturned = ret48Value === owedReturn48;
-                        return (
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              isAllReturned ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              setRet48Touched(true);
-                              if (isAllReturned) {
-                                setRet48("0");
-                              } else {
-                                setRet48(String(owedReturn48));
-                              }
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {isAllReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                            </Text>
-                          </Pressable>
-                        );
-                      })()}
-                    </View>
-                  ) : showReturnToggle ? (
-                    <View style={styles.inlineActionRow}>
-                      {(() => {
-                        const isReturned = buy48Value > 0 && ret48Value === buy48Value;
-                        return (
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              isReturned ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              if (buy48Value <= 0) return;
-                              if (isReturned) {
-                                setRet48Touched(true);
-                                setRet48("0");
-                                return;
-                              }
-                              setRet48Touched(true);
-                              setRet48(String(buy48Value));
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {isReturned ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                            </Text>
-                          </Pressable>
-                        );
-                      })()}
-                    </View>
-                  ) : null}
-                </BigBox>
-              </View>
+                ) : isBuyMode ? (
+                  <View style={styles.entryFieldPairSingle}>
+                    <FieldCell
+                      title="Buy"
+                      value={buy48Value}
+                      onIncrement={() => adjustBuy48(1)}
+                      onDecrement={() => adjustBuy48(-1)}
+                      onChangeText={handleBuy48Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                    <FieldCell
+                      title="Buy"
+                      value={buy48Value}
+                      onIncrement={() => adjustBuy48(1)}
+                      onDecrement={() => adjustBuy48(-1)}
+                      onChangeText={handleBuy48Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                    <FieldCell
+                      title="Return"
+                      value={ret48Value}
+                      onIncrement={() => adjustReturn48(1)}
+                      onDecrement={() => adjustReturn48(-1)}
+                      onChangeText={(text) => {
+                        setRet48Touched(true);
+                        setRet48(sanitizeCountInput(text));
+                      }}
+                      error={return48Invalid}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                )}
+                {!isBuyMode ? (
+                  <View style={styles.bigBoxActionRow}>
+                    {isReturnMode && owedReturn48 > 0 ? (
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          setRet48Touched(true);
+                          setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                        </Text>
+                      </Pressable>
+                    ) : showReturnToggle ? (
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          if (buy48Value <= 0) return;
+                          setRet48Touched(true);
+                          setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+                {return48Invalid && !disableReturn48 ? (
+                  <Text style={styles.errorText}>
+                    Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
+                  </Text>
+                ) : null}
+              </BigBox>
 
               {!isReturnMode ? (
-                <View style={styles.section}>
+                <>
+                  {/* Gas Price 12kg - all fields read-only, price comes from config */}
+                  <BigBox title="Gas Price 12kg">
+                    <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                      <View style={styles.tradeStatCell}>
+                        <Text style={styles.tradeStatLabel}>QTY</Text>
+                        <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                      </View>
+                      <FieldCell
+                        title="Price"
+                        value={price12Value}
+                        onIncrement={() => {}}
+                        onDecrement={() => {}}
+                        editable={false}
+                      />
+                      <View style={styles.tradeStatCell}>
+                        <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                        <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
+                      </View>
+                    </View>
+                  </BigBox>
+
+                  {/* Gas Price 48kg - all fields read-only */}
+                  <BigBox title="Gas Price 48kg">
+                    <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                      <View style={styles.tradeStatCell}>
+                        <Text style={styles.tradeStatLabel}>QTY</Text>
+                        <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                      </View>
+                      <FieldCell
+                        title="Price"
+                        value={price48Value}
+                        onIncrement={() => {}}
+                        onDecrement={() => {}}
+                        editable={false}
+                      />
+                      <View style={styles.tradeStatCell}>
+                        <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                        <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
+                      </View>
+                    </View>
+                  </BigBox>
+
+                  {/* Iron Price boxes - Buy tab only */}
+                  {isBuyMode ? (
+                    <>
+                      <BigBox title="Iron Price 12kg">
+                        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                          <View style={styles.tradeStatCell}>
+                            <Text style={styles.tradeStatLabel}>QTY</Text>
+                            <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                          </View>
+                          <FieldCell
+                            title="Iron Price"
+                            value={ironPrice12Value}
+                            onIncrement={() => adjustIronPrice12(5)}
+                            onDecrement={() => adjustIronPrice12(-5)}
+                            onChangeText={(t) => setIronPrice12Input(t)}
+                            steppers={FIELD_MONEY_STEPPERS}
+                          />
+                          <View style={styles.tradeStatCell}>
+                            <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                            <Text style={styles.tradeStatValue}>{ironLine12Cost.toFixed(0)}</Text>
+                          </View>
+                        </View>
+                      </BigBox>
+
+                      <BigBox title="Iron Price 48kg">
+                        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                          <View style={styles.tradeStatCell}>
+                            <Text style={styles.tradeStatLabel}>QTY</Text>
+                            <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                          </View>
+                          <FieldCell
+                            title="Iron Price"
+                            value={ironPrice48Value}
+                            onIncrement={() => adjustIronPrice48(5)}
+                            onDecrement={() => adjustIronPrice48(-5)}
+                            onChangeText={(t) => setIronPrice48Input(t)}
+                            steppers={FIELD_MONEY_STEPPERS}
+                          />
+                          <View style={styles.tradeStatCell}>
+                            <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                            <Text style={styles.tradeStatValue}>{ironLine48Cost.toFixed(0)}</Text>
+                          </View>
+                        </View>
+                      </BigBox>
+                    </>
+                  ) : null}
+
+                  {/* Money - Total (read-only) + Paid (adjustable) */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
                     statusLine={moneyStatusLine}
                     statusIsAlert={liveMoneyNet > 0}
                   >
-                  <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg</Text>
-                  <View style={styles.amountsRow}>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Qty</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        value={totalBuy12.toString()}
-                        editable={false}
-                        placeholder="0"
-                      />
-                    </View>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>{isBuyMode ? "Gas Price" : "Price"}</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        keyboardType="numeric"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={price12Input}
+                    <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                      <FieldCell
+                        title={CUSTOMER_WORDING.total}
+                        value={totalCost}
+                        onIncrement={() => {}}
+                        onDecrement={() => {}}
                         editable={false}
                       />
-                    </View>
-                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Line total</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        value={line12Cost.toFixed(0)}
-                        editable={false}
-                        placeholder="0"
+                      <FieldCell
+                        title={CUSTOMER_WORDING.paid}
+                        value={paidNowValue}
+                        onIncrement={() => adjustPaid(5)}
+                        onDecrement={() => adjustPaid(-5)}
+                        onChangeText={(text) => {
+                          if (!canEditMoney) return;
+                          setPaidTouched(true);
+                          setPaidNow(text);
+                        }}
+                        editable={canEditMoney}
+                        steppers={FIELD_MONEY_STEPPERS}
                       />
                     </View>
-                  </View>
-                  {isBuyMode ? (
-                    <>
-                      <Text style={[styles.gasTitle, gasLabelStyle("12kg")]}>12kg Iron</Text>
-                      <View style={styles.amountsRow}>
-                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Qty</Text>
-                          </View>
-                          <TextInput
-                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                            value={totalBuy12.toString()}
-                            editable={false}
-                            placeholder="0"
-                          />
-                        </View>
-                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Iron Price</Text>
-                          </View>
-                          <View style={styles.amountGroup}>
-                            <Pressable
-                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                              onPress={() => adjustIronPrice12(-10)}
-                              disabled={!canEditMoney}
-                            >
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[styles.input, styles.moneyInput]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={ironPrice12Input}
-                              editable={canEditMoney}
-                              onChangeText={(value) => {
-                                if (!canEditMoney) return;
-                                setIronPrice12Input(value);
-                              }}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable
-                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                              onPress={() => adjustIronPrice12(10)}
-                              disabled={!canEditMoney}
-                            >
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                        </View>
-                        <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Line total</Text>
-                          </View>
-                          <TextInput
-                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                            value={ironLine12Cost.toFixed(0)}
-                            editable={false}
-                            placeholder="0"
-                          />
-                        </View>
-                      </View>
-                    </>
-                  ) : null}
-
-                  <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg</Text>
-                  <View style={styles.amountsRow}>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Qty</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        value={totalBuy48.toString()}
-                        editable={false}
-                        placeholder="0"
-                      />
+                    <View style={styles.bigBoxActionRow}>
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
+                        ]}
+                        onPress={() => {
+                          setPaidTouched(true);
+                          setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {paidNowValue === 0 ? CUSTOMER_WORDING.paid_ : CUSTOMER_WORDING.didntPay}
+                        </Text>
+                      </Pressable>
                     </View>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>{isBuyMode ? "Gas Price" : "Price"}</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        keyboardType="numeric"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={price48Input}
-                        editable={false}
-                      />
-                    </View>
-                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Line total</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        value={line48Cost.toFixed(0)}
-                        editable={false}
-                        placeholder="0"
-                      />
-                    </View>
-                  </View>
-                  {isBuyMode ? (
-                    <>
-                      <Text style={[styles.gasTitle, gasLabelStyle("48kg")]}>48kg Iron</Text>
-                      <View style={styles.amountsRow}>
-                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Qty</Text>
-                          </View>
-                          <TextInput
-                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                            value={totalBuy48.toString()}
-                            editable={false}
-                            placeholder="0"
-                          />
-                        </View>
-                        <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Iron Price</Text>
-                          </View>
-                          <View style={styles.amountGroup}>
-                            <Pressable
-                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                              onPress={() => adjustIronPrice48(-10)}
-                              disabled={!canEditMoney}
-                            >
-                              <Ionicons name="remove" size={10} color="#0a7ea4" />
-                            </Pressable>
-                            <TextInput
-                              style={[styles.input, styles.moneyInput]}
-                              keyboardType="numeric"
-                              inputMode="numeric"
-                              placeholder="0"
-                              value={ironPrice48Input}
-                              editable={canEditMoney}
-                              onChangeText={(value) => {
-                                if (!canEditMoney) return;
-                                setIronPrice48Input(value);
-                              }}
-                              inputAccessoryViewID={accessoryViewId}
-                            />
-                            <Pressable
-                              style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                              onPress={() => adjustIronPrice48(10)}
-                              disabled={!canEditMoney}
-                            >
-                              <Ionicons name="add" size={10} color="#0a7ea4" />
-                            </Pressable>
-                          </View>
-                        </View>
-                        <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
-                          <View style={styles.amountHeader}>
-                            <Text style={styles.fieldName}>Line total</Text>
-                          </View>
-                          <TextInput
-                            style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                            value={ironLine48Cost.toFixed(0)}
-                            editable={false}
-                            placeholder="0"
-                          />
-                        </View>
-                      </View>
-                    </>
-                  ) : null}
-
-                  <View style={[styles.amountsRow, styles.totalsRow]}>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Total</Text>
-                      </View>
-                      <TextInput
-                        style={[styles.input, styles.moneyInput, styles.inputReadOnly]}
-                        value={totalCost.toFixed(0)}
-                        editable={false}
-                        placeholder="0"
-                      />
-                    </View>
-                    <View style={[styles.amountCell, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Paid</Text>
-                      </View>
-                      <View style={styles.stepperStack}>
-                        <Pressable
-                          style={[styles.stepperTiny, !canEditMoney && styles.stepperBtnDisabled]}
-                          onPress={() => adjustPaid(50)}
-                          disabled={!canEditMoney}
-                        >
-                          <Ionicons name="add" size={10} color="#0a7ea4" />
-                        </Pressable>
-                        <View style={styles.amountGroup}>
-                          <Pressable
-                            style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                            onPress={() => adjustPaid(-1)}
-                            disabled={!canEditMoney}
-                          >
-                            <Ionicons name="remove" size={10} color="#0a7ea4" />
-                          </Pressable>
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.moneyInput,
-                              !canEditMoney && styles.inputReadOnly,
-                            ]}
-                            keyboardType="numeric"
-                            inputMode="numeric"
-                            placeholder="0"
-                            value={paidNow}
-                            editable={canEditMoney}
-                            onChangeText={(value) => {
-                              if (!canEditMoney) return;
-                              setPaidTouched(true);
-                              setPaidNow(value);
-                            }}
-                            inputAccessoryViewID={paidAccessoryViewId}
-                          />
-                          <Pressable
-                            style={[styles.stepperBtn, !canEditMoney && styles.stepperBtnDisabled]}
-                            onPress={() => adjustPaid(1)}
-                            disabled={!canEditMoney}
-                          >
-                            <Ionicons name="add" size={10} color="#0a7ea4" />
-                          </Pressable>
-                        </View>
-                        <Pressable
-                          style={[styles.stepperTiny, !canEditMoney && styles.stepperBtnDisabled]}
-                          onPress={() => adjustPaid(-50)}
-                          disabled={!canEditMoney}
-                        >
-                          <Ionicons name="remove" size={10} color="#0a7ea4" />
-                        </Pressable>
-                      </View>
-                    </View>
-                    <View style={[styles.amountCell, styles.amountCellResult, styles.amountCellAlignEnd]}>
-                      <View style={styles.amountHeader}>
-                        <Text style={styles.fieldName}>Remaining / Extra</Text>
-                      </View>
-                      <RemainingExtraChips
-                        unavailable={!companyBalanceReady}
-                        remainingText={
-                          remainingPay > 0 ? `Remaining: pay company ${formatMoney(remainingPay)}â‚ª` : null
-                        }
-                        extraText={
-                          extraPaid > 0 ? `Extra: company owes ${formatMoney(extraPaid)}â‚ª` : null
+                    {canEditMoney ? (
+                      <InlineWalletFundingPrompt
+                        walletAmount={walletBalance}
+                        shortfall={refillWalletShortfall}
+                        onTransferNow={
+                          refillWalletShortfall > 0
+                            ? () =>
+                                router.push({
+                                  pathname: "/expenses/new",
+                                  params: {
+                                    tab: "bank_to_wallet",
+                                    amount: refillWalletShortfall.toFixed(0),
+                                  },
+                                })
+                            : undefined
                         }
                       />
-                      {canEditMoney ? (
-                        <InlineWalletFundingPrompt
-                          walletAmount={walletBalance}
-                          shortfall={refillWalletShortfall}
-                          onTransferNow={
-                            refillWalletShortfall > 0
-                              ? () =>
-                                  router.push({
-                                    pathname: "/expenses/new",
-                                    params: {
-                                      tab: "bank_to_wallet",
-                                      amount: refillWalletShortfall.toFixed(0),
-                                    },
-                                  })
-                              : undefined
-                          }
-                        />
-                      ) : null}
-                    </View>
-                  </View>
-                  {canEditMoney ? (
-                    <View style={[styles.amountsRow, styles.actionRow]}>
-                      <View style={styles.amountCell} />
-                      <View style={styles.amountCell}>
-                        <View style={styles.inlineActionRow}>
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
-                            ]}
-                            onPress={() => {
-                              setPaidTouched(true);
-                              if (paidNowValue === 0) {
-                                setPaidNow(String(totalCost));
-                              } else {
-                                setPaidNow("0");
-                              }
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {paidNowValue === 0 ? "Paid" : "Didnt pay"}
-                            </Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                      <View style={[styles.amountCell, styles.amountCellResult]} />
-                    </View>
-                  ) : null}
+                    ) : null}
                   </BigBox>
-                </View>
+                </>
               ) : null}
               <View style={styles.section}>
                 <Text style={styles.label}>Notes</Text>
@@ -2037,99 +1667,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     gap: 12,
   },
-  totalsRow: {
-    marginTop: 12,
-  },
-  actionRow: {
-    marginTop: 2,
-  },
-  amountCell: {
-    flex: 1,
-    alignItems: "center",
-    flexDirection: "column",
-    minHeight: 80,
-    gap: 6,
-  },
-  amountCellAlignEnd: {
-    alignSelf: "stretch",
-  },
-  amountCellResult: {
-    flex: 1,
-  },
-  fieldName: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#475569",
-    textAlign: "center",
-    alignSelf: "center",
-  },
-  amountHeader: {
-    height: 40,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    marginBottom: 4,
-  },
-  amountGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  stepperStack: {
-    alignItems: "center",
-    gap: 2,
-    width: 120,
-  },
-  stepperSpacer: {
-    height: 30,
-    opacity: 0,
-  },
-  amountInput: {
-    flex: 1,
-    minWidth: 72,
-    textAlign: "center",
-    paddingHorizontal: 6,
-    height: 40,
-  },
-  moneyInput: {
-    flex: 1,
-    minWidth: 72,
-    textAlign: "center",
-    paddingHorizontal: 6,
-    height: 40,
-  },
-  stepperRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  stepperBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-    backgroundColor: "#f8fafc",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperTiny: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-    backgroundColor: "#f8fafc",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperBtnDisabled: {
-    opacity: 0.4,
-  },
-  stepperInput: {
-    flex: 1,
-    textAlign: "center",
-  },
   helperText: {
     fontSize: 10,
     color: "#6b7280",
@@ -2242,6 +1779,14 @@ const styles = StyleSheet.create({
   inlineActionRow: {
     marginTop: 8,
     width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entryFieldPairSingle: {
+    flexDirection: "row",
+  },
+  bigBoxActionRow: {
+    marginTop: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2514,6 +2059,25 @@ const styles = StyleSheet.create({
   },
   timeTextSelected: {
     color: "#fff",
+  },
+  tradeStatCell: {
+    width: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  tradeStatLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  tradeStatValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textAlign: "center",
   },
 });
 
