@@ -654,6 +654,9 @@ function CompanyPaymentForm({
   const totalDue = Math.abs(companyBalance);
   const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
   const companyBalanceAfter = companyBalance - normalizedAmount;
+  const walletAfter = paymentDirection === "receive"
+    ? walletBalance + amountValue
+    : Math.max(walletBalance - amountValue, 0);
   const companyPreviewLines = formatBalanceTransitions(
     [makeBalanceTransition("company", "money", companyBalance, companyBalanceAfter)],
     {
@@ -768,6 +771,7 @@ function CompanyPaymentForm({
         >
           <FieldCell
             title={CUSTOMER_WORDING.paid}
+            comment={`Wallet ${walletBalance.toFixed(0)} -> ${walletAfter.toFixed(0)}`}
             value={amountValue}
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}

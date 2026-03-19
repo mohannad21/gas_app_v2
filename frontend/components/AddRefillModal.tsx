@@ -833,7 +833,7 @@ export function RefillForm({
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
                       title="12kg Buy"
-                      comment={`${refillBuyEmpty12} empties on hand\n${formatCount(base?.full12)} -> ${formatCount(afterFull12)}`}
+                      comment={`${refillBuyEmpty12} empties on hand\nFull ${formatCount(base?.full12)} -> ${formatCount(afterFull12)}`}
                       value={buy12Value}
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
@@ -842,7 +842,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="12kg Return"
-                      comment={` \n${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
+                      comment={` \nEmpty ${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
@@ -881,7 +881,7 @@ export function RefillForm({
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 16 }}>
                     <FieldCell
                       title="48kg Buy"
-                      comment={`${refillBuyEmpty48} empties on hand\n${formatCount(base?.full48)} -> ${formatCount(afterFull48)}`}
+                      comment={`${refillBuyEmpty48} empties on hand\nFull ${formatCount(base?.full48)} -> ${formatCount(afterFull48)}`}
                       value={buy48Value}
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
@@ -890,7 +890,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="48kg Return"
-                      comment={` \n${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
+                      comment={` \nEmpty ${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
                       value={ret48Value}
                       onIncrement={() => adjustReturn48(1)}
                       onDecrement={() => adjustReturn48(-1)}
