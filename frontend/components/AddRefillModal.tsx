@@ -151,7 +151,7 @@ export function RefillForm({
     { delta: -20, label: "-20", position: "bottom" },
   ];
   const FIELD_QTY_STEPPERS: FieldStepper[] = [
-    { delta: -1, label: "âˆ’", position: "left" },
+    { delta: -1, label: "-", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
   const createRefill = useCreateRefill();
@@ -690,16 +690,16 @@ export function RefillForm({
               </View>
 
 
-              {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+              {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
                   CYLINDERS
                   - Refill:  [Buy 12kg] [Return 12kg] side by side in ONE BigBox
                              [Buy 48kg] [Return 48kg] side by side in same BigBox
                   - Return:  [Return 12kg] centered  /  [Return 48kg] centered (2 BigBoxes)
                   - Buy:     ONE BigBox with [Buy 12kg left] [Buy 48kg right]
-              â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+              Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
 
               {isBuyMode ? (
-                /* BUY â€” one Cylinders BigBox, 12kg left / 48kg right */
+                /* BUY Ã¢â‚¬â€ one Cylinders BigBox, 12kg left / 48kg right */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={cylinderStatusLine}
@@ -725,7 +725,7 @@ export function RefillForm({
                   </View>
                 </BigBox>
               ) : isReturnMode ? (
-                /* RETURN â€” separate BigBox per gas type */
+                /* RETURN Ã¢â‚¬â€ separate BigBox per gas type */
                 <>
                   <BigBox
                     title="12kg Cylinders"
@@ -812,23 +812,17 @@ export function RefillForm({
                   </BigBox>
                 </>
               ) : (
-                /* REFILL â€” one BigBox, 12kg top / 48kg bottom */
+                /* REFILL Ã¢â‚¬â€ one BigBox, 12kg top / 48kg bottom */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={cylinderOnlyStatusLine}
                   statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
                 >
-                  {/* 12kg inventory hint — shown above the pair so both FieldCells stay same height */}
-                  <View style={styles.inventoryHintRow}>
-                    <Text style={styles.inventoryHint}>
-                      12kg — Full: {formatCount(base?.full12)} → {formatCount(afterFull12)}{"  "}
-                      Empties on hand: {availableEmpty12}
-                    </Text>
-                  </View>
                   {/* 12kg row */}
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
                       title="12kg Buy"
+                      comment={availableEmpty12 > 0 ? `${availableEmpty12} empties on hand` : "no empties"}
                       value={buy12Value}
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
@@ -837,6 +831,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="12kg Return"
+                      comment={`${formatCount(base?.full12)} \u2192 ${formatCount(afterFull12)}`}
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
@@ -845,8 +840,8 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                  {/* 12kg Return toggle — sits under the Return (right) field only */}
-                  <View style={{ flexDirection: "row", gap: 12 }}>
+                  {/* 12kg Return toggle — aligned under Return (right) field */}
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                     <View style={{ flex: 1 }} />
                     <Pressable
                       style={[
@@ -871,10 +866,58 @@ export function RefillForm({
                     </Text>
                   ) : null}
 
+                  {/* 48kg row */}
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 16 }}>
+                    <FieldCell
+                      title="48kg Buy"
+                      comment={availableEmpty48 > 0 ? `${availableEmpty48} empties on hand` : "no empties"}
+                      value={buy48Value}
+                      onIncrement={() => adjustBuy48(1)}
+                      onDecrement={() => adjustBuy48(-1)}
+                      onChangeText={handleBuy48Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                    <FieldCell
+                      title="48kg Return"
+                      comment={`${formatCount(base?.full48)} \u2192 ${formatCount(afterFull48)}`}
+                      value={ret48Value}
+                      onIncrement={() => adjustReturn48(1)}
+                      onDecrement={() => adjustReturn48(-1)}
+                      onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
+                      error={return48Invalid}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                  {/* 48kg Return toggle — aligned under Return (right) field */}
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                    <View style={{ flex: 1 }} />
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        { flex: 1 },
+                        buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={() => {
+                        if (buy48Value <= 0) return;
+                        setRet48Touched(true);
+                        setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                      }}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  {return48Invalid ? (
+                    <Text style={styles.errorText}>
+                      Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
+                    </Text>
+                  ) : null}
+
                   {/* 48kg inventory hint */}
                   <View style={styles.inventoryHintRow}>
                     <Text style={styles.inventoryHint}>
-                      48kg — Full: {formatCount(base?.full48)} → {formatCount(afterFull48)}{"  "}
+                      48kg â€” Full: {formatCount(base?.full48)} â†’ {formatCount(afterFull48)}{"  "}
                       Empties on hand: {availableEmpty48}
                     </Text>
                   </View>
@@ -898,7 +941,7 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                  {/* 48kg Return toggle — sits under the Return (right) field only */}
+                  {/* 48kg Return toggle â€” sits under the Return (right) field only */}
                   <View style={{ flexDirection: "row", gap: 12 }}>
                     <View style={{ flex: 1 }} />
                     <Pressable
@@ -926,17 +969,17 @@ export function RefillForm({
                 </BigBox>
               )}
 
-              {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+              {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
                   GAS PRICE + IRON PRICE + MONEY
                   Only shown on Refill and Buy tabs (not Return)
-              â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+              Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
               {!isReturnMode ? (
                 <>
                   {/* Gas Price 12kg
                       QTY and TOTAL are plain text (tradeStatCell style).
                       Price is a read-only FieldCell (grey, no buttons).
                       A "Set price" button below navigates to the config page
-                      (that page is not yet built â€” the button is a placeholder). */}
+                      (that page is not yet built Ã¢â‚¬â€ the button is a placeholder). */}
                   <BigBox title="Gas Price 12kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -968,7 +1011,7 @@ export function RefillForm({
                     </View>
                   </BigBox>
 
-                  {/* Gas Price 48kg â€” same structure */}
+                  {/* Gas Price 48kg Ã¢â‚¬â€ same structure */}
                   <BigBox title="Gas Price 48kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -999,7 +1042,7 @@ export function RefillForm({
                     </View>
                   </BigBox>
 
-                  {/* Iron Price â€” Buy tab only.
+                  {/* Iron Price Ã¢â‚¬â€ Buy tab only.
                       QTY and TOTAL are plain text at the same vertical level as
                       the Iron Price FieldCell buttons (alignItems: "center"). */}
                   {isBuyMode ? (
@@ -1051,8 +1094,8 @@ export function RefillForm({
                   {/* Money BigBox.
                       statusLine shows the money debt/credit alert (red if owing).
                       Total is read-only. Paid is adjustable.
-                      Toggle button: when paid=0 â†’ "Paid all" (green) sets paid=total.
-                                     when paid>0 â†’ "Didn't pay" (red) sets paid=0.
+                      Toggle button: when paid=0 Ã¢â€ â€™ "Paid all" (green) sets paid=total.
+                                     when paid>0 Ã¢â€ â€™ "Didn't pay" (red) sets paid=0.
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
@@ -1081,8 +1124,8 @@ export function RefillForm({
                         steppers={FIELD_MONEY_STEPPERS}
                       />
                     </View>
-                    {/* Paid all toggle — sits under Paid (right) field only */}
-                    <View style={{ flexDirection: "row", gap: 12 }}>
+                    {/* Paid all toggle — aligned under Paid (right) field */}
+                    <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                       <View style={{ flex: 1 }} />
                       <Pressable
                         style={[
