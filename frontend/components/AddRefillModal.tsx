@@ -145,12 +145,6 @@ export function RefillForm({
   mode?: "refill" | "buy" | "return";
   walletBalance?: number;
 }) {
-  const createRefill = useCreateRefill();
-  const updateRefill = useUpdateRefill();
-  const initInventory = useInitInventory();
-  const refillDetailsQuery = useInventoryRefillDetails(editEntry?.refill_id);
-  const refillDetails = refillDetailsQuery.data;
-  const pricesQuery = usePriceSettings();
   const FIELD_MONEY_STEPPERS: FieldStepper[] = [
     { delta: 20, label: "+20", position: "top" },
     { delta: -5, label: "-5", position: "left" },
@@ -158,9 +152,15 @@ export function RefillForm({
     { delta: -20, label: "-20", position: "bottom" },
   ];
   const FIELD_QTY_STEPPERS: FieldStepper[] = [
-    { delta: -1, label: "\u2212", position: "left" },
+    { delta: -1, label: "−", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
+  const createRefill = useCreateRefill();
+  const updateRefill = useUpdateRefill();
+  const initInventory = useInitInventory();
+  const refillDetailsQuery = useInventoryRefillDetails(editEntry?.refill_id);
+  const refillDetails = refillDetailsQuery.data;
+  const pricesQuery = usePriceSettings();
   const [date, setDate] = useState(getNowDate());
   const [time, setTime] = useState(getNowTime());
   const companyBalancesQuery = useCompanyBalances();
@@ -581,7 +581,6 @@ export function RefillForm({
   const canEditReturn = !isBuyMode;
   const canEditMoney = !isReturnMode;
   const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
-  const showReturnToggle = !isBuyMode && !isReturnMode;
 
   const adjustBuy12 = (delta: number) => {
     if (!canEditBuy) return;
@@ -782,46 +781,24 @@ export function RefillForm({
                 </View>
               </View>
 
-              {/* -- 12kg Cylinders -- */}
-              <BigBox
-                title="12kg Cylinders"
-                statusLine={cylinderStatusLine}
-                statusIsAlert={liveCompanyNet12 < 0}
-              >
-                {isReturnMode ? (
-                  // Return tab: only Return field, centered
-                  <View style={styles.entryFieldPairSingle}>
-                    <FieldCell
-                      title="Return"
-                      value={ret12Value}
-                      onIncrement={() => adjustReturn12(1)}
-                      onDecrement={() => adjustReturn12(-1)}
-                      onChangeText={(text) => {
-                        setRet12Touched(true);
-                        setRet12(sanitizeCountInput(text));
-                      }}
-                      editable={!disableReturn12}
-                      error={return12Invalid}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
-                  </View>
-                ) : isBuyMode ? (
-                  // Buy tab: only Buy field, centered
-                  <View style={styles.entryFieldPairSingle}>
-                    <FieldCell
-                      title="Buy"
-                      value={buy12Value}
-                      onIncrement={() => adjustBuy12(1)}
-                      onDecrement={() => adjustBuy12(-1)}
-                      onChangeText={handleBuy12Change}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
-                  </View>
-                ) : (
-                  // Refill tab: Buy + Return side by side
+              {/* ════════════════════════════════════════════
+                  CYLINDERS
+                  - Refill:  [Buy 12kg] [Return 12kg] side by side in ONE BigBox
+                             [Buy 48kg] [Return 48kg] side by side in same BigBox
+                  - Return:  [Return 12kg] centered  /  [Return 48kg] centered (2 BigBoxes)
+                  - Buy:     ONE BigBox with [Buy 12kg left] [Buy 48kg right]
+              ════════════════════════════════════════════ */}
+
+              {isBuyMode ? (
+                /* BUY — one Cylinders BigBox, 12kg left / 48kg right */
+                <BigBox
+                  title={CUSTOMER_WORDING.cylinders}
+                  statusLine={cylinderStatusLine}
+                  statusIsAlert={false}
+                >
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
-                      title="Buy"
+                      title="12kg Buy"
                       value={buy12Value}
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
@@ -829,101 +806,157 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                     <FieldCell
-                      title="Return"
+                      title="48kg Buy"
+                      value={buy48Value}
+                      onIncrement={() => adjustBuy48(1)}
+                      onDecrement={() => adjustBuy48(-1)}
+                      onChangeText={handleBuy48Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                  </View>
+                </BigBox>
+              ) : isReturnMode ? (
+                /* RETURN — separate BigBox per gas type */
+                <>
+                  <BigBox
+                    title="12kg Cylinders"
+                    statusLine={cylinderStatusLine}
+                    statusIsAlert={liveCompanyNet12 < 0}
+                  >
+                    <View style={styles.entryFieldPairSingle}>
+                      <FieldCell
+                        title="Return"
+                        value={ret12Value}
+                        onIncrement={() => adjustReturn12(1)}
+                        onDecrement={() => adjustReturn12(-1)}
+                        onChangeText={(text) => { setRet12Touched(true); setRet12(sanitizeCountInput(text)); }}
+                        editable={!disableReturn12}
+                        error={return12Invalid}
+                        steppers={FIELD_QTY_STEPPERS}
+                      />
+                    </View>
+                    {owedReturn12 > 0 ? (
+                      <View style={styles.bigBoxActionRow}>
+                        <Pressable
+                          style={[
+                            styles.inlineActionButton,
+                            ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
+                          ]}
+                          onPress={() => {
+                            setRet12Touched(true);
+                            setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
+                          }}
+                        >
+                          <Text style={styles.inlineActionText}>
+                            {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {return12Invalid ? (
+                      <Text style={styles.errorText}>
+                        Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
+                      </Text>
+                    ) : null}
+                  </BigBox>
+
+                  <BigBox
+                    title="48kg Cylinders"
+                    statusLine={cylinderStatusLine}
+                    statusIsAlert={liveCompanyNet48 < 0}
+                  >
+                    <View style={styles.entryFieldPairSingle}>
+                      <FieldCell
+                        title="Return"
+                        value={ret48Value}
+                        onIncrement={() => adjustReturn48(1)}
+                        onDecrement={() => adjustReturn48(-1)}
+                        onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
+                        editable={!disableReturn48}
+                        error={return48Invalid}
+                        steppers={FIELD_QTY_STEPPERS}
+                      />
+                    </View>
+                    {owedReturn48 > 0 ? (
+                      <View style={styles.bigBoxActionRow}>
+                        <Pressable
+                          style={[
+                            styles.inlineActionButton,
+                            ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
+                          ]}
+                          onPress={() => {
+                            setRet48Touched(true);
+                            setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
+                          }}
+                        >
+                          <Text style={styles.inlineActionText}>
+                            {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {return48Invalid ? (
+                      <Text style={styles.errorText}>
+                        Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
+                      </Text>
+                    ) : null}
+                  </BigBox>
+                </>
+              ) : (
+                /* REFILL — one BigBox, 12kg top / 48kg bottom */
+                <BigBox
+                  title={CUSTOMER_WORDING.cylinders}
+                  statusLine={cylinderStatusLine}
+                  statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
+                >
+                  {/* 12kg row */}
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+                    <FieldCell
+                      title="12kg Buy"
+                      value={buy12Value}
+                      onIncrement={() => adjustBuy12(1)}
+                      onDecrement={() => adjustBuy12(-1)}
+                      onChangeText={handleBuy12Change}
+                      steppers={FIELD_QTY_STEPPERS}
+                    />
+                    <FieldCell
+                      title="12kg Return"
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
-                      onChangeText={(text) => {
-                        setRet12Touched(true);
-                        setRet12(sanitizeCountInput(text));
-                      }}
+                      onChangeText={(text) => { setRet12Touched(true); setRet12(sanitizeCountInput(text)); }}
                       error={return12Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                )}
-                {/* Return toggle - shown on Refill and Return tabs */}
-                {!isBuyMode ? (
+                  {/* 12kg Return toggle */}
                   <View style={styles.bigBoxActionRow}>
-                    {isReturnMode && owedReturn12 > 0 ? (
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          setRet12Touched(true);
-                          setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                        </Text>
-                      </Pressable>
-                    ) : showReturnToggle ? (
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          if (buy12Value <= 0) return;
-                          setRet12Touched(true);
-                          setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : null}
-                {return12Invalid && !disableReturn12 ? (
-                  <Text style={styles.errorText}>
-                    Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
-                  </Text>
-                ) : null}
-
-              </BigBox>
-
-              {/* -- 48kg Cylinders -- */}
-              <BigBox
-                title="48kg Cylinders"
-                statusLine={cylinderStatusLine}
-                statusIsAlert={liveCompanyNet48 < 0}
-              >
-                {isReturnMode ? (
-                  <View style={styles.entryFieldPairSingle}>
-                    <FieldCell
-                      title="Return"
-                      value={ret48Value}
-                      onIncrement={() => adjustReturn48(1)}
-                      onDecrement={() => adjustReturn48(-1)}
-                      onChangeText={(text) => {
-                        setRet48Touched(true);
-                        setRet48(sanitizeCountInput(text));
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={() => {
+                        if (buy12Value <= 0) return;
+                        setRet12Touched(true);
+                        setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
                       }}
-                      editable={!disableReturn48}
-                      error={return48Invalid}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                      </Text>
+                    </Pressable>
                   </View>
-                ) : isBuyMode ? (
-                  <View style={styles.entryFieldPairSingle}>
+                  {return12Invalid ? (
+                    <Text style={styles.errorText}>
+                      Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
+                    </Text>
+                  ) : null}
+
+                  {/* 48kg row */}
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 12 }}>
                     <FieldCell
-                      title="Buy"
-                      value={buy48Value}
-                      onIncrement={() => adjustBuy48(1)}
-                      onDecrement={() => adjustBuy48(-1)}
-                      onChangeText={handleBuy48Change}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
-                  </View>
-                ) : (
-                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-                    <FieldCell
-                      title="Buy"
+                      title="48kg Buy"
                       value={buy48Value}
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
@@ -931,65 +964,52 @@ export function RefillForm({
                       steppers={FIELD_QTY_STEPPERS}
                     />
                     <FieldCell
-                      title="Return"
+                      title="48kg Return"
                       value={ret48Value}
                       onIncrement={() => adjustReturn48(1)}
                       onDecrement={() => adjustReturn48(-1)}
-                      onChangeText={(text) => {
-                        setRet48Touched(true);
-                        setRet48(sanitizeCountInput(text));
-                      }}
+                      onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
                       error={return48Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
                   </View>
-                )}
-                {!isBuyMode ? (
+                  {/* 48kg Return toggle */}
                   <View style={styles.bigBoxActionRow}>
-                    {isReturnMode && owedReturn48 > 0 ? (
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          setRet48Touched(true);
-                          setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                        </Text>
-                      </Pressable>
-                    ) : showReturnToggle ? (
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          if (buy48Value <= 0) return;
-                          setRet48Touched(true);
-                          setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                        </Text>
-                      </Pressable>
-                    ) : null}
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={() => {
+                        if (buy48Value <= 0) return;
+                        setRet48Touched(true);
+                        setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                      }}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                      </Text>
+                    </Pressable>
                   </View>
-                ) : null}
-                {return48Invalid && !disableReturn48 ? (
-                  <Text style={styles.errorText}>
-                    Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
-                  </Text>
-                ) : null}
-              </BigBox>
+                  {return48Invalid ? (
+                    <Text style={styles.errorText}>
+                      Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
+                    </Text>
+                  ) : null}
+                </BigBox>
+              )}
 
+              {/* ════════════════════════════════════════════
+                  GAS PRICE + IRON PRICE + MONEY
+                  Only shown on Refill and Buy tabs (not Return)
+              ════════════════════════════════════════════ */}
               {!isReturnMode ? (
                 <>
-                  {/* Gas Price 12kg - all fields read-only, price comes from config */}
+                  {/* Gas Price 12kg
+                      QTY and TOTAL are plain text (tradeStatCell style).
+                      Price is a read-only FieldCell (grey, no buttons).
+                      A "Set price" button below navigates to the config page
+                      (that page is not yet built — the button is a placeholder). */}
                   <BigBox title="Gas Price 12kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -1008,9 +1028,20 @@ export function RefillForm({
                         <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
                       </View>
                     </View>
+                    <View style={styles.bigBoxActionRow}>
+                      <Pressable
+                        style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
+                        onPress={() => {
+                          // TODO: navigate to price config page when implemented
+                          // router.push({ pathname: "/prices/config" });
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>Set price</Text>
+                      </Pressable>
+                    </View>
                   </BigBox>
 
-                  {/* Gas Price 48kg - all fields read-only */}
+                  {/* Gas Price 48kg — same structure */}
                   <BigBox title="Gas Price 48kg">
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                       <View style={styles.tradeStatCell}>
@@ -1029,9 +1060,21 @@ export function RefillForm({
                         <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
                       </View>
                     </View>
+                    <View style={styles.bigBoxActionRow}>
+                      <Pressable
+                        style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
+                        onPress={() => {
+                          // TODO: navigate to price config page when implemented
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>Set price</Text>
+                      </Pressable>
+                    </View>
                   </BigBox>
 
-                  {/* Iron Price boxes - Buy tab only */}
+                  {/* Iron Price — Buy tab only.
+                      QTY and TOTAL are plain text at the same vertical level as
+                      the Iron Price FieldCell buttons (alignItems: "center"). */}
                   {isBuyMode ? (
                     <>
                       <BigBox title="Iron Price 12kg">
@@ -1078,7 +1121,12 @@ export function RefillForm({
                     </>
                   ) : null}
 
-                  {/* Money - Total (read-only) + Paid (adjustable) */}
+                  {/* Money BigBox.
+                      statusLine shows the money debt/credit alert (red if owing).
+                      Total is read-only. Paid is adjustable.
+                      Toggle button: when paid=0 → "Paid all" (green) sets paid=total.
+                                     when paid>0 → "Didn't pay" (red) sets paid=0.
+                      InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
                     statusLine={moneyStatusLine}
@@ -1118,7 +1166,7 @@ export function RefillForm({
                         }}
                       >
                         <Text style={styles.inlineActionText}>
-                          {paidNowValue === 0 ? CUSTOMER_WORDING.paid_ : CUSTOMER_WORDING.didntPay}
+                          {paidNowValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
                         </Text>
                       </Pressable>
                     </View>
@@ -1783,10 +1831,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   entryFieldPairSingle: {
-    flexDirection: "row",
+    width: "50%",
+    minWidth: 160,
+    alignSelf: "center",
   },
   bigBoxActionRow: {
-    marginTop: 12,
+    marginTop: 8,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1801,6 +1851,9 @@ const styles = StyleSheet.create({
   },
   inlineActionButtonSuccess: {
     backgroundColor: "#16a34a",
+  },
+  inlineActionButtonAlt: {
+    backgroundColor: "#0a7ea4",
   },
   inlineActionText: {
     color: "#fff",
