@@ -763,17 +763,9 @@ function CompanyPaymentForm({
         statusIsAlert={companyBalanceAfter > 0}
       >
         <View
-          style={[styles.entryFieldPair, tableDisabled && styles.sectionDisabled]}
+          style={[styles.entryFieldPairSingle, tableDisabled && styles.sectionDisabled, { justifyContent: "center" }]}
           pointerEvents={tableDisabled ? "none" : "auto"}
         >
-          <FieldCell
-            title={CUSTOMER_WORDING.total}
-            comment={paymentDirection === "receive" ? "Company owes you" : "You owe company"}
-            value={totalDue}
-            onIncrement={() => {}}
-            onDecrement={() => {}}
-            editable={false}
-          />
           <FieldCell
             title={CUSTOMER_WORDING.paid}
             value={amountValue}
