@@ -124,6 +124,13 @@ function sanitizeCountInput(value: string) {
   return String(Math.max(0, parsed));
 }
 
+function sanitizeCountInputMax(value: string, max: number) {
+  if (!value.trim()) return "";
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return "";
+  return String(Math.min(Math.max(0, parsed), Math.max(0, max)));
+}
+
 export function RefillForm({
   visible,
   onClose,
@@ -463,6 +470,10 @@ export function RefillForm({
 
   const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
   const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
+  const refillBuyEmpty12 = Math.max(availableEmpty12 - buy12Value, 0);
+  const refillBuyEmpty48 = Math.max(availableEmpty48 - buy48Value, 0);
+  const afterEmpty12 = Math.max(availableEmpty12 - ret12Value, 0);
+  const afterEmpty48 = Math.max(availableEmpty48 - ret48Value, 0);
 
   const disableSave =
     !companyBalanceReady ||
@@ -556,7 +567,7 @@ export function RefillForm({
   };
   const handleBuy12Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInput(value);
+    const next = sanitizeCountInputMax(value, availableEmpty12);
     setBuy12(next);
     if (!ret12Touched && !isBuyMode) {
       setRet12(next);
@@ -564,7 +575,7 @@ export function RefillForm({
   };
   const handleBuy48Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInput(value);
+    const next = sanitizeCountInputMax(value, availableEmpty48);
     setBuy48(next);
     if (!ret48Touched && !isBuyMode) {
       setRet48(next);
@@ -822,7 +833,7 @@ export function RefillForm({
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
                       title="12kg Buy"
-                      comment={availableEmpty12 > 0 ? `${availableEmpty12} empties on hand` : "no empties"}
+                      comment={`${refillBuyEmpty12} empties on hand\n${formatCount(base?.full12)} -> ${formatCount(afterFull12)}`}
                       value={buy12Value}
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
@@ -831,7 +842,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="12kg Return"
-                      comment={`${formatCount(base?.full12)} \u2192 ${formatCount(afterFull12)}`}
+                      comment={` \n${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
@@ -870,7 +881,7 @@ export function RefillForm({
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 16 }}>
                     <FieldCell
                       title="48kg Buy"
-                      comment={availableEmpty48 > 0 ? `${availableEmpty48} empties on hand` : "no empties"}
+                      comment={`${refillBuyEmpty48} empties on hand\n${formatCount(base?.full48)} -> ${formatCount(afterFull48)}`}
                       value={buy48Value}
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
@@ -879,7 +890,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="48kg Return"
-                      comment={`${formatCount(base?.full48)} \u2192 ${formatCount(afterFull48)}`}
+                      comment={` \n${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
                       value={ret48Value}
                       onIncrement={() => adjustReturn48(1)}
                       onDecrement={() => adjustReturn48(-1)}
@@ -914,58 +925,6 @@ export function RefillForm({
                     </Text>
                   ) : null}
 
-                  {/* 48kg inventory hint */}
-                  <View style={styles.inventoryHintRow}>
-                    <Text style={styles.inventoryHint}>
-                      48kg â€” Full: {formatCount(base?.full48)} â†’ {formatCount(afterFull48)}{"  "}
-                      Empties on hand: {availableEmpty48}
-                    </Text>
-                  </View>
-                  {/* 48kg row */}
-                  <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 4 }}>
-                    <FieldCell
-                      title="48kg Buy"
-                      value={buy48Value}
-                      onIncrement={() => adjustBuy48(1)}
-                      onDecrement={() => adjustBuy48(-1)}
-                      onChangeText={handleBuy48Change}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
-                    <FieldCell
-                      title="48kg Return"
-                      value={ret48Value}
-                      onIncrement={() => adjustReturn48(1)}
-                      onDecrement={() => adjustReturn48(-1)}
-                      onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
-                      error={return48Invalid}
-                      steppers={FIELD_QTY_STEPPERS}
-                    />
-                  </View>
-                  {/* 48kg Return toggle â€” sits under the Return (right) field only */}
-                  <View style={{ flexDirection: "row", gap: 12 }}>
-                    <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { flex: 1 },
-                        buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={() => {
-                        if (buy48Value <= 0) return;
-                        setRet48Touched(true);
-                        setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
-                      }}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                      </Text>
-                    </Pressable>
-                  </View>
-                  {return48Invalid ? (
-                    <Text style={styles.errorText}>
-                      Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
-                    </Text>
-                  ) : null}
                 </BigBox>
               )}
 
@@ -1058,7 +1017,7 @@ export function RefillForm({
                             value={ironPrice12Value}
                             onIncrement={() => adjustIronPrice12(5)}
                             onDecrement={() => adjustIronPrice12(-5)}
-                            onChangeText={(t) => setIronPrice12Input(t)}
+                            onChangeText={(t) => setIronPrice12Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeStatCell}>
@@ -1079,7 +1038,7 @@ export function RefillForm({
                             value={ironPrice48Value}
                             onIncrement={() => adjustIronPrice48(5)}
                             onDecrement={() => adjustIronPrice48(-5)}
-                            onChangeText={(t) => setIronPrice48Input(t)}
+                            onChangeText={(t) => setIronPrice48Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeStatCell}>
@@ -1118,7 +1077,7 @@ export function RefillForm({
                         onChangeText={(text) => {
                           if (!canEditMoney) return;
                           setPaidTouched(true);
-                          setPaidNow(text);
+                          setPaidNow(sanitizeCountInput(text));
                         }}
                         editable={canEditMoney}
                         steppers={FIELD_MONEY_STEPPERS}
@@ -2110,4 +2069,3 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
-
