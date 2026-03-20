@@ -2628,7 +2628,7 @@ ${cylLine}
                   saveDisabled && styles.footerButtonDisabled,
                 ]}
               >
-                <Text style={styles.footerSecondaryText}>Save & Add Another</Text>
+                <Text style={styles.footerSecondaryText}>Save & Add More</Text>
               </Pressable>
               <Pressable
                 onPress={savePrimaryHandler}
@@ -3225,33 +3225,33 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
   },
-  footerRow: { flexDirection: "row", gap: 10 },
+  footerRow: { flexDirection: "row", gap: 8 },
   footerCancel: {
     flex: 1,
-    backgroundColor: "#64748b",
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: "#dc2626",
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: "center",
   },
-  footerCancelText: { color: "#fff", fontWeight: "700" },
+  footerCancelText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   footerPrimary: {
     flex: 1,
-    backgroundColor: "#0a7ea4",
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: "#16a34a",
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: "center",
   },
-  footerPrimaryText: { color: "#fff", fontWeight: "700" },
+  footerPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   footerSecondary: {
     flex: 1,
-    borderColor: "#cbd5e1",
+    backgroundColor: "#0a7ea4",
     borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    borderColor: "#0a7ea4",
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: "center",
-    backgroundColor: "#fff",
   },
-  footerSecondaryText: { color: "#0a7ea4", fontWeight: "700" },
+  footerSecondaryText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   footerButtonDisabled: { opacity: 0.6 },
   notice: {
     backgroundColor: "#fff7e6",
