@@ -1834,10 +1834,12 @@ ${cylLine}
                       )}
                     />
                   </View>
-                  <View style={styles.bigBoxActionRow}>
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                    <View style={{ flex: 1 }} />
                     <Pressable
                       style={[
                         styles.inlineActionButton,
+                        { flex: 1 },
                         replacementReceivedToggleState === "none"
                           ? styles.inlineActionButtonDanger
                           : replacementReceivedToggleState === "with_old"
@@ -1932,10 +1934,12 @@ ${cylLine}
                       )}
                     />
                   </View>
-                  <View style={styles.bigBoxActionRow}>
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                    <View style={{ flex: 1 }} />
                     <Pressable
                       style={[
                         styles.inlineActionButton,
+                        { flex: 1 },
                         replacementPaidToggleState === "none"
                           ? styles.inlineActionButtonDanger
                           : replacementPaidToggleState === "with_old"
