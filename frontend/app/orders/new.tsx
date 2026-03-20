@@ -1248,6 +1248,61 @@ ${cylLine}
     }
   };
 
+  const dateTimeSection = (
+    <View style={styles.sectionCard}>
+      <FieldLabel>Date & time</FieldLabel>
+      {entryMode === "order" ? (
+        <Controller
+          control={control}
+          name="delivered_at"
+          rules={{ required: "Enter delivery date & time" }}
+          render={() => (
+            <View style={styles.row}>
+              <Pressable
+                style={[
+                  styles.input,
+                  styles.half,
+                  errors.delivered_at && styles.inputError,
+                ]}
+                onPress={openActiveDate}
+              >
+                <Text style={styles.dateText}>{activeDate}</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.input,
+                  styles.half,
+                  errors.delivered_at && styles.inputError,
+                ]}
+                onPress={openActiveTime}
+              >
+                <Text style={styles.dateText}>{activeTime}</Text>
+              </Pressable>
+              <Pressable style={styles.nowButton} onPress={setActiveNow}>
+                <Text style={styles.nowButtonText}>Now</Text>
+              </Pressable>
+            </View>
+          )}
+        />
+      ) : (
+        <View style={styles.row}>
+          <Pressable style={[styles.input, styles.half]} onPress={openActiveDate}>
+            <Text style={styles.dateText}>{activeDate}</Text>
+          </Pressable>
+          <Pressable style={[styles.input, styles.half]} onPress={openActiveTime}>
+            <Text style={styles.dateText}>{activeTime}</Text>
+          </Pressable>
+          <Pressable style={styles.nowButton} onPress={setActiveNow}>
+            <Text style={styles.nowButtonText}>Now</Text>
+          </Pressable>
+        </View>
+      )}
+      {entryMode === "order" ? (
+        <FieldError message={errors.delivered_at?.message} />
+      ) : null}
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.keyboardAvoider}
@@ -1433,9 +1488,9 @@ ${cylLine}
                 {mode === "replacement"
                   ? "Replacement"
                   : mode === "sell_iron"
-                    ? "Selling"
+                    ? "Sell Full"
                     : mode === "buy_iron"
-                      ? "Buying"
+                      ? "Buy Empty"
                       : mode === "payment"
                         ? "Payment"
                         : "Return"}
@@ -1444,6 +1499,8 @@ ${cylLine}
           )})}
         </View>
       ) : null}
+
+      {currentAction === "replacement" && hasCustomer ? dateTimeSection : null}
 
       {showSystemSection ? (
         <View style={styles.sectionCard}>
@@ -1487,7 +1544,7 @@ ${cylLine}
                       value === s.id && styles.chipActive,
                     ]}
                   >
-                    <Text style={styles.chipText}>{s.name}</Text>
+                    <Text style={[styles.chipText, value === s.id && styles.chipTextActive]}>{s.name}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -1518,58 +1575,7 @@ ${cylLine}
             </View>
           )}
 
-          <View style={styles.sectionCard}>
-            <FieldLabel>Date & time</FieldLabel>
-            {entryMode === "order" ? (
-              <Controller
-                control={control}
-                name="delivered_at"
-                rules={{ required: "Enter delivery date & time" }}
-                render={() => (
-                  <View style={styles.row}>
-                    <Pressable
-                      style={[
-                        styles.input,
-                        styles.half,
-                        errors.delivered_at && styles.inputError,
-                      ]}
-                      onPress={openActiveDate}
-                    >
-                      <Text style={styles.dateText}>{activeDate}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.input,
-                        styles.half,
-                        errors.delivered_at && styles.inputError,
-                      ]}
-                      onPress={openActiveTime}
-                    >
-                      <Text style={styles.dateText}>{activeTime}</Text>
-                    </Pressable>
-                    <Pressable style={styles.nowButton} onPress={setActiveNow}>
-                      <Text style={styles.nowButtonText}>Now</Text>
-                    </Pressable>
-                  </View>
-                )}
-              />
-            ) : (
-              <View style={styles.row}>
-                <Pressable style={[styles.input, styles.half]} onPress={openActiveDate}>
-                  <Text style={styles.dateText}>{activeDate}</Text>
-                </Pressable>
-                <Pressable style={[styles.input, styles.half]} onPress={openActiveTime}>
-                  <Text style={styles.dateText}>{activeTime}</Text>
-                </Pressable>
-                <Pressable style={styles.nowButton} onPress={setActiveNow}>
-                  <Text style={styles.nowButtonText}>Now</Text>
-                </Pressable>
-              </View>
-            )}
-            {entryMode === "order" ? (
-              <FieldError message={errors.delivered_at?.message} />
-            ) : null}
-          </View>
+          {currentAction !== "replacement" ? dateTimeSection : null}
 
           {isPayment ? (
             <View style={styles.sectionCard}>
@@ -2091,7 +2097,7 @@ ${cylLine}
               }
             />
           ) : null}
-          {selectedCustomerEntry ? (
+          {selectedCustomerEntry && !isSellIron && !isBuyIron ? (
             customerPreviewStatusLine ? (
               <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
             ) : (
