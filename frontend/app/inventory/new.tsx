@@ -708,6 +708,15 @@ function CompanyPaymentForm({
           <Text style={styles.dateText}>{payTime}</Text>
           <Ionicons name="time-outline" size={16} color="#0a7ea4" />
         </Pressable>
+        <Pressable
+          style={styles.nowButton}
+          onPress={() => {
+            setPayDate(getLocalDateString());
+            setPayTime(getNowTime());
+          }}
+        >
+          <Text style={styles.nowButtonText}>Now</Text>
+        </Pressable>
       </View>
       <Text style={styles.modalLabel}>Payment direction</Text>
       <View style={styles.modeRow}>
@@ -976,7 +985,7 @@ export default function InventoryNewScreen() {
   }, [activeTab, paymentTabDisabled, returnTabDisabled, section, resolveTab]);
 
   return (
-    <SafeAreaView style={styles.hubSafeArea}>
+    <SafeAreaView style={styles.hubSafeArea} edges={["bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
@@ -996,8 +1005,8 @@ export default function InventoryNewScreen() {
                   ? "Return"
                   : tab === "payment"
                     ? "Payment"
-                : tab === "buy"
-                  ? "Buy"
+              : tab === "buy"
+                  ? "Buy Full"
                 : tab === "cash"
                     ? "Adjust Wallet"
                     : "Adjust Inventory";
@@ -1570,6 +1579,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a7ea4",
   },
   accessoryText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  nowButton: {
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#0a7ea4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nowButtonText: {
     color: "#fff",
     fontWeight: "700",
   },
