@@ -1839,7 +1839,7 @@ ${cylLine}
                     <Pressable
                       style={[
                         styles.inlineActionButton,
-                        { flex: 1 },
+                        { flex: 1, alignSelf: "stretch", minWidth: 0 },
                         replacementReceivedToggleState === "none"
                           ? styles.inlineActionButtonDanger
                           : replacementReceivedToggleState === "with_old"
@@ -1939,7 +1939,7 @@ ${cylLine}
                     <Pressable
                       style={[
                         styles.inlineActionButton,
-                        { flex: 1 },
+                        { flex: 1, alignSelf: "stretch", minWidth: 0 },
                         replacementPaidToggleState === "none"
                           ? styles.inlineActionButtonDanger
                           : replacementPaidToggleState === "with_old"
