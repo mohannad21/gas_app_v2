@@ -60,6 +60,11 @@ function getTodayDate() {
   return `${year}-${month}-${day}`;
 }
 
+function formatLedgerNumber(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return Number(value).toFixed(0);
+}
+
 type ReplacementToggleState = "matched" | "with_old" | "none" | "custom";
 
 export default function NewOrderScreen() {
@@ -184,11 +189,32 @@ export default function NewOrderScreen() {
   const showStickyPayment =
     focusTarget === "amounts" && effectiveKeyboardHeight > 0 && currentAction === "replacement";
   const walletBalance = dailyReportQuery.data?.[0]?.cash_end ?? 0;
+  const inventoryBaseFullForGas =
+    selectedGas === "48kg"
+      ? inventoryLatest.data?.full48 ?? null
+      : selectedGas === "12kg"
+        ? inventoryLatest.data?.full12 ?? null
+        : null;
+  const inventoryBaseEmptyForGas =
+    selectedGas === "48kg"
+      ? inventoryLatest.data?.empty48 ?? null
+      : selectedGas === "12kg"
+        ? inventoryLatest.data?.empty12 ?? null
+        : null;
 
   const installed = Number(watch("cylinders_installed")) || 0;
   const received = Number(watch("cylinders_received")) || 0;
   const totalAmount = Number(watch("price_total")) || 0;
   const paidInput = Number(watch("paid_amount")) || 0;
+  const inventoryFullAfterInstalled =
+    inventoryBaseFullForGas === null ? null : inventoryBaseFullForGas - installed;
+  const inventoryEmptyAfterReceived =
+    inventoryBaseEmptyForGas === null ? null : inventoryBaseEmptyForGas + received;
+  const walletAfterCustomerInflow = walletBalance + paidInput;
+  const walletAfterCustomerOutflow = walletBalance - paidInput;
+  const walletAfterPayment = paymentDirection === "payout"
+    ? walletBalance - paidInput
+    : walletBalance + paidInput;
   const cylinderResult = calcCustomerCylinderDelta(currentAction, installed, received);
   const baseMoneyDelta = calcCustomerMoneyDelta(currentAction, totalAmount, paidInput);
   const paymentDelta =
@@ -1750,6 +1776,7 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.installed}
+                          comment={`Full ${formatLedgerNumber(inventoryBaseFullForGas)} -> ${formatLedgerNumber(inventoryFullAfterInstalled)}`}
                           value={Number(field.value) || 0}
                           onIncrement={() => adjustInstalled(1)}
                           onDecrement={() => adjustInstalled(-1)}
@@ -1781,6 +1808,7 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.received}
+                          comment={`Empty ${formatLedgerNumber(inventoryBaseEmptyForGas)} -> ${formatLedgerNumber(inventoryEmptyAfterReceived)}`}
                           value={Number(field.value) || 0}
                           onIncrement={() => adjustReceived(1)}
                           onDecrement={() => adjustReceived(-1)}
@@ -1875,6 +1903,7 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.paid}
+                          comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerInflow)}`}
                           value={Number(field.value) || 0}
                           onIncrement={() => adjustPaidAmount(5)}
                           onDecrement={() => adjustPaidAmount(-5)}
@@ -1944,6 +1973,7 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
+                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterPayment)}`}
                         value={Number(field.value) || 0}
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
@@ -2087,6 +2117,7 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.installed}
+                        comment={`Full ${formatLedgerNumber(inventoryBaseFullForGas)} -> ${formatLedgerNumber(inventoryFullAfterInstalled)}`}
                         value={Number(field.value) || 0}
                         onIncrement={() => adjustInstalled(1)}
                         onDecrement={() => adjustInstalled(-1)}
@@ -2175,6 +2206,7 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
+                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerInflow)}`}
                         value={Number(field.value) || 0}
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
@@ -2208,6 +2240,7 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.received}
+                        comment={`Empty ${formatLedgerNumber(inventoryBaseEmptyForGas)} -> ${formatLedgerNumber(inventoryEmptyAfterReceived)}`}
                         value={Number(field.value) || 0}
                         onIncrement={() => adjustReceived(1)}
                         onDecrement={() => adjustReceived(-1)}
@@ -2272,6 +2305,7 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
+                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerOutflow)}`}
                         value={Number(field.value) || 0}
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}

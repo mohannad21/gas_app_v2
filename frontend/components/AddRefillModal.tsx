@@ -474,6 +474,7 @@ export function RefillForm({
   const refillBuyEmpty48 = Math.max(availableEmpty48 - buy48Value, 0);
   const afterEmpty12 = Math.max(availableEmpty12 - ret12Value, 0);
   const afterEmpty48 = Math.max(availableEmpty48 - ret48Value, 0);
+  const walletAfterPaid = walletBalance - paidNowValue;
 
   const disableSave =
     !companyBalanceReady ||
@@ -719,6 +720,7 @@ export function RefillForm({
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
                       title="12kg Buy"
+                      comment={`Full ${formatCount(base?.full12)} -> ${formatCount(afterFull12)}`}
                       value={buy12Value}
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
@@ -727,6 +729,7 @@ export function RefillForm({
                     />
                     <FieldCell
                       title="48kg Buy"
+                      comment={`Full ${formatCount(base?.full48)} -> ${formatCount(afterFull48)}`}
                       value={buy48Value}
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
@@ -746,6 +749,7 @@ export function RefillForm({
                     <View style={styles.entryFieldPairSingle}>
                       <FieldCell
                         title="Return"
+                        comment={`Empty ${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
                         value={ret12Value}
                         onIncrement={() => adjustReturn12(1)}
                         onDecrement={() => adjustReturn12(-1)}
@@ -788,6 +792,7 @@ export function RefillForm({
                     <View style={styles.entryFieldPairSingle}>
                       <FieldCell
                         title="Return"
+                        comment={`Empty ${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
                         value={ret48Value}
                         onIncrement={() => adjustReturn48(1)}
                         onDecrement={() => adjustReturn48(-1)}
@@ -1071,6 +1076,7 @@ export function RefillForm({
                       />
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
+                        comment={`Wallet ${formatMoney(walletBalance)} -> ${formatMoney(walletAfterPaid)}`}
                         value={paidNowValue}
                         onIncrement={() => adjustPaid(5)}
                         onDecrement={() => adjustPaid(-5)}
