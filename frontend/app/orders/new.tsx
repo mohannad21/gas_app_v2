@@ -2612,7 +2612,7 @@ ${cylLine}
       </ScrollView>
       {hasCustomer ? (
         <>
-      <View style={[styles.stickyFooter, { bottom: 0 }]}>
+      <View style={styles.stickyFooter}>
             <View style={styles.footerRow}>
               <Pressable
                 onPress={cancelHandler}
@@ -3224,6 +3224,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
+    bottom: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   footerRow: { flexDirection: "row", gap: 8 },
   footerCancel: {

@@ -654,7 +654,7 @@ export function RefillForm({
   };
 
   const footerActions = (
-    <View style={[styles.footerActions, !useCard && styles.footerInline, isBuyMode && styles.footerFloating]}>
+    <View style={[styles.footerActions, !useCard && styles.footerInline]}>
       <Pressable style={[styles.cancelBtn, isBuyMode && styles.footerBuyCancelBtn]} onPress={onClose}>
         <Text style={[styles.cancelText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
       </Pressable>
@@ -1973,13 +1973,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: "#fff",
+    backgroundColor: "#0a7ea4",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#0a7ea4",
     alignItems: "center",
   },
   secondaryText: {
-    color: "#0a7ea4",
+    color: "#fff",
     fontWeight: "700",
     fontSize: 12,
     textAlign: "center",
@@ -1989,7 +1989,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: "#64748b",
+    backgroundColor: "#dc2626",
     alignItems: "center",
   },
   cancelText: {
@@ -2003,7 +2003,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: "#0a7ea4",
+    backgroundColor: "#16a34a",
     alignItems: "center",
   },
   primaryText: {

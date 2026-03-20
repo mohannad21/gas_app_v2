@@ -378,11 +378,17 @@ export default function CashExpensesView({
       <View style={styles.expenseFooterPage}>
         <View style={styles.expenseFooterRow}>
           <Pressable
+            onPress={() => onClose?.()}
+            style={styles.expenseFooterCancel}
+          >
+            <Text style={styles.expenseFooterCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable
             onPress={() => handleSave(true)}
             disabled={!canSaveExpense}
             style={[styles.expenseFooterSecondary, !canSaveExpense && styles.expenseFooterDisabled]}
           >
-            <Text style={styles.expenseFooterSecondaryText}>Save & Add Another</Text>
+            <Text style={styles.expenseFooterSecondaryText}>Save & Add More</Text>
           </Pressable>
           <Pressable
             onPress={() => handleSave(false)}
