@@ -654,21 +654,21 @@ export function RefillForm({
   };
 
   const footerActions = (
-    <View style={[styles.footerActions, !useCard && styles.footerInline]}>
-      <Pressable style={styles.cancelBtn} onPress={onClose}>
-        <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
+    <View style={[styles.footerActions, !useCard && styles.footerInline, isBuyMode && styles.footerFloating]}>
+      <Pressable style={[styles.cancelBtn, isBuyMode && styles.footerBuyCancelBtn]} onPress={onClose}>
+        <Text style={[styles.cancelText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
       </Pressable>
       {!useCard ? (
-        <Pressable style={[styles.secondaryBtn, disableSave && styles.disabledBtn]} onPress={() => handleSave(true)} disabled={disableSave}>
-          <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Save & Add More</Text>
+        <Pressable style={[styles.secondaryBtn, isBuyMode && styles.footerBuySecondaryBtn, disableSave && styles.disabledBtn]} onPress={() => handleSave(true)} disabled={disableSave}>
+          <Text style={[styles.secondaryText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Save & Add More</Text>
         </Pressable>
       ) : null}
       <Pressable
-        style={[styles.primaryBtn, disableSave && styles.disabledBtn]}
+        style={[styles.primaryBtn, isBuyMode && styles.footerBuyPrimaryBtn, disableSave && styles.disabledBtn]}
         onPress={() => handleSave(false)}
         disabled={disableSave}
       >
-        <Text style={styles.primaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+        <Text style={[styles.primaryText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
           {createRefill.isPending ? "Saving..." : "Save"}
         </Text>
       </Pressable>
@@ -746,7 +746,7 @@ export function RefillForm({
                 /* BUY Ã¢â‚¬â€ one Cylinders BigBox, 12kg left / 48kg right */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
-                  statusLine={cylinderStatusLine}
+                  statusLine={undefined}
                   statusIsAlert={false}
                 >
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1179,8 +1179,8 @@ export function RefillForm({
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
-                    statusLine={moneyStatusLine}
-                    statusIsAlert={liveMoneyNet > 0}
+                    statusLine={isBuyMode ? undefined : moneyStatusLine}
+                    statusIsAlert={!isBuyMode && liveMoneyNet > 0}
                   >
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                       <FieldCell
@@ -1962,6 +1962,12 @@ const styles = StyleSheet.create({
   footerInline: {
     paddingBottom: 8,
   },
+  footerFloating: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 8,
+  },
   secondaryBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -2005,6 +2011,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
     textAlign: "center",
+  },
+  footerBuyCancelBtn: {
+    backgroundColor: "#dc2626",
+  },
+  footerBuySecondaryBtn: {
+    backgroundColor: "#0a7ea4",
+    borderColor: "#0a7ea4",
+  },
+  footerBuyPrimaryBtn: {
+    backgroundColor: "#16a34a",
+  },
+  footerBuyText: {
+    color: "#fff",
   },
   moneyHeaderRow: {
     flexDirection: "row",
