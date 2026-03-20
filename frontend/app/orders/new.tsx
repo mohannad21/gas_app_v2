@@ -1933,7 +1933,6 @@ ${cylLine}
                             inputRefs.current.paid_amount = node;
                           }}
                           onFocus={() => {
-                            setPaidDirty(true);
                             setAvoidKeyboard(true);
                             setFocusTarget("payments");
                           }}
