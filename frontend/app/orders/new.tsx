@@ -138,7 +138,7 @@ export default function NewOrderScreen() {
   const [amountsLayoutY, setAmountsLayoutY] = useState<number | null>(null);
   const [totalsLayout, setTotalsLayout] = useState<{ y: number; height: number } | null>(null);
   const effectiveKeyboardHeight = avoidKeyboard ? keyboardHeight : 0;
-  const footerHeight = 96;
+  const footerHeight = 112;
   const contentBottomPadding = footerHeight + 32;
   const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
   const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
@@ -1134,6 +1134,7 @@ ${cylLine}
     : isPayment
       ? handleSavePaymentAndAddAnother
       : handleSaveReturnAndAddAnother;
+  const cancelHandler = () => router.back();
   const saveBusy = isOrderAction ? submitting : collectionBusy;
   const saveDisabled = isOrderAction
     ? submitting || orderSaveDisabled || !customerPreviewReady
@@ -1309,6 +1310,51 @@ ${cylLine}
       behavior={Platform.OS === "ios" ? (avoidKeyboard ? "padding" : undefined) : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 0}
     >
+      <View style={styles.headerBlock}>
+        <Text style={styles.title}>Add Order</Text>
+        {showOrderTabs ? (
+          <View style={styles.modeRow}>
+            {(["replacement", "payment", "return", "sell_iron", "buy_iron"] as const).map((mode) => {
+              const isDisabled =
+                (mode === "payment" && !paymentTabEnabled) ||
+                (mode === "return" && !returnTabEnabled);
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => {
+                    if (isDisabled) return;
+                    setActionMode(mode);
+                  }}
+                  disabled={isDisabled}
+                  style={[
+                    styles.modeButton,
+                    currentAction === mode && styles.modeButtonActive,
+                    isDisabled && styles.modeButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.modeText,
+                      currentAction === mode && styles.modeTextActive,
+                      isDisabled && styles.modeTextDisabled,
+                    ]}
+                  >
+                    {mode === "replacement"
+                      ? "Replacement"
+                      : mode === "sell_iron"
+                        ? "Sell Full"
+                        : mode === "buy_iron"
+                          ? "Buy Empty"
+                          : mode === "payment"
+                            ? "Payment"
+                            : "Return"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -1322,8 +1368,6 @@ ${cylLine}
         alwaysBounceVertical
         onLayout={(event) => setScrollViewHeight(event.nativeEvent.layout.height)}
       >
-        <Text style={styles.title}>Add Order</Text>
-
       <View style={styles.sectionCard}>
         <FieldLabel>Customer</FieldLabel>
         <Pressable
@@ -1458,48 +1502,6 @@ ${cylLine}
         />
         <FieldError message={errors.customer_id?.message} />
       </View>
-      {showOrderTabs ? (
-        <View style={styles.modeRow}>
-          {(["replacement", "payment", "return", "sell_iron", "buy_iron"] as const).map((mode) => {
-            const isDisabled =
-              (mode === "payment" && !paymentTabEnabled) ||
-              (mode === "return" && !returnTabEnabled);
-            return (
-            <Pressable
-              key={mode}
-              onPress={() => {
-                if (isDisabled) return;
-                setActionMode(mode);
-              }}
-              disabled={isDisabled}
-              style={[
-                styles.modeButton,
-                currentAction === mode && styles.modeButtonActive,
-                isDisabled && styles.modeButtonDisabled,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modeText,
-                  currentAction === mode && styles.modeTextActive,
-                  isDisabled && styles.modeTextDisabled,
-                ]}
-              >
-                {mode === "replacement"
-                  ? "Replacement"
-                  : mode === "sell_iron"
-                    ? "Sell Full"
-                    : mode === "buy_iron"
-                      ? "Buy Empty"
-                      : mode === "payment"
-                        ? "Payment"
-                        : "Return"}
-              </Text>
-            </Pressable>
-          )})}
-        </View>
-      ) : null}
-
       {currentAction === "replacement" && hasCustomer ? dateTimeSection : null}
 
       {showSystemSection ? (
@@ -2155,11 +2157,19 @@ ${cylLine}
               </BigBox>
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron">
-                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                  <View style={styles.tradeStatCell}>
+              <BigBox title="Iron Price">
+                <View style={styles.tradeEquationRow}>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
-                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{installed}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>x</Text>
+                    </View>
                   </View>
                   <FieldCell
                     title="Iron Price"
@@ -2171,19 +2181,35 @@ ${cylLine}
                     onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                     onBlur={() => setFocusTarget(null)}
                   />
-                  <View style={styles.tradeStatCell}>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>=</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                    </View>
                   </View>
                 </View>
               </BigBox>
 
               {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
               <BigBox title="Gas Price">
-                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                  <View style={styles.tradeStatCell}>
+                <View style={styles.tradeEquationRow}>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
-                    <Text style={styles.tradeStatValue}>{installed}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{installed}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>x</Text>
+                    </View>
                   </View>
                   <FieldCell
                     title="Gas Price"
@@ -2195,9 +2221,17 @@ ${cylLine}
                     onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                     onBlur={() => setFocusTarget(null)}
                   />
-                  <View style={styles.tradeStatCell}>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>=</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                    <Text style={styles.tradeStatValue}>{gasLineTotal}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{gasLineTotal}</Text>
+                    </View>
                   </View>
                 </View>
               </BigBox>
@@ -2279,11 +2313,19 @@ ${cylLine}
               </BigBox>
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron">
-                <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                  <View style={styles.tradeStatCell}>
+              <BigBox title="Iron Price">
+                <View style={styles.tradeEquationRow}>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
-                    <Text style={styles.tradeStatValue}>{received}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{received}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>x</Text>
+                    </View>
                   </View>
                   <FieldCell
                     title="Iron Price"
@@ -2295,9 +2337,17 @@ ${cylLine}
                     onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                     onBlur={() => setFocusTarget(null)}
                   />
-                  <View style={styles.tradeStatCell}>
+                  <View style={styles.tradeOperatorCell}>
+                    <View style={styles.tradeOperatorTopSpacer} />
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeOperator}>=</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                    <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                    <View style={styles.tradeStatValueWrap}>
+                      <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                    </View>
                   </View>
                 </View>
               </BigBox>
@@ -2561,6 +2611,12 @@ ${cylLine}
         <>
       <View style={[styles.stickyFooter, { bottom: 0 }]}>
             <View style={styles.footerRow}>
+              <Pressable
+                onPress={cancelHandler}
+                style={styles.footerCancel}
+              >
+                <Text style={styles.footerCancelText}>Cancel</Text>
+              </Pressable>
               <Pressable
                 onPress={saveSecondaryHandler}
                 disabled={saveDisabled}
@@ -2859,6 +2915,13 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#f3f5f7",
   },
+  headerBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+    gap: 4,
+    backgroundColor: "#f3f5f7",
+  },
   title: { fontSize: 26, fontWeight: "800", color: "#0f172a" },
   modeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6, marginBottom: 2 },
   modeButton: {
@@ -3080,11 +3143,29 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
   },
+  tradeEquationRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+  },
   tradeStatCell: {
-    width: 56,
+    width: 84,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  tradeStatCellNarrow: {
+    width: 72,
+  },
+  tradeStatValueWrap: {
+    width: "100%",
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
   },
   tradeStatLabel: {
     fontSize: 11,
@@ -3095,6 +3176,21 @@ const styles = StyleSheet.create({
   },
   tradeStatValue: {
     fontSize: 20,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textAlign: "center",
+  },
+  tradeOperatorCell: {
+    width: 20,
+    paddingTop: 12,
+    alignItems: "center",
+    gap: 8,
+  },
+  tradeOperatorTopSpacer: {
+    height: 14,
+  },
+  tradeOperator: {
+    fontSize: 22,
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
@@ -3127,6 +3223,14 @@ const styles = StyleSheet.create({
     right: 16,
   },
   footerRow: { flexDirection: "row", gap: 10 },
+  footerCancel: {
+    flex: 1,
+    backgroundColor: "#64748b",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  footerCancelText: { color: "#fff", fontWeight: "700" },
   footerPrimary: {
     flex: 1,
     backgroundColor: "#0a7ea4",
