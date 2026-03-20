@@ -14,17 +14,16 @@ export default function InlineWalletFundingPrompt({
 }: InlineWalletFundingPromptProps) {
   const showTransfer = shortfall > 0 && !!onTransferNow;
 
+  if (!showTransfer) return null;
   return (
     <View style={styles.wrap}>
       <Text style={styles.walletText}>You have {walletAmount.toFixed(0)} shekels in the wallet.</Text>
-      {showTransfer ? (
-        <View style={styles.promptRow}>
-          <Text style={styles.promptText}>Want to move money from bank to wallet?</Text>
-          <Pressable onPress={onTransferNow} style={styles.button}>
-            <Text style={styles.buttonText}>Transfer now</Text>
-          </Pressable>
-        </View>
-      ) : null}
+      <View style={styles.promptRow}>
+        <Text style={styles.promptText}>Want to move money from bank to wallet?</Text>
+        <Pressable onPress={onTransferNow} style={styles.button}>
+          <Text style={styles.buttonText}>Transfer now</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
