@@ -265,6 +265,24 @@ export function RefillForm({
     setRet48Touched(true);
   }, [isBuyMode, visible]);
 
+  const resetFormForCurrentMode = () => {
+    setDate(getNowDate());
+    setTime(getNowTime());
+    setBuy12(isReturnMode ? "0" : "");
+    setRet12(isBuyMode ? "0" : "");
+    setBuy48(isReturnMode ? "0" : "");
+    setRet48(isBuyMode ? "0" : "");
+    setRet12Touched(isBuyMode);
+    setRet48Touched(isBuyMode);
+    setPaidNow("");
+    setPaidTouched(false);
+    setNotes("");
+    setPrice12Dirty(false);
+    setPrice48Dirty(false);
+    setIronPrice12Input("0");
+    setIronPrice48Input("0");
+  };
+
   useEffect(() => {
     if (!visible || !isReturnMode) return;
     setBuy12("0");
@@ -491,7 +509,7 @@ export function RefillForm({
   const payloadReturn12 = isBuyMode ? 0 : ret12Value;
   const payloadReturn48 = isBuyMode ? 0 : ret48Value;
 
-  const handleSave = async () => {
+  const handleSave = async (resetAfter = false) => {
     if (!base || inventoryNotInitialized) {
       Alert.alert("Inventory not initialized", "Set starting inventory before adding a refill.");
       return;
@@ -542,7 +560,7 @@ export function RefillForm({
         });
       }
       Keyboard.dismiss();
-      onSaved({
+      const savedEntry = {
         id: editEntry?.refill_id ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         date,
         time,
@@ -552,8 +570,13 @@ export function RefillForm({
         return48: ret48Value,
         total_cost: totalCost,
         paid_now: paidNowValue,
-      });
-      onClose();
+      };
+      if (resetAfter && !editEntry?.refill_id) {
+        resetFormForCurrentMode();
+      } else {
+        onSaved(savedEntry);
+        onClose();
+      }
     } catch (err) {
       const detail = (err as AxiosError<{ detail?: InventoryNegativeDetail }>).response?.data?.detail;
       if (detail?.code === "inventory_negative" && detail.gas_type && detail.available !== undefined) {
@@ -632,15 +655,22 @@ export function RefillForm({
 
   const footerActions = (
     <View style={[styles.footerActions, !useCard && styles.footerInline]}>
-      <Pressable style={styles.secondaryBtn} onPress={onClose}>
-        <Text style={styles.secondaryText}>Cancel</Text>
+      <Pressable style={styles.cancelBtn} onPress={onClose}>
+        <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
       </Pressable>
+      {!useCard ? (
+        <Pressable style={[styles.secondaryBtn, disableSave && styles.disabledBtn]} onPress={() => handleSave(true)} disabled={disableSave}>
+          <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Save & Add More</Text>
+        </Pressable>
+      ) : null}
       <Pressable
         style={[styles.primaryBtn, disableSave && styles.disabledBtn]}
-        onPress={handleSave}
+        onPress={() => handleSave(false)}
         disabled={disableSave}
       >
-        <Text style={styles.primaryText}>{createRefill.isPending ? "Saving..." : "Save"}</Text>
+        <Text style={styles.primaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+          {createRefill.isPending ? "Saving..." : "Save"}
+        </Text>
       </Pressable>
     </View>
   );
@@ -956,65 +986,107 @@ export function RefillForm({
                       Price is a read-only FieldCell (grey, no buttons).
                       A "Set price" button below navigates to the config page
                       (that page is not yet built Ã¢â‚¬â€ the button is a placeholder). */}
-                  <BigBox title="Gas Price 12kg">
-                    <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <BigBox title="Gas Buying Price 12kg">
+                    <View style={styles.tradeEquationRow}>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
-                        <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                        </View>
                       </View>
-                      <FieldCell
-                        title="Price"
-                        value={price12Value}
-                        onIncrement={() => {}}
-                        onDecrement={() => {}}
-                        editable={false}
-                      />
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>x</Text>
+                        </View>
+                      </View>
+                      <View style={styles.tradeReadonlyPriceCell}>
+                        <Text style={styles.tradeReadonlyPriceTitle}>PRICE</Text>
+                        <View style={styles.tradeReadonlyPriceValueWrap}>
+                          <Text style={styles.tradeReadonlyPriceValue}>{price12Value}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>=</Text>
+                        </View>
+                      </View>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                        <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
+                        </View>
                       </View>
                     </View>
-                    <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                      <Pressable
-                        style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                        onPress={() => {
-                          // TODO: navigate to price config page when implemented
-                          // router.push({ pathname: "/prices/config" });
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>Set price</Text>
-                      </Pressable>
+                    <View style={styles.tradeActionRow}>
+                      <View style={styles.tradeActionStatSpacer} />
+                      <View style={styles.tradeActionOperatorSpacer} />
+                      <View style={styles.tradeActionButtonWrap}>
+                        <Pressable
+                          style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
+                          onPress={() => {
+                            // TODO: navigate to price config page when implemented
+                            // router.push({ pathname: "/prices/config" });
+                          }}
+                        >
+                          <Text style={styles.inlineActionText}>Set price</Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.tradeActionOperatorSpacer} />
+                      <View style={styles.tradeActionStatSpacer} />
                     </View>
                   </BigBox>
 
                   {/* Gas Price 48kg Ã¢â‚¬â€ same structure */}
-                  <BigBox title="Gas Price 48kg">
-                    <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                  <BigBox title="Gas Buying Price 48kg">
+                    <View style={styles.tradeEquationRow}>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
-                        <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                        </View>
                       </View>
-                      <FieldCell
-                        title="Price"
-                        value={price48Value}
-                        onIncrement={() => {}}
-                        onDecrement={() => {}}
-                        editable={false}
-                      />
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>x</Text>
+                        </View>
+                      </View>
+                      <View style={styles.tradeReadonlyPriceCell}>
+                        <Text style={styles.tradeReadonlyPriceTitle}>PRICE</Text>
+                        <View style={styles.tradeReadonlyPriceValueWrap}>
+                          <Text style={styles.tradeReadonlyPriceValue}>{price48Value}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>=</Text>
+                        </View>
+                      </View>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                        <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
+                        </View>
                       </View>
                     </View>
-                    <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                      <Pressable
-                        style={[styles.inlineActionButton, styles.inlineActionButtonAlt]}
-                        onPress={() => {
-                          // TODO: navigate to price config page when implemented
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>Set price</Text>
-                      </Pressable>
+                    <View style={styles.tradeActionRow}>
+                      <View style={styles.tradeActionStatSpacer} />
+                      <View style={styles.tradeActionOperatorSpacer} />
+                      <View style={styles.tradeActionButtonWrap}>
+                        <Pressable
+                          style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
+                          onPress={() => {
+                            // TODO: navigate to price config page when implemented
+                          }}
+                        >
+                          <Text style={styles.inlineActionText}>Set price</Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.tradeActionOperatorSpacer} />
+                      <View style={styles.tradeActionStatSpacer} />
                     </View>
                   </BigBox>
 
@@ -1023,11 +1095,19 @@ export function RefillForm({
                       the Iron Price FieldCell buttons (alignItems: "center"). */}
                   {isBuyMode ? (
                     <>
-                      <BigBox title="Iron Price 12kg">
-                        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                          <View style={styles.tradeStatCell}>
+                      <BigBox title="Iron Buying Price 12kg">
+                        <View style={styles.tradeEquationRow}>
+                          <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
-                            <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.tradeOperatorCell}>
+                            <View style={styles.tradeOperatorTopSpacer} />
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeOperator}>x</Text>
+                            </View>
                           </View>
                           <FieldCell
                             title="Iron Price"
@@ -1037,18 +1117,34 @@ export function RefillForm({
                             onChangeText={(t) => setIronPrice12Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
-                          <View style={styles.tradeStatCell}>
+                          <View style={styles.tradeOperatorCell}>
+                            <View style={styles.tradeOperatorTopSpacer} />
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeOperator}>=</Text>
+                            </View>
+                          </View>
+                          <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                            <Text style={styles.tradeStatValue}>{ironLine12Cost.toFixed(0)}</Text>
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeStatValue}>{ironLine12Cost.toFixed(0)}</Text>
+                            </View>
                           </View>
                         </View>
                       </BigBox>
 
-                      <BigBox title="Iron Price 48kg">
-                        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                          <View style={styles.tradeStatCell}>
+                      <BigBox title="Iron Buying Price 48kg">
+                        <View style={styles.tradeEquationRow}>
+                          <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
-                            <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.tradeOperatorCell}>
+                            <View style={styles.tradeOperatorTopSpacer} />
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeOperator}>x</Text>
+                            </View>
                           </View>
                           <FieldCell
                             title="Iron Price"
@@ -1058,9 +1154,17 @@ export function RefillForm({
                             onChangeText={(t) => setIronPrice48Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
-                          <View style={styles.tradeStatCell}>
+                          <View style={styles.tradeOperatorCell}>
+                            <View style={styles.tradeOperatorTopSpacer} />
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeOperator}>=</Text>
+                            </View>
+                          </View>
+                          <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                            <Text style={styles.tradeStatValue}>{ironLine48Cost.toFixed(0)}</Text>
+                            <View style={styles.tradeStatValueWrap}>
+                              <Text style={styles.tradeStatValue}>{ironLine48Cost.toFixed(0)}</Text>
+                            </View>
                           </View>
                         </View>
                       </BigBox>
@@ -1156,10 +1260,9 @@ export function RefillForm({
                   numberOfLines={3}
                 />
               </View>
-              {!useCard ? footerActions : null}
 
         </ScrollView>
-        {useCard ? footerActions : null}
+        {footerActions}
       </View>
 
       {paidAccessoryViewId ? (
@@ -1542,7 +1645,7 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 12,
-    paddingBottom: 84,
+    paddingBottom: 120,
   },
   section: {
     gap: 6,
@@ -1853,26 +1956,46 @@ const styles = StyleSheet.create({
   },
   footerActions: {
     flexDirection: "row",
-    gap: 10,
-    paddingTop: 10,
+    gap: 8,
+    paddingTop: 8,
   },
   footerInline: {
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   secondaryBtn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: "#e8eef1",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
     alignItems: "center",
   },
   secondaryText: {
     color: "#0a7ea4",
     fontWeight: "700",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: "#64748b",
+    alignItems: "center",
+  },
+  cancelText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+    textAlign: "center",
   },
   primaryBtn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: 10,
     backgroundColor: "#0a7ea4",
     alignItems: "center",
@@ -1880,6 +2003,8 @@ const styles = StyleSheet.create({
   primaryText: {
     color: "#fff",
     fontWeight: "700",
+    fontSize: 12,
+    textAlign: "center",
   },
   moneyHeaderRow: {
     flexDirection: "row",
@@ -2061,11 +2186,61 @@ const styles = StyleSheet.create({
   timeTextSelected: {
     color: "#fff",
   },
+  tradeEquationRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+  },
   tradeStatCell: {
-    width: 56,
+    width: 84,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  tradeStatCellNarrow: {
+    width: 72,
+  },
+  tradeStatValueWrap: {
+    width: "100%",
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+  },
+  tradeReadonlyPriceCell: {
+    flex: 1,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e2e8f0",
+    gap: 8,
+  },
+  tradeReadonlyPriceTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  tradeReadonlyPriceValueWrap: {
+    width: "100%",
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#f0f4f8",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tradeReadonlyPriceValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textAlign: "center",
   },
   tradeStatLabel: {
     fontSize: 11,
@@ -2079,6 +2254,41 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
+  },
+  tradeOperatorCell: {
+    width: 20,
+    paddingTop: 12,
+    alignItems: "center",
+    gap: 8,
+  },
+  tradeOperatorTopSpacer: {
+    height: 14,
+  },
+  tradeOperator: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textAlign: "center",
+  },
+  tradeActionRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  tradeActionStatSpacer: {
+    width: 84,
+  },
+  tradeActionOperatorSpacer: {
+    width: 20,
+  },
+  tradeActionButtonWrap: {
+    flex: 1,
+  },
+  tradeActionButton: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
   },
   inventoryHintRow: {
     marginBottom: 4,

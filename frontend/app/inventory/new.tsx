@@ -296,7 +296,18 @@ function InventoryAdjustForm({
       ? `Full ${baseFull48} to ${baseFull48 + deltaFull48} | Empty ${baseEmpty48} to ${baseEmpty48 + deltaEmpty48}`
       : null;
 
-  const save = async () => {
+  const resetForm = () => {
+    setGasType(entry?.gas_type ?? "12kg");
+    setFull12(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
+    setEmpty12(String(entry?.gas_type === "12kg" ? entry?.delta_empty ?? 0 : 0));
+    setFull48(String(entry?.gas_type === "48kg" ? entry?.delta_full ?? 0 : 0));
+    setEmpty48(String(entry?.gas_type === "48kg" ? entry?.delta_empty ?? 0 : 0));
+    setReason(entry?.reason ?? "");
+    setAdjustDate(date);
+    setAdjustTime(getNowTime());
+  };
+
+  const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
       Alert.alert("Reason required", "Please add a reason for the adjustment.");
@@ -329,7 +340,11 @@ function InventoryAdjustForm({
           });
         }
       }
-      onSaved();
+      if (resetAfter && !entry) {
+        resetForm();
+      } else {
+        onSaved();
+      }
     } catch (err: any) {
       Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
     }
@@ -341,7 +356,8 @@ function InventoryAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard]}>
+    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+      <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
         <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
@@ -444,13 +460,19 @@ function InventoryAdjustForm({
       />
       <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
 
-      <View style={styles.modalActions}>
-        <Pressable style={styles.modalBtn} onPress={onCancel}>
-          <Text style={styles.modalBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-          <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-        </Pressable>
+      </ScrollView>
+      <View style={styles.stickyFooterPanel}>
+        <View style={styles.footerRow}>
+          <Pressable style={styles.footerCancel} onPress={onCancel}>
+            <Text style={styles.footerCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
+            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
+          </Pressable>
+          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
+            <Text style={styles.footerPrimaryText}>Save</Text>
+          </Pressable>
+        </View>
       </View>
       <CalendarModal
         visible={calendarOpen}
@@ -522,7 +544,14 @@ function CashAdjustForm({
   const cashStatusLine =
     cashBefore !== null ? `Cash ${cashBefore.toFixed(0)} to ${(cashBefore + deltaValue).toFixed(0)}` : null;
 
-  const save = async () => {
+  const resetForm = () => {
+    setDeltaCash(String(entry?.delta_cash ?? 0));
+    setReason(entry?.reason ?? "");
+    setAdjustDate(date);
+    setAdjustTime(getNowTime());
+  };
+
+  const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
       Alert.alert("Reason required", "Please add a reason for the adjustment.");
@@ -534,7 +563,11 @@ function CashAdjustForm({
       } else {
         await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason });
       }
-      onSaved();
+      if (resetAfter && !entry) {
+        resetForm();
+      } else {
+        onSaved();
+      }
     } catch (err: any) {
       Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
     }
@@ -546,7 +579,8 @@ function CashAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard]}>
+    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+      <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
         <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
@@ -574,13 +608,19 @@ function CashAdjustForm({
       <Text style={styles.modalLabel}>Reason</Text>
       <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
 
-      <View style={styles.modalActions}>
-        <Pressable style={styles.modalBtn} onPress={onCancel}>
-          <Text style={styles.modalBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save}>
-          <Text style={styles.modalBtnTextPrimary}>{entry ? "Save" : "Add"}</Text>
-        </Pressable>
+      </ScrollView>
+      <View style={styles.stickyFooterPanel}>
+        <View style={styles.footerRow}>
+          <Pressable style={styles.footerCancel} onPress={onCancel}>
+            <Text style={styles.footerCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
+            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
+          </Pressable>
+          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
+            <Text style={styles.footerPrimaryText}>Save</Text>
+          </Pressable>
+        </View>
       </View>
       <CalendarModal
         visible={calendarOpen}
@@ -673,7 +713,14 @@ function CompanyPaymentForm({
     paymentDirection === "pay" ? Math.max(amountValue - walletBalance, 0) : 0;
   const paymentStatusLine = companyPreviewLines.join("\n");
 
-  const save = async () => {
+  const resetForm = () => {
+    setAmount("");
+    setNote("");
+    setPayDate(date);
+    setPayTime(getNowTime());
+  };
+
+  const save = async (resetAfter = false) => {
     if (amountValue <= 0) {
       Alert.alert("Missing amount", "Enter a payment amount.");
       return;
@@ -685,7 +732,11 @@ function CompanyPaymentForm({
         amount: normalizedAmount,
         note: note.trim() || undefined,
       });
-      onSaved();
+      if (resetAfter) {
+        resetForm();
+      } else {
+        onSaved();
+      }
     } catch (err: any) {
       Alert.alert("Payment failed", err?.response?.data?.detail ?? "Failed to save payment.");
     }
@@ -697,7 +748,8 @@ function CompanyPaymentForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard]}>
+    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+      <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
         <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
@@ -775,7 +827,11 @@ function CompanyPaymentForm({
         statusIsAlert={companyBalanceAfter > 0}
       >
         <View
-          style={[styles.entryFieldPairSingle, tableDisabled && styles.sectionDisabled, { justifyContent: "center" }]}
+          style={[
+            styles.entryFieldPairSingle,
+            tableDisabled && styles.sectionDisabled,
+            { width: "50%", minWidth: 160, alignSelf: "center", justifyContent: "center" },
+          ]}
           pointerEvents={tableDisabled ? "none" : "auto"}
         >
           <FieldCell
@@ -840,15 +896,21 @@ function CompanyPaymentForm({
         inputAccessoryViewID={accessoryId}
       />
 
-      <View style={styles.modalActions}>
-        <Pressable style={styles.modalBtn} onPress={onCancel}>
-          <Text style={styles.modalBtnText}>Cancel</Text>
-        </Pressable>
-        <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={save} disabled={tableDisabled}>
-          <Text style={styles.modalBtnTextPrimary}>
-            {paymentDirection === "receive" ? "Receive" : "Pay"}
-          </Text>
-        </Pressable>
+      </ScrollView>
+      <View style={styles.stickyFooterPanel}>
+        <View style={styles.footerRow}>
+          <Pressable style={styles.footerCancel} onPress={onCancel}>
+            <Text style={styles.footerCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable style={[styles.footerSecondary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(true)} disabled={tableDisabled}>
+            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
+          </Pressable>
+          <Pressable style={[styles.footerPrimary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(false)} disabled={tableDisabled}>
+            <Text style={styles.footerPrimaryText}>
+              {paymentDirection === "receive" ? "Save Receive" : "Save Pay"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <CalendarModal
         visible={calendarOpen}
@@ -1057,59 +1119,53 @@ export default function InventoryNewScreen() {
             walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
           />
         ) : (
-          <ScrollView
-            contentContainerStyle={styles.hubContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          >
-            {activeTab === "payment" ? (
-                <CompanyPaymentForm
-                  visible
-                  date={businessDate}
-                  accessoryId={accessoryId}
-                  companyBalance={companyBalance}
-                  walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
-                  balanceReady={companyBalanceReady}
-                  onCreate={async (payload) => {
-                    await createCompanyPayment.mutateAsync(payload);
-                  }}
-                onSaved={() => router.back()}
-                onCancel={() => router.back()}
-              />
-            ) : activeTab === "cash" ? (
-              <CashAdjustForm
-                visible
-                entry={editingCashAdjust}
-                date={businessDate}
-                accessoryId={accessoryId}
-                cashBefore={dailyReportQuery.data?.[0]?.cash_end ?? null}
-                onCreate={async (payload) => {
-                  await createCashAdjust.mutateAsync(payload);
-                }}
-                onUpdate={async (id, payload) => {
-                  await updateCashAdjust.mutateAsync({ id, payload });
-                }}
-                onSaved={() => router.back()}
-                onCancel={() => router.back()}
-              />
-            ) : (
-              <InventoryAdjustForm
-                visible
-                entry={editingInventoryAdjust}
-                date={businessDate}
-                accessoryId={accessoryId}
-                inventoryBefore={inventoryLatest.data ?? null}
-                onCreate={async (payload) => {
-                  await adjustInventory.mutateAsync(payload);
-                }}
-                onUpdate={async (id, payload) => {
-                  await updateInventoryAdjust.mutateAsync({ id, payload });
-                }}
-                onSaved={() => router.back()}
-                onCancel={() => router.back()}
-              />
-            )}
-          </ScrollView>
+          activeTab === "payment" ? (
+            <CompanyPaymentForm
+              visible
+              date={businessDate}
+              accessoryId={accessoryId}
+              companyBalance={companyBalance}
+              walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
+              balanceReady={companyBalanceReady}
+              onCreate={async (payload) => {
+                await createCompanyPayment.mutateAsync(payload);
+              }}
+              onSaved={() => router.back()}
+              onCancel={() => router.back()}
+            />
+          ) : activeTab === "cash" ? (
+            <CashAdjustForm
+              visible
+              entry={editingCashAdjust}
+              date={businessDate}
+              accessoryId={accessoryId}
+              cashBefore={dailyReportQuery.data?.[0]?.cash_end ?? null}
+              onCreate={async (payload) => {
+                await createCashAdjust.mutateAsync(payload);
+              }}
+              onUpdate={async (id, payload) => {
+                await updateCashAdjust.mutateAsync({ id, payload });
+              }}
+              onSaved={() => router.back()}
+              onCancel={() => router.back()}
+            />
+          ) : (
+            <InventoryAdjustForm
+              visible
+              entry={editingInventoryAdjust}
+              date={businessDate}
+              accessoryId={accessoryId}
+              inventoryBefore={inventoryLatest.data ?? null}
+              onCreate={async (payload) => {
+                await adjustInventory.mutateAsync(payload);
+              }}
+              onUpdate={async (id, payload) => {
+                await updateInventoryAdjust.mutateAsync({ id, payload });
+              }}
+              onSaved={() => router.back()}
+              onCancel={() => router.back()}
+            />
+          )
         )}
       </KeyboardAvoidingView>
       {Platform.OS === "ios" && (
@@ -1181,7 +1237,15 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   hubForm: {
+    flex: 1,
     gap: 8,
+  },
+  hubFormScreen: {
+    overflow: "hidden",
+  },
+  hubFormContent: {
+    gap: 8,
+    paddingBottom: 132,
   },
   entryFieldPair: {
     flexDirection: "row",
@@ -1596,6 +1660,57 @@ const styles = StyleSheet.create({
   nowButtonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  stickyFooterPanel: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 12,
+  },
+  footerRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  footerCancel: {
+    flex: 1,
+    backgroundColor: "#64748b",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  footerCancelText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  footerPrimary: {
+    flex: 1,
+    backgroundColor: "#0a7ea4",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  footerPrimaryText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  footerSecondary: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  footerSecondaryText: {
+    color: "#0a7ea4",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  footerButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

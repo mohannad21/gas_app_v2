@@ -1313,7 +1313,11 @@ ${cylLine}
       <View style={styles.headerBlock}>
         <Text style={styles.title}>Add Order</Text>
         {showOrderTabs ? (
-          <View style={styles.modeRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.modeRow}
+          >
             {(["replacement", "payment", "return", "sell_iron", "buy_iron"] as const).map((mode) => {
               const isDisabled =
                 (mode === "payment" && !paymentTabEnabled) ||
@@ -1352,7 +1356,7 @@ ${cylLine}
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         ) : null}
       </View>
       <ScrollView
@@ -2157,7 +2161,7 @@ ${cylLine}
               </BigBox>
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron Price">
+              <BigBox title="Iron Selling Price">
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2197,7 +2201,7 @@ ${cylLine}
               </BigBox>
 
               {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
-              <BigBox title="Gas Price">
+              <BigBox title="Gas Selling Price">
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2313,7 +2317,7 @@ ${cylLine}
               </BigBox>
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron Price">
+              <BigBox title="Iron Buying Price - From Customer">
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2923,7 +2927,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f5f7",
   },
   title: { fontSize: 26, fontWeight: "800", color: "#0f172a" },
-  modeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6, marginBottom: 2 },
+  modeRow: { flexDirection: "row", gap: 8, marginTop: 6, marginBottom: 2, paddingRight: 14 },
   modeButton: {
     paddingVertical: 8,
     paddingHorizontal: 14,
