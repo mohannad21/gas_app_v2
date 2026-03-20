@@ -789,27 +789,30 @@ function CompanyPaymentForm({
           />
         </View>
         <View style={styles.bigBoxActionRow}>
-          <Pressable
-            style={[
-              styles.inlineActionButton,
-              amountValue === 0 ? styles.inlineActionButtonSuccess : null,
-            ]}
-            onPress={() => {
-              if (amountValue === 0) {
-                setAmount(totalDue.toFixed(0));
-              } else {
-                setAmount("0");
-              }
-            }}
-          >
-            <Text style={styles.inlineActionText}>
-              {amountValue === 0
-                ? paymentDirection === "receive"
-                  ? "Receive all"
-                  : CUSTOMER_WORDING.payAll
-                : CUSTOMER_WORDING.didntPay}
-            </Text>
-          </Pressable>
+          <View style={{ width: "50%", minWidth: 160, alignSelf: "center" }}>
+            <Pressable
+              style={[
+                styles.inlineActionButton,
+                { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                amountValue === 0 ? styles.inlineActionButtonSuccess : null,
+              ]}
+              onPress={() => {
+                if (amountValue === 0) {
+                  setAmount(totalDue.toFixed(0));
+                } else {
+                  setAmount("0");
+                }
+              }}
+            >
+              <Text style={styles.inlineActionText}>
+                {amountValue === 0
+                  ? paymentDirection === "receive"
+                    ? "Receive all"
+                    : CUSTOMER_WORDING.payAll
+                  : CUSTOMER_WORDING.didntPay}
+              </Text>
+            </Pressable>
+          </View>
         </View>
         <InlineWalletFundingPrompt
           walletAmount={walletBalance}

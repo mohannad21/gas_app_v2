@@ -176,8 +176,8 @@ export function RefillForm({
   const [ret12, setRet12] = useState("");
   const [buy48, setBuy48] = useState("");
   const [ret48, setRet48] = useState("");
-  const [ret12Touched, setRet12Touched] = useState(false);
-  const [ret48Touched, setRet48Touched] = useState(false);
+  const [, setRet12Touched] = useState(false);
+  const [, setRet48Touched] = useState(false);
   const [paidNow, setPaidNow] = useState("");
   const [paidTouched, setPaidTouched] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
@@ -569,17 +569,19 @@ export function RefillForm({
   const handleBuy12Change = (value: string) => {
     if (isReturnMode) return;
     const next = sanitizeCountInputMax(value, availableEmpty12);
+    const delta = Number(next || 0) - buy12Value;
     setBuy12(next);
-    if (!ret12Touched && !isBuyMode) {
-      setRet12(next);
+    if (!isBuyMode && delta > 0) {
+      setRet12(String(ret12Value + delta));
     }
   };
   const handleBuy48Change = (value: string) => {
     if (isReturnMode) return;
     const next = sanitizeCountInputMax(value, availableEmpty48);
+    const delta = Number(next || 0) - buy48Value;
     setBuy48(next);
-    if (!ret48Touched && !isBuyMode) {
-      setRet48(next);
+    if (!isBuyMode && delta > 0) {
+      setRet48(String(ret48Value + delta));
     }
   };
 
@@ -761,20 +763,23 @@ export function RefillForm({
                     </View>
                     {owedReturn12 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <Pressable
-                          style={[
-                            styles.inlineActionButton,
-                            ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
-                          ]}
-                          onPress={() => {
-                            setRet12Touched(true);
-                            setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
-                          }}
-                        >
-                          <Text style={styles.inlineActionText}>
-                            {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                          </Text>
-                        </Pressable>
+                        <View style={styles.entryFieldPairSingle}>
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                              ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              setRet12Touched(true);
+                              setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                            </Text>
+                          </Pressable>
+                        </View>
                       </View>
                     ) : null}
                     {return12Invalid ? (
@@ -804,20 +809,23 @@ export function RefillForm({
                     </View>
                     {owedReturn48 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <Pressable
-                          style={[
-                            styles.inlineActionButton,
-                            ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
-                          ]}
-                          onPress={() => {
-                            setRet48Touched(true);
-                            setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
-                          }}
-                        >
-                          <Text style={styles.inlineActionText}>
-                            {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                          </Text>
-                        </Pressable>
+                        <View style={styles.entryFieldPairSingle}>
+                          <Pressable
+                            style={[
+                              styles.inlineActionButton,
+                              { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                              ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
+                            ]}
+                            onPress={() => {
+                              setRet48Touched(true);
+                              setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
+                            }}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
+                            </Text>
+                          </Pressable>
+                        </View>
                       </View>
                     ) : null}
                     {return48Invalid ? (
@@ -859,22 +867,24 @@ export function RefillForm({
                   {/* 12kg Return toggle — aligned under Return (right) field */}
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                     <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { flex: 1 },
-                        buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={() => {
-                        if (buy12Value <= 0) return;
-                        setRet12Touched(true);
-                        setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
-                      }}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                      </Text>
-                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                          buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          if (buy12Value <= 0) return;
+                          setRet12Touched(true);
+                          setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                   {return12Invalid ? (
                     <Text style={styles.errorText}>
@@ -907,22 +917,24 @@ export function RefillForm({
                   {/* 48kg Return toggle — aligned under Return (right) field */}
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                     <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { flex: 1 },
-                        buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={() => {
-                        if (buy48Value <= 0) return;
-                        setRet48Touched(true);
-                        setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
-                      }}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                      </Text>
-                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                          buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={() => {
+                          if (buy48Value <= 0) return;
+                          setRet48Touched(true);
+                          setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                        }}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                   {return48Invalid ? (
                     <Text style={styles.errorText}>
@@ -1069,6 +1081,7 @@ export function RefillForm({
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                       <FieldCell
                         title={CUSTOMER_WORDING.total}
+                        comment=" "
                         value={totalCost}
                         onIncrement={() => {}}
                         onDecrement={() => {}}
@@ -1092,21 +1105,23 @@ export function RefillForm({
                     {/* Paid all toggle — aligned under Paid (right) field */}
                     <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                       <View style={{ flex: 1 }} />
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          { flex: 1 },
-                          paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
-                        ]}
-                        onPress={() => {
-                          setPaidTouched(true);
-                          setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {paidNowValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
-                        </Text>
-                      </Pressable>
+                      <View style={{ flex: 1 }}>
+                        <Pressable
+                          style={[
+                            styles.inlineActionButton,
+                            { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                            paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
+                          ]}
+                          onPress={() => {
+                            setPaidTouched(true);
+                            setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
+                          }}
+                        >
+                          <Text style={styles.inlineActionText}>
+                            {paidNowValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
                     {canEditMoney ? (
                       <InlineWalletFundingPrompt

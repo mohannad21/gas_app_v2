@@ -1836,26 +1836,28 @@ ${cylLine}
                   </View>
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
                     <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { flex: 1, alignSelf: "stretch", minWidth: 0 },
-                        replacementReceivedToggleState === "none"
-                          ? styles.inlineActionButtonDanger
-                          : replacementReceivedToggleState === "with_old"
-                            ? styles.inlineActionButtonAlt
-                            : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={cycleReplacementReceived}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {replacementReceivedToggleState === "with_old"
-                          ? CUSTOMER_WORDING.returnedWithOld
-                          : replacementReceivedToggleState === "none"
-                            ? CUSTOMER_WORDING.didntReturn
-                            : CUSTOMER_WORDING.returned}
-                      </Text>
-                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                          replacementReceivedToggleState === "none"
+                            ? styles.inlineActionButtonDanger
+                            : replacementReceivedToggleState === "with_old"
+                              ? styles.inlineActionButtonAlt
+                              : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={cycleReplacementReceived}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {replacementReceivedToggleState === "with_old"
+                            ? CUSTOMER_WORDING.returnedWithOld
+                            : replacementReceivedToggleState === "none"
+                              ? CUSTOMER_WORDING.didntReturn
+                              : CUSTOMER_WORDING.returned}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </BigBox>
                 <BigBox
@@ -1879,6 +1881,7 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.total}
+                          comment=" "
                           value={Number(field.value) || 0}
                           onIncrement={() => adjustPriceTotal(5)}
                           onDecrement={() => adjustPriceTotal(-5)}
@@ -1936,26 +1939,28 @@ ${cylLine}
                   </View>
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
                     <View style={{ flex: 1 }} />
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { flex: 1, alignSelf: "stretch", minWidth: 0 },
-                        replacementPaidToggleState === "none"
-                          ? styles.inlineActionButtonDanger
-                          : replacementPaidToggleState === "with_old"
-                            ? styles.inlineActionButtonAlt
-                            : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={cycleReplacementPaid}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {replacementPaidToggleState === "with_old"
-                          ? CUSTOMER_WORDING.paidWithDebt
-                          : replacementPaidToggleState === "none"
-                            ? CUSTOMER_WORDING.didntPay
-                            : CUSTOMER_WORDING.paid_}
-                      </Text>
-                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Pressable
+                        style={[
+                          styles.inlineActionButton,
+                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                          replacementPaidToggleState === "none"
+                            ? styles.inlineActionButtonDanger
+                            : replacementPaidToggleState === "with_old"
+                              ? styles.inlineActionButtonAlt
+                              : styles.inlineActionButtonSuccess,
+                        ]}
+                        onPress={cycleReplacementPaid}
+                      >
+                        <Text style={styles.inlineActionText}>
+                          {replacementPaidToggleState === "with_old"
+                            ? CUSTOMER_WORDING.paidWithDebt
+                            : replacementPaidToggleState === "none"
+                              ? CUSTOMER_WORDING.didntPay
+                              : CUSTOMER_WORDING.paid_}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </BigBox>
               </View>
@@ -2007,21 +2012,24 @@ ${cylLine}
                   />
                 </View>
                 <View style={styles.bigBoxActionRow}>
-                  <Pressable
-                    style={[
-                      styles.inlineActionButton,
-                      paidInput === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
-                    ]}
-                    onPress={togglePaymentModeAmount}
-                  >
-                    <Text style={styles.inlineActionText}>
-                      {paidInput === 0
-                        ? paymentDirection === "payout"
-                          ? "Pay all"
-                          : "Receive all"
-                        : CUSTOMER_WORDING.didntPay}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.entryFieldPairSingle}>
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                        paidInput === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={togglePaymentModeAmount}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {paidInput === 0
+                          ? paymentDirection === "payout"
+                            ? "Pay all"
+                            : "Receive all"
+                          : CUSTOMER_WORDING.didntPay}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </BigBox>
               <FieldError message={errors.paid_amount?.message} />
@@ -2065,19 +2073,22 @@ ${cylLine}
                   />
                 </View>
                 <View style={styles.bigBoxActionRow}>
-                  <Pressable
-                    style={[
-                      styles.inlineActionButton,
-                      received === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
-                    ]}
-                    onPress={toggleReturnModeAmount}
-                  >
-                    <Text style={styles.inlineActionText}>
-                      {received === Math.max(0, cylinderDebtBeforeForGas)
-                        ? CUSTOMER_WORDING.didntReturn
-                        : CUSTOMER_WORDING.returnAll}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.entryFieldPairSingle}>
+                    <Pressable
+                      style={[
+                        styles.inlineActionButton,
+                        { width: "100%", alignSelf: "stretch", minWidth: 0 },
+                        received === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
+                      ]}
+                      onPress={toggleReturnModeAmount}
+                    >
+                      <Text style={styles.inlineActionText}>
+                        {received === Math.max(0, cylinderDebtBeforeForGas)
+                          ? CUSTOMER_WORDING.didntReturn
+                          : CUSTOMER_WORDING.returnAll}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />
@@ -2202,6 +2213,7 @@ ${cylLine}
                 >
                   <FieldCell
                     title={CUSTOMER_WORDING.total}
+                    comment=" "
                     value={computedTradeTotal}
                     onIncrement={() => {}}
                     onDecrement={() => {}}
@@ -2301,6 +2313,7 @@ ${cylLine}
                 >
                   <FieldCell
                     title={CUSTOMER_WORDING.total}
+                    comment=" "
                     value={computedTradeTotal}
                     onIncrement={() => {}}
                     onDecrement={() => {}}
