@@ -219,11 +219,14 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <ActivityIcon
-          type={iconTypeForEvent(eventType, event.order_mode)}
-          color={dotColor}
-          size={20}
-        />
+        <View style={styles.markerRow}>
+          <View style={[styles.dot, { backgroundColor: dotColor }]} />
+          <ActivityIcon
+            type={iconTypeForEvent(eventType, event.order_mode)}
+            color={dotColor}
+            size={20}
+          />
+        </View>
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
@@ -314,8 +317,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 48,
+    width: 58,
     alignItems: "center",
+  },
+  markerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
   },
   rail: {
     flex: 1,
@@ -326,6 +336,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
   },
   headerRow: {
     flexDirection: "row",
