@@ -1,65 +1,53 @@
 import React from "react";
-import { render } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 
-import CustomersHomeScreen from "@/app/(tabs)/customers-home";
+import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
 
-jest.mock("@/app/(tabs)/add/index", () => {
+jest.mock("@expo/vector-icons", () => {
   const React = require("react");
-  const { Text, View } = require("react-native");
-
+  const { Text } = require("react-native");
   return {
-    AddCustomerEntryAction: () => <View><Text>Add action marker</Text></View>,
-    AddCustomersSection: () => <View><Text>Customer list marker</Text></View>,
+    Ionicons: ({ name }: { name: string }) => <Text>{name}</Text>,
   };
 });
 
-jest.mock("@/hooks/useBalancesSummary", () => ({
-  useBalancesSummary: () => ({
-    balanceSummary: {
-      money: {
-        receivable: { count: 1, total: 20 },
-        payable: { count: 1, total: 15 },
-      },
-      cyl12: {
-        receivable: { count: 1, total: 3 },
-        payable: { count: 1, total: 4 },
-      },
-      cyl48: {
-        receivable: { count: 1, total: 2 },
-        payable: { count: 1, total: 1 },
-      },
-    },
-  }),
-}));
+describe("CustomerBalancesSection", () => {
+  it("starts collapsed and expands with money wording", () => {
+    const { getByText, queryByText } = render(
+      <CustomerBalancesSection
+        balanceSummary={{
+          money: {
+            receivable: { count: 1, total: 20 },
+            payable: { count: 1, total: 15 },
+          },
+          cyl12: {
+            receivable: { count: 1, total: 3 },
+            payable: { count: 1, total: 4 },
+          },
+          cyl48: {
+            receivable: { count: 1, total: 2 },
+            payable: { count: 1, total: 1 },
+          },
+        }}
+        formatMoney={(value) => Number(value || 0).toFixed(0)}
+        formatCustomerCount={(count) => `${count} cust`}
+      />
+    );
 
-describe("Customer summary boxes", () => {
-  it("renders the 6 compact boxes in the required order between filters and list", () => {
-    const { getByText, queryByText, toJSON } = render(<CustomersHomeScreen />);
+    expect(getByText("Customer Balances")).toBeTruthy();
+    expect(queryByText("Money debt")).toBeNull();
 
-    expect(getByText("Wallet debt")).toBeTruthy();
+    fireEvent.press(getByText("Customer Balances"));
+
+    expect(getByText("Money debt")).toBeTruthy();
     expect(getByText("12kg debt")).toBeTruthy();
     expect(getByText("48kg debt")).toBeTruthy();
-    expect(getByText("Wallet credit")).toBeTruthy();
+    expect(getByText("Money credit")).toBeTruthy();
     expect(getByText("12kg credit")).toBeTruthy();
     expect(getByText("48kg credit")).toBeTruthy();
-    expect(queryByText("Customer Balances")).toBeNull();
-
     expect(getByText("20 shekels")).toBeTruthy();
     expect(getByText("15 shekels")).toBeTruthy();
-    expect(getByText("3 cyl")).toBeTruthy();
-    expect(getByText("4 cyl")).toBeTruthy();
-    expect(getByText("2 cyl")).toBeTruthy();
-    expect(getByText("1 cyl")).toBeTruthy();
-    expect(queryByText("-15 shekels")).toBeNull();
-    expect(queryByText("-4 cyl")).toBeNull();
-
-    const tree = JSON.stringify(toJSON());
-    expect(tree.indexOf("Replacement")).toBeLessThan(tree.indexOf("Wallet debt"));
-    expect(tree.indexOf("Wallet debt")).toBeLessThan(tree.indexOf("Customer list marker"));
-    expect(tree.indexOf("Wallet debt")).toBeLessThan(tree.indexOf("12kg debt"));
-    expect(tree.indexOf("12kg debt")).toBeLessThan(tree.indexOf("48kg debt"));
-    expect(tree.indexOf("48kg debt")).toBeLessThan(tree.indexOf("Wallet credit"));
-    expect(tree.indexOf("Wallet credit")).toBeLessThan(tree.indexOf("12kg credit"));
-    expect(tree.indexOf("12kg credit")).toBeLessThan(tree.indexOf("48kg credit"));
+    expect(queryByText("Wallet debt")).toBeNull();
+    expect(queryByText("Wallet credit")).toBeNull();
   });
 });

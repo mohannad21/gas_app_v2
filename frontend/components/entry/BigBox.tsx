@@ -18,6 +18,8 @@ export default function BigBox({
   children,
 }: BigBoxProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const isSettled = statusLine === "Settled";
+  const statusColorStyle = statusIsAlert ? styles.bigBoxStatusAlert : styles.bigBoxStatusOk;
 
   return (
     <View style={styles.bigBox}>
@@ -26,9 +28,17 @@ export default function BigBox({
         <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={18} color="#0f172a" />
       </Pressable>
       {statusLine ? (
-        <Text style={[styles.bigBoxStatus, statusIsAlert ? styles.bigBoxStatusAlert : styles.bigBoxStatusOk]}>
-          {statusLine}
-        </Text>
+        <View style={styles.bigBoxStatusRow}>
+          {isSettled ? (
+            <Ionicons
+              name="checkmark-circle"
+              size={14}
+              color={statusIsAlert ? "#b00020" : "#15803d"}
+              style={styles.bigBoxStatusIcon}
+            />
+          ) : null}
+          <Text style={[styles.bigBoxStatus, statusColorStyle]}>{statusLine}</Text>
+        </View>
       ) : null}
       {expanded ? (
         <>
@@ -65,8 +75,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginTop: 2,
-    paddingHorizontal: 14,
     paddingBottom: 8,
+  },
+  bigBoxStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+    paddingHorizontal: 14,
+  },
+  bigBoxStatusIcon: {
+    marginBottom: 8,
   },
   bigBoxStatusAlert: {
     color: "#b00020",

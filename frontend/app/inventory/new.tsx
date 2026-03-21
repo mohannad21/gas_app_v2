@@ -725,72 +725,76 @@ function CompanyPaymentForm({
   return (
     <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
-      <Text style={styles.modalLabel}>Date & time</Text>
-      <View style={styles.row}>
-        <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
-          <Text style={styles.dateText}>{payDate}</Text>
-          <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
-          <Text style={styles.dateText}>{payTime}</Text>
-          <Ionicons name="time-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable
-          style={styles.nowButton}
-          onPress={() => {
-            setPayDate(getLocalDateString());
-            setPayTime(getNowTime());
-          }}
-        >
-          <Text style={styles.nowButtonText}>Now</Text>
-        </Pressable>
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Date & time</Text>
+        <View style={styles.row}>
+          <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
+            <Text style={styles.dateText}>{payDate}</Text>
+            <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
+          </Pressable>
+          <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
+            <Text style={styles.dateText}>{payTime}</Text>
+            <Ionicons name="time-outline" size={16} color="#0a7ea4" />
+          </Pressable>
+          <Pressable
+            style={styles.nowButton}
+            onPress={() => {
+              setPayDate(getLocalDateString());
+              setPayTime(getNowTime());
+            }}
+          >
+            <Text style={styles.nowButtonText}>Now</Text>
+          </Pressable>
+        </View>
       </View>
-      <Text style={styles.modalLabel}>Payment direction</Text>
-      <View style={styles.modeRow}>
-        <Pressable
-          onPress={() => {
-            if (receiveDisabled) return;
-            setPaymentDirection("receive");
-          }}
-          disabled={receiveDisabled}
-          style={[
-            styles.modeButton,
-            paymentDirection === "receive" && styles.modeButtonActive,
-            receiveDisabled && styles.modeButtonDisabled,
-          ]}
-        >
-          <Text
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Payment direction</Text>
+        <View style={styles.modeRow}>
+          <Pressable
+            onPress={() => {
+              if (receiveDisabled) return;
+              setPaymentDirection("receive");
+            }}
+            disabled={receiveDisabled}
             style={[
-              styles.modeText,
-              paymentDirection === "receive" && styles.modeTextActive,
-              receiveDisabled && styles.modeTextDisabled,
+              styles.modeButton,
+              paymentDirection === "receive" && styles.modeButtonActive,
+              receiveDisabled && styles.modeButtonDisabled,
             ]}
           >
-            Receive
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            if (payDisabled) return;
-            setPaymentDirection("pay");
-          }}
-          disabled={payDisabled}
-          style={[
-            styles.modeButton,
-            paymentDirection === "pay" && styles.modeButtonActive,
-            payDisabled && styles.modeButtonDisabled,
-          ]}
-        >
-          <Text
+            <Text
+              style={[
+                styles.modeText,
+                paymentDirection === "receive" && styles.modeTextActive,
+                receiveDisabled && styles.modeTextDisabled,
+              ]}
+            >
+              Receive
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (payDisabled) return;
+              setPaymentDirection("pay");
+            }}
+            disabled={payDisabled}
             style={[
-              styles.modeText,
-              paymentDirection === "pay" && styles.modeTextActive,
-              payDisabled && styles.modeTextDisabled,
+              styles.modeButton,
+              paymentDirection === "pay" && styles.modeButtonActive,
+              payDisabled && styles.modeButtonDisabled,
             ]}
           >
-            Pay
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.modeText,
+                paymentDirection === "pay" && styles.modeTextActive,
+                payDisabled && styles.modeTextDisabled,
+              ]}
+            >
+              Pay
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <BigBox
         title={CUSTOMER_WORDING.money}
@@ -1237,6 +1241,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#1c1c1c",
+  },
+  sectionCardLabel: {
+    marginTop: 0,
   },
   modalInput: {
     marginTop: 6,

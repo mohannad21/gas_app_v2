@@ -132,6 +132,10 @@ function sanitizeCountInputMax(value: string, max: number) {
   return String(Math.min(Math.max(0, parsed), Math.max(0, max)));
 }
 
+export function sanitizeBuyCountInput(value: string, max: number, isBuyMode: boolean) {
+  return isBuyMode ? sanitizeCountInput(value) : sanitizeCountInputMax(value, max);
+}
+
 export function RefillForm({
   visible,
   onClose,
@@ -592,7 +596,7 @@ export function RefillForm({
   };
   const handleBuy12Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInputMax(value, availableEmpty12);
+    const next = sanitizeBuyCountInput(value, availableEmpty12, isBuyMode);
     const delta = Number(next || 0) - buy12Value;
     setBuy12(next);
     if (!isBuyMode && delta > 0) {
@@ -601,7 +605,7 @@ export function RefillForm({
   };
   const handleBuy48Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInputMax(value, availableEmpty48);
+    const next = sanitizeBuyCountInput(value, availableEmpty48, isBuyMode);
     const delta = Number(next || 0) - buy48Value;
     setBuy48(next);
     if (!isBuyMode && delta > 0) {

@@ -16,7 +16,7 @@ export const CUSTOMER_WORDING = {
   notes: "Note (optional)",
   cylinderDebt: (n: number, gas: string) => `Owes ${n} ${gas} cylinder${n !== 1 ? "s" : ""}`,
   cylinderCredit: (n: number, gas: string) => `${n} ${gas} cylinder${n !== 1 ? "s" : ""} credit`,
-  cylinderSettled: "Cylinders settled",
+  cylinderSettled: "Settled",
   moneyDebt: (n: string) => `Owes ${n}`,
   moneyCredit: (n: string) => `${n} credit`,
   moneySettled: "Settled",

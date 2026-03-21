@@ -2110,7 +2110,7 @@ ${cylLine}
               }
             />
           ) : null}
-          {selectedCustomerEntry && !isSellIron && !isBuyIron ? (
+          {selectedCustomerEntry && !isSellIron && !isBuyIron && currentAction !== "replacement" ? (
             customerPreviewStatusLine ? (
               <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
             ) : (
