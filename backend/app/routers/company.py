@@ -7,6 +7,8 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import CompanyTransaction
 from app.schemas import (
+  CompanyBalanceAdjustmentCreate,
+  CompanyBalanceAdjustmentOut,
   CompanyBalancesOut,
   CompanyBuyIronCreate,
   CompanyBuyIronOut,
@@ -243,6 +245,72 @@ def create_company_buy_iron(
     new48=txn.new48,
     total_cost=txn.total,
     paid_now=txn.paid,
+    note=txn.note,
+  )
+
+
+@router.post("/balances/adjust", response_model=CompanyBalanceAdjustmentOut, status_code=status.HTTP_201_CREATED)
+def adjust_company_balances(
+  payload: CompanyBalanceAdjustmentCreate, session: Session = Depends(get_session)
+) -> CompanyBalanceAdjustmentOut:
+  if payload.request_id:
+    existing = session.exec(
+      select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+    ).first()
+    if existing:
+      return CompanyBalanceAdjustmentOut(
+        id=existing.id,
+        happened_at=existing.happened_at,
+        money_balance=existing.total,
+        cylinder_balance_12=existing.buy12,
+        cylinder_balance_48=existing.buy48,
+        note=existing.note,
+      )
+
+  current_money = sum_company_money(session)
+  current_cyl_12 = sum_company_cylinders(session, gas_type="12kg")
+  current_cyl_48 = sum_company_cylinders(session, gas_type="48kg")
+
+  delta_money = payload.money_balance - current_money
+  delta_cyl_12 = payload.cylinder_balance_12 - current_cyl_12
+  delta_cyl_48 = payload.cylinder_balance_48 - current_cyl_48
+  if delta_money == 0 and delta_cyl_12 == 0 and delta_cyl_48 == 0:
+    raise HTTPException(status_code=400, detail="adjustment_required")
+
+  happened_at = (
+    normalize_happened_at(payload.happened_at)
+    if payload.happened_at
+    else _parse_datetime(
+      date_str=payload.date,
+      time_str=payload.time,
+      time_of_day=payload.time_of_day,
+      at=payload.at,
+    )
+  ) or datetime.now(timezone.utc)
+
+  txn = CompanyTransaction(
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="adjust",
+    buy12=delta_cyl_12,
+    buy48=delta_cyl_48,
+    total=delta_money,
+    paid=0,
+    note=payload.note,
+    request_id=payload.request_id,
+    is_reversed=False,
+  )
+  session.add(txn)
+  post_company_transaction(session, txn)
+  session.commit()
+  session.refresh(txn)
+
+  return CompanyBalanceAdjustmentOut(
+    id=txn.id,
+    happened_at=txn.happened_at,
+    money_balance=payload.money_balance,
+    cylinder_balance_12=payload.cylinder_balance_12,
+    cylinder_balance_48=payload.cylinder_balance_48,
     note=txn.note,
   )
 

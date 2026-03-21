@@ -809,7 +809,7 @@ function CompanyPaymentForm({
           style={[
             styles.entryFieldPairSingle,
             tableDisabled && styles.sectionDisabled,
-            { width: "50%", minWidth: 160, alignSelf: "center", justifyContent: "center" },
+            styles.standaloneFieldWrap,
           ]}
           pointerEvents={tableDisabled ? "none" : "auto"}
         >
@@ -824,7 +824,7 @@ function CompanyPaymentForm({
           />
         </View>
         <View style={styles.bigBoxActionRow}>
-          <View style={{ width: "50%", minWidth: 160, alignSelf: "center" }}>
+          <View style={styles.standaloneFieldWrap}>
             <Pressable
               style={[
                 styles.inlineActionButton,
@@ -866,14 +866,16 @@ function CompanyPaymentForm({
           }
         />
       </BigBox>
-      <Text style={styles.modalLabel}>Note</Text>
-      <TextInput
-        style={styles.modalInput}
-        placeholder="Optional note"
-        value={note}
-        onChangeText={setNote}
-        inputAccessoryViewID={accessoryId}
-      />
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Reason / type</Text>
+        <TextInput
+          style={styles.modalInput}
+          placeholder="Optional note"
+          value={note}
+          onChangeText={setNote}
+          inputAccessoryViewID={accessoryId}
+        />
+      </View>
       </ScrollView>
       <FooterActions
         onSave={() => save(false)}
@@ -1218,6 +1220,11 @@ const styles = StyleSheet.create({
   },
   entryFieldPairSingle: {
     flexDirection: "row",
+  },
+  standaloneFieldWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    justifyContent: "center",
   },
   hubFormContainer: {
     flexGrow: 1,

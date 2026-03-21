@@ -322,7 +322,7 @@ export default function CashExpensesView({
                   statusLine={`Wallet ${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
                   statusIsAlert={walletAfter < 0}
                 >
-                  <View style={styles.entryFieldPairSingle}>
+                  <View style={styles.standaloneFieldWrap}>
                     <FieldCell
                       title="Amount"
                       value={expenseAmountValue}
@@ -353,7 +353,7 @@ export default function CashExpensesView({
                   statusLine={formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
                   statusIsAlert={isWalletToBank && transferDisabled}
                 >
-                  <View style={styles.entryFieldPairSingle}>
+                  <View style={styles.standaloneFieldWrap}>
                     <FieldCell
                       title="Amount"
                       value={transferAmountValue}

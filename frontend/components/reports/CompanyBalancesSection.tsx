@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
@@ -82,6 +83,13 @@ export default function CompanyBalancesSection({
               </View>
             ))}
           </View>
+          <Pressable
+            style={[styles.adjustButton, !companyBalancesReady && styles.adjustButtonDisabled]}
+            disabled={!companyBalancesReady}
+            onPress={() => router.push("/inventory/company-balance-adjust")}
+          >
+            <Text style={styles.adjustButtonText}>Adjust balances</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -117,6 +125,23 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: 8,
+  },
+  adjustButton: {
+    marginTop: 10,
+    alignSelf: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#0a7ea4",
+  },
+  adjustButtonDisabled: {
+    opacity: 0.5,
+  },
+  adjustButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
   },
   box: {
     flex: 1,

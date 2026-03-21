@@ -169,6 +169,27 @@ export type CompanyBuyIronCreateInput = {
   request_id?: string;
 };
 
+export const CompanyBalanceAdjustmentSchema = z.object({
+  id: z.string(),
+  happened_at: z.string(),
+  money_balance: z.number(),
+  cylinder_balance_12: z.number(),
+  cylinder_balance_48: z.number(),
+  note: z.string().nullish(),
+});
+export type CompanyBalanceAdjustment = z.infer<typeof CompanyBalanceAdjustmentSchema>;
+export type CompanyBalanceAdjustmentCreateInput = {
+  money_balance: number;
+  cylinder_balance_12: number;
+  cylinder_balance_48: number;
+  note?: string;
+  date?: string;
+  time?: string;
+  time_of_day?: "morning" | "evening";
+  happened_at?: string;
+  request_id?: string;
+};
+
 export const InventoryAdjustmentSchema = z
   .object({
     id: z.string(),

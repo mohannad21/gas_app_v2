@@ -468,6 +468,28 @@ class CompanyBuyIronOut(SQLModel):
   note: Optional[str] = None
 
 
+class CompanyBalanceAdjustmentCreate(SQLModel):
+  money_balance: int = 0
+  cylinder_balance_12: int = 0
+  cylinder_balance_48: int = 0
+  note: Optional[str] = None
+  request_id: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
+class CompanyBalanceAdjustmentOut(SQLModel):
+  id: str
+  happened_at: datetime
+  money_balance: int
+  cylinder_balance_12: int
+  cylinder_balance_48: int
+  note: Optional[str] = None
+
+
 class CompanyBalancesOut(SQLModel):
   company_money: int
   company_cyl_12: int

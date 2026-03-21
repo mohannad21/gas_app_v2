@@ -515,7 +515,7 @@ def _level3_counterparty(event: DailyReportV2Event) -> Level3Counterparty:
       description=event.customer_description,
       display=display,
     )
-  if event.event_type in {"refill", "company_payment", "company_buy_iron"}:
+  if event.event_type in {"refill", "company_payment", "company_buy_iron", "company_adjustment"}:
     return Level3Counterparty(type="company", display_name="Company", description=None, display="Company")
   return Level3Counterparty(type="none", display_name=None, description=None, display=None)
 
@@ -549,6 +549,8 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
     return Level3Hero(text="Pay Company")
   if event.event_type == "company_buy_iron":
     return Level3Hero(text="Buy Iron")
+  if event.event_type == "company_adjustment":
+    return Level3Hero(text="Company Adjust")
   if event.event_type == "expense":
     if event.expense_type:
       return Level3Hero(text=f"Expense: {event.expense_type}")
@@ -2875,6 +2877,13 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       buy48 = txn.new48
       return12 = 0
       return48 = 0
+    elif txn.kind == "adjust":
+      event_type = "company_adjustment"
+      buy12 = None
+      buy48 = None
+      return12 = None
+      return48 = None
+      paid_now = None
     elif (
       txn.kind == "refill"
       and (txn.new12 or txn.new48)

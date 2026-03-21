@@ -349,8 +349,27 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
           amount=txn.new48,
         )
       )
+  elif txn.kind == "adjust":
+    if txn.buy12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="12kg",
+          unit=UNIT_COUNT,
+          amount=txn.buy12,
+        )
+      )
+    if txn.buy48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="48kg",
+          unit=UNIT_COUNT,
+          amount=txn.buy48,
+        )
+      )
 
-  if txn.paid:
+  if txn.paid and txn.kind != "adjust":
     lines.append(
       LedgerLine(
         account=ACCOUNT_CASH,
@@ -359,7 +378,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
       )
     )
 
-  money_delta = txn.total - txn.paid
+  money_delta = txn.total if txn.kind == "adjust" else txn.total - txn.paid
   if money_delta:
     lines.append(
       LedgerLine(

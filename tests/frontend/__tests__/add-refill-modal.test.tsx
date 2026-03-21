@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 const mockCreateRefillMutateAsync = jest.fn().mockResolvedValue({});
 const mockCreateCompanyBuyIronMutateAsync = jest.fn().mockResolvedValue({});
@@ -84,10 +84,7 @@ describe("AddRefillModal company activity behavior", () => {
     expect(queryByText("48kg Return")).toBeNull();
 
     fireEvent.press(getAllByText("+")[0]);
-
-    await act(async () => {
-      fireEvent.press(getByText("Save"));
-    });
+    fireEvent.press(getByText("Save"));
 
     await waitFor(() => {
       expect(mockCreateCompanyBuyIronMutateAsync).toHaveBeenCalledWith(

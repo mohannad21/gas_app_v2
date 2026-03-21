@@ -479,6 +479,7 @@ export function summarizeEventTypes(events: any[]) {
     collection_empty: "ReturnEmp",
     company_payment: "PayCompany",
     company_buy_iron: "BuyIron",
+    company_adjustment: "CompAdjust",
   };
   const palette = ["#0a7ea4", "#16a34a", "#f97316", "#8b5cf6", "#e0b93f", "#64748b"];
   const out = Array.from(map.entries()).map(([type, count], i) => ({

@@ -10,6 +10,7 @@ export const EVENT_COLOR_MAP: Record<string, string> = {
   collection_empty: "#14b8a6",
   company_payment: "#2563eb",
   company_buy_iron: "#f59e0b",
+  company_adjustment: "#64748b",
   bank_deposit: "#0ea5e9",
 };
 

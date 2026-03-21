@@ -15,6 +15,9 @@ import {
   DailyReportV2DaySchema,
   CompanyBalances,
   CompanyBalancesSchema,
+  CompanyBalanceAdjustment,
+  CompanyBalanceAdjustmentCreateInput,
+  CompanyBalanceAdjustmentSchema,
   CompanyBuyIron,
   CompanyBuyIronCreateInput,
   CompanyBuyIronSchema,
@@ -222,6 +225,27 @@ export async function getCompanyBalances(): Promise<CompanyBalances> {
   return {
     ...parsed,
     company_money: fromMinorUnits(parsed.company_money),
+  };
+}
+
+export async function createCompanyBalanceAdjustment(
+  payload: CompanyBalanceAdjustmentCreateInput
+): Promise<CompanyBalanceAdjustment> {
+  const happened_at =
+    payload.happened_at ??
+    buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
+  const { data } = await api.post("/company/balances/adjust", {
+    happened_at,
+    money_balance: toMinorUnits(payload.money_balance),
+    cylinder_balance_12: payload.cylinder_balance_12,
+    cylinder_balance_48: payload.cylinder_balance_48,
+    note: payload.note,
+    request_id: payload.request_id,
+  });
+  const parsed = parse(CompanyBalanceAdjustmentSchema, data);
+  return {
+    ...parsed,
+    money_balance: fromMinorUnits(parsed.money_balance),
   };
 }
 

@@ -330,6 +330,10 @@ const styles = StyleSheet.create({
   entryFieldPairSingle: {
     flexDirection: "row",
   },
+  standaloneFieldWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
   row: {
     flexDirection: "row",
     gap: 8,
