@@ -375,13 +375,12 @@ export default function CashExpensesView({
             )}
           </View>
         </KeyboardAvoidingView>
-        <FooterActions
-          onCancel={() => onClose?.()}
-          onSave={() => handleSave(false)}
-          onSaveAndAdd={() => handleSave(true)}
-          saveDisabled={!canSaveExpense}
-        />
       </ScrollView>
+      <FooterActions
+        onSave={() => handleSave(false)}
+        onSaveAndAdd={() => handleSave(true)}
+        saveDisabled={!canSaveExpense}
+      />
     </View>
   );
 }

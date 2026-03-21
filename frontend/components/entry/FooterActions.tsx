@@ -1,17 +1,16 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 type FooterActionsProps = {
-  onCancel: () => void;
   onSave: () => void;
   onSaveAndAdd?: () => void;
   saveLabel?: string;
   saveAndAddLabel?: string;
   saveDisabled?: boolean;
   saving?: boolean;
+  [key: string]: unknown;
 };
 
 export default function FooterActions({
-  onCancel,
   onSave,
   onSaveAndAdd,
   saveLabel = "Save",
@@ -22,16 +21,15 @@ export default function FooterActions({
   return (
     <View style={styles.footer}>
       <View style={styles.row}>
-        <Pressable style={styles.cancelBtn} onPress={onCancel}>
-          <Text style={styles.btnText}>Cancel</Text>
-        </Pressable>
         {onSaveAndAdd ? (
           <Pressable
             style={[styles.secondaryBtn, saveDisabled && styles.disabledBtn]}
             onPress={onSaveAndAdd}
             disabled={saveDisabled}
           >
-            <Text style={styles.btnText}>{saveAndAddLabel}</Text>
+            <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {saveAndAddLabel}
+            </Text>
           </Pressable>
         ) : null}
         <Pressable
@@ -39,7 +37,9 @@ export default function FooterActions({
           onPress={onSave}
           disabled={saveDisabled}
         >
-          <Text style={styles.btnText}>{saving ? "Saving..." : saveLabel}</Text>
+          <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {saving ? "Saving..." : saveLabel}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -54,18 +54,10 @@ const styles = StyleSheet.create({
     bottom: 8,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: "#f3f5f7",
   },
   row: {
     flexDirection: "row",
     gap: 8,
-  },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: "#dc2626",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
   },
   secondaryBtn: {
     flex: 1,

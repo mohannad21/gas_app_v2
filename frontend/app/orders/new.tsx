@@ -1128,7 +1128,6 @@ ${cylLine}
     : isPayment
       ? handleSavePaymentAndAddAnother
       : handleSaveReturnAndAddAnother;
-  const cancelHandler = () => router.back();
   const saveBusy = isOrderAction ? submitting : collectionBusy;
   const saveDisabled = isOrderAction
     ? submitting || orderSaveDisabled || !customerPreviewReady
@@ -2603,17 +2602,16 @@ ${cylLine}
         onSelect={(next) => setCollectionTime(next)}
         onClose={() => setCollectionTimeOpen(false)}
       />
-        {hasCustomer ? (
-          <FooterActions
-            onCancel={cancelHandler}
-            onSave={savePrimaryHandler}
-            onSaveAndAdd={saveSecondaryHandler}
-            saveLabel={savePrimaryLabel}
-            saveDisabled={saveDisabled}
-            saving={saveBusy}
-          />
-        ) : null}
       </ScrollView>
+      {hasCustomer ? (
+        <FooterActions
+          onSave={savePrimaryHandler}
+          onSaveAndAdd={saveSecondaryHandler}
+          saveLabel={savePrimaryLabel}
+          saveDisabled={saveDisabled}
+          saving={saveBusy}
+        />
+      ) : null}
       {hasCustomer ? (
         <>
           {showStickyPayment && (

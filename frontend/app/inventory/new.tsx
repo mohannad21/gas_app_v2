@@ -230,7 +230,6 @@ function InventoryAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   entry: InventoryAdjustment | null;
@@ -247,7 +246,6 @@ function InventoryAdjustForm({
   }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
   const [full12, setFull12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
@@ -357,7 +355,7 @@ function InventoryAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
@@ -460,12 +458,11 @@ function InventoryAdjustForm({
         onChangeText={setReason}
       />
       <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
+      </ScrollView>
       <FooterActions
-        onCancel={onCancel}
         onSave={() => save(false)}
         onSaveAndAdd={() => save(!entry)}
       />
-      </ScrollView>
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -497,7 +494,6 @@ function CashAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   entry: CashAdjustment | null;
@@ -507,7 +503,6 @@ function CashAdjustForm({
   onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
   const [reason, setReason] = useState(entry?.reason ?? "");
@@ -571,7 +566,7 @@ function CashAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
@@ -599,12 +594,11 @@ function CashAdjustForm({
 
       <Text style={styles.modalLabel}>Reason</Text>
       <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
+      </ScrollView>
       <FooterActions
-        onCancel={onCancel}
         onSave={() => save(false)}
         onSaveAndAdd={() => save(!entry)}
       />
-      </ScrollView>
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -636,7 +630,6 @@ function CompanyPaymentForm({
   balanceReady,
   onCreate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   date: string;
@@ -646,7 +639,6 @@ function CompanyPaymentForm({
   balanceReady: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -731,7 +723,7 @@ function CompanyPaymentForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
@@ -878,13 +870,12 @@ function CompanyPaymentForm({
         onChangeText={setNote}
         inputAccessoryViewID={accessoryId}
       />
+      </ScrollView>
       <FooterActions
-        onCancel={onCancel}
         onSave={() => save(false)}
         onSaveAndAdd={() => save(true)}
         saveDisabled={tableDisabled}
       />
-      </ScrollView>
       <CalendarModal
         visible={calendarOpen}
         value={payDate}
@@ -1104,7 +1095,6 @@ export default function InventoryNewScreen() {
                 await createCompanyPayment.mutateAsync(payload);
               }}
               onSaved={() => router.back()}
-              onCancel={() => router.back()}
             />
           ) : activeTab === "cash" ? (
             <CashAdjustForm
@@ -1120,7 +1110,6 @@ export default function InventoryNewScreen() {
                 await updateCashAdjust.mutateAsync({ id, payload });
               }}
               onSaved={() => router.back()}
-              onCancel={() => router.back()}
             />
           ) : (
             <InventoryAdjustForm
@@ -1136,7 +1125,6 @@ export default function InventoryNewScreen() {
                 await updateInventoryAdjust.mutateAsync({ id, payload });
               }}
               onSaved={() => router.back()}
-              onCancel={() => router.back()}
             />
           )
         )}
