@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import ActivityIcon, { iconTypeForEvent } from "@/components/reports/ActivityIcon";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
@@ -227,7 +228,11 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        <ActivityIcon
+          type={iconTypeForEvent(eventType, event.order_mode)}
+          color={dotColor}
+          size={20}
+        />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
@@ -318,7 +323,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 18,
+    width: 48,
     alignItems: "center",
   },
   rail: {
@@ -330,11 +335,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
   },
   headerRow: {
     flexDirection: "row",
