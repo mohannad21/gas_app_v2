@@ -4,6 +4,7 @@ import {
   calcCustomerMoneyDelta,
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
+import { PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 
 export type DaySummaryTotals = {
   newDebt: { cash: number; cyl12: number; cyl48: number };
@@ -19,11 +20,11 @@ export function formatEventType(type: string, orderMode?: string | null) {
     if (resolvedMode === "buy_iron") return "BuyEmpty";
     return "Replace";
   }
-  if (type === "collection_money") return "LatePay";
-  if (type === "collection_payout") return "Payout";
+  if (type === "collection_money") return PAYMENT_DIRECTION_WORDING.reportShort.paymentFromCustomer;
+  if (type === "collection_payout") return PAYMENT_DIRECTION_WORDING.reportShort.paymentToCustomer;
   if (type === "collection_empty") return "ReturnEmp";
   if (type === "refill") return "Refill";
-  if (type === "company_payment") return "PayCompany";
+  if (type === "company_payment") return PAYMENT_DIRECTION_WORDING.reportShort.companyPayment;
   if (type === "company_buy_iron") return "BuyIron";
   if (type === "cash_adjust") return "WalletAdjust";
   if (type === "adjust") return "InvAdjust";
@@ -474,10 +475,10 @@ export function summarizeEventTypes(events: any[]) {
     init: "Init",
     adjust: "InvAdjust",
     cash_adjust: "WalletAdjust",
-    collection_money: "LatePay",
-    collection_payout: "Payout",
+    collection_money: PAYMENT_DIRECTION_WORDING.reportShort.paymentFromCustomer,
+    collection_payout: PAYMENT_DIRECTION_WORDING.reportShort.paymentToCustomer,
     collection_empty: "ReturnEmp",
-    company_payment: "PayCompany",
+    company_payment: PAYMENT_DIRECTION_WORDING.reportShort.companyPayment,
     company_buy_iron: "BuyIron",
     company_adjustment: "CompAdjust",
   };

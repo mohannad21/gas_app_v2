@@ -126,7 +126,16 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
   }
   if (event.event_type === "collection_money") {
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
-    return amount ? `Collected ${formatMoneyValue(amount, formatMoney)}` : "Collected";
+    return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
+  }
+  if (event.event_type === "collection_payout") {
+    const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
+    return amount ? `Payment to customer ${formatMoneyValue(amount, formatMoney)}` : "Payment to customer";
+  }
+  if (event.event_type === "company_payment") {
+    const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
+    const direction = event.money_direction === "in" ? "Payment from company" : "Payment to company";
+    return amount ? `${direction} ${formatMoneyValue(amount, formatMoney)}` : direction;
   }
   if (event.event_type === "collection_empty") {
     const parts = formatGasSummary(event.return12, event.return48);

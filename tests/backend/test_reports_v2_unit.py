@@ -411,3 +411,75 @@ def test_day_v2_formats_report_times_in_business_timezone_for_entry_flows(client
     assert inventory_adjust["time_display"] == "18:20"
     assert company_payment["time_display"] == "18:21"
     assert "18:18" in refill["context_line"]
+
+
+def test_day_v2_payment_wording_is_direction_aware(client) -> None:
+    day = date(2025, 1, 11)
+    customer_id = create_customer(client, name="Direction Customer")
+
+    resp = client.post(
+        "/collections",
+        json={
+            "customer_id": customer_id,
+            "action_type": "payment",
+            "amount_money": 45600,
+            "happened_at": f"{day.isoformat()}T09:00:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/collections",
+        json={
+            "customer_id": customer_id,
+            "action_type": "payout",
+            "amount_money": 12300,
+            "happened_at": f"{day.isoformat()}T10:00:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/company/payments",
+        json={"amount": 500, "note": "pay company", "happened_at": f"{day.isoformat()}T11:00:00"},
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/company/payments",
+        json={"amount": -200, "note": "receive company", "happened_at": f"{day.isoformat()}T12:00:00"},
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = report.json()["events"]
+
+    customer_payment = next(
+        event for event in events if event["event_type"] == "collection_money" and event["money_amount"] == 45600
+    )
+    customer_payout = next(
+        event for event in events if event["event_type"] == "collection_payout" and event["money_amount"] == 12300
+    )
+    company_payment = next(
+        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "pay company"
+    )
+    company_receive = next(
+        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "receive company"
+    )
+
+    assert customer_payment["label"] == "Payment from customer"
+    assert customer_payment["hero"]["text"] == "Payment from customer"
+    assert customer_payment["hero_text"] == "Payment from customer ₪456"
+
+    assert customer_payout["label"] == "Payment to customer"
+    assert customer_payout["hero"]["text"] == "Payment to customer"
+    assert customer_payout["hero_text"] == "Payment to customer ₪123"
+
+    assert company_payment["label"] == "Payment to company"
+    assert company_payment["hero"]["text"] == "Payment to company"
+    assert company_payment["hero_text"] == "Payment to company ₪5"
+
+    assert company_receive["label"] == "Payment from company"
+    assert company_receive["hero"]["text"] == "Payment from company"
+    assert company_receive["hero_text"] == "Payment from company ₪2"

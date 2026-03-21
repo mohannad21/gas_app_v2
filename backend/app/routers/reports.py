@@ -104,14 +104,14 @@ def _sum_company_cyl_at_day_end(session: Session, day: date, gas_type: str) -> i
 _EVENT_LABELS: dict[str, str] = {
   "refill": "Refill",
   "company_buy_iron": "Buy Iron",
-  "collection_money": "Late Pay",
+  "collection_money": "Payment from customer",
   "collection_empty": "Return Emp",
-  "company_payment": "Pay Company",
+  "company_payment": "Company Payment",
   "expense": "Expense",
   "bank_deposit": "Deposit",
   "adjust": "Inventory Adjust",
   "cash_adjust": "Cash Adjust",
-  "collection_payout": "Customer Payout",
+  "collection_payout": "Payment to customer",
   "customer_adjust": "Customer Adjust",
   "init": "System Init",
 }
@@ -133,6 +133,15 @@ def _customer_identity(customer: Optional[Customer]) -> tuple[Optional[str], Opt
   return (customer.name, customer.note)
 
 
+def _company_payment_label(event: DailyReportV2Event) -> str:
+  delta = _cash_delta(event)
+  if delta < 0:
+    return "Payment to company"
+  if delta > 0:
+    return "Payment from company"
+  return _EVENT_LABELS["company_payment"]
+
+
 def _event_label(event: DailyReportV2Event) -> str:
   if event.event_type == "order":
     if event.order_mode:
@@ -142,6 +151,8 @@ def _event_label(event: DailyReportV2Event) -> str:
     return "Company Settle"
   if event.event_type == "bank_deposit":
     return "Bank to Wallet" if event.transfer_direction == "bank_to_wallet" else "Wallet to Bank"
+  if event.event_type == "company_payment":
+    return _company_payment_label(event)
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
 
 
@@ -539,7 +550,7 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
       return Level3Hero(text=f"Buy Empty{gas}".strip())
     return Level3Hero(text="Order")
   if event.event_type == "collection_money":
-    return Level3Hero(text="Late Pay")
+    return Level3Hero(text="Payment from customer")
   if event.event_type == "collection_empty":
     return Level3Hero(text="Late Return")
   if event.event_type == "refill":
@@ -547,7 +558,7 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
       return Level3Hero(text="Company Settle")
     return Level3Hero(text="Refill")
   if event.event_type == "company_payment":
-    return Level3Hero(text="Pay Company")
+    return Level3Hero(text=_company_payment_label(event))
   if event.event_type == "company_buy_iron":
     return Level3Hero(text="Buy Iron")
   if event.event_type == "company_adjustment":
@@ -563,7 +574,7 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
   if event.event_type == "bank_deposit":
     return Level3Hero(text=_event_label(event))
   if event.event_type == "collection_payout":
-    return Level3Hero(text="Customer Payout")
+    return Level3Hero(text="Payment to customer")
   if event.event_type == "customer_adjust":
     return Level3Hero(text="Customer Adjust")
   if event.event_type == "init":
@@ -592,10 +603,19 @@ def _level3_money(event: DailyReportV2Event) -> Level3Money:
       verb = "paid"
       amount = abs(paid)
   elif event.event_type in {"company_payment", "company_buy_iron"}:
-    paid = _safe_int(event.paid_now or event.total_cost)
-    if paid:
-      verb = "paid"
-      amount = abs(paid)
+    if event.event_type == "company_payment":
+      delta = _cash_delta(event)
+      if delta > 0:
+        verb = "received"
+        amount = abs(delta)
+      elif delta < 0:
+        verb = "paid"
+        amount = abs(delta)
+    else:
+      paid = _safe_int(event.paid_now or event.total_cost)
+      if paid:
+        verb = "paid"
+        amount = abs(paid)
   elif event.event_type == "expense":
     total = _safe_int(event.total_cost)
     if total:
@@ -772,8 +792,8 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
   if event.event_type == "collection_money":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Collected {_format_money_major(amount, money_decimals)}"
-    return "Collected"
+      return f"Payment from customer {_format_money_major(amount, money_decimals)}"
+    return "Payment from customer"
   if event.event_type == "collection_empty":
     parts: list[str] = []
     if event.return12:
@@ -785,14 +805,15 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
     return "Returned empties"
   if event.event_type == "company_payment":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
+    label = _company_payment_label(event)
     if amount:
-      return f"Paid company {_format_money_major(amount, money_decimals)}"
-    return "Paid company"
+      return f"{label} {_format_money_major(amount, money_decimals)}"
+    return label
   if event.event_type == "collection_payout":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Paid customer {_format_money_major(amount, money_decimals)}"
-    return "Paid customer"
+      return f"Payment to customer {_format_money_major(amount, money_decimals)}"
+    return "Payment to customer"
   if event.event_type == "customer_adjust":
     return "Adjusted customer balance"
   if event.event_type == "expense":
