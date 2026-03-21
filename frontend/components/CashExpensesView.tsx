@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildHappenedAt } from "@/lib/date";
@@ -322,7 +323,7 @@ export default function CashExpensesView({
                   statusLine={`Wallet ${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
                   statusIsAlert={walletAfter < 0}
                 >
-                  <View style={styles.standaloneFieldWrap}>
+                  <StandaloneField>
                     <FieldCell
                       title="Amount"
                       value={expenseAmountValue}
@@ -331,7 +332,7 @@ export default function CashExpensesView({
                       onChangeText={setExpenseAmount}
                       steppers={MONEY_STEPPERS}
                     />
-                  </View>
+                  </StandaloneField>
                 </BigBox>
                 <InlineWalletFundingPrompt
                   walletAmount={walletValue}
@@ -352,8 +353,9 @@ export default function CashExpensesView({
                   title={CUSTOMER_WORDING.money}
                   statusLine={formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
                   statusIsAlert={isWalletToBank && transferDisabled}
+                  defaultExpanded
                 >
-                  <View style={styles.standaloneFieldWrap}>
+                  <StandaloneField>
                     <FieldCell
                       title="Amount"
                       value={transferAmountValue}
@@ -362,7 +364,7 @@ export default function CashExpensesView({
                       onChangeText={setTransferAmount}
                       steppers={MONEY_STEPPERS}
                     />
-                  </View>
+                  </StandaloneField>
                 </BigBox>
                 <Text style={styles.label}>Note (optional)</Text>
                 <TextInput

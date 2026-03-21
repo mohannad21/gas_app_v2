@@ -21,6 +21,7 @@ import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
@@ -65,6 +66,10 @@ function getNowTime() {
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
   return `${hour}:${minute}`;
+}
+
+function newInventoryAdjustGroupId() {
+  return `inventory-adjust-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function CalendarModal({
@@ -242,7 +247,8 @@ function InventoryAdjustForm({
     gas_type: "12kg" | "48kg";
     delta_full: number;
     delta_empty: number;
-    reason: string;
+    reason?: string;
+    group_id?: string;
   }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
@@ -308,16 +314,13 @@ function InventoryAdjustForm({
 
   const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
     try {
       if (entry) {
         const delta_full = gasType === "12kg" ? deltaFull12 : deltaFull48;
         const delta_empty = gasType === "12kg" ? deltaEmpty12 : deltaEmpty48;
-        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason });
+        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason || undefined });
       } else {
+        const groupId = newInventoryAdjustGroupId();
         if (deltaFull12 || deltaEmpty12) {
           await onCreate({
             date: adjustDate,
@@ -325,7 +328,8 @@ function InventoryAdjustForm({
             gas_type: "12kg",
             delta_full: deltaFull12,
             delta_empty: deltaEmpty12,
-            reason: trimmedReason,
+            reason: trimmedReason || undefined,
+            group_id: groupId,
           });
         }
         if (deltaFull48 || deltaEmpty48) {
@@ -335,7 +339,8 @@ function InventoryAdjustForm({
             gas_type: "48kg",
             delta_full: deltaFull48,
             delta_empty: deltaEmpty48,
-            reason: trimmedReason,
+            reason: trimmedReason || undefined,
+            group_id: groupId,
           });
         }
       }
@@ -450,10 +455,10 @@ function InventoryAdjustForm({
         </View>
       </BigBox>
 
-      <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
+      <Text style={styles.modalLabel}>Reason (optional: count_correction | shrinkage | damage)</Text>
       <TextInput
         style={styles.modalInput}
-        placeholder="count_correction"
+        placeholder="Optional"
         value={reason}
         onChangeText={setReason}
       />
@@ -540,15 +545,11 @@ function CashAdjustForm({
 
   const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
     try {
       if (entry) {
-        await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason });
+        await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason || undefined });
       } else {
-        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason });
+        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason || undefined });
       }
       if (resetAfter && !entry) {
         resetForm();
@@ -580,7 +581,7 @@ function CashAdjustForm({
         </Pressable>
       </View>
       <BigBox title="Amount" statusLine={cashStatusLine} statusIsAlert={deltaValue < 0}>
-        <View style={styles.entryFieldPairSingle}>
+        <StandaloneField>
           <FieldCell
             title="Amount"
             value={deltaValue}
@@ -589,11 +590,11 @@ function CashAdjustForm({
             onChangeText={setDeltaCash}
             steppers={MONEY_STEPPERS}
           />
-        </View>
+        </StandaloneField>
       </BigBox>
 
-      <Text style={styles.modalLabel}>Reason</Text>
-      <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
+      <Text style={styles.modalLabel}>Reason (optional)</Text>
+      <TextInput style={styles.modalInput} placeholder="Optional" value={reason} onChangeText={setReason} />
       </ScrollView>
       <FooterActions
         onSave={() => save(false)}
@@ -804,13 +805,10 @@ function CompanyPaymentForm({
             : paymentStatusLine
         }
         statusIsAlert={companyBalanceAfter > 0}
+        defaultExpanded
       >
-        <View
-          style={[
-            styles.entryFieldPairSingle,
-            tableDisabled && styles.sectionDisabled,
-            styles.standaloneFieldWrap,
-          ]}
+        <StandaloneField
+          style={tableDisabled ? styles.sectionDisabled : undefined}
           pointerEvents={tableDisabled ? "none" : "auto"}
         >
           <FieldCell
@@ -822,9 +820,9 @@ function CompanyPaymentForm({
             onChangeText={setAmount}
             steppers={MONEY_STEPPERS}
           />
-        </View>
+        </StandaloneField>
         <View style={styles.bigBoxActionRow}>
-          <View style={styles.standaloneFieldWrap}>
+          <StandaloneField>
             <Pressable
               style={[
                 styles.inlineActionButton,
@@ -847,7 +845,7 @@ function CompanyPaymentForm({
                   : CUSTOMER_WORDING.didntPay}
               </Text>
             </Pressable>
-          </View>
+          </StandaloneField>
         </View>
         <InlineWalletFundingPrompt
           walletAmount={walletBalance}
@@ -1001,6 +999,13 @@ export default function InventoryNewScreen() {
   const company48Balance = companyBalances?.company_cyl_48 ?? 0;
   const paymentTabDisabled = !companyBalanceReady || companyBalance === 0;
   const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
+  const closeScreen = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({ pathname: "/(tabs)/add" });
+  }, []);
 
   useEffect(() => {
     setActiveTab(resolveTab(section));
@@ -1077,8 +1082,8 @@ export default function InventoryNewScreen() {
         {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
           <RefillForm
             visible
-            onClose={() => router.back()}
-            onSaved={() => router.back()}
+            onClose={closeScreen}
+            onSaved={closeScreen}
             accessoryId={accessoryId}
             editEntry={activeTab === "refill" ? editRefill : null}
             showHeader={false}
@@ -1100,7 +1105,7 @@ export default function InventoryNewScreen() {
               onCreate={async (payload) => {
                 await createCompanyPayment.mutateAsync(payload);
               }}
-              onSaved={() => router.back()}
+              onSaved={closeScreen}
             />
           ) : activeTab === "cash" ? (
             <CashAdjustForm
@@ -1115,7 +1120,7 @@ export default function InventoryNewScreen() {
               onUpdate={async (id, payload) => {
                 await updateCashAdjust.mutateAsync({ id, payload });
               }}
-              onSaved={() => router.back()}
+              onSaved={closeScreen}
             />
           ) : (
             <InventoryAdjustForm
@@ -1130,7 +1135,7 @@ export default function InventoryNewScreen() {
               onUpdate={async (id, payload) => {
                 await updateInventoryAdjust.mutateAsync({ id, payload });
               }}
-              onSaved={() => router.back()}
+              onSaved={closeScreen}
             />
           )
         )}

@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import { useCompanyBalances, useCreateCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
 
 const MONEY_STEPPERS: FieldStepper[] = [
@@ -264,8 +265,12 @@ export default function CompanyBalanceAdjustScreen() {
             </View>
           </View>
 
-          <BigBox title="Money balance" statusLine={`Current ${currentMoney.toFixed(0)} -> ${nextMoney.toFixed(0)}`}>
-            <View style={styles.standaloneFieldWrap}>
+          <BigBox
+            title="Money balance"
+            statusLine={`Current ${currentMoney.toFixed(0)} -> ${nextMoney.toFixed(0)}`}
+            defaultExpanded
+          >
+            <StandaloneField>
               <FieldCell
                 title="Money"
                 value={nextMoney}
@@ -274,10 +279,14 @@ export default function CompanyBalanceAdjustScreen() {
                 onChangeText={setMoney}
                 steppers={MONEY_STEPPERS}
               />
-            </View>
+            </StandaloneField>
           </BigBox>
 
-          <BigBox title="Cylinder balances" statusLine={`12kg ${current12} -> ${next12}\n48kg ${current48} -> ${next48}`}>
+          <BigBox
+            title="Cylinder balances"
+            statusLine={`12kg ${current12} -> ${next12}\n48kg ${current48} -> ${next48}`}
+            defaultExpanded
+          >
             <View style={styles.fieldPair}>
               <FieldCell
                 title="12kg"

@@ -13,9 +13,29 @@ jest.mock("@expo/vector-icons", () => {
 });
 
 describe("BigBox", () => {
+  it("starts collapsed by default", () => {
+    const { queryByText } = render(
+      <BigBox title="Notes">
+        <Text>Body</Text>
+      </BigBox>
+    );
+
+    expect(queryByText("Body")).toBeNull();
+  });
+
+  it("can start expanded when defaultExpanded is true", () => {
+    const { getByText } = render(
+      <BigBox title="Money" defaultExpanded>
+        <Text>Body</Text>
+      </BigBox>
+    );
+
+    expect(getByText("Body")).toBeTruthy();
+  });
+
   it("shows a success icon for Settled status", () => {
     const { getByText } = render(
-      <BigBox title="Money" statusLine="Settled">
+      <BigBox title="Money" statusLine="Settled" defaultExpanded>
         <Text>Body</Text>
       </BigBox>
     );
@@ -26,7 +46,7 @@ describe("BigBox", () => {
 
   it("does not show the success icon for other statuses", () => {
     const { queryByText } = render(
-      <BigBox title="Money" statusLine="Balance due">
+      <BigBox title="Money" statusLine="Balance due" defaultExpanded>
         <Text>Body</Text>
       </BigBox>
     );

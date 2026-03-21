@@ -814,6 +814,7 @@ export async function createInventoryAdjust(payload: {
   delta_empty: number;
   reason?: string;
   note?: string;
+  group_id?: string;
 }): Promise<InventorySnapshot> {
   const happened_at = buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/inventory/adjust", {
@@ -823,6 +824,7 @@ export async function createInventoryAdjust(payload: {
     delta_empty: payload.delta_empty,
     reason: payload.reason,
     note: payload.note,
+    group_id: payload.group_id,
   });
   return parse(InventorySnapshotSchema, data);
 }

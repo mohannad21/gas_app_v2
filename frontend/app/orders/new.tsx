@@ -32,6 +32,7 @@ import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
@@ -1770,6 +1771,7 @@ ${cylLine}
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={customerPreviewStatusLine ?? cylinderStatusLine}
                   statusIsAlert={customerPreviewStatusLine ? true : cylinderStatusIsAlert}
+                  defaultExpanded
                 >
                   <View style={styles.entryFieldPair}>
                     <Controller
@@ -1863,6 +1865,7 @@ ${cylLine}
                   title={CUSTOMER_WORDING.money}
                   statusLine={customerPreviewStatusLine ?? moneyStatusLine}
                   statusIsAlert={customerPreviewStatusLine ? true : moneyStatusIsAlert}
+                  defaultExpanded
                 >
                   <View
                     style={styles.entryFieldPair}
@@ -1975,8 +1978,9 @@ ${cylLine}
                 title={CUSTOMER_WORDING.money}
                 statusLine={customerPreviewStatusLine ?? paymentModeStatusLine}
                 statusIsAlert={customerPreviewStatusLine ? true : balanceAfter > 0}
+                defaultExpanded
               >
-                <View style={styles.entryFieldPairSingle}>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="paid_amount"
@@ -2008,9 +2012,9 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
                 <View style={styles.bigBoxActionRow}>
-                  <View style={styles.entryFieldPairSingle}>
+                  <StandaloneField>
                     <Pressable
                       style={[
                         styles.inlineActionButton,
@@ -2027,7 +2031,7 @@ ${cylLine}
                           : CUSTOMER_WORDING.didntPay}
                       </Text>
                     </Pressable>
-                  </View>
+                  </StandaloneField>
                 </View>
               </BigBox>
               <FieldError message={errors.paid_amount?.message} />
@@ -2040,8 +2044,9 @@ ${cylLine}
                 title={CUSTOMER_WORDING.cylinders}
                 statusLine={customerPreviewStatusLine ?? returnModeStatusLine}
                 statusIsAlert={customerPreviewStatusLine ? true : cylinderDebtAfterForGas > 0}
+                defaultExpanded
               >
-                <View style={styles.entryFieldPairSingle}>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_received"
@@ -2069,9 +2074,9 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
                 <View style={styles.bigBoxActionRow}>
-                  <View style={styles.entryFieldPairSingle}>
+                  <StandaloneField>
                     <Pressable
                       style={[
                         styles.inlineActionButton,
@@ -2086,7 +2091,7 @@ ${cylLine}
                           : CUSTOMER_WORDING.returnAll}
                       </Text>
                     </Pressable>
-                  </View>
+                  </StandaloneField>
                 </View>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />
@@ -2125,8 +2130,8 @@ ${cylLine}
           {isSellIron ? (
             <>
               {/* Cylinders — user enters how many installed */}
-              <BigBox title={CUSTOMER_WORDING.cylinders}>
-                <View style={styles.entryFieldPairSingle}>
+              <BigBox title={CUSTOMER_WORDING.cylinders} defaultExpanded>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_installed"
@@ -2149,7 +2154,7 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
               </BigBox>
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
@@ -2233,7 +2238,7 @@ ${cylLine}
               </BigBox>
 
               {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
-              <BigBox title={CUSTOMER_WORDING.money}>
+              <BigBox title={CUSTOMER_WORDING.money} defaultExpanded>
                 <View
                   style={styles.entryFieldPair}
                   onLayout={(event) => {
@@ -2281,8 +2286,8 @@ ${cylLine}
           {isBuyIron ? (
             <>
               {/* Cylinders — user enters how many received (buying empty cylinders) */}
-              <BigBox title={CUSTOMER_WORDING.cylinders}>
-                <View style={styles.entryFieldPairSingle}>
+              <BigBox title={CUSTOMER_WORDING.cylinders} defaultExpanded>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_received"
@@ -2305,7 +2310,7 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
               </BigBox>
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
@@ -2349,7 +2354,7 @@ ${cylLine}
               </BigBox>
 
               {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
-              <BigBox title={CUSTOMER_WORDING.money}>
+              <BigBox title={CUSTOMER_WORDING.money} defaultExpanded>
                 <View
                   style={styles.entryFieldPair}
                   onLayout={(event) => {

@@ -83,9 +83,9 @@ def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
     raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
 
 
-def _validate_inventory_adjustment_reason(reason: str, *, delta_full: int, delta_empty: int) -> None:
-  if reason not in {"count_correction", "shrinkage", "damage"}:
-    raise HTTPException(status_code=422, detail="invalid_adjustment_reason")
+def _validate_inventory_adjustment_reason(reason: Optional[str], *, delta_full: int, delta_empty: int) -> None:
+  if not reason:
+    return
   if reason in {"shrinkage", "damage"} and (delta_full > 0 or delta_empty > 0):
     raise HTTPException(status_code=422, detail="adjustment_reason_disallows_positive_delta")
 
@@ -158,13 +158,10 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
     if existing:
       return _snapshot_at(session, existing.happened_at, existing.note)
 
-  _validate_inventory_adjustment_reason(
-    payload.reason,
-    delta_full=payload.delta_full,
-    delta_empty=payload.delta_empty,
-  )
+  _validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
   happened_at = normalize_happened_at(payload.happened_at)
   adj = InventoryAdjustment(
+    group_id=payload.group_id,
     gas_type=payload.gas_type,
     delta_full=payload.delta_full,
     delta_empty=payload.delta_empty,
@@ -197,6 +194,7 @@ def list_inventory_adjustments(
   return [
     InventoryAdjustmentRow(
       id=row.id,
+      group_id=row.group_id,
       gas_type=row.gas_type,
       delta_full=row.delta_full,
       delta_empty=row.delta_empty,
@@ -222,6 +220,7 @@ def update_inventory_adjustment(
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = InventoryAdjustment(
+    group_id=existing.group_id,
     gas_type=existing.gas_type,
     delta_full=existing.delta_full,
     delta_empty=existing.delta_empty,
@@ -248,14 +247,13 @@ def update_inventory_adjustment(
   data = payload.model_dump(exclude_unset=True)
   new_full = data.get("delta_full", existing.delta_full)
   new_empty = data.get("delta_empty", existing.delta_empty)
-  next_reason = data.get("reason") or existing.note
-  if not next_reason:
-    raise HTTPException(status_code=422, detail="adjustment_reason_required")
+  next_reason = data.get("reason") if "reason" in data else existing.note
   _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
   new_note = data.get("note")
   if new_note is None:
     new_note = next_reason
   new_adj = InventoryAdjustment(
+    group_id=existing.group_id,
     gas_type=existing.gas_type,
     delta_full=new_full,
     delta_empty=new_empty,
@@ -270,6 +268,7 @@ def update_inventory_adjustment(
   session.refresh(new_adj)
   return InventoryAdjustmentRow(
     id=new_adj.id,
+    group_id=new_adj.group_id,
     gas_type=new_adj.gas_type,
     delta_full=new_adj.delta_full,
     delta_empty=new_adj.delta_empty,
@@ -288,6 +287,7 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = InventoryAdjustment(
+    group_id=existing.group_id,
     gas_type=existing.gas_type,
     delta_full=existing.delta_full,
     delta_empty=existing.delta_empty,

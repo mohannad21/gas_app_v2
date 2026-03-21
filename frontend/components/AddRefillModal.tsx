@@ -20,6 +20,7 @@ import {
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
@@ -742,6 +743,7 @@ export function RefillForm({
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={undefined}
                   statusIsAlert={false}
+                  defaultExpanded
                 >
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
@@ -771,8 +773,9 @@ export function RefillForm({
                     title="12kg Cylinders"
                     statusLine={return12StatusLine}
                     statusIsAlert={liveCompanyNet12 < 0}
+                    defaultExpanded
                   >
-                    <View style={styles.entryFieldPairSingle}>
+                    <StandaloneField>
                       <FieldCell
                         title="Return"
                         comment={`Empty ${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
@@ -784,10 +787,10 @@ export function RefillForm({
                         error={return12Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
-                    </View>
+                    </StandaloneField>
                     {owedReturn12 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <View style={styles.entryFieldPairSingle}>
+                        <StandaloneField>
                           <Pressable
                             style={[
                               styles.inlineActionButton,
@@ -803,7 +806,7 @@ export function RefillForm({
                               {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
                             </Text>
                           </Pressable>
-                        </View>
+                        </StandaloneField>
                       </View>
                     ) : null}
                     {return12Invalid ? (
@@ -817,8 +820,9 @@ export function RefillForm({
                     title="48kg Cylinders"
                     statusLine={return48StatusLine}
                     statusIsAlert={liveCompanyNet48 < 0}
+                    defaultExpanded
                   >
-                    <View style={styles.entryFieldPairSingle}>
+                    <StandaloneField>
                       <FieldCell
                         title="Return"
                         comment={`Empty ${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
@@ -830,10 +834,10 @@ export function RefillForm({
                         error={return48Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
-                    </View>
+                    </StandaloneField>
                     {owedReturn48 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <View style={styles.entryFieldPairSingle}>
+                        <StandaloneField>
                           <Pressable
                             style={[
                               styles.inlineActionButton,
@@ -849,7 +853,7 @@ export function RefillForm({
                               {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
                             </Text>
                           </Pressable>
-                        </View>
+                        </StandaloneField>
                       </View>
                     ) : null}
                     {return48Invalid ? (
@@ -865,6 +869,7 @@ export function RefillForm({
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={cylinderOnlyStatusLine}
                   statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
+                  defaultExpanded
                 >
                   {/* 12kg row */}
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1175,6 +1180,7 @@ export function RefillForm({
                     title={CUSTOMER_WORDING.money}
                     statusLine={isBuyMode ? undefined : moneyStatusLine}
                     statusIsAlert={!isBuyMode && liveMoneyNet > 0}
+                    defaultExpanded
                   >
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                       <FieldCell

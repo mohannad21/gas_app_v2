@@ -302,6 +302,7 @@ export default function EditOrderScreen() {
         title={CUSTOMER_WORDING.cylinders}
         statusLine={cylinderStatusLine}
         statusIsAlert={cylinderAfter > 0}
+        defaultExpanded
       >
         <View style={styles.entryFieldPair}>
           <Controller
@@ -378,6 +379,7 @@ export default function EditOrderScreen() {
         title={CUSTOMER_WORDING.money}
         statusLine={moneyStatusLine}
         statusIsAlert={moneyAfter > 0}
+        defaultExpanded
       >
         <View style={styles.entryFieldPair}>
           <Controller

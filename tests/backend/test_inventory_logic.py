@@ -135,6 +135,19 @@ def test_adjust_allow_negative_requires_admin(client) -> None:
     resp = client.post("/inventory/adjust", json=payload)
     assert resp.status_code == 200
 
+def test_inventory_adjust_reason_optional(client) -> None:
+    init_inventory(client, date="2025-01-01")
+    payload = {
+        "happened_at": iso_at("2025-01-02", "morning"),
+        "gas_type": "12kg",
+        "delta_full": 1,
+        "delta_empty": 0,
+    }
+    resp = client.post("/inventory/adjust", json=payload)
+    assert resp.status_code == 200
+    snapshot = resp.json()
+    assert snapshot["full12"] == 51
+
 def test_advisory_lock_uses_hashtext_for_postgres() -> None:
     class _Dialect:
         name = "postgresql"
@@ -193,6 +206,49 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
 
     daily = get_daily_row(client, "2025-01-02")
     assert_inventory(daily["inventory_end"], full12=50, empty12=10, full48=20, empty48=5)
+
+def test_inventory_adjust_grouped_report_event_for_multi_row_action(client) -> None:
+    init_inventory(client, date="2025-01-01")
+    happened_at = iso_at("2025-01-02", "morning")
+    group_id = "inventory-adjust-group-1"
+
+    first = client.post("/inventory/adjust", json={
+        "happened_at": happened_at,
+        "group_id": group_id,
+        "gas_type": "12kg",
+        "delta_full": 1,
+        "delta_empty": 0,
+        "reason": "bulk fix",
+    })
+    second = client.post("/inventory/adjust", json={
+        "happened_at": happened_at,
+        "group_id": group_id,
+        "gas_type": "48kg",
+        "delta_full": 0,
+        "delta_empty": 2,
+        "reason": "bulk fix",
+    })
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    adjustments = client.get("/inventory/adjustments", params={"date": "2025-01-02"})
+    assert adjustments.status_code == 200
+    rows = adjustments.json()
+    assert len(rows) == 2
+    assert {row["group_id"] for row in rows} == {group_id}
+
+    report = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    assert report.status_code == 200
+    events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
+    assert len(events) == 1
+
+    event = events[0]
+    assert event["source_id"] == group_id
+    assert event["reason"] == "bulk fix"
+    assert event["inventory_before"]["full12"] == 50
+    assert event["inventory_after"]["full12"] == 51
+    assert event["inventory_before"]["empty48"] == 5
+    assert event["inventory_after"]["empty48"] == 7
 
 def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
     init_inventory(client, date="2025-01-01")

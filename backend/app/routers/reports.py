@@ -2676,6 +2676,7 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
 
   grouped_returns: dict[str, list[CustomerTransaction]] = defaultdict(list)
   grouped_adjustments: dict[str, list[CustomerTransaction]] = defaultdict(list)
+  grouped_inventory_adjustments: dict[str, list[InventoryAdjustment]] = defaultdict(list)
   other_txns: list[CustomerTransaction] = []
   for txn in customer_txns:
     if txn.kind == "return" and txn.group_id:
@@ -2689,6 +2690,12 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
   }
   adjust_group_txn_ids: dict[str, list[str]] = {
     group_id: [t.id for t in txns] for group_id, txns in grouped_adjustments.items()
+  }
+  adjust_group_adjustment_ids: dict[str, list[str]] = {}
+  for adj in adjustments:
+    grouped_inventory_adjustments[adj.group_id or adj.id].append(adj)
+  adjust_group_adjustment_ids = {
+    group_id: [adj.id for adj in rows] for group_id, rows in grouped_inventory_adjustments.items()
   }
 
   for txn in other_txns:
@@ -2821,23 +2828,24 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
     events.append(event)
 
   # inventory adjustments
-  for adj in adjustments:
+  for group_id, rows in grouped_inventory_adjustments.items():
+    base = min(rows, key=stable_row_key)
     event = DailyReportV2Event(
       event_type="adjust",
-      effective_at=adj.happened_at,
-      created_at=adj.created_at,
-      source_id=adj.id,
+      effective_at=base.happened_at,
+      created_at=base.created_at,
+      source_id=group_id,
       label=None,
       label_short=None,
       order_mode=None,
-      gas_type=adj.gas_type,
+      gas_type=base.gas_type if len(rows) == 1 else None,
       customer_id=None,
       customer_name=None,
       customer_description=None,
       system_name=None,
       system_type=None,
       expense_type=None,
-      reason=adj.note,
+      reason=base.note,
       buy12=None,
       return12=None,
       buy48=None,
@@ -3035,6 +3043,11 @@ def get_daily_report_v2(date: str, session: Session = Depends(get_session)) -> D
       rows: list[LedgerEntry] = []
       for txn_id in adjust_group_txn_ids[event.source_id]:
         rows.extend(ledger_by_source.get(("customer_txn", txn_id), []))
+      return rows
+    if event.event_type == "adjust" and event.source_id in adjust_group_adjustment_ids:
+      rows: list[LedgerEntry] = []
+      for adjustment_id in adjust_group_adjustment_ids[event.source_id]:
+        rows.extend(ledger_by_source.get(("inventory_adjust", adjustment_id), []))
       return rows
     source_key = _event_source_key(event)
     return ledger_by_source.get(source_key, []) if source_key else []

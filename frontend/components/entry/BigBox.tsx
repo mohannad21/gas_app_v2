@@ -14,7 +14,7 @@ export default function BigBox({
   title,
   statusLine,
   statusIsAlert = false,
-  defaultExpanded = true,
+  defaultExpanded = false,
   children,
 }: BigBoxProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);

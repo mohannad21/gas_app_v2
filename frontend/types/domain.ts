@@ -193,6 +193,7 @@ export type CompanyBalanceAdjustmentCreateInput = {
 export const InventoryAdjustmentSchema = z
   .object({
     id: z.string(),
+    group_id: z.string().nullish(),
     gas_type: GasTypeSchema,
     delta_full: z.number(),
     delta_empty: z.number(),

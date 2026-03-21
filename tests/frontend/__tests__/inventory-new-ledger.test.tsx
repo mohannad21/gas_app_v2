@@ -7,9 +7,17 @@ const mockUpdateInventoryAdjustmentMutateAsync = jest.fn().mockResolvedValue({})
 const mockCreateCashAdjustmentMutateAsync = jest.fn().mockResolvedValue({});
 const mockUpdateCashAdjustmentMutateAsync = jest.fn().mockResolvedValue({});
 const mockCreateCompanyPaymentMutateAsync = jest.fn().mockResolvedValue({});
+const mockRouterBack = jest.fn();
+const mockRouterReplace = jest.fn();
+const mockRouterCanGoBack = jest.fn().mockReturnValue(false);
 
 jest.mock("expo-router", () => ({
-  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
+  router: {
+    back: mockRouterBack,
+    canGoBack: mockRouterCanGoBack,
+    push: jest.fn(),
+    replace: mockRouterReplace,
+  },
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -77,44 +85,67 @@ describe("InventoryNewScreen ledger adjustments", () => {
     mockCreateCashAdjustmentMutateAsync.mockClear();
     mockUpdateCashAdjustmentMutateAsync.mockClear();
     mockCreateCompanyPaymentMutateAsync.mockClear();
+    mockRouterBack.mockClear();
+    mockRouterReplace.mockClear();
+    mockRouterCanGoBack.mockReset();
+    mockRouterCanGoBack.mockReturnValue(false);
   });
 
-  it("opens inventory adjustment without crashing and saves a valid entry", async () => {
-    const { getAllByText, getByPlaceholderText, getByText } = render(<InventoryNewScreen />);
+  it("opens inventory adjustment without crashing and saves a valid entry without reason", async () => {
+    const { getAllByText, getByText } = render(<InventoryNewScreen />);
 
     expect(getByText("Adjust Inventory")).toBeTruthy();
+    fireEvent.press(getByText("12kg"));
+    fireEvent.press(getByText("48kg"));
     fireEvent.press(getAllByText("+")[0]);
-    fireEvent.changeText(getByPlaceholderText("count_correction"), "count_correction");
+    fireEvent.press(getAllByText("+")[2]);
     fireEvent.press(getByText("Save"));
 
     await waitFor(() => {
-      expect(mockAdjustInventoryMutateAsync).toHaveBeenCalledWith(
+      expect(mockAdjustInventoryMutateAsync).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
           gas_type: "12kg",
           delta_full: 1,
           delta_empty: 0,
-          reason: "count_correction",
+          reason: undefined,
         })
       );
     });
+    expect(mockAdjustInventoryMutateAsync).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        gas_type: "48kg",
+        delta_full: 1,
+        delta_empty: 0,
+        reason: undefined,
+      })
+    );
+    expect(mockAdjustInventoryMutateAsync).toHaveBeenCalledTimes(2);
+    const firstPayload = mockAdjustInventoryMutateAsync.mock.calls[0][0];
+    const secondPayload = mockAdjustInventoryMutateAsync.mock.calls[1][0];
+    expect(firstPayload.group_id).toBeTruthy();
+    expect(firstPayload.group_id).toBe(secondPayload.group_id);
+
   });
 
-  it("opens wallet adjustment without crashing and saves a valid entry", async () => {
+  it("opens wallet adjustment without crashing and saves a valid entry without reason", async () => {
     mockParams = { section: "ledger", tab: "cash" };
-    const { getByPlaceholderText, getByText } = render(<InventoryNewScreen />);
+    const { getByText } = render(<InventoryNewScreen />);
 
     expect(getByText("Adjust Wallet")).toBeTruthy();
+    fireEvent.press(getByText("Amount"));
     fireEvent.press(getByText("+20"));
-    fireEvent.changeText(getByPlaceholderText("Required"), "correction");
     fireEvent.press(getByText("Save"));
 
     await waitFor(() => {
       expect(mockCreateCashAdjustmentMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           delta_cash: 20,
-          reason: "correction",
+          reason: undefined,
         })
       );
     });
+
   });
 });

@@ -544,10 +544,11 @@ class CashAdjustmentRow(SQLModel):
 
 class InventoryAdjustCreate(SQLModel):
   happened_at: Optional[datetime] = None
+  group_id: Optional[str] = None
   gas_type: GasType
   delta_full: int = 0
   delta_empty: int = 0
-  reason: InventoryAdjustReason
+  reason: Optional[str] = None
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -555,12 +556,13 @@ class InventoryAdjustCreate(SQLModel):
 class InventoryAdjustUpdate(SQLModel):
   delta_full: Optional[int] = None
   delta_empty: Optional[int] = None
-  reason: Optional[InventoryAdjustReason] = None
+  reason: Optional[str] = None
   note: Optional[str] = None
 
 
 class InventoryAdjustmentRow(SQLModel):
   id: str
+  group_id: Optional[str] = None
   gas_type: GasType
   delta_full: int
   delta_empty: int

@@ -197,6 +197,7 @@ class InventoryAdjustment(SQLModel, table=True):
   __tablename__ = "inventory_adjustments"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
