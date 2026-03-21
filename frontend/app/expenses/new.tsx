@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   modeTextActive: { color: "#fff" },
   expenseContent: {
     paddingHorizontal: 14,
-    paddingBottom: 140,
+    paddingBottom: 8,
     gap: 12,
   },
   formCard: {
@@ -472,64 +472,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#0f172a",
-  },
-  expenseFooterPage: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    paddingTop: 8,
-    backgroundColor: "transparent",
-  },
-  expenseFooterRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  expenseFooterCancel: {
-    flex: 1,
-    backgroundColor: "#dc2626",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  expenseFooterPrimary: {
-    flex: 1,
-    backgroundColor: "#16a34a",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  expenseFooterSecondary: {
-    flex: 1,
-    borderColor: "#0a7ea4",
-    borderWidth: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    backgroundColor: "#0a7ea4",
-  },
-  expenseFooterCancelText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  expenseFooterPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  expenseFooterSecondaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  expenseFooterDisabled: {
-    opacity: 0.6,
   },
   calendarOverlay: {
     position: "absolute",

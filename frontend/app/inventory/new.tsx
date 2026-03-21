@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
@@ -459,21 +460,12 @@ function InventoryAdjustForm({
         onChangeText={setReason}
       />
       <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
-
+      <FooterActions
+        onCancel={onCancel}
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(!entry)}
+      />
       </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
-            <Text style={styles.footerPrimaryText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -607,21 +599,12 @@ function CashAdjustForm({
 
       <Text style={styles.modalLabel}>Reason</Text>
       <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
-
+      <FooterActions
+        onCancel={onCancel}
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(!entry)}
+      />
       </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
-            <Text style={styles.footerPrimaryText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -895,23 +878,13 @@ function CompanyPaymentForm({
         onChangeText={setNote}
         inputAccessoryViewID={accessoryId}
       />
-
+      <FooterActions
+        onCancel={onCancel}
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(true)}
+        saveDisabled={tableDisabled}
+      />
       </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={[styles.footerSecondary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(true)} disabled={tableDisabled}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={[styles.footerPrimary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(false)} disabled={tableDisabled}>
-            <Text style={styles.footerPrimaryText}>
-              {paymentDirection === "receive" ? "Save Receive" : "Save Pay"}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
       <CalendarModal
         visible={calendarOpen}
         value={payDate}
@@ -1245,7 +1218,7 @@ const styles = StyleSheet.create({
   },
   hubFormContent: {
     gap: 8,
-    paddingBottom: 132,
+    paddingBottom: 8,
   },
   entryFieldPair: {
     flexDirection: "row",
@@ -1660,62 +1633,6 @@ const styles = StyleSheet.create({
   nowButtonText: {
     color: "#fff",
     fontWeight: "700",
-  },
-  stickyFooterPanel: {
-    position: "absolute",
-    left: 8,
-    right: 8,
-    bottom: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  footerCancel: {
-    flex: 1,
-    backgroundColor: "#dc2626",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerCancelText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  footerPrimary: {
-    flex: 1,
-    backgroundColor: "#16a34a",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  footerSecondary: {
-    flex: 1,
-    backgroundColor: "#0a7ea4",
-    borderWidth: 1,
-    borderColor: "#0a7ea4",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerSecondaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  footerButtonDisabled: {
-    opacity: 0.6,
   },
 });
 

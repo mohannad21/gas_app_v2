@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
@@ -374,31 +375,13 @@ export default function CashExpensesView({
             )}
           </View>
         </KeyboardAvoidingView>
+        <FooterActions
+          onCancel={() => onClose?.()}
+          onSave={() => handleSave(false)}
+          onSaveAndAdd={() => handleSave(true)}
+          saveDisabled={!canSaveExpense}
+        />
       </ScrollView>
-      <View style={styles.expenseFooterPage}>
-        <View style={styles.expenseFooterRow}>
-          <Pressable
-            onPress={() => onClose?.()}
-            style={styles.expenseFooterCancel}
-          >
-            <Text style={styles.expenseFooterCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleSave(true)}
-            disabled={!canSaveExpense}
-            style={[styles.expenseFooterSecondary, !canSaveExpense && styles.expenseFooterDisabled]}
-          >
-            <Text style={styles.expenseFooterSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleSave(false)}
-            disabled={!canSaveExpense}
-            style={[styles.expenseFooterPrimary, !canSaveExpense && styles.expenseFooterDisabled]}
-          >
-            <Text style={styles.expenseFooterPrimaryText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
     </View>
   );
 }

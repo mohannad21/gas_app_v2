@@ -30,6 +30,7 @@ import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
@@ -138,8 +139,7 @@ export default function NewOrderScreen() {
   const [amountsLayoutY, setAmountsLayoutY] = useState<number | null>(null);
   const [totalsLayout, setTotalsLayout] = useState<{ y: number; height: number } | null>(null);
   const effectiveKeyboardHeight = avoidKeyboard ? keyboardHeight : 0;
-  const footerHeight = 112;
-  const contentBottomPadding = footerHeight + 32;
+  const contentBottomPadding = 24;
   const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
   const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -1117,13 +1117,7 @@ ${cylLine}
   const handleSavePaymentAndAddAnother = () => runSavePayment(true);
   const handleSaveReturn = () => runSaveReturn(false);
   const handleSaveReturnAndAddAnother = () => runSaveReturn(true);
-  const savePrimaryLabel = isOrderAction
-    ? "Save Order"
-    : isPayment
-      ? paymentDirection === "payout"
-        ? "Save Payout"
-        : "Save Payment"
-      : "Save Return";
+  const savePrimaryLabel = "Save";
   const savePrimaryHandler = isOrderAction
     ? handleSaveOrder
     : isPayment
@@ -2609,44 +2603,22 @@ ${cylLine}
         onSelect={(next) => setCollectionTime(next)}
         onClose={() => setCollectionTimeOpen(false)}
       />
+        {hasCustomer ? (
+          <FooterActions
+            onCancel={cancelHandler}
+            onSave={savePrimaryHandler}
+            onSaveAndAdd={saveSecondaryHandler}
+            saveLabel={savePrimaryLabel}
+            saveDisabled={saveDisabled}
+            saving={saveBusy}
+          />
+        ) : null}
       </ScrollView>
       {hasCustomer ? (
         <>
-      <View style={styles.stickyFooter}>
-            <View style={styles.footerRow}>
-              <Pressable
-                onPress={cancelHandler}
-                style={styles.footerCancel}
-              >
-                <Text style={styles.footerCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={saveSecondaryHandler}
-                disabled={saveDisabled}
-                style={[
-                  styles.footerSecondary,
-                  saveDisabled && styles.footerButtonDisabled,
-                ]}
-              >
-                <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-              </Pressable>
-              <Pressable
-                onPress={savePrimaryHandler}
-                disabled={saveDisabled}
-                style={[
-                  styles.footerPrimary,
-                  saveDisabled && styles.footerButtonDisabled,
-                ]}
-              >
-                <Text style={styles.footerPrimaryText}>
-                  {saveBusy ? "Saving..." : savePrimaryLabel}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
           {showStickyPayment && (
             <View
-              style={[styles.stickyPayment, { bottom: footerHeight + 8 }]}
+              style={[styles.stickyPayment, { bottom: 8 }]}
             >
               <Text style={styles.stickyLabel}>Total / Paid</Text>
               <View style={styles.entryFieldPair}>
@@ -3220,42 +3192,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700" },
-  stickyFooter: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  footerRow: { flexDirection: "row", gap: 8 },
-  footerCancel: {
-    flex: 1,
-    backgroundColor: "#dc2626",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerCancelText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  footerPrimary: {
-    flex: 1,
-    backgroundColor: "#16a34a",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  footerSecondary: {
-    flex: 1,
-    backgroundColor: "#0a7ea4",
-    borderWidth: 1,
-    borderColor: "#0a7ea4",
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  footerSecondaryText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  footerButtonDisabled: { opacity: 0.6 },
   notice: {
     backgroundColor: "#fff7e6",
     borderColor: "#f0c36d",

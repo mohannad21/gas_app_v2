@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
@@ -654,25 +655,13 @@ export function RefillForm({
   };
 
   const footerActions = (
-    <View style={[styles.footerActions, !useCard && styles.footerInline]}>
-      <Pressable style={[styles.cancelBtn, isBuyMode && styles.footerBuyCancelBtn]} onPress={onClose}>
-        <Text style={[styles.cancelText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
-      </Pressable>
-      {!useCard ? (
-        <Pressable style={[styles.secondaryBtn, isBuyMode && styles.footerBuySecondaryBtn, disableSave && styles.disabledBtn]} onPress={() => handleSave(true)} disabled={disableSave}>
-          <Text style={[styles.secondaryText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Save & Add More</Text>
-        </Pressable>
-      ) : null}
-      <Pressable
-        style={[styles.primaryBtn, isBuyMode && styles.footerBuyPrimaryBtn, disableSave && styles.disabledBtn]}
-        onPress={() => handleSave(false)}
-        disabled={disableSave}
-      >
-        <Text style={[styles.primaryText, isBuyMode && styles.footerBuyText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          {createRefill.isPending ? "Saving..." : "Save"}
-        </Text>
-      </Pressable>
-    </View>
+    <FooterActions
+      onCancel={onClose}
+      onSave={() => handleSave(false)}
+      onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
+      saveDisabled={disableSave}
+      saving={createRefill.isPending}
+    />
   );
 
   return (
@@ -1592,14 +1581,11 @@ function InitInventoryModal({
                   />
                 </View>
               </View>
-              <View style={styles.footerActions}>
-                <Pressable style={styles.secondaryBtn} onPress={onClose}>
-                  <Text style={styles.secondaryText}>Cancel</Text>
-                </Pressable>
-                <Pressable style={styles.primaryBtn} onPress={onSave}>
-                  <Text style={styles.primaryText}>Save inventory</Text>
-                </Pressable>
-              </View>
+              <FooterActions
+                onCancel={onClose}
+                onSave={onSave}
+                saveLabel="Save inventory"
+              />
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -1954,77 +1940,6 @@ const styles = StyleSheet.create({
   sectionDisabled: {
     opacity: 0.45,
   },
-  footerActions: {
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 8,
-  },
-  footerInline: {
-    paddingBottom: 8,
-  },
-  footerFloating: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 8,
-  },
-  secondaryBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#0a7ea4",
-    borderWidth: 1,
-    borderColor: "#0a7ea4",
-    alignItems: "center",
-  },
-  secondaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#dc2626",
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  primaryBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#16a34a",
-    alignItems: "center",
-  },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  footerBuyCancelBtn: {
-    backgroundColor: "#dc2626",
-  },
-  footerBuySecondaryBtn: {
-    backgroundColor: "#0a7ea4",
-    borderColor: "#0a7ea4",
-  },
-  footerBuyPrimaryBtn: {
-    backgroundColor: "#16a34a",
-  },
-  footerBuyText: {
-    color: "#fff",
-  },
   moneyHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2101,9 +2016,6 @@ const styles = StyleSheet.create({
   accessoryText: {
     color: "#fff",
     fontWeight: "700",
-  },
-  disabledBtn: {
-    opacity: 0.6,
   },
   calendarOverlay: {
     flex: 1,
