@@ -28,6 +28,7 @@ import {
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
 import {
+  useCreateCompanyBuyIron,
   useCreateRefill,
   useInitInventory,
   useInventoryRefillDetails,
@@ -166,6 +167,7 @@ export function RefillForm({
     { delta: -1, label: "-", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
+  const createCompanyBuyIron = useCreateCompanyBuyIron();
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
   const initInventory = useInitInventory();
@@ -439,29 +441,6 @@ export function RefillForm({
     }
   );
 
-  const balanceAlertLines = useMemo(() => {
-    if (isReturnMode) {
-      return [...company12TransitionLines, ...company48TransitionLines].filter(
-        (line) => line !== "All settled \u2705"
-      );
-    }
-    if (isBuyMode) {
-      return companyMoneyTransitionLines;
-    }
-    return [...companyMoneyTransitionLines, ...company12TransitionLines, ...company48TransitionLines];
-  }, [
-    company12TransitionLines,
-    company48TransitionLines,
-    companyMoneyTransitionLines,
-    isBuyMode,
-    isReturnMode,
-  ]);
-  const cylinderStatusLine = !companyBalanceReady
-    ? "Current company balances unavailable. Preview is disabled until balances load."
-    : balanceAlertLines.length > 0
-      ? balanceAlertLines.join("\n")
-      : CUSTOMER_WORDING.cylinderSettled;
-
   // Cylinder-only status: excludes money lines so they don't bleed into Cylinder BigBox
   const cylinderOnlyLines = [...company12TransitionLines, ...company48TransitionLines].filter(
     (line) => line !== "All settled \u2705"
@@ -470,6 +449,18 @@ export function RefillForm({
     ? "Current company balances unavailable."
     : cylinderOnlyLines.length > 0
       ? cylinderOnlyLines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
+  const return12Lines = company12TransitionLines.filter((line) => line !== "All settled \u2705");
+  const return48Lines = company48TransitionLines.filter((line) => line !== "All settled \u2705");
+  const return12StatusLine = !companyBalanceReady
+    ? "Current company balances unavailable."
+    : return12Lines.length > 0
+      ? return12Lines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
+  const return48StatusLine = !companyBalanceReady
+    ? "Current company balances unavailable."
+    : return48Lines.length > 0
+      ? return48Lines.join("\n")
       : CUSTOMER_WORDING.cylinderSettled;
   const moneyStatusLine = !companyBalanceReady
     ? "Current company balances unavailable. Preview is disabled until balances load."
@@ -505,6 +496,7 @@ export function RefillForm({
     !base ||
     return12Invalid ||
     return48Invalid ||
+    createCompanyBuyIron.isPending ||
     createRefill.isPending ||
     updateRefill.isPending ||
     initInventory.isPending;
@@ -547,6 +539,16 @@ export function RefillForm({
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
           debt_cylinders_48: liveCompanyNet48,
+        });
+      } else if (isBuyMode) {
+        await createCompanyBuyIron.mutateAsync({
+          date,
+          time,
+          new12: payloadBuy12,
+          new48: payloadBuy48,
+          total_cost: totalCost,
+          paid_now: paidNowValue,
+          note: notes.trim() ? notes.trim() : undefined,
         });
       } else {
         await createRefill.mutateAsync({
@@ -660,11 +662,10 @@ export function RefillForm({
 
   const footerActions = (
     <FooterActions
-      onCancel={onClose}
       onSave={() => handleSave(false)}
       onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
       saveDisabled={disableSave}
-      saving={createRefill.isPending}
+      saving={isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
     />
   );
 
@@ -768,7 +769,7 @@ export function RefillForm({
                 <>
                   <BigBox
                     title="12kg Cylinders"
-                    statusLine={cylinderStatusLine}
+                    statusLine={return12StatusLine}
                     statusIsAlert={liveCompanyNet12 < 0}
                   >
                     <View style={styles.entryFieldPairSingle}>
@@ -814,7 +815,7 @@ export function RefillForm({
 
                   <BigBox
                     title="48kg Cylinders"
-                    statusLine={cylinderStatusLine}
+                    statusLine={return48StatusLine}
                     statusIsAlert={liveCompanyNet48 < 0}
                   >
                     <View style={styles.entryFieldPairSingle}>

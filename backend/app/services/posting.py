@@ -334,7 +334,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
         LedgerLine(
           account=ACCOUNT_INV,
           gas_type="12kg",
-          state="empty",
+          state="full",
           unit=UNIT_COUNT,
           amount=txn.new12,
         )
@@ -344,7 +344,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
         LedgerLine(
           account=ACCOUNT_INV,
           gas_type="48kg",
-          state="empty",
+          state="full",
           unit=UNIT_COUNT,
           amount=txn.new48,
         )

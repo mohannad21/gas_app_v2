@@ -15,6 +15,9 @@ import {
   DailyReportV2DaySchema,
   CompanyBalances,
   CompanyBalancesSchema,
+  CompanyBuyIron,
+  CompanyBuyIronCreateInput,
+  CompanyBuyIronSchema,
   CompanyPayment,
   CompanyPaymentCreateInput,
   CompanyPaymentSchema,
@@ -229,6 +232,27 @@ export async function createCompanyPayment(payload: CompanyPaymentCreateInput): 
   });
   const parsed = parse(CompanyPaymentSchema, data);
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
+}
+
+export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): Promise<CompanyBuyIron> {
+  const happened_at =
+    payload.happened_at ??
+    buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
+  const { data } = await api.post("/company/buy_iron", {
+    happened_at,
+    new12: payload.new12,
+    new48: payload.new48,
+    total_cost: toMinorUnits(payload.total_cost),
+    paid_now: toMinorUnits(payload.paid_now),
+    note: payload.note,
+    request_id: payload.request_id,
+  });
+  const parsed = parse(CompanyBuyIronSchema, data);
+  return {
+    ...parsed,
+    total_cost: fromMinorUnits(parsed.total_cost),
+    paid_now: fromMinorUnits(parsed.paid_now),
+  };
 }
 
 export async function initializeSystem(payload: SystemInitializeInput): Promise<SystemSettings> {

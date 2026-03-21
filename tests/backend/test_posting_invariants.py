@@ -421,6 +421,7 @@ def test_company_buy_iron_invariants(client) -> None:
     events = _get_day_events(client, day=day)
     buy_event = next(event for event in events if event["event_type"] == "company_buy_iron")
     assert buy_event["cash_after"] - buy_event["cash_before"] == -60
-    assert buy_event["inventory_after"]["empty12"] == buy_event["inventory_before"]["empty12"] + 3
+    assert buy_event["inventory_after"]["full12"] == buy_event["inventory_before"]["full12"] + 3
+    assert buy_event["inventory_after"]["empty12"] == buy_event["inventory_before"]["empty12"]
     assert buy_event["company_after"] - buy_event["company_before"] == 30
     assert buy_event["company_12kg_after"] - buy_event["company_12kg_before"] == 0
