@@ -39,6 +39,7 @@ from app.schemas import (
   ReportInventoryTotals,
 )
 from app.services.ledger import boundary_from_entries, sum_ledger
+from app.utils.time import business_local_datetime_from_utc
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -720,7 +721,7 @@ def _event_kind(event: DailyReportV2Event) -> str:
 
 
 def _time_display(value: datetime) -> str:
-  return value.strftime("%H:%M")
+  return business_local_datetime_from_utc(value).strftime("%H:%M")
 
 
 def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:

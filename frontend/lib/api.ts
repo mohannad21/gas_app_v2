@@ -250,9 +250,13 @@ export async function createCompanyBalanceAdjustment(
 }
 
 export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {
+  const happened_at =
+    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/company/payments", {
-    ...payload,
     amount: toMinorUnits(payload.amount),
+    note: payload.note,
+    request_id: payload.request_id,
+    happened_at,
   });
   const parsed = parse(CompanyPaymentSchema, data);
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
@@ -808,7 +812,7 @@ export async function createInventoryAdjust(payload: {
   gas_type: "12kg" | "48kg";
   delta_full: number;
   delta_empty: number;
-  reason: string;
+  reason?: string;
   note?: string;
 }): Promise<InventorySnapshot> {
   const happened_at = buildHappenedAt({ date: payload.date, time: payload.time });

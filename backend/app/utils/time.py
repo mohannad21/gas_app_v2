@@ -13,6 +13,54 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _last_sunday(year: int, month: int) -> date:
+  if month == 12:
+    last_day = date(year + 1, 1, 1) - timedelta(days=1)
+  else:
+    last_day = date(year, month + 1, 1) - timedelta(days=1)
+  return last_day - timedelta(days=(last_day.weekday() + 1) % 7)
+
+
+class _EuropeBerlinFallbackTZ(tzinfo):
+  _std_offset = timedelta(hours=1)
+  _dst_delta = timedelta(hours=1)
+
+  def _dst_start_local(self, year: int) -> datetime:
+    sunday = _last_sunday(year, 3)
+    return datetime(year, 3, sunday.day, 2, 0)
+
+  def _dst_end_local(self, year: int) -> datetime:
+    sunday = _last_sunday(year, 10)
+    return datetime(year, 10, sunday.day, 3, 0)
+
+  def _dst_window_utc(self, year: int) -> tuple[datetime, datetime]:
+    start = datetime(year, 3, _last_sunday(year, 3).day, 1, 0, tzinfo=timezone.utc)
+    end = datetime(year, 10, _last_sunday(year, 10).day, 1, 0, tzinfo=timezone.utc)
+    return start, end
+
+  def utcoffset(self, dt: datetime | None) -> timedelta:
+    return self._std_offset + self.dst(dt)
+
+  def dst(self, dt: datetime | None) -> timedelta:
+    if dt is None:
+      return timedelta(0)
+    naive = dt.replace(tzinfo=None)
+    if self._dst_start_local(dt.year) <= naive < self._dst_end_local(dt.year):
+      return self._dst_delta
+    return timedelta(0)
+
+  def tzname(self, dt: datetime | None) -> str:
+    return "CEST" if self.dst(dt) else "CET"
+
+  def fromutc(self, dt: datetime) -> datetime:
+    if dt.tzinfo is not self:
+      raise ValueError("fromutc: dt.tzinfo is not self")
+    utc_dt = dt.replace(tzinfo=timezone.utc)
+    start, end = self._dst_window_utc(utc_dt.year)
+    offset = self._std_offset + (self._dst_delta if start <= utc_dt < end else timedelta(0))
+    return (utc_dt + offset).replace(tzinfo=self)
+
+
 def to_utc_naive(dt: datetime) -> datetime:
   """
   Normalize any datetime to naive UTC to avoid offset-naive vs offset-aware comparisons.
@@ -34,6 +82,9 @@ def _business_tz() -> tzinfo:
   try:
     return ZoneInfo(key)
   except ZoneInfoNotFoundError:
+    if key == "Europe/Berlin":
+      logger.warning("business_tz_fallback requested=%s effective=custom_europe_berlin", key)
+      return _EuropeBerlinFallbackTZ()
     logger.warning("business_tz_fallback requested=%s effective=UTC", key)
     return timezone.utc
 
