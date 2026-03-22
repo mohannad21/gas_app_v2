@@ -143,10 +143,18 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
     return parts ? `Returned ${parts} empties` : "Returned empties";
   }
   if (event.event_type === "expense") {
-    return event.expense_type ?? "Expense";
+    return null;
   }
   if (event.event_type === "cash_adjust") {
-    return "Wallet Adjustment";
+    return event.reason ?? null;
+  }
+  if (event.event_type === "adjust") {
+    const gas = event.gas_type ? `${event.gas_type}` : null;
+    const note = event.reason ?? null;
+    if (gas && note) return `${gas} · ${note}`;
+    if (gas) return gas;
+    if (note) return note;
+    return null;
   }
   if (event.event_type === "bank_deposit") {
     return event.label ?? event.display_name ?? "Wallet Transfer";
@@ -192,10 +200,10 @@ function getActivityIcon(
   moneyDirection: string | null | undefined
 ): IoniconName {
   if (eventType === "order") {
-    if (orderMode === "replacement") return "swap-vertical-outline";
+    if (orderMode === "replacement") return "swap-horizontal-outline";
     if (orderMode === "sell_iron") return "arrow-up-circle-outline";
     if (orderMode === "buy_iron") return "arrow-down-circle-outline";
-    return "swap-vertical-outline";
+    return "swap-horizontal-outline";
   }
   if (eventType === "collection_money") return "cash-outline";
   if (eventType === "collection_payout") return "cash-outline";
@@ -236,7 +244,11 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const { name: headerName, desc: headerDescFromName } = splitDisplayName(headerNameRaw);
   const headerDesc = headerDescFromName || headerDescBase || "";
 
-  const heroAction = buildHeroAction(event, fmtMoney) ?? label;
+  const heroActionBase = buildHeroAction(event, fmtMoney);
+  const heroAction =
+    heroActionBase && heroActionBase.trim() && heroActionBase !== headerName && heroActionBase !== label
+      ? heroActionBase
+      : null;
   const moneyAmount = typeof event?.money_delta === "number" ? event.money_delta : Number(event?.money_amount ?? 0);
   const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
   const moneyText =
@@ -265,27 +277,14 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
+        <View style={[styles.dot, { backgroundColor: dotColor }]} />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
-        {event.context_line || (showStatus && !showNotes) ? (
-          <View style={styles.contextRow}>
-            {event.context_line ? (
-              <Text style={styles.contextText} numberOfLines={1}>
-                {event.context_line}
-              </Text>
-            ) : (
-              <View style={styles.contextSpacer} />
-            )}
-            {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
-          </View>
-        ) : null}
-
-        <View style={styles.headerRow}>
-          <Text style={styles.headerName} numberOfLines={1}>
-            {headerName}
-            {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
+        <View style={styles.topRow}>
+          <Ionicons name={activityIcon} size={20} color={dotColor} style={styles.icon} />
+          <Text style={styles.actionText} numberOfLines={1}>
+            {event.context_line ?? label}
           </Text>
           {moneyText ? (
             <Text
@@ -300,15 +299,19 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
           ) : null}
         </View>
 
-        <Text style={styles.heroText} numberOfLines={1}>
-          {heroAction}
+        <Text style={styles.headerName} numberOfLines={1}>
+          {headerName}
+          {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
         </Text>
 
-        {false ? (
-          <View style={styles.contextRow}>
-            <View style={styles.contextSpacer} />
-          </View>
+
+        {heroAction ? (
+          <Text style={styles.heroText} numberOfLines={1}>
+            {heroAction}
+          </Text>
         ) : null}
+
+        {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
 
         {showNotes ? (
           <View style={styles.statusRow}>
@@ -362,27 +365,37 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 28,
+    width: 12,
     alignItems: "center",
   },
   rail: {
     flex: 1,
     width: 2,
     backgroundColor: Level3Tokens.colors.border,
-    marginTop: 4,
+    marginTop: 5,
   },
   content: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
-  icon: {
-    marginBottom: 0,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
   },
-  headerRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
+  },
+  icon: {
+    flexShrink: 0,
+  },
+  actionText: {
+    flex: 1,
+    fontSize: FontSizes.md,
+    color: Level3Tokens.colors.textMuted,
+    fontFamily: FontFamilies.regular,
   },
   headerName: {
     flex: 1,
