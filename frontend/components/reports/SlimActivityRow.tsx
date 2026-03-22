@@ -277,12 +277,11 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
         <View style={styles.topRow}>
-          <Ionicons name={activityIcon} size={20} color={dotColor} style={styles.icon} />
           <Text style={styles.actionText} numberOfLines={1}>
             {event.context_line ?? label}
           </Text>
@@ -365,23 +364,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 12,
+    width: 28,
     alignItems: "center",
   },
   rail: {
     flex: 1,
     width: 2,
     backgroundColor: Level3Tokens.colors.border,
-    marginTop: 5,
+    marginTop: 4,
   },
   content: {
     flex: 1,
-    gap: 3,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
+    gap: 4,
   },
   topRow: {
     flexDirection: "row",
