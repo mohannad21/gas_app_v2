@@ -233,7 +233,9 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const isCompany = counterparty?.type === "company";
 
   const headerNameRaw = event.display_name
-    ? event.display_name
+    ? event.event_type === "expense" && event.expense_type
+      ? event.expense_type
+      : event.display_name
     : isCustomer
     ? event.customer_name ?? counterparty?.display_name ?? "Customer"
     : isCompany

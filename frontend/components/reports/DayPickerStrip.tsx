@@ -63,8 +63,12 @@ const DayCard = memo(function DayCard({
   const netColor = selected ? "#fff" : net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
 
   return (
-    <Pressable onPress={() => onSelect(item.date)} style={[styles.card, selected && styles.cardSelected]}>
-      <View style={styles.topRow}>
+    <Pressable
+      onPress={() => onSelect(item.date)}
+      style={[styles.card, selected && styles.cardSelected]}
+      testID={`day-card-${item.date}`}
+    >
+      <View style={styles.topRow} testID={`day-card-top-${item.date}`}>
         <View style={styles.cylRow}>
           <CylIcon variant="12kg" size={14} color={cylColor} />
           <Text style={[styles.cylCount, { color: cylColor }]}>{item.sold_12kg ?? 0}</Text>
@@ -72,12 +76,12 @@ const DayCard = memo(function DayCard({
         <Text style={[styles.netText, { color: netColor }]}>{netStr}</Text>
       </View>
 
-      <View style={styles.centerBlock}>
+      <View style={styles.centerBlock} testID={`day-card-center-${item.date}`}>
         <Text style={[styles.dayName, selected && styles.textWhite]}>{dayName}</Text>
         <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
       </View>
 
-      <View style={styles.bottomRow}>
+      <View style={styles.bottomRow} testID={`day-card-bottom-${item.date}`}>
         <View style={styles.cylRow}>
           <CylIcon variant="48kg" size={14} color={cylColor} />
           <Text style={[styles.cylCount, { color: cylColor }]}>{item.sold_48kg ?? 0}</Text>
@@ -109,14 +113,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   card: {
-    width: 80,
+    width: 84,
+    minHeight: 110,
     borderRadius: 14,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 4,
+    paddingVertical: 10,
+    justifyContent: "space-between",
+    gap: 6,
   },
   cardSelected: {
     backgroundColor: "#0a7ea4",
@@ -126,15 +132,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    minHeight: 20,
   },
   bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    minHeight: 20,
   },
   centerBlock: {
     alignItems: "center",
-    paddingVertical: 2,
+    justifyContent: "center",
+    flex: 1,
+    paddingVertical: 4,
   },
   cylRow: {
     flexDirection: "row",
@@ -166,7 +176,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   truckPlaceholder: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
   },
 });
