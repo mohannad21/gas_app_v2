@@ -11,11 +11,11 @@ function extractErrorMessage(err: AxiosError) {
   return "Unknown error";
 }
 
-export function useBankDeposits(date: string, options?: { enabled?: boolean }) {
+export function useBankDeposits(date?: string, options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   return useQuery<BankDeposit[]>({
-    queryKey: ["bank_deposits", date],
-    enabled: enabled && !!date,
+    queryKey: ["bank_deposits", date ?? "all"],
+    enabled,
     queryFn: () => listBankDeposits(date),
   });
 }
@@ -32,6 +32,7 @@ export function useCreateBankDeposit() {
       const directionLabel =
         variables.direction === "bank_to_wallet" ? "Bank to Wallet saved" : "Wallet to Bank saved";
       showToast(directionLabel);
+      queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });

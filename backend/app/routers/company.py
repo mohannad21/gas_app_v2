@@ -188,6 +188,25 @@ def create_company_payment(
   )
 
 
+@router.get("/payments", response_model=list[CompanyPaymentOut])
+def list_company_payments(session: Session = Depends(get_session)) -> list[CompanyPaymentOut]:
+  rows = session.exec(
+    select(CompanyTransaction)
+    .where(CompanyTransaction.kind == "payment")
+    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    .order_by(CompanyTransaction.happened_at.desc())
+  ).all()
+  return [
+    CompanyPaymentOut(
+      id=row.id,
+      happened_at=row.happened_at,
+      amount=row.paid,
+      note=row.note,
+    )
+    for row in rows
+  ]
+
+
 @router.post("/buy_iron", response_model=CompanyBuyIronOut, status_code=status.HTTP_201_CREATED)
 def create_company_buy_iron(
   payload: CompanyBuyIronCreate, session: Session = Depends(get_session)

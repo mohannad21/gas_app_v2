@@ -179,15 +179,17 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
 
 @router.get("/adjustments", response_model=list[InventoryAdjustmentRow])
 def list_inventory_adjustments(
-  date: str,
+  date: Optional[str] = None,
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[InventoryAdjustmentRow]:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  stmt = select(InventoryAdjustment).where(InventoryAdjustment.day == day)
+  stmt = select(InventoryAdjustment)
+  if date:
+    try:
+      day = datetime.fromisoformat(date).date()
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid date format") from exc
+    stmt = stmt.where(InventoryAdjustment.day == day)
   if not include_deleted:
     stmt = stmt.where(InventoryAdjustment.is_reversed == False)  # noqa: E712
   rows = session.exec(stmt.order_by(InventoryAdjustment.happened_at.desc())).all()

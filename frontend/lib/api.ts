@@ -262,6 +262,14 @@ export async function createCompanyPayment(payload: CompanyPaymentCreateInput): 
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
 }
 
+export async function listCompanyPayments(): Promise<CompanyPayment[]> {
+  const { data } = await api.get("/company/payments");
+  return parseArray(CompanyPaymentSchema, data).map((row) => ({
+    ...row,
+    amount: fromMinorUnits(row.amount),
+  }));
+}
+
 export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): Promise<CompanyBuyIron> {
   const happened_at =
     payload.happened_at ??
@@ -355,7 +363,7 @@ export async function updateSystemType(
 
 // Inventory adjustments
 export async function listInventoryAdjustments(
-  date: string,
+  date?: string,
   includeDeleted?: boolean
 ): Promise<InventoryAdjustment[]> {
   const { data } = await api.get("/inventory/adjustments", {
@@ -378,7 +386,7 @@ export async function deleteInventoryAdjustment(deltaId: string): Promise<void> 
 
 // Cash adjustments
 export async function listCashAdjustments(
-  date: string,
+  date?: string,
   includeDeleted?: boolean
 ): Promise<CashAdjustment[]> {
   const { data } = await api.get("/cash/adjustments", {
@@ -899,8 +907,8 @@ export async function deleteExpense(expenseId: string): Promise<void> {
 }
 
 // Bank deposits
-export async function listBankDeposits(date: string): Promise<BankDeposit[]> {
-  const { data } = await api.get("/cash/bank_deposits", { params: { date } });
+export async function listBankDeposits(date?: string): Promise<BankDeposit[]> {
+  const { data } = await api.get("/cash/bank_deposits", { params: date ? { date } : undefined });
   return parseArray(BankDepositSchema, data).map((d) => ({
     ...d,
     amount: fromMinorUnits(d.amount),

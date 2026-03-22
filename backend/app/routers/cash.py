@@ -18,15 +18,17 @@ def _transfer_direction(expense: Expense) -> str:
 
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
 def list_cash_adjustments(
-  date: str,
+  date: str | None = None,
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[CashAdjustmentRow]:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  stmt = select(CashAdjustment).where(CashAdjustment.day == day)
+  stmt = select(CashAdjustment)
+  if date:
+    try:
+      day = datetime.fromisoformat(date).date()
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid date format") from exc
+    stmt = stmt.where(CashAdjustment.day == day)
   if not include_deleted:
     stmt = stmt.where(CashAdjustment.is_reversed == False)  # noqa: E712
   rows = session.exec(stmt.order_by(CashAdjustment.happened_at.desc())).all()
@@ -176,20 +178,21 @@ def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_sessio
 
 @router.get("/bank_deposits", response_model=list[BankDepositOut])
 def list_bank_deposits(
-  date: str,
+  date: str | None = None,
   session: Session = Depends(get_session),
 ) -> list[BankDepositOut]:
-  try:
-    day = datetime.fromisoformat(date).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  rows = session.exec(
+  stmt = (
     select(Expense)
-    .where(Expense.day == day)
     .where(Expense.kind == "deposit")
     .where(Expense.is_reversed == False)  # noqa: E712
-    .order_by(Expense.happened_at.desc())
-  ).all()
+  )
+  if date:
+    try:
+      day = datetime.fromisoformat(date).date()
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid date format") from exc
+    stmt = stmt.where(Expense.day == day)
+  rows = session.exec(stmt.order_by(Expense.happened_at.desc())).all()
   return [
     BankDepositOut(
       id=row.id,

@@ -104,7 +104,6 @@ export function useInventoryAdjustments(date?: string, includeDeleted?: boolean)
   return useQuery({
     queryKey: ["inventory", "adjustments", date, includeDeleted ?? false],
     queryFn: () => listInventoryAdjustments(date as string, includeDeleted),
-    enabled: !!date,
   });
 }
 

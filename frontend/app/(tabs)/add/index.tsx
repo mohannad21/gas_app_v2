@@ -11,19 +11,21 @@ import {
 } from "@/components/customers/customerListFilters";
 import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
-import { useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useCompanyPayments } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import { useAllCustomerAdjustments, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
 import {
+  useInventoryAdjustments,
   useDeleteInventoryAdjustment,
   useDeleteRefill,
+  useInventoryRefills,
 } from "@/hooks/useInventory";
-import { InventoryActivityItem, useInventoryActivity } from "@/hooks/useInventoryActivity";
+import { InventoryActivityItem } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
-import { useDailyReportDayV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeLocale, toDateKey } from "@/lib/date";
@@ -35,7 +37,7 @@ import {
   PriceMatrixSection,
   gasTypes,
 } from "@/components/PriceMatrix";
-import { BankDeposit, CashAdjustment, CollectionEvent, CustomerAdjustment, DailyReportV2Event, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
+import { BankDeposit, CashAdjustment, CollectionEvent, CompanyPayment, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
 
 type AddMode =
   | "customer_activities"
@@ -112,7 +114,7 @@ type CompanyActivityListItem =
       kind: "company_payment";
       sortAt: string;
       is_deleted: false;
-      data: DailyReportV2Event;
+      data: CompanyPayment;
     };
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
@@ -198,10 +200,12 @@ const formatDateTime = (value?: string) => {
     return `${year}-${month}-${day}`;
   };
   const todayDate = getLocalDateString();
-  const inventoryActivity = useInventoryActivity(todayDate);
-  const dayReportQuery = useDailyReportDayV2(todayDate);
+  const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, true);
+  const allCashAdjustmentsQuery = useCashAdjustments(undefined, true);
+  const companyRefillsQuery = useInventoryRefills(true);
+  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities });
   const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
-  const bankDepositsQuery = useBankDeposits(todayDate, { enabled: isExpenses });
+  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses });
   const deleteBankDeposit = useDeleteBankDeposit();
 
 
@@ -274,50 +278,56 @@ const formatDateTime = (value?: string) => {
       (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
     );
   }, [collections, customerAdjustmentsQuery.data, customersById, orders, toSafeTime]);
-  const filteredInventoryItems = useMemo(
-    () =>
-      inventoryActivity.items.filter((entry) => {
-        if (entry.kind !== "refill") return true;
-        const data = entry.data;
-        return data.buy12 || data.buy48 || data.return12 || data.return48;
-      }),
-    [inventoryActivity.items]
-  );
   const companyActivityItems = useMemo<CompanyActivityListItem[]>(() => {
-    const refillItems = filteredInventoryItems
-      .filter((entry): entry is Extract<InventoryActivityItem, { kind: "refill" }> => entry.kind === "refill")
-      .map((entry) => ({
-        id: `refill-${entry.data.refill_id}`,
+    const refillItems = (companyRefillsQuery.data ?? [])
+      .filter((refill) => {
+        const totalBuys =
+          Number(refill.buy12 ?? 0) +
+          Number(refill.buy48 ?? 0) +
+          Number(refill.new12 ?? 0) +
+          Number(refill.new48 ?? 0);
+        const totalReturns = Number(refill.return12 ?? 0) + Number(refill.return48 ?? 0);
+        return totalBuys > 0 || totalReturns > 0;
+      })
+      .map((refill) => ({
+        id: `refill-${refill.refill_id}`,
         kind: "refill" as const,
-        sortAt: entry.created_at,
-        is_deleted: entry.is_deleted,
-        data: entry.data,
+        sortAt: refill.effective_at,
+        is_deleted: Boolean(refill.is_deleted),
+        data: refill,
       }));
-    const companyPaymentItems = (dayReportQuery.data?.events ?? [])
-      .filter((event) => event.event_type === "company_payment")
-      .map((event) => ({
-        id: `company-payment-${event.source_id ?? event.effective_at}`,
+    const companyPaymentItems = (companyPaymentsQuery.data ?? []).map((payment) => ({
+        id: `company-payment-${payment.id}`,
         kind: "company_payment" as const,
-        sortAt: event.effective_at,
+        sortAt: payment.happened_at,
         is_deleted: false as const,
-        data: event,
+        data: payment,
       }));
 
     return [...refillItems, ...companyPaymentItems].sort(
       (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
     );
-  }, [dayReportQuery.data?.events, filteredInventoryItems, toSafeTime]);
+  }, [companyPaymentsQuery.data, companyRefillsQuery.data, toSafeTime]);
   const ledgerAdjustmentItems = useMemo(
-    () =>
-      filteredInventoryItems.filter(
-        (
-          entry
-        ): entry is Extract<
-          InventoryActivityItem,
-          { kind: "inventory_adjustment" } | { kind: "cash_adjustment" }
-        > => entry.kind === "inventory_adjustment" || entry.kind === "cash_adjustment"
-      ),
-    [filteredInventoryItems]
+    () => {
+      const inventoryItems = (allInventoryAdjustmentsQuery.data ?? []).map((adjustment) => ({
+        kind: "inventory_adjustment" as const,
+        created_at: adjustment.effective_at,
+        is_deleted: Boolean(adjustment.is_deleted),
+        data: adjustment,
+      }));
+      const cashItems = (allCashAdjustmentsQuery.data ?? []).map((adjustment) => ({
+        kind: "cash_adjustment" as const,
+        created_at: adjustment.effective_at,
+        is_deleted: Boolean(adjustment.is_deleted),
+        data: adjustment,
+      }));
+
+      return [...inventoryItems, ...cashItems].sort(
+        (left, right) => toSafeTime(right.created_at) - toSafeTime(left.created_at)
+      );
+    },
+    [allCashAdjustmentsQuery.data, allInventoryAdjustmentsQuery.data, toSafeTime]
   );
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
@@ -364,7 +374,11 @@ const formatDateTime = (value?: string) => {
           return companyActivityFilter === "company_payment";
         }
         const refill = entry.data;
-        const totalBuys = Number(refill.buy12 ?? 0) + Number(refill.buy48 ?? 0);
+        const totalBuys =
+          Number(refill.buy12 ?? 0) +
+          Number(refill.buy48 ?? 0) +
+          Number(refill.new12 ?? 0) +
+          Number(refill.new48 ?? 0);
         const totalReturns = Number(refill.return12 ?? 0) + Number(refill.return48 ?? 0);
         if (companyActivityFilter === "buy_full") {
           return totalBuys > 0 && totalReturns === 0;
@@ -564,16 +578,22 @@ const formatDateTime = (value?: string) => {
   useFocusEffect(
     useCallback(() => {
       if (isCompanyActivities || isLedgerAdjustments) {
-        inventoryActivity.refillsQuery.refetch();
-        inventoryActivity.inventoryAdjustmentsQuery.refetch();
-        inventoryActivity.cashAdjustmentsQuery.refetch();
+        if (isCompanyActivities) {
+          companyRefillsQuery.refetch();
+          companyPaymentsQuery.refetch();
+        }
+        if (isLedgerAdjustments) {
+          allInventoryAdjustmentsQuery.refetch();
+          allCashAdjustmentsQuery.refetch();
+        }
       }
     }, [
+      allCashAdjustmentsQuery,
+      allInventoryAdjustmentsQuery,
+      companyPaymentsQuery,
+      companyRefillsQuery,
       isCompanyActivities,
       isLedgerAdjustments,
-      inventoryActivity.refillsQuery,
-      inventoryActivity.inventoryAdjustmentsQuery,
-      inventoryActivity.cashAdjustmentsQuery,
     ])
   );
   useFocusEffect(
@@ -723,7 +743,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteRefill.mutateAsync(refillId);
-            inventoryActivity.refillsQuery.refetch();
+            companyRefillsQuery.refetch();
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -742,7 +762,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
-            inventoryActivity.inventoryAdjustmentsQuery.refetch();
+            allInventoryAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -761,7 +781,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteCashAdjust.mutateAsync(entry.id);
-            inventoryActivity.cashAdjustmentsQuery.refetch();
+            allCashAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete cash adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -1227,7 +1247,7 @@ const formatDateTime = (value?: string) => {
           <View style={styles.listBlock}>
             {filteredCompanyActivityItems.map((entry) => {
               if (entry.kind === "company_payment") {
-                const amount = Number(entry.data.total_cost ?? 0);
+                const amount = Number(entry.data.amount ?? 0);
                 return (
                   <View key={entry.id} style={styles.card}>
                     <View style={styles.cardHeader}>
@@ -1237,8 +1257,8 @@ const formatDateTime = (value?: string) => {
                             <Text style={styles.inventoryTypeBadgeText}>Company Payment</Text>
                           </View>
                         </View>
-                        <Text style={styles.metaLine}>{formatDateTime(entry.data.effective_at)}</Text>
-                        {entry.data.reason ? <Text style={styles.note}>{entry.data.reason}</Text> : null}
+                        <Text style={styles.metaLine}>{formatDateTime(entry.data.happened_at)}</Text>
+                        {entry.data.note ? <Text style={styles.note}>{entry.data.note}</Text> : null}
                       </View>
                       <View style={styles.headerRight}>
                         <Text style={styles.expenseAmount}>{amount.toFixed(0)}</Text>
