@@ -359,13 +359,6 @@ export default function NewOrderScreen() {
     orderCylinderAfter48,
     selectedCustomerEntry,
   ]);
-  const previewIntent = useMemo(() => {
-    if (isPayment) {
-      return paymentDirection === "payout" ? "customer_payout" : "customer_payment";
-    }
-    if (isReturn) return "customer_return";
-    return "customer_order";
-  }, [isPayment, isReturn, paymentDirection]);
   const sharedCustomerAlertLines = useMemo(
     () =>
       formatBalanceTransitions(sharedCustomerPreviewTransitions, {
@@ -373,16 +366,6 @@ export default function NewOrderScreen() {
         formatMoney: formatMoneyAmount,
       }),
     [formatMoneyAmount, sharedCustomerPreviewTransitions]
-  );
-  const sharedBalancePreviewLines = useMemo(
-    () =>
-      formatBalanceTransitions(sharedCustomerPreviewTransitions, {
-        mode: "transition",
-        collapseAllSettled: true,
-        intent: previewIntent,
-        formatMoney: formatMoneyAmount,
-      }),
-    [formatMoneyAmount, previewIntent, sharedCustomerPreviewTransitions]
   );
   const cylinderDebtBeforeForGas = selectedGas === "48kg" ? Math.max(cylinder48Before, 0) : Math.max(cylinder12Before, 0);
   const cylinderDebtAfterForGas = selectedGas === "48kg" ? orderCylinderAfter48 : orderCylinderAfter12;
@@ -2115,13 +2098,6 @@ ${cylLine}
               }
             />
           ) : null}
-          {selectedCustomerEntry && !isSellIron && !isBuyIron && currentAction !== "replacement" ? (
-            customerPreviewStatusLine ? (
-              <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
-            ) : (
-              <BalancePreviewCard lines={sharedBalancePreviewLines} />
-            )
-          ) : null}
         <FieldError message={errors.cylinders_installed?.message} />
         <FieldError message={errors.cylinders_received?.message} />
         <FieldError message={errors.price_total?.message} />
@@ -2702,19 +2678,6 @@ function FieldError({ message }: { message?: string }) {
   return <Text style={styles.errorText}>{message}</Text>;
 }
 
-function BalancePreviewCard({ lines, title = "New Balance" }: { lines: string[]; title?: string }) {
-  return (
-    <View style={styles.balancePreviewCard}>
-      <Text style={styles.balancePreviewTitle}>{title}</Text>
-      {lines.map((line, index) => (
-        <Text key={`${line}-${index}`} style={styles.balancePreviewLine}>
-          {line}
-        </Text>
-      ))}
-    </View>
-  );
-}
-
 function CalendarModal({
   visible,
   value,
@@ -2925,16 +2888,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
   },
-  balancePreviewCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    padding: 10,
-    gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
-  },
-  balancePreviewTitle: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
-  balancePreviewLine: { fontSize: 12, fontWeight: "700", color: "#0f172a" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { padding: 10, borderRadius: 12, backgroundColor: "#eef2f6" },
   chipActive: { backgroundColor: "#0a7ea4" },
