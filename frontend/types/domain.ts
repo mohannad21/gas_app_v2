@@ -530,6 +530,7 @@ export const DailyReportV2CardSchema = z.object({
   sold_12kg: z.number(),
   sold_48kg: z.number(),
   net_today: z.number(),
+  has_refill: z.boolean().optional().default(false),
   cash_math: DailyReportV2CashMathSchema,
   math: DailyReportV2MathSchema.optional(),
   company_start: z.number().optional(),

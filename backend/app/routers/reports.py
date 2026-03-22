@@ -2246,6 +2246,17 @@ def list_daily_reports_v2(
     session, account="inv", gas_type="48kg", state="empty", unit="count", start=start_date, end=end_date
   )
   sold_full = _sold_full_by_day(session, start_date, end_date)
+  refill_days: set = set(
+    row[0] if isinstance(row, tuple) else row
+    for row in session.exec(
+      select(CompanyTransaction.day)
+      .where(CompanyTransaction.day >= start_date)
+      .where(CompanyTransaction.day <= end_date)
+      .where(CompanyTransaction.kind.in_(["refill", "buy_iron"]))
+      .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+      .distinct()
+    ).all()
+  )
 
   running_cash = _sum_cash_before_day(session, start_date)
   running_company = _sum_company_before_day(session, start_date)
@@ -2474,6 +2485,7 @@ def list_daily_reports_v2(
         sold_12kg=sold_12kg,
         sold_48kg=sold_48kg,
         net_today=net_today,
+        has_refill=current in refill_days,
         cash_math=DailyReportV2CashMath(**cash_math_values),
         math=math_payload,
         company_start=company_start,

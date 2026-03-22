@@ -22,10 +22,13 @@ import { Spacing } from "@/constants/spacing";
 import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
+import { getDailyReportV2 } from "@/lib/api";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
+import DayPickerStrip from "@/components/reports/DayPickerStrip";
+import DaySummaryBox from "@/components/reports/DaySummaryBox";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -259,6 +262,10 @@ export default function ReportsScreen() {
 
   // Sync tooltip
   const [syncInfoDate, setSyncInfoDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
 
   // Route handling
   const params = useLocalSearchParams<{ mode?: string; addExpense?: string; expand?: string; date?: string }>();
@@ -366,6 +373,15 @@ export default function ReportsScreen() {
     }, [refetchV2])
   );
 
+  useEffect(() => {
+    if (!selectedDate) return;
+    if (v2DayByDate[selectedDate] !== undefined) return;
+    setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null }));
+    getDailyReportV2(selectedDate)
+      .then((day) => setV2DayByDate((prev) => ({ ...prev, [selectedDate]: day })))
+      .catch(() => setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null })));
+  }, [selectedDate, setV2DayByDate, v2DayByDate]);
+
   // Clear cached day info when collapsing
   useEffect(() => {
     if (!v2Query.data) return;
@@ -389,22 +405,6 @@ export default function ReportsScreen() {
   const toggleDay = useCallback((date: string) => {
     setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
   }, [setV2Expanded]);
-
-  const renderDayRow = useCallback(
-    ({ item }: { item: any }) => {
-      if (!item) return null;
-      return (
-        <ReportDayCard
-          item={item}
-          isOpen={v2Expanded.includes(item.date)}
-          dayInfo={v2DayByDate[item.date] ?? null}
-          onToggle={toggleDay}
-          onShowSyncInfo={setSyncInfoDate}
-        />
-      );
-    },
-    [setSyncInfoDate, toggleDay, v2DayByDate, v2Expanded]
-  );
 
   // -------------------------
   // VIEW MODE: NEW (V2)
@@ -437,21 +437,37 @@ export default function ReportsScreen() {
         {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
         {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
 
-        <FlatList
-          data={v2Rows}
-          extraData={`${v2Expanded.join("|")}::${Object.entries(v2DayByDate)
-            .map(([date, value]) => `${date}:${value === null ? "n" : "y"}`)
-            .sort()
-            .join("|")}`}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          removeClippedSubviews
-          keyExtractor={(item, index) => item?.date ?? `report-row-${index}`}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          ListEmptyComponent={!v2Query.isLoading ? <Text style={styles.meta}>No reports yet.</Text> : null}
-          renderItem={renderDayRow}
+        <DayPickerStrip
+          rows={v2Rows}
+          selectedDate={selectedDate}
+          onSelect={(date) => {
+            setSelectedDate(date);
+          }}
         />
+
+        {selectedDate ? (() => {
+          const card = v2Rows.find((r) => r.date === selectedDate);
+          const dayInfo = v2DayByDate[selectedDate] ?? null;
+          const events = (dayInfo?.events ?? []) as any[];
+          return (
+            <FlatList
+              data={events}
+              keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
+              ListHeaderComponent={card ? <DaySummaryBox card={card} /> : null}
+              ListEmptyComponent={
+                dayInfo === null && !v2Query.isLoading ? (
+                  <Text style={styles.meta}>Loading activities...</Text>
+                ) : dayInfo !== null && events.length === 0 ? (
+                  <Text style={styles.meta}>No activities on this day.</Text>
+                ) : null
+              }
+              renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
+              contentContainerStyle={{ paddingBottom: 32 }}
+            />
+          );
+        })() : (
+          <Text style={styles.meta}>Select a day above.</Text>
+        )}
 
         {/* Sync tooltip */}
         <Modal transparent visible={!!syncInfoDate} animationType="fade" onRequestClose={() => setSyncInfoDate(null)}>
