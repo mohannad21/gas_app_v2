@@ -15,22 +15,25 @@ export type DaySummaryTotals = {
 export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "order") {
     const resolvedMode = orderMode || "replacement";
-    if (resolvedMode === "replacement") return "Replace";
-    if (resolvedMode === "sell_iron") return "SellFull";
-    if (resolvedMode === "buy_iron") return "BuyEmpty";
-    return "Replace";
+    if (resolvedMode === "replacement") return "Replacement";
+    if (resolvedMode === "sell_iron") return "Sell Full";
+    if (resolvedMode === "buy_iron") return "Buy Empty";
+    return "Replacement";
   }
-  if (type === "collection_money") return PAYMENT_DIRECTION_WORDING.reportShort.paymentFromCustomer;
-  if (type === "collection_payout") return PAYMENT_DIRECTION_WORDING.reportShort.paymentToCustomer;
-  if (type === "collection_empty") return "ReturnEmp";
+  if (type === "collection_money") return "Received payment";
+  if (type === "collection_payout") return "Paid customer";
+  if (type === "collection_empty") return "Returned empties";
   if (type === "refill") return "Refill";
-  if (type === "company_payment") return PAYMENT_DIRECTION_WORDING.reportShort.companyPayment;
-  if (type === "company_buy_iron") return "BuyIron";
-  if (type === "cash_adjust") return "WalletAdjust";
-  if (type === "adjust") return "InvAdjust";
-  if (type === "init_balance") return "Init Co";
-  if (type === "init_credit") return "Init Cr";
-  if (type === "init_return") return "Init Ret";
+  if (type === "company_payment") return "Paid company";
+  if (type === "company_buy_iron") return "Bought full cylinders";
+  if (type === "cash_adjust") return "Wallet adjustment";
+  if (type === "adjust") return "Inventory adjustment";
+  if (type === "customer_adjust") return "Balance adjustment";
+  if (type === "company_adjustment") return "Balance adjustment";
+  if (type === "init_balance") return "Opening balance";
+  if (type === "init_credit") return "Opening balance";
+  if (type === "init_return") return "Opening balance";
+  if (type === "init") return "Opening balance";
   return type
     .replace(/_/g, " ")
     .split(" ")
@@ -255,7 +258,6 @@ export function scanDaySummary(events: any[]): DaySummaryTotals {
 
     if (eventType === "order") {
       const orderMode = String(ev?.order_mode ?? "replacement");
-      const isReplacement = orderMode === "replacement";
       const orderTotal = typeof ev?.order_total === "number" ? ev.order_total : 0;
       const orderPaid = typeof ev?.order_paid === "number" ? ev.order_paid : 0;
       const installed = typeof ev?.order_installed === "number" ? ev.order_installed : 0;

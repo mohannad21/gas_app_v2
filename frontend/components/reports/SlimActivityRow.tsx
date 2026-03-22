@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import ActivityIcon, { iconTypeForEvent } from "@/components/reports/ActivityIcon";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
@@ -175,10 +175,46 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
   if (event.event_type === "company_payment") return "company_payment" as const;
   if (event.event_type === "company_buy_iron") return "company_buy_iron" as const;
   if (event.event_type === "refill") {
-    return event.label === "Company Settle" ? ("company_settle" as const) : ("company_refill" as const);
+    const isSettleOnly =
+      event.label === "Returned empties" ||
+      (!(event.buy12 || event.buy48) && !!(event.return12 || event.return48) &&
+        !event.total_cost && !event.paid_now);
+    return isSettleOnly ? ("company_settle" as const) : ("company_refill" as const);
   }
   return "generic" as const;
 };
+
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+function getActivityIcon(
+  eventType: string,
+  orderMode: string | null | undefined,
+  moneyDirection: string | null | undefined
+): IoniconName {
+  if (eventType === "order") {
+    if (orderMode === "replacement") return "swap-vertical-outline";
+    if (orderMode === "sell_iron") return "arrow-up-circle-outline";
+    if (orderMode === "buy_iron") return "arrow-down-circle-outline";
+    return "swap-vertical-outline";
+  }
+  if (eventType === "collection_money") return "cash-outline";
+  if (eventType === "collection_payout") return "cash-outline";
+  if (eventType === "collection_empty") return "refresh-outline";
+  if (eventType === "customer_adjust") return "build-outline";
+  if (eventType === "refill") return "reload-outline";
+  if (eventType === "company_buy_iron") return "download-outline";
+  if (eventType === "company_payment") {
+    if (moneyDirection === "in" || moneyDirection === "received") return "arrow-down-circle-outline";
+    return "arrow-up-circle-outline";
+  }
+  if (eventType === "company_adjustment") return "build-outline";
+  if (eventType === "expense") return "receipt-outline";
+  if (eventType === "bank_deposit") return "card-outline";
+  if (eventType === "cash_adjust") return "wallet-outline";
+  if (eventType === "adjust") return "cube-outline";
+  if (eventType === "init") return "flag-outline";
+  return "ellipse-outline";
+}
 
 export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
@@ -224,21 +260,28 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const showStatus = (showOk || showSettled) && transitionLines.length === 0;
   const okLabel = showSettled ? "✅ Balance settled" : "✅ OK";
   const dotColor = getEventColor(eventType);
+  const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
 
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <View style={styles.markerRow}>
-          <View style={[styles.dot, { backgroundColor: dotColor }]} />
-          <ActivityIcon
-            type={iconTypeForEvent(eventType, event.order_mode)}
-            color={dotColor}
-            size={20}
-          />
-        </View>
+        <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
+        {event.context_line || (showStatus && !showNotes) ? (
+          <View style={styles.contextRow}>
+            {event.context_line ? (
+              <Text style={styles.contextText} numberOfLines={1}>
+                {event.context_line}
+              </Text>
+            ) : (
+              <View style={styles.contextSpacer} />
+            )}
+            {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
+          </View>
+        ) : null}
+
         <View style={styles.headerRow}>
           <Text style={styles.headerName} numberOfLines={1}>
             {headerName}
@@ -261,16 +304,9 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
           {heroAction}
         </Text>
 
-        {event.context_line || (showStatus && !showNotes) ? (
+        {false ? (
           <View style={styles.contextRow}>
-            {event.context_line ? (
-              <Text style={styles.contextText} numberOfLines={1}>
-                {event.context_line}
-              </Text>
-            ) : (
-              <View style={styles.contextSpacer} />
-            )}
-            {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
+            <View style={styles.contextSpacer} />
           </View>
         ) : null}
 
@@ -326,30 +362,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 58,
+    width: 28,
     alignItems: "center",
-  },
-  markerRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
   },
   rail: {
     flex: 1,
     width: 2,
     backgroundColor: Level3Tokens.colors.border,
-    marginTop: 6,
+    marginTop: 4,
   },
   content: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
+  icon: {
+    marginBottom: 0,
   },
   headerRow: {
     flexDirection: "row",
