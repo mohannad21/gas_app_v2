@@ -18,7 +18,9 @@ import {
 } from "react-native";
 
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { formatDateLocale, formatTimeHM } from "@/lib/date";
@@ -27,6 +29,7 @@ import {
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
 import {
+  useCreateCompanyBuyIron,
   useCreateRefill,
   useInitInventory,
   useInventoryRefillDetails,
@@ -131,6 +134,10 @@ function sanitizeCountInputMax(value: string, max: number) {
   return String(Math.min(Math.max(0, parsed), Math.max(0, max)));
 }
 
+export function sanitizeBuyCountInput(value: string, max: number, isBuyMode: boolean) {
+  return isBuyMode ? sanitizeCountInput(value) : sanitizeCountInputMax(value, max);
+}
+
 export function RefillForm({
   visible,
   onClose,
@@ -161,6 +168,7 @@ export function RefillForm({
     { delta: -1, label: "-", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
+  const createCompanyBuyIron = useCreateCompanyBuyIron();
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
   const initInventory = useInitInventory();
@@ -434,29 +442,6 @@ export function RefillForm({
     }
   );
 
-  const balanceAlertLines = useMemo(() => {
-    if (isReturnMode) {
-      return [...company12TransitionLines, ...company48TransitionLines].filter(
-        (line) => line !== "All settled \u2705"
-      );
-    }
-    if (isBuyMode) {
-      return companyMoneyTransitionLines;
-    }
-    return [...companyMoneyTransitionLines, ...company12TransitionLines, ...company48TransitionLines];
-  }, [
-    company12TransitionLines,
-    company48TransitionLines,
-    companyMoneyTransitionLines,
-    isBuyMode,
-    isReturnMode,
-  ]);
-  const cylinderStatusLine = !companyBalanceReady
-    ? "Current company balances unavailable. Preview is disabled until balances load."
-    : balanceAlertLines.length > 0
-      ? balanceAlertLines.join("\n")
-      : CUSTOMER_WORDING.cylinderSettled;
-
   // Cylinder-only status: excludes money lines so they don't bleed into Cylinder BigBox
   const cylinderOnlyLines = [...company12TransitionLines, ...company48TransitionLines].filter(
     (line) => line !== "All settled \u2705"
@@ -465,6 +450,18 @@ export function RefillForm({
     ? "Current company balances unavailable."
     : cylinderOnlyLines.length > 0
       ? cylinderOnlyLines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
+  const return12Lines = company12TransitionLines.filter((line) => line !== "All settled \u2705");
+  const return48Lines = company48TransitionLines.filter((line) => line !== "All settled \u2705");
+  const return12StatusLine = !companyBalanceReady
+    ? "Current company balances unavailable."
+    : return12Lines.length > 0
+      ? return12Lines.join("\n")
+      : CUSTOMER_WORDING.cylinderSettled;
+  const return48StatusLine = !companyBalanceReady
+    ? "Current company balances unavailable."
+    : return48Lines.length > 0
+      ? return48Lines.join("\n")
       : CUSTOMER_WORDING.cylinderSettled;
   const moneyStatusLine = !companyBalanceReady
     ? "Current company balances unavailable. Preview is disabled until balances load."
@@ -500,6 +497,7 @@ export function RefillForm({
     !base ||
     return12Invalid ||
     return48Invalid ||
+    createCompanyBuyIron.isPending ||
     createRefill.isPending ||
     updateRefill.isPending ||
     initInventory.isPending;
@@ -542,6 +540,16 @@ export function RefillForm({
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
           debt_cylinders_48: liveCompanyNet48,
+        });
+      } else if (isBuyMode) {
+        await createCompanyBuyIron.mutateAsync({
+          date,
+          time,
+          new12: payloadBuy12,
+          new48: payloadBuy48,
+          total_cost: totalCost,
+          paid_now: paidNowValue,
+          note: notes.trim() ? notes.trim() : undefined,
         });
       } else {
         await createRefill.mutateAsync({
@@ -591,7 +599,7 @@ export function RefillForm({
   };
   const handleBuy12Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInputMax(value, availableEmpty12);
+    const next = sanitizeBuyCountInput(value, availableEmpty12, isBuyMode);
     const delta = Number(next || 0) - buy12Value;
     setBuy12(next);
     if (!isBuyMode && delta > 0) {
@@ -600,7 +608,7 @@ export function RefillForm({
   };
   const handleBuy48Change = (value: string) => {
     if (isReturnMode) return;
-    const next = sanitizeCountInputMax(value, availableEmpty48);
+    const next = sanitizeBuyCountInput(value, availableEmpty48, isBuyMode);
     const delta = Number(next || 0) - buy48Value;
     setBuy48(next);
     if (!isBuyMode && delta > 0) {
@@ -654,25 +662,12 @@ export function RefillForm({
   };
 
   const footerActions = (
-    <View style={[styles.footerActions, !useCard && styles.footerInline]}>
-      <Pressable style={styles.cancelBtn} onPress={onClose}>
-        <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
-      </Pressable>
-      {!useCard ? (
-        <Pressable style={[styles.secondaryBtn, disableSave && styles.disabledBtn]} onPress={() => handleSave(true)} disabled={disableSave}>
-          <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Save & Add More</Text>
-        </Pressable>
-      ) : null}
-      <Pressable
-        style={[styles.primaryBtn, disableSave && styles.disabledBtn]}
-        onPress={() => handleSave(false)}
-        disabled={disableSave}
-      >
-        <Text style={styles.primaryText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          {createRefill.isPending ? "Saving..." : "Save"}
-        </Text>
-      </Pressable>
-    </View>
+    <FooterActions
+      onSave={() => handleSave(false)}
+      onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
+      saveDisabled={disableSave}
+      saving={isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
+    />
   );
 
   return (
@@ -746,8 +741,9 @@ export function RefillForm({
                 /* BUY Ã¢â‚¬â€ one Cylinders BigBox, 12kg left / 48kg right */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
-                  statusLine={cylinderStatusLine}
+                  statusLine={undefined}
                   statusIsAlert={false}
+                  defaultExpanded
                 >
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     <FieldCell
@@ -775,10 +771,11 @@ export function RefillForm({
                 <>
                   <BigBox
                     title="12kg Cylinders"
-                    statusLine={cylinderStatusLine}
+                    statusLine={return12StatusLine}
                     statusIsAlert={liveCompanyNet12 < 0}
+                    defaultExpanded
                   >
-                    <View style={styles.entryFieldPairSingle}>
+                    <StandaloneField>
                       <FieldCell
                         title="Return"
                         comment={`Empty ${formatCount(availableEmpty12)} -> ${formatCount(afterEmpty12)}`}
@@ -790,10 +787,10 @@ export function RefillForm({
                         error={return12Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
-                    </View>
+                    </StandaloneField>
                     {owedReturn12 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <View style={styles.entryFieldPairSingle}>
+                        <StandaloneField>
                           <Pressable
                             style={[
                               styles.inlineActionButton,
@@ -809,7 +806,7 @@ export function RefillForm({
                               {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
                             </Text>
                           </Pressable>
-                        </View>
+                        </StandaloneField>
                       </View>
                     ) : null}
                     {return12Invalid ? (
@@ -821,10 +818,11 @@ export function RefillForm({
 
                   <BigBox
                     title="48kg Cylinders"
-                    statusLine={cylinderStatusLine}
+                    statusLine={return48StatusLine}
                     statusIsAlert={liveCompanyNet48 < 0}
+                    defaultExpanded
                   >
-                    <View style={styles.entryFieldPairSingle}>
+                    <StandaloneField>
                       <FieldCell
                         title="Return"
                         comment={`Empty ${formatCount(availableEmpty48)} -> ${formatCount(afterEmpty48)}`}
@@ -836,10 +834,10 @@ export function RefillForm({
                         error={return48Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
-                    </View>
+                    </StandaloneField>
                     {owedReturn48 > 0 ? (
                       <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <View style={styles.entryFieldPairSingle}>
+                        <StandaloneField>
                           <Pressable
                             style={[
                               styles.inlineActionButton,
@@ -855,7 +853,7 @@ export function RefillForm({
                               {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
                             </Text>
                           </Pressable>
-                        </View>
+                        </StandaloneField>
                       </View>
                     ) : null}
                     {return48Invalid ? (
@@ -871,6 +869,7 @@ export function RefillForm({
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={cylinderOnlyStatusLine}
                   statusIsAlert={liveCompanyNet12 < 0 || liveCompanyNet48 < 0}
+                  defaultExpanded
                 >
                   {/* 12kg row */}
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1179,8 +1178,9 @@ export function RefillForm({
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
-                    statusLine={moneyStatusLine}
-                    statusIsAlert={liveMoneyNet > 0}
+                    statusLine={isBuyMode ? undefined : moneyStatusLine}
+                    statusIsAlert={!isBuyMode && liveMoneyNet > 0}
+                    defaultExpanded
                   >
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                       <FieldCell
@@ -1592,14 +1592,11 @@ function InitInventoryModal({
                   />
                 </View>
               </View>
-              <View style={styles.footerActions}>
-                <Pressable style={styles.secondaryBtn} onPress={onClose}>
-                  <Text style={styles.secondaryText}>Cancel</Text>
-                </Pressable>
-                <Pressable style={styles.primaryBtn} onPress={onSave}>
-                  <Text style={styles.primaryText}>Save inventory</Text>
-                </Pressable>
-              </View>
+              <FooterActions
+                onCancel={onClose}
+                onSave={onSave}
+                saveLabel="Save inventory"
+              />
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -1954,58 +1951,6 @@ const styles = StyleSheet.create({
   sectionDisabled: {
     opacity: 0.45,
   },
-  footerActions: {
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 8,
-  },
-  footerInline: {
-    paddingBottom: 8,
-  },
-  secondaryBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    alignItems: "center",
-  },
-  secondaryText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#64748b",
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  primaryBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#0a7ea4",
-    alignItems: "center",
-  },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-    textAlign: "center",
-  },
   moneyHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2082,9 +2027,6 @@ const styles = StyleSheet.create({
   accessoryText: {
     color: "#fff",
     fontWeight: "700",
-  },
-  disabledBtn: {
-    opacity: 0.6,
   },
   calendarOverlay: {
     flex: 1,

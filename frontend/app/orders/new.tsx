@@ -30,7 +30,9 @@ import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
@@ -138,8 +140,7 @@ export default function NewOrderScreen() {
   const [amountsLayoutY, setAmountsLayoutY] = useState<number | null>(null);
   const [totalsLayout, setTotalsLayout] = useState<{ y: number; height: number } | null>(null);
   const effectiveKeyboardHeight = avoidKeyboard ? keyboardHeight : 0;
-  const footerHeight = 112;
-  const contentBottomPadding = footerHeight + 32;
+  const contentBottomPadding = 24;
   const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
   const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -358,13 +359,6 @@ export default function NewOrderScreen() {
     orderCylinderAfter48,
     selectedCustomerEntry,
   ]);
-  const previewIntent = useMemo(() => {
-    if (isPayment) {
-      return paymentDirection === "payout" ? "customer_payout" : "customer_payment";
-    }
-    if (isReturn) return "customer_return";
-    return "customer_order";
-  }, [isPayment, isReturn, paymentDirection]);
   const sharedCustomerAlertLines = useMemo(
     () =>
       formatBalanceTransitions(sharedCustomerPreviewTransitions, {
@@ -372,16 +366,6 @@ export default function NewOrderScreen() {
         formatMoney: formatMoneyAmount,
       }),
     [formatMoneyAmount, sharedCustomerPreviewTransitions]
-  );
-  const sharedBalancePreviewLines = useMemo(
-    () =>
-      formatBalanceTransitions(sharedCustomerPreviewTransitions, {
-        mode: "transition",
-        collapseAllSettled: true,
-        intent: previewIntent,
-        formatMoney: formatMoneyAmount,
-      }),
-    [formatMoneyAmount, previewIntent, sharedCustomerPreviewTransitions]
   );
   const cylinderDebtBeforeForGas = selectedGas === "48kg" ? Math.max(cylinder48Before, 0) : Math.max(cylinder12Before, 0);
   const cylinderDebtAfterForGas = selectedGas === "48kg" ? orderCylinderAfter48 : orderCylinderAfter12;
@@ -1117,13 +1101,7 @@ ${cylLine}
   const handleSavePaymentAndAddAnother = () => runSavePayment(true);
   const handleSaveReturn = () => runSaveReturn(false);
   const handleSaveReturnAndAddAnother = () => runSaveReturn(true);
-  const savePrimaryLabel = isOrderAction
-    ? "Save Order"
-    : isPayment
-      ? paymentDirection === "payout"
-        ? "Save Payout"
-        : "Save Payment"
-      : "Save Return";
+  const savePrimaryLabel = "Save";
   const savePrimaryHandler = isOrderAction
     ? handleSaveOrder
     : isPayment
@@ -1134,7 +1112,6 @@ ${cylLine}
     : isPayment
       ? handleSavePaymentAndAddAnother
       : handleSaveReturnAndAddAnother;
-  const cancelHandler = () => router.back();
   const saveBusy = isOrderAction ? submitting : collectionBusy;
   const saveDisabled = isOrderAction
     ? submitting || orderSaveDisabled || !customerPreviewReady
@@ -1777,6 +1754,7 @@ ${cylLine}
                   title={CUSTOMER_WORDING.cylinders}
                   statusLine={customerPreviewStatusLine ?? cylinderStatusLine}
                   statusIsAlert={customerPreviewStatusLine ? true : cylinderStatusIsAlert}
+                  defaultExpanded
                 >
                   <View style={styles.entryFieldPair}>
                     <Controller
@@ -1870,6 +1848,7 @@ ${cylLine}
                   title={CUSTOMER_WORDING.money}
                   statusLine={customerPreviewStatusLine ?? moneyStatusLine}
                   statusIsAlert={customerPreviewStatusLine ? true : moneyStatusIsAlert}
+                  defaultExpanded
                 >
                   <View
                     style={styles.entryFieldPair}
@@ -1982,8 +1961,9 @@ ${cylLine}
                 title={CUSTOMER_WORDING.money}
                 statusLine={customerPreviewStatusLine ?? paymentModeStatusLine}
                 statusIsAlert={customerPreviewStatusLine ? true : balanceAfter > 0}
+                defaultExpanded
               >
-                <View style={styles.entryFieldPairSingle}>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="paid_amount"
@@ -2015,9 +1995,9 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
                 <View style={styles.bigBoxActionRow}>
-                  <View style={styles.entryFieldPairSingle}>
+                  <StandaloneField>
                     <Pressable
                       style={[
                         styles.inlineActionButton,
@@ -2034,7 +2014,7 @@ ${cylLine}
                           : CUSTOMER_WORDING.didntPay}
                       </Text>
                     </Pressable>
-                  </View>
+                  </StandaloneField>
                 </View>
               </BigBox>
               <FieldError message={errors.paid_amount?.message} />
@@ -2047,8 +2027,9 @@ ${cylLine}
                 title={CUSTOMER_WORDING.cylinders}
                 statusLine={customerPreviewStatusLine ?? returnModeStatusLine}
                 statusIsAlert={customerPreviewStatusLine ? true : cylinderDebtAfterForGas > 0}
+                defaultExpanded
               >
-                <View style={styles.entryFieldPairSingle}>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_received"
@@ -2076,9 +2057,9 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
                 <View style={styles.bigBoxActionRow}>
-                  <View style={styles.entryFieldPairSingle}>
+                  <StandaloneField>
                     <Pressable
                       style={[
                         styles.inlineActionButton,
@@ -2093,7 +2074,7 @@ ${cylLine}
                           : CUSTOMER_WORDING.returnAll}
                       </Text>
                     </Pressable>
-                  </View>
+                  </StandaloneField>
                 </View>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />
@@ -2117,13 +2098,6 @@ ${cylLine}
               }
             />
           ) : null}
-          {selectedCustomerEntry && !isSellIron && !isBuyIron ? (
-            customerPreviewStatusLine ? (
-              <BalancePreviewCard title="Preview unavailable" lines={[customerPreviewStatusLine]} />
-            ) : (
-              <BalancePreviewCard lines={sharedBalancePreviewLines} />
-            )
-          ) : null}
         <FieldError message={errors.cylinders_installed?.message} />
         <FieldError message={errors.cylinders_received?.message} />
         <FieldError message={errors.price_total?.message} />
@@ -2132,8 +2106,8 @@ ${cylLine}
           {isSellIron ? (
             <>
               {/* Cylinders — user enters how many installed */}
-              <BigBox title={CUSTOMER_WORDING.cylinders}>
-                <View style={styles.entryFieldPairSingle}>
+              <BigBox title={CUSTOMER_WORDING.cylinders} defaultExpanded>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_installed"
@@ -2156,7 +2130,7 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
               </BigBox>
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
@@ -2240,7 +2214,7 @@ ${cylLine}
               </BigBox>
 
               {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
-              <BigBox title={CUSTOMER_WORDING.money}>
+              <BigBox title={CUSTOMER_WORDING.money} defaultExpanded>
                 <View
                   style={styles.entryFieldPair}
                   onLayout={(event) => {
@@ -2288,8 +2262,8 @@ ${cylLine}
           {isBuyIron ? (
             <>
               {/* Cylinders — user enters how many received (buying empty cylinders) */}
-              <BigBox title={CUSTOMER_WORDING.cylinders}>
-                <View style={styles.entryFieldPairSingle}>
+              <BigBox title={CUSTOMER_WORDING.cylinders} defaultExpanded>
+                <StandaloneField>
                   <Controller
                     control={control}
                     name="cylinders_received"
@@ -2312,7 +2286,7 @@ ${cylLine}
                       />
                     )}
                   />
-                </View>
+                </StandaloneField>
               </BigBox>
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
@@ -2356,7 +2330,7 @@ ${cylLine}
               </BigBox>
 
               {/* Money — Total is read-only (auto from computedTradeTotal), Paid is editable */}
-              <BigBox title={CUSTOMER_WORDING.money}>
+              <BigBox title={CUSTOMER_WORDING.money} defaultExpanded>
                 <View
                   style={styles.entryFieldPair}
                   onLayout={(event) => {
@@ -2611,42 +2585,19 @@ ${cylLine}
       />
       </ScrollView>
       {hasCustomer ? (
+        <FooterActions
+          onSave={savePrimaryHandler}
+          onSaveAndAdd={saveSecondaryHandler}
+          saveLabel={savePrimaryLabel}
+          saveDisabled={saveDisabled}
+          saving={saveBusy}
+        />
+      ) : null}
+      {hasCustomer ? (
         <>
-      <View style={[styles.stickyFooter, { bottom: 0 }]}>
-            <View style={styles.footerRow}>
-              <Pressable
-                onPress={cancelHandler}
-                style={styles.footerCancel}
-              >
-                <Text style={styles.footerCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={saveSecondaryHandler}
-                disabled={saveDisabled}
-                style={[
-                  styles.footerSecondary,
-                  saveDisabled && styles.footerButtonDisabled,
-                ]}
-              >
-                <Text style={styles.footerSecondaryText}>Save & Add Another</Text>
-              </Pressable>
-              <Pressable
-                onPress={savePrimaryHandler}
-                disabled={saveDisabled}
-                style={[
-                  styles.footerPrimary,
-                  saveDisabled && styles.footerButtonDisabled,
-                ]}
-              >
-                <Text style={styles.footerPrimaryText}>
-                  {saveBusy ? "Saving..." : savePrimaryLabel}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
           {showStickyPayment && (
             <View
-              style={[styles.stickyPayment, { bottom: footerHeight + 8 }]}
+              style={[styles.stickyPayment, { bottom: 8 }]}
             >
               <Text style={styles.stickyLabel}>Total / Paid</Text>
               <View style={styles.entryFieldPair}>
@@ -2725,19 +2676,6 @@ function FieldLabel({ children }: { children: ReactNode }) {
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <Text style={styles.errorText}>{message}</Text>;
-}
-
-function BalancePreviewCard({ lines, title = "New Balance" }: { lines: string[]; title?: string }) {
-  return (
-    <View style={styles.balancePreviewCard}>
-      <Text style={styles.balancePreviewTitle}>{title}</Text>
-      {lines.map((line, index) => (
-        <Text key={`${line}-${index}`} style={styles.balancePreviewLine}>
-          {line}
-        </Text>
-      ))}
-    </View>
-  );
 }
 
 function CalendarModal({
@@ -2950,16 +2888,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e2e8f0",
   },
-  balancePreviewCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    padding: 10,
-    gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
-  },
-  balancePreviewTitle: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
-  balancePreviewLine: { fontSize: 12, fontWeight: "700", color: "#0f172a" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { padding: 10, borderRadius: 12, backgroundColor: "#eef2f6" },
   chipActive: { backgroundColor: "#0a7ea4" },
@@ -3220,39 +3148,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700" },
-  stickyFooter: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-  },
-  footerRow: { flexDirection: "row", gap: 10 },
-  footerCancel: {
-    flex: 1,
-    backgroundColor: "#64748b",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  footerCancelText: { color: "#fff", fontWeight: "700" },
-  footerPrimary: {
-    flex: 1,
-    backgroundColor: "#0a7ea4",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  footerPrimaryText: { color: "#fff", fontWeight: "700" },
-  footerSecondary: {
-    flex: 1,
-    borderColor: "#cbd5e1",
-    borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  footerSecondaryText: { color: "#0a7ea4", fontWeight: "700" },
-  footerButtonDisabled: { opacity: 0.6 },
   notice: {
     backgroundColor: "#fff7e6",
     borderColor: "#f0c36d",

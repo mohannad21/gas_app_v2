@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
@@ -126,17 +127,34 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
   }
   if (event.event_type === "collection_money") {
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
-    return amount ? `Collected ${formatMoneyValue(amount, formatMoney)}` : "Collected";
+    return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
+  }
+  if (event.event_type === "collection_payout") {
+    const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
+    return amount ? `Payment to customer ${formatMoneyValue(amount, formatMoney)}` : "Payment to customer";
+  }
+  if (event.event_type === "company_payment") {
+    const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
+    const direction = event.money_direction === "in" ? "Payment from company" : "Payment to company";
+    return amount ? `${direction} ${formatMoneyValue(amount, formatMoney)}` : direction;
   }
   if (event.event_type === "collection_empty") {
     const parts = formatGasSummary(event.return12, event.return48);
     return parts ? `Returned ${parts} empties` : "Returned empties";
   }
   if (event.event_type === "expense") {
-    return event.expense_type ?? "Expense";
+    return null;
   }
   if (event.event_type === "cash_adjust") {
-    return "Wallet Adjustment";
+    return event.reason ?? null;
+  }
+  if (event.event_type === "adjust") {
+    const gas = event.gas_type ? `${event.gas_type}` : null;
+    const note = event.reason ?? null;
+    if (gas && note) return `${gas} · ${note}`;
+    if (gas) return gas;
+    if (note) return note;
+    return null;
   }
   if (event.event_type === "bank_deposit") {
     return event.label ?? event.display_name ?? "Wallet Transfer";
@@ -165,10 +183,46 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
   if (event.event_type === "company_payment") return "company_payment" as const;
   if (event.event_type === "company_buy_iron") return "company_buy_iron" as const;
   if (event.event_type === "refill") {
-    return event.label === "Company Settle" ? ("company_settle" as const) : ("company_refill" as const);
+    const isSettleOnly =
+      event.label === "Returned empties" ||
+      (!(event.buy12 || event.buy48) && !!(event.return12 || event.return48) &&
+        !event.total_cost && !event.paid_now);
+    return isSettleOnly ? ("company_settle" as const) : ("company_refill" as const);
   }
   return "generic" as const;
 };
+
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+function getActivityIcon(
+  eventType: string,
+  orderMode: string | null | undefined,
+  moneyDirection: string | null | undefined
+): IoniconName {
+  if (eventType === "order") {
+    if (orderMode === "replacement") return "swap-horizontal-outline";
+    if (orderMode === "sell_iron") return "arrow-up-circle-outline";
+    if (orderMode === "buy_iron") return "arrow-down-circle-outline";
+    return "swap-horizontal-outline";
+  }
+  if (eventType === "collection_money") return "cash-outline";
+  if (eventType === "collection_payout") return "cash-outline";
+  if (eventType === "collection_empty") return "refresh-outline";
+  if (eventType === "customer_adjust") return "build-outline";
+  if (eventType === "refill") return "reload-outline";
+  if (eventType === "company_buy_iron") return "download-outline";
+  if (eventType === "company_payment") {
+    if (moneyDirection === "in" || moneyDirection === "received") return "arrow-down-circle-outline";
+    return "arrow-up-circle-outline";
+  }
+  if (eventType === "company_adjustment") return "build-outline";
+  if (eventType === "expense") return "receipt-outline";
+  if (eventType === "bank_deposit") return "card-outline";
+  if (eventType === "cash_adjust") return "wallet-outline";
+  if (eventType === "adjust") return "cube-outline";
+  if (eventType === "init") return "flag-outline";
+  return "ellipse-outline";
+}
 
 export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
@@ -190,7 +244,11 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const { name: headerName, desc: headerDescFromName } = splitDisplayName(headerNameRaw);
   const headerDesc = headerDescFromName || headerDescBase || "";
 
-  const heroAction = buildHeroAction(event, fmtMoney) ?? label;
+  const heroActionBase = buildHeroAction(event, fmtMoney);
+  const heroAction =
+    heroActionBase && heroActionBase.trim() && heroActionBase !== headerName && heroActionBase !== label
+      ? heroActionBase
+      : null;
   const moneyAmount = typeof event?.money_delta === "number" ? event.money_delta : Number(event?.money_amount ?? 0);
   const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
   const moneyText =
@@ -214,18 +272,18 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const showStatus = (showOk || showSettled) && transitionLines.length === 0;
   const okLabel = showSettled ? "✅ Balance settled" : "✅ OK";
   const dotColor = getEventColor(eventType);
+  const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
 
   return (
     <View style={styles.row}>
       <View style={styles.railCol}>
-        <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerName} numberOfLines={1}>
-            {headerName}
-            {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
+        <View style={styles.topRow}>
+          <Text style={styles.actionText} numberOfLines={1}>
+            {event.context_line ?? label}
           </Text>
           {moneyText ? (
             <Text
@@ -240,22 +298,19 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
           ) : null}
         </View>
 
-        <Text style={styles.heroText} numberOfLines={1}>
-          {heroAction}
+        <Text style={styles.headerName} numberOfLines={1}>
+          {headerName}
+          {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
         </Text>
 
-        {event.context_line || (showStatus && !showNotes) ? (
-          <View style={styles.contextRow}>
-            {event.context_line ? (
-              <Text style={styles.contextText} numberOfLines={1}>
-                {event.context_line}
-              </Text>
-            ) : (
-              <View style={styles.contextSpacer} />
-            )}
-            {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
-          </View>
+
+        {heroAction ? (
+          <Text style={styles.heroText} numberOfLines={1}>
+            {heroAction}
+          </Text>
         ) : null}
+
+        {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
 
         {showNotes ? (
           <View style={styles.statusRow}>
@@ -309,29 +364,32 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   railCol: {
-    width: 18,
+    width: 28,
     alignItems: "center",
   },
   rail: {
     flex: 1,
     width: 2,
     backgroundColor: Level3Tokens.colors.border,
-    marginTop: 6,
+    marginTop: 4,
   },
   content: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-  },
-  headerRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: 6,
+  },
+  icon: {
+    flexShrink: 0,
+  },
+  actionText: {
+    flex: 1,
+    fontSize: FontSizes.md,
+    color: Level3Tokens.colors.textMuted,
+    fontFamily: FontFamilies.regular,
   },
   headerName: {
     flex: 1,

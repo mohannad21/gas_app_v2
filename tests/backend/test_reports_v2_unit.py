@@ -343,3 +343,143 @@ def test_day_v2_uses_created_at_as_tiebreak_when_effective_time_matches(client) 
     cash_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "cash_adjust")
 
     assert customer_adjust < cash_adjust
+
+
+def test_day_v2_formats_report_times_in_business_timezone_for_entry_flows(client) -> None:
+    day = date(2025, 1, 10)
+    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=8, empty48=1)
+
+    refill_at = datetime(2025, 1, 10, 17, 18, tzinfo=timezone.utc).isoformat()
+    cash_adjust_at = datetime(2025, 1, 10, 17, 19, tzinfo=timezone.utc).isoformat()
+    inventory_adjust_at = datetime(2025, 1, 10, 17, 20, tzinfo=timezone.utc).isoformat()
+    company_payment_at = datetime(2025, 1, 10, 17, 21, tzinfo=timezone.utc).isoformat()
+
+    resp = client.post(
+        "/inventory/refill",
+        json={
+            "happened_at": refill_at,
+            "buy12": 1,
+            "return12": 1,
+            "buy48": 0,
+            "return48": 0,
+            "note": "tz refill",
+            "total_cost": 0,
+            "paid_now": 0,
+        },
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        "/cash/adjust",
+        json={"happened_at": cash_adjust_at, "delta_cash": 100, "reason": "tz cash"},
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/inventory/adjust",
+        json={
+            "happened_at": inventory_adjust_at,
+            "gas_type": "12kg",
+            "delta_full": 1,
+            "delta_empty": 0,
+            "reason": "tz inventory",
+        },
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        "/company/payments",
+        json={"happened_at": company_payment_at, "amount": 50, "note": "tz company"},
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = report.json()["events"]
+
+    refill = next(event for event in events if event["event_type"] == "refill" and event["reason"] == "tz refill")
+    cash_adjust = next(event for event in events if event["event_type"] == "cash_adjust" and event["reason"] == "tz cash")
+    inventory_adjust = next(
+        event for event in events if event["event_type"] == "adjust" and event["reason"] == "tz inventory"
+    )
+    company_payment = next(
+        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "tz company"
+    )
+
+    assert refill["time_display"] == "18:18"
+    assert cash_adjust["time_display"] == "18:19"
+    assert inventory_adjust["time_display"] == "18:20"
+    assert company_payment["time_display"] == "18:21"
+    assert "18:18" in refill["context_line"]
+
+
+def test_day_v2_payment_wording_is_direction_aware(client) -> None:
+    day = date(2025, 1, 11)
+    customer_id = create_customer(client, name="Direction Customer")
+
+    resp = client.post(
+        "/collections",
+        json={
+            "customer_id": customer_id,
+            "action_type": "payment",
+            "amount_money": 45600,
+            "happened_at": f"{day.isoformat()}T09:00:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/collections",
+        json={
+            "customer_id": customer_id,
+            "action_type": "payout",
+            "amount_money": 12300,
+            "happened_at": f"{day.isoformat()}T10:00:00",
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/company/payments",
+        json={"amount": 500, "note": "pay company", "happened_at": f"{day.isoformat()}T11:00:00"},
+    )
+    assert resp.status_code == 201
+
+    resp = client.post(
+        "/company/payments",
+        json={"amount": -200, "note": "receive company", "happened_at": f"{day.isoformat()}T12:00:00"},
+    )
+    assert resp.status_code == 201
+
+    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    assert report.status_code == 200
+    events = report.json()["events"]
+
+    customer_payment = next(
+        event for event in events if event["event_type"] == "collection_money" and event["money_amount"] == 45600
+    )
+    customer_payout = next(
+        event for event in events if event["event_type"] == "collection_payout" and event["money_amount"] == 12300
+    )
+    company_payment = next(
+        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "pay company"
+    )
+    company_receive = next(
+        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "receive company"
+    )
+
+    assert customer_payment["label"] == "Payment from customer"
+    assert customer_payment["hero"]["text"] == "Payment from customer"
+    assert customer_payment["hero_text"] == "Payment from customer ₪456"
+
+    assert customer_payout["label"] == "Payment to customer"
+    assert customer_payout["hero"]["text"] == "Payment to customer"
+    assert customer_payout["hero_text"] == "Payment to customer ₪123"
+
+    assert company_payment["label"] == "Payment to company"
+    assert company_payment["hero"]["text"] == "Payment to company"
+    assert company_payment["hero_text"] == "Payment to company ₪5"
+
+    assert company_receive["label"] == "Payment from company"
+    assert company_receive["hero"]["text"] == "Payment from company"
+    assert company_receive["hero_text"] == "Payment from company ₪2"

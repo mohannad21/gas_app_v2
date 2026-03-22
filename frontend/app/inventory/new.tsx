@@ -19,7 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
+import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
@@ -64,6 +66,10 @@ function getNowTime() {
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
   return `${hour}:${minute}`;
+}
+
+function newInventoryAdjustGroupId() {
+  return `inventory-adjust-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function CalendarModal({
@@ -229,7 +235,6 @@ function InventoryAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   entry: InventoryAdjustment | null;
@@ -242,11 +247,11 @@ function InventoryAdjustForm({
     gas_type: "12kg" | "48kg";
     delta_full: number;
     delta_empty: number;
-    reason: string;
+    reason?: string;
+    group_id?: string;
   }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
   const [full12, setFull12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
@@ -309,16 +314,13 @@ function InventoryAdjustForm({
 
   const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
     try {
       if (entry) {
         const delta_full = gasType === "12kg" ? deltaFull12 : deltaFull48;
         const delta_empty = gasType === "12kg" ? deltaEmpty12 : deltaEmpty48;
-        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason });
+        await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason || undefined });
       } else {
+        const groupId = newInventoryAdjustGroupId();
         if (deltaFull12 || deltaEmpty12) {
           await onCreate({
             date: adjustDate,
@@ -326,7 +328,8 @@ function InventoryAdjustForm({
             gas_type: "12kg",
             delta_full: deltaFull12,
             delta_empty: deltaEmpty12,
-            reason: trimmedReason,
+            reason: trimmedReason || undefined,
+            group_id: groupId,
           });
         }
         if (deltaFull48 || deltaEmpty48) {
@@ -336,7 +339,8 @@ function InventoryAdjustForm({
             gas_type: "48kg",
             delta_full: deltaFull48,
             delta_empty: deltaEmpty48,
-            reason: trimmedReason,
+            reason: trimmedReason || undefined,
+            group_id: groupId,
           });
         }
       }
@@ -356,7 +360,7 @@ function InventoryAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
@@ -451,29 +455,19 @@ function InventoryAdjustForm({
         </View>
       </BigBox>
 
-      <Text style={styles.modalLabel}>Reason (count_correction | shrinkage | damage)</Text>
+      <Text style={styles.modalLabel}>Reason (optional: count_correction | shrinkage | damage)</Text>
       <TextInput
         style={styles.modalInput}
-        placeholder="count_correction"
+        placeholder="Optional"
         value={reason}
         onChangeText={setReason}
       />
       <Text style={styles.modalHint}>Adjustments are for corrections only. Use Refill/Buy Iron for purchases.</Text>
-
       </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
-            <Text style={styles.footerPrimaryText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
+      <FooterActions
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(!entry)}
+      />
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -505,7 +499,6 @@ function CashAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   entry: CashAdjustment | null;
@@ -515,7 +508,6 @@ function CashAdjustForm({
   onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
   const [reason, setReason] = useState(entry?.reason ?? "");
@@ -553,15 +545,11 @@ function CashAdjustForm({
 
   const save = async (resetAfter = false) => {
     const trimmedReason = reason.trim();
-    if (!trimmedReason) {
-      Alert.alert("Reason required", "Please add a reason for the adjustment.");
-      return;
-    }
     try {
       if (entry) {
-        await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason });
+        await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason || undefined });
       } else {
-        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason });
+        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason || undefined });
       }
       if (resetAfter && !entry) {
         resetForm();
@@ -579,7 +567,7 @@ function CashAdjustForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.modalLabel}>Date & time</Text>
       <View style={styles.row}>
@@ -593,7 +581,7 @@ function CashAdjustForm({
         </Pressable>
       </View>
       <BigBox title="Amount" statusLine={cashStatusLine} statusIsAlert={deltaValue < 0}>
-        <View style={styles.entryFieldPairSingle}>
+        <StandaloneField>
           <FieldCell
             title="Amount"
             value={deltaValue}
@@ -602,26 +590,16 @@ function CashAdjustForm({
             onChangeText={setDeltaCash}
             steppers={MONEY_STEPPERS}
           />
-        </View>
+        </StandaloneField>
       </BigBox>
 
-      <Text style={styles.modalLabel}>Reason</Text>
-      <TextInput style={styles.modalInput} placeholder="Required" value={reason} onChangeText={setReason} />
-
+      <Text style={styles.modalLabel}>Reason (optional)</Text>
+      <TextInput style={styles.modalInput} placeholder="Optional" value={reason} onChangeText={setReason} />
       </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={styles.footerSecondary} onPress={() => save(!entry)}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={styles.footerPrimary} onPress={() => save(false)}>
-            <Text style={styles.footerPrimaryText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
+      <FooterActions
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(!entry)}
+      />
       <CalendarModal
         visible={calendarOpen}
         value={adjustDate}
@@ -653,7 +631,6 @@ function CompanyPaymentForm({
   balanceReady,
   onCreate,
   onSaved,
-  onCancel,
 }: {
   visible: boolean;
   date: string;
@@ -663,7 +640,6 @@ function CompanyPaymentForm({
   balanceReady: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
-  onCancel: () => void;
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -748,74 +724,78 @@ function CompanyPaymentForm({
   };
 
   return (
-    <View style={[styles.hubForm, styles.hubSectionCard, styles.hubFormScreen]}>
+    <View style={[styles.hubForm, styles.hubFormScreen]}>
       <ScrollView contentContainerStyle={styles.hubFormContent} keyboardShouldPersistTaps="handled">
-      <Text style={styles.modalLabel}>Date & time</Text>
-      <View style={styles.row}>
-        <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
-          <Text style={styles.dateText}>{payDate}</Text>
-          <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
-          <Text style={styles.dateText}>{payTime}</Text>
-          <Ionicons name="time-outline" size={16} color="#0a7ea4" />
-        </Pressable>
-        <Pressable
-          style={styles.nowButton}
-          onPress={() => {
-            setPayDate(getLocalDateString());
-            setPayTime(getNowTime());
-          }}
-        >
-          <Text style={styles.nowButtonText}>Now</Text>
-        </Pressable>
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Date & time</Text>
+        <View style={styles.row}>
+          <Pressable style={styles.dateField} onPress={() => setCalendarOpen(true)}>
+            <Text style={styles.dateText}>{payDate}</Text>
+            <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
+          </Pressable>
+          <Pressable style={styles.dateField} onPress={() => setTimeOpen(true)}>
+            <Text style={styles.dateText}>{payTime}</Text>
+            <Ionicons name="time-outline" size={16} color="#0a7ea4" />
+          </Pressable>
+          <Pressable
+            style={styles.nowButton}
+            onPress={() => {
+              setPayDate(getLocalDateString());
+              setPayTime(getNowTime());
+            }}
+          >
+            <Text style={styles.nowButtonText}>Now</Text>
+          </Pressable>
+        </View>
       </View>
-      <Text style={styles.modalLabel}>Payment direction</Text>
-      <View style={styles.modeRow}>
-        <Pressable
-          onPress={() => {
-            if (receiveDisabled) return;
-            setPaymentDirection("receive");
-          }}
-          disabled={receiveDisabled}
-          style={[
-            styles.modeButton,
-            paymentDirection === "receive" && styles.modeButtonActive,
-            receiveDisabled && styles.modeButtonDisabled,
-          ]}
-        >
-          <Text
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Payment direction</Text>
+        <View style={styles.modeRow}>
+          <Pressable
+            onPress={() => {
+              if (receiveDisabled) return;
+              setPaymentDirection("receive");
+            }}
+            disabled={receiveDisabled}
             style={[
-              styles.modeText,
-              paymentDirection === "receive" && styles.modeTextActive,
-              receiveDisabled && styles.modeTextDisabled,
+              styles.modeButton,
+              paymentDirection === "receive" && styles.modeButtonActive,
+              receiveDisabled && styles.modeButtonDisabled,
             ]}
           >
-            Receive
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            if (payDisabled) return;
-            setPaymentDirection("pay");
-          }}
-          disabled={payDisabled}
-          style={[
-            styles.modeButton,
-            paymentDirection === "pay" && styles.modeButtonActive,
-            payDisabled && styles.modeButtonDisabled,
-          ]}
-        >
-          <Text
+            <Text
+              style={[
+                styles.modeText,
+                paymentDirection === "receive" && styles.modeTextActive,
+                receiveDisabled && styles.modeTextDisabled,
+              ]}
+            >
+              Receive
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (payDisabled) return;
+              setPaymentDirection("pay");
+            }}
+            disabled={payDisabled}
             style={[
-              styles.modeText,
-              paymentDirection === "pay" && styles.modeTextActive,
-              payDisabled && styles.modeTextDisabled,
+              styles.modeButton,
+              paymentDirection === "pay" && styles.modeButtonActive,
+              payDisabled && styles.modeButtonDisabled,
             ]}
           >
-            Pay
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.modeText,
+                paymentDirection === "pay" && styles.modeTextActive,
+                payDisabled && styles.modeTextDisabled,
+              ]}
+            >
+              Pay
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <BigBox
         title={CUSTOMER_WORDING.money}
@@ -825,13 +805,10 @@ function CompanyPaymentForm({
             : paymentStatusLine
         }
         statusIsAlert={companyBalanceAfter > 0}
+        defaultExpanded
       >
-        <View
-          style={[
-            styles.entryFieldPairSingle,
-            tableDisabled && styles.sectionDisabled,
-            { width: "50%", minWidth: 160, alignSelf: "center", justifyContent: "center" },
-          ]}
+        <StandaloneField
+          style={tableDisabled ? styles.sectionDisabled : undefined}
           pointerEvents={tableDisabled ? "none" : "auto"}
         >
           <FieldCell
@@ -843,9 +820,9 @@ function CompanyPaymentForm({
             onChangeText={setAmount}
             steppers={MONEY_STEPPERS}
           />
-        </View>
+        </StandaloneField>
         <View style={styles.bigBoxActionRow}>
-          <View style={{ width: "50%", minWidth: 160, alignSelf: "center" }}>
+          <StandaloneField>
             <Pressable
               style={[
                 styles.inlineActionButton,
@@ -868,7 +845,7 @@ function CompanyPaymentForm({
                   : CUSTOMER_WORDING.didntPay}
               </Text>
             </Pressable>
-          </View>
+          </StandaloneField>
         </View>
         <InlineWalletFundingPrompt
           walletAmount={walletBalance}
@@ -887,31 +864,22 @@ function CompanyPaymentForm({
           }
         />
       </BigBox>
-      <Text style={styles.modalLabel}>Note</Text>
-      <TextInput
-        style={styles.modalInput}
-        placeholder="Optional note"
-        value={note}
-        onChangeText={setNote}
-        inputAccessoryViewID={accessoryId}
-      />
-
-      </ScrollView>
-      <View style={styles.stickyFooterPanel}>
-        <View style={styles.footerRow}>
-          <Pressable style={styles.footerCancel} onPress={onCancel}>
-            <Text style={styles.footerCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={[styles.footerSecondary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(true)} disabled={tableDisabled}>
-            <Text style={styles.footerSecondaryText}>Save & Add More</Text>
-          </Pressable>
-          <Pressable style={[styles.footerPrimary, tableDisabled && styles.footerButtonDisabled]} onPress={() => save(false)} disabled={tableDisabled}>
-            <Text style={styles.footerPrimaryText}>
-              {paymentDirection === "receive" ? "Save Receive" : "Save Pay"}
-            </Text>
-          </Pressable>
-        </View>
+      <View style={styles.hubSectionCard}>
+        <Text style={[styles.modalLabel, styles.sectionCardLabel]}>Reason / type</Text>
+        <TextInput
+          style={styles.modalInput}
+          placeholder="Optional note"
+          value={note}
+          onChangeText={setNote}
+          inputAccessoryViewID={accessoryId}
+        />
       </View>
+      </ScrollView>
+      <FooterActions
+        onSave={() => save(false)}
+        onSaveAndAdd={() => save(true)}
+        saveDisabled={tableDisabled}
+      />
       <CalendarModal
         visible={calendarOpen}
         value={payDate}
@@ -1031,6 +999,13 @@ export default function InventoryNewScreen() {
   const company48Balance = companyBalances?.company_cyl_48 ?? 0;
   const paymentTabDisabled = !companyBalanceReady || companyBalance === 0;
   const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
+  const closeScreen = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({ pathname: "/(tabs)/add" });
+  }, []);
 
   useEffect(() => {
     setActiveTab(resolveTab(section));
@@ -1107,8 +1082,8 @@ export default function InventoryNewScreen() {
         {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
           <RefillForm
             visible
-            onClose={() => router.back()}
-            onSaved={() => router.back()}
+            onClose={closeScreen}
+            onSaved={closeScreen}
             accessoryId={accessoryId}
             editEntry={activeTab === "refill" ? editRefill : null}
             showHeader={false}
@@ -1130,8 +1105,7 @@ export default function InventoryNewScreen() {
               onCreate={async (payload) => {
                 await createCompanyPayment.mutateAsync(payload);
               }}
-              onSaved={() => router.back()}
-              onCancel={() => router.back()}
+              onSaved={closeScreen}
             />
           ) : activeTab === "cash" ? (
             <CashAdjustForm
@@ -1146,8 +1120,7 @@ export default function InventoryNewScreen() {
               onUpdate={async (id, payload) => {
                 await updateCashAdjust.mutateAsync({ id, payload });
               }}
-              onSaved={() => router.back()}
-              onCancel={() => router.back()}
+              onSaved={closeScreen}
             />
           ) : (
             <InventoryAdjustForm
@@ -1162,8 +1135,7 @@ export default function InventoryNewScreen() {
               onUpdate={async (id, payload) => {
                 await updateInventoryAdjust.mutateAsync({ id, payload });
               }}
-              onSaved={() => router.back()}
-              onCancel={() => router.back()}
+              onSaved={closeScreen}
             />
           )
         )}
@@ -1245,7 +1217,7 @@ const styles = StyleSheet.create({
   },
   hubFormContent: {
     gap: 8,
-    paddingBottom: 132,
+    paddingBottom: 8,
   },
   entryFieldPair: {
     flexDirection: "row",
@@ -1253,6 +1225,11 @@ const styles = StyleSheet.create({
   },
   entryFieldPairSingle: {
     flexDirection: "row",
+  },
+  standaloneFieldWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    justifyContent: "center",
   },
   hubFormContainer: {
     flexGrow: 1,
@@ -1276,6 +1253,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#1c1c1c",
+  },
+  sectionCardLabel: {
+    marginTop: 0,
   },
   modalInput: {
     marginTop: 6,
@@ -1660,57 +1640,6 @@ const styles = StyleSheet.create({
   nowButtonText: {
     color: "#fff",
     fontWeight: "700",
-  },
-  stickyFooterPanel: {
-    position: "absolute",
-    left: 8,
-    right: 8,
-    bottom: 12,
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  footerCancel: {
-    flex: 1,
-    backgroundColor: "#64748b",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  footerCancelText: {
-    color: "#fff",
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  footerPrimary: {
-    flex: 1,
-    backgroundColor: "#0a7ea4",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  footerPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  footerSecondary: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  footerSecondaryText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  footerButtonDisabled: {
-    opacity: 0.6,
   },
 });
 

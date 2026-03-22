@@ -316,5 +316,5 @@ def test_level3_money_delta_matches_hero_primary(client) -> None:
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
 
-    assert event["hero_primary"] == f"Collected ₪{_major(45600)}"
+    assert event["hero_primary"] == f"Payment from customer ₪{_major(45600)}"
     assert event["money_delta"] == _major(45600)

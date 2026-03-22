@@ -46,25 +46,25 @@ describe("NewExpenseScreen transfer tabs", () => {
   });
 
   it("updates the Bank to Wallet helper text and compact amount control", () => {
-    const { getByLabelText, getByText } = render(<NewExpenseScreen />);
+    const { getByDisplayValue, getByText } = render(<NewExpenseScreen />);
 
     fireEvent.press(getByText("Bank to Wallet"));
-    fireEvent.changeText(getByLabelText("Transfer amount"), "25");
+    fireEvent.changeText(getByDisplayValue("0"), "25");
     expect(
       getByText("You will have 125 shekels in the wallet after moving 25 from bank. (was 100)")
     ).toBeTruthy();
 
-    fireEvent.press(getByLabelText("Increase transfer amount"));
-    expect(getByLabelText("Transfer amount").props.value).toBe("26");
+    fireEvent.press(getByText("+5"));
+    expect(getByDisplayValue("30")).toBeTruthy();
   });
 
   it("switches to Bank to Wallet and prefills the shortfall from the inline prompt", () => {
-    const { getByLabelText, getByText } = render(<NewExpenseScreen />);
+    const { getByDisplayValue, getByText } = render(<NewExpenseScreen />);
 
-    fireEvent.changeText(getByLabelText("Expense amount"), "150");
+    fireEvent.changeText(getByDisplayValue("0"), "150");
     fireEvent.press(getByText("Transfer now"));
 
-    expect(getByLabelText("Transfer amount").props.value).toBe("50");
+    expect(getByDisplayValue("50")).toBeTruthy();
     expect(
       getByText("You will have 150 shekels in the wallet after moving 50 from bank. (was 100)")
     ).toBeTruthy();

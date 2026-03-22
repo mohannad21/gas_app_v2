@@ -146,9 +146,54 @@ export type CompanyPaymentCreateInput = {
   request_id?: string;
 };
 
+export const CompanyBuyIronSchema = z.object({
+  id: z.string(),
+  happened_at: z.string(),
+  new12: z.number(),
+  new48: z.number(),
+  total_cost: z.number(),
+  paid_now: z.number(),
+  note: z.string().nullish(),
+});
+export type CompanyBuyIron = z.infer<typeof CompanyBuyIronSchema>;
+export type CompanyBuyIronCreateInput = {
+  new12: number;
+  new48: number;
+  total_cost: number;
+  paid_now: number;
+  note?: string;
+  date?: string;
+  time?: string;
+  time_of_day?: "morning" | "evening";
+  happened_at?: string;
+  request_id?: string;
+};
+
+export const CompanyBalanceAdjustmentSchema = z.object({
+  id: z.string(),
+  happened_at: z.string(),
+  money_balance: z.number(),
+  cylinder_balance_12: z.number(),
+  cylinder_balance_48: z.number(),
+  note: z.string().nullish(),
+});
+export type CompanyBalanceAdjustment = z.infer<typeof CompanyBalanceAdjustmentSchema>;
+export type CompanyBalanceAdjustmentCreateInput = {
+  money_balance: number;
+  cylinder_balance_12: number;
+  cylinder_balance_48: number;
+  note?: string;
+  date?: string;
+  time?: string;
+  time_of_day?: "morning" | "evening";
+  happened_at?: string;
+  request_id?: string;
+};
+
 export const InventoryAdjustmentSchema = z
   .object({
     id: z.string(),
+    group_id: z.string().nullish(),
     gas_type: GasTypeSchema,
     delta_full: z.number(),
     delta_empty: z.number(),

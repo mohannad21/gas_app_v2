@@ -1,4 +1,5 @@
 import {
+  createCompanyBuyIron,
   createInventoryAdjust,
   createInventoryRefill,
   deleteInventoryAdjustment,
@@ -71,6 +72,20 @@ export function useCreateRefill() {
   });
 }
 
+export function useCreateCompanyBuyIron() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createCompanyBuyIron,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
+    },
+  });
+}
+
 export function useAdjustInventory() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -89,7 +104,6 @@ export function useInventoryAdjustments(date?: string, includeDeleted?: boolean)
   return useQuery({
     queryKey: ["inventory", "adjustments", date, includeDeleted ?? false],
     queryFn: () => listInventoryAdjustments(date as string, includeDeleted),
-    enabled: !!date,
   });
 }
 

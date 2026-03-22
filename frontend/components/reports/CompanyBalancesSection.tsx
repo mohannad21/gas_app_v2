@@ -1,4 +1,7 @@
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
@@ -14,14 +17,8 @@ type CompanyBalancesSectionProps = {
 type CompanySummaryBox = {
   label: string;
   value: string;
+  direction: string;
 };
-
-function formatSignedValue(value: number, formatter: (value: number) => string, suffix?: string) {
-  const numeric = Number(value || 0);
-  const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
-  const formatted = formatter(Math.abs(numeric));
-  return suffix ? `${sign}${formatted} ${suffix}` : `${sign}${formatted}`;
-}
 
 function buildCompanyBoxes(
   companySummary: CompanySummary,
@@ -31,11 +28,25 @@ function buildCompanyBoxes(
   const moneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
   const cyl12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
   const cyl48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
+  const toDirection = (value: number) =>
+    value > 0 ? "Credit to company" : value < 0 ? "Debts to company" : "Settled";
 
   return [
-    { label: "Wallet balance", value: formatSignedValue(moneyNet, formatMoney, "shekels") },
-    { label: "12kg balance", value: formatSignedValue(cyl12Net, formatCount, "cyl") },
-    { label: "48kg balance", value: formatSignedValue(cyl48Net, formatCount, "cyl") },
+    {
+      label: "Money balance",
+      value: `${formatMoney(Math.abs(moneyNet))} shekels`,
+      direction: toDirection(moneyNet),
+    },
+    {
+      label: "12kg balance",
+      value: `${formatCount(Math.abs(cyl12Net))} cyl`,
+      direction: toDirection(cyl12Net),
+    },
+    {
+      label: "48kg balance",
+      value: `${formatCount(Math.abs(cyl48Net))} cyl`,
+      direction: toDirection(cyl48Net),
+    },
   ];
 }
 
@@ -46,46 +57,97 @@ export default function CompanyBalancesSection({
   formatCount,
   containerStyle,
 }: CompanyBalancesSectionProps) {
-  const companyBoxes = buildCompanyBoxes(companySummary, formatMoney, formatCount);
+  const [expanded, setExpanded] = useState(false);
+  const companyBoxes = useMemo(
+    () => buildCompanyBoxes(companySummary, formatMoney, formatCount),
+    [companySummary, formatCount, formatMoney]
+  );
 
   return (
-    <View style={[styles.card, containerStyle]}>
-      {companyBalancesReady ? (
-        <>
+    <View style={[styles.section, containerStyle]}>
+      <Pressable style={styles.header} onPress={() => setExpanded((value) => !value)} accessibilityRole="button">
+        <Text style={styles.headerTitle}>Company Balances</Text>
+        <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={18} color="#0f172a" />
+      </Pressable>
+      {expanded ? (
+        <View style={styles.content}>
           <View style={styles.row}>
-            {companyBoxes.map((box) => (
+            {(companyBalancesReady
+              ? companyBoxes
+              : companyBoxes.map((box) => ({ ...box, value: "Unavailable", direction: "Unavailable" }))
+            ).map((box) => (
               <View key={box.label} style={styles.box}>
                 <Text style={styles.label}>{box.label}</Text>
                 <Text style={styles.value}>{box.value}</Text>
+                <Text style={styles.meta}>{box.direction}</Text>
               </View>
             ))}
           </View>
-          <Text style={styles.meta}>+ = you owe company. - = company owes you.</Text>
-        </>
-      ) : (
-        <View style={styles.box}>
-          <Text style={styles.label}>Wallet balance</Text>
-          <Text style={styles.value}>Unavailable</Text>
+          <Pressable
+            style={[styles.adjustButton, !companyBalancesReady && styles.adjustButtonDisabled]}
+            disabled={!companyBalancesReady}
+            onPress={() => router.push("/inventory/company-balance-adjust")}
+          >
+            <Text style={styles.adjustButtonText}>Adjust balances</Text>
+          </Pressable>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  section: {
     marginTop: 12,
-    gap: 8,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    color: "#0f172a",
+    fontWeight: "800",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.sm,
+  },
+  content: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   row: {
     flexDirection: "row",
     gap: 8,
   },
+  adjustButton: {
+    marginTop: 10,
+    alignSelf: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#0a7ea4",
+  },
+  adjustButtonDisabled: {
+    opacity: 0.5,
+  },
+  adjustButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
+  },
   box: {
     flex: 1,
-    minHeight: 78,
+    minHeight: 88,
     borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 10,
@@ -106,8 +168,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   meta: {
+    marginTop: "auto",
     color: "#64748b",
-    fontWeight: "600",
+    fontWeight: "700",
     fontFamily: FontFamilies.regular,
     fontSize: FontSizes.xs,
   },

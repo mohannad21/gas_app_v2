@@ -1,4 +1,5 @@
 import type { BalanceTransition } from "@/types/domain";
+import { getBalanceDirectionLabel, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 
 type BalanceScope = BalanceTransition["scope"];
 type BalanceComponent = BalanceTransition["component"];
@@ -47,17 +48,7 @@ function formatComponentValue(component: BalanceComponent, value: number, format
 }
 
 function buildDirectionLabel(scope: BalanceScope, component: BalanceComponent, amount: number) {
-  const positive = Number(amount || 0) > 0;
-  if (scope === "customer") {
-    if (component === "money") {
-      return positive ? "Customer owes you" : "You owe customer";
-    }
-    return positive ? "Customer owes you" : "You owe customer";
-  }
-  if (component === "money") {
-    return positive ? "You owe company" : "Company owes you";
-  }
-  return positive ? "You owe company" : "Company owes you";
+  return getBalanceDirectionLabel(scope, Number(amount || 0));
 }
 
 function prefixWithDisplayName(line: string, transition: TransitionInput, includeDisplayName?: boolean) {
@@ -91,7 +82,7 @@ export function formatCurrentBalanceState(
   options: SharedOptions = {}
 ) {
   const numeric = Number(amount || 0);
-  if (numeric === 0) return "Settled";
+  if (numeric === 0) return PAYMENT_DIRECTION_WORDING.settled;
   const formatMoney = options.formatMoney ?? defaultFormatMoney;
   const label = buildDirectionLabel(scope, component, numeric);
   const value = formatComponentValue(component, numeric, formatMoney);
@@ -136,7 +127,7 @@ export function formatBalanceTransitions(
 
       if (after === 0) {
         if (options.collapseAllSettled) return null;
-        return prefixWithDisplayName("Settled", transition, options.includeDisplayName);
+        return prefixWithDisplayName(PAYMENT_DIRECTION_WORDING.settled, transition, options.includeDisplayName);
       }
 
       const current = formatCurrentBalanceState(transition.scope, transition.component, after, { formatMoney });
@@ -144,7 +135,10 @@ export function formatBalanceTransitions(
         return prefixWithDisplayName(current, transition, options.includeDisplayName);
       }
 
-      const previous = formatComponentValue(transition.component, before, formatMoney);
+      const previous =
+        Math.sign(before) !== Math.sign(after)
+          ? formatCurrentBalanceState(transition.scope, transition.component, before, { formatMoney })
+          : formatComponentValue(transition.component, before, formatMoney);
       return prefixWithDisplayName(`${current} (was ${previous})`, transition, options.includeDisplayName);
     })
     .filter((line): line is string => Boolean(line));

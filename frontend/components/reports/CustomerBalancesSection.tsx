@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { BalanceSummary } from "@/hooks/useBalancesSummary";
@@ -23,7 +25,7 @@ function buildCustomerBoxes(
 ): CustomerSummaryBox[] {
   return [
     {
-      label: "Wallet debt",
+      label: "Money debt",
       count: balanceSummary.money.receivable.count,
       value: formatMoney(balanceSummary.money.receivable.total),
     },
@@ -38,7 +40,7 @@ function buildCustomerBoxes(
       value: String(balanceSummary.cyl48.receivable.total),
     },
     {
-      label: "Wallet credit",
+      label: "Money credit",
       count: balanceSummary.money.payable.count,
       value: formatMoney(balanceSummary.money.payable.total),
     },
@@ -53,7 +55,7 @@ function buildCustomerBoxes(
       value: String(balanceSummary.cyl48.payable.total),
     },
   ].map((entry) => ({
-    value: entry.label.startsWith("Wallet") ? `${entry.value} shekels` : `${entry.value} cyl`,
+    value: entry.label.startsWith("Money") ? `${entry.value} shekels` : `${entry.value} cyl`,
     countLabel: formatCustomerCount(entry.count),
     label: entry.label,
   }));
@@ -65,29 +67,63 @@ export default function CustomerBalancesSection({
   formatCustomerCount,
   containerStyle,
 }: CustomerBalancesSectionProps) {
-  const customerBoxes = buildCustomerBoxes(balanceSummary, formatMoney, formatCustomerCount);
+  const [expanded, setExpanded] = useState(false);
+  const customerBoxes = useMemo(
+    () => buildCustomerBoxes(balanceSummary, formatMoney, formatCustomerCount),
+    [balanceSummary, formatCustomerCount, formatMoney]
+  );
   const rows = [customerBoxes.slice(0, 3), customerBoxes.slice(3, 6)];
 
   return (
-    <View style={[styles.card, containerStyle]}>
-      {rows.map((row, rowIndex) => (
-        <View key={`customer-summary-row-${rowIndex}`} style={styles.row}>
-          {row.map((box) => (
-            <View key={box.label} style={styles.box}>
-              <Text style={styles.label}>{box.label}</Text>
-              <Text style={styles.value}>{box.value}</Text>
-              <Text style={styles.meta}>{box.countLabel}</Text>
+    <View style={[styles.section, containerStyle]}>
+      <Pressable style={styles.header} onPress={() => setExpanded((value) => !value)} accessibilityRole="button">
+        <Text style={styles.headerTitle}>Customer Balances</Text>
+        <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={18} color="#0f172a" />
+      </Pressable>
+      {expanded ? (
+        <View style={styles.content}>
+          {rows.map((row, rowIndex) => (
+            <View key={`customer-summary-row-${rowIndex}`} style={styles.row}>
+              {row.map((box) => (
+                <View key={box.label} style={styles.box}>
+                  <Text style={styles.label}>{box.label}</Text>
+                  <Text style={styles.value}>{box.value}</Text>
+                  <Text style={styles.meta}>{box.countLabel}</Text>
+                </View>
+              ))}
             </View>
           ))}
         </View>
-      ))}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  section: {
     marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    color: "#0f172a",
+    fontWeight: "800",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.sm,
+  },
+  content: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     gap: 8,
   },
   row: {
@@ -98,7 +134,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 74,
     borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 10,

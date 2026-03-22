@@ -19,7 +19,6 @@ export function useCashAdjustments(date?: string, includeDeleted?: boolean) {
   return useQuery({
     queryKey: ["cash", "adjustments", date, includeDeleted ?? false],
     queryFn: () => listCashAdjustments(date as string, includeDeleted),
-    enabled: !!date,
   });
 }
 

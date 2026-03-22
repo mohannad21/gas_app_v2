@@ -468,6 +468,28 @@ class CompanyBuyIronOut(SQLModel):
   note: Optional[str] = None
 
 
+class CompanyBalanceAdjustmentCreate(SQLModel):
+  money_balance: int = 0
+  cylinder_balance_12: int = 0
+  cylinder_balance_48: int = 0
+  note: Optional[str] = None
+  request_id: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
+class CompanyBalanceAdjustmentOut(SQLModel):
+  id: str
+  happened_at: datetime
+  money_balance: int
+  cylinder_balance_12: int
+  cylinder_balance_48: int
+  note: Optional[str] = None
+
+
 class CompanyBalancesOut(SQLModel):
   company_money: int
   company_cyl_12: int
@@ -522,10 +544,11 @@ class CashAdjustmentRow(SQLModel):
 
 class InventoryAdjustCreate(SQLModel):
   happened_at: Optional[datetime] = None
+  group_id: Optional[str] = None
   gas_type: GasType
   delta_full: int = 0
   delta_empty: int = 0
-  reason: InventoryAdjustReason
+  reason: Optional[str] = None
   note: Optional[str] = None
   request_id: Optional[str] = None
 
@@ -533,12 +556,13 @@ class InventoryAdjustCreate(SQLModel):
 class InventoryAdjustUpdate(SQLModel):
   delta_full: Optional[int] = None
   delta_empty: Optional[int] = None
-  reason: Optional[InventoryAdjustReason] = None
+  reason: Optional[str] = None
   note: Optional[str] = None
 
 
 class InventoryAdjustmentRow(SQLModel):
   id: str
+  group_id: Optional[str] = None
   gas_type: GasType
   delta_full: int
   delta_empty: int

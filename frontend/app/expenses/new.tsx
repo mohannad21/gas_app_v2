@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   modeTextActive: { color: "#fff" },
   expenseContent: {
     paddingHorizontal: 14,
-    paddingBottom: 140,
+    paddingBottom: 8,
     gap: 12,
   },
   formCard: {
@@ -329,6 +329,10 @@ const styles = StyleSheet.create({
   },
   entryFieldPairSingle: {
     flexDirection: "row",
+  },
+  standaloneFieldWrap: {
+    width: "100%",
+    alignSelf: "stretch",
   },
   row: {
     flexDirection: "row",
@@ -472,47 +476,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#0f172a",
-  },
-  expenseFooterPage: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    paddingTop: 6,
-    backgroundColor: "#f3f5f7",
-  },
-  expenseFooterRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  expenseFooterPrimary: {
-    flex: 1,
-    backgroundColor: "#0a7ea4",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  expenseFooterSecondary: {
-    flex: 1,
-    borderColor: "#cbd5e1",
-    borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  expenseFooterPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  expenseFooterSecondaryText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
-  },
-  expenseFooterDisabled: {
-    opacity: 0.6,
   },
   calendarOverlay: {
     position: "absolute",
