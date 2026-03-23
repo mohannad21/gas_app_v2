@@ -16,8 +16,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Svg, { Line, Path, Rect } from "react-native-svg";
-
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
@@ -68,20 +66,6 @@ const buildCashMathLines = (cashMath?: any) => {
   pushLine("Other", cashMath.other);
   return lines;
 };
-
-function QuickReplacementIcon() {
-  return (
-    <View style={styles.quickReplacementIcon}>
-      <Svg width={14} height={20} viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
-        <Rect x="20" y="115" width="60" height="65" rx="10" fill="#B7D7E8" stroke="#0a7ea4" strokeWidth="4" />
-        <Line x1="20" y1="147" x2="80" y2="147" stroke="#0a7ea4" strokeWidth="3" />
-        <Path d="M35 115V100C35 97 38 95 40 95H60C62 95 65 97 65 100V115" fill="none" stroke="#0a7ea4" strokeWidth="4" />
-        <Rect x="30" y="180" width="40" height="10" rx="2" fill="#0a7ea4" />
-      </Svg>
-      <Ionicons name="sync-outline" size={13} color="#0a7ea4" style={styles.quickReplacementArrow} />
-    </View>
-  );
-}
 
 type ReportDayCardProps = {
   item: any;
@@ -790,7 +774,10 @@ export default function ReportsScreen() {
           style={styles.quickFab}
           onPress={() => router.push("/orders/new")}
         >
-          <QuickReplacementIcon />
+          <Ionicons name="swap-horizontal-outline" size={26} color="#0a7ea4" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
         </Pressable>
         <Pressable
           testID="reports-quick-refill"
@@ -798,7 +785,10 @@ export default function ReportsScreen() {
           style={styles.quickFab}
           onPress={() => router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } })}
         >
-          <MaterialCommunityIcons name="truck-delivery" size={18} color="#f59e0b" />
+          <MaterialCommunityIcons name="truck-delivery" size={22} color="#f59e0b" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
         </Pressable>
         <Pressable
           testID="reports-quick-expense"
@@ -806,7 +796,10 @@ export default function ReportsScreen() {
           style={styles.quickFab}
           onPress={() => router.push("/expenses/new")}
         >
-          <Ionicons name="receipt-outline" size={18} color="#0a7ea4" />
+          <Ionicons name="receipt-outline" size={24} color="#0a7ea4" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
         </Pressable>
       </Animated.View>
 
@@ -1600,16 +1593,24 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  quickReplacementIcon: {
-    width: 18,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quickReplacementArrow: {
+  quickFabBadge: {
     position: "absolute",
-    right: -4,
-    bottom: -2,
+    top: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+  },
+  quickFabBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 12,
+    fontFamily: FontFamilies.extrabold,
   },
 
   tabRow: { flexDirection: "row", gap: 8, marginTop: 10, marginBottom: 10, flexWrap: "wrap" },
