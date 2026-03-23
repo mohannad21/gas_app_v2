@@ -63,7 +63,7 @@ type CashExpensesViewProps = {
   transferNote: string;
   setTransferNote: (next: string) => void;
   accessoryId?: string;
-  createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown> };
+  createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown>; isPending?: boolean };
   createBankDeposit: {
     mutateAsync: (payload: {
       date: string;
@@ -72,6 +72,7 @@ type CashExpensesViewProps = {
       direction?: "wallet_to_bank" | "bank_to_wallet";
       note?: string;
     }) => Promise<unknown>;
+    isPending?: boolean;
   };
   CalendarModal: React.ComponentType<CalendarModalProps>;
   TimePickerModal: React.ComponentType<{
@@ -170,6 +171,7 @@ export default function CashExpensesView({
     isExpense
       ? Boolean(expenseType.trim()) && expenseAmountValue > 0
       : transferAmountValue > 0 && !transferDisabled;
+  const isSaving = isExpense ? Boolean(createExpense.isPending) : Boolean(createBankDeposit.isPending);
 
   const setExpenseNow = () => {
     const now = new Date();
@@ -381,7 +383,8 @@ export default function CashExpensesView({
       <FooterActions
         onSave={() => handleSave(false)}
         onSaveAndAdd={() => handleSave(true)}
-        saveDisabled={!canSaveExpense}
+        saveDisabled={!canSaveExpense || isSaving}
+        saving={isSaving}
       />
     </View>
   );

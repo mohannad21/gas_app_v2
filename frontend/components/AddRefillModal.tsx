@@ -1299,6 +1299,8 @@ export function RefillForm({
         counts={initCounts}
         onChangeCounts={setInitCounts}
         onClose={() => setInitOpen(false)}
+        saveDisabled={initInventory.isPending}
+        saving={initInventory.isPending}
         onSave={async () => {
           await initInventory.mutateAsync({
             date,
@@ -1519,6 +1521,8 @@ function InitInventoryModal({
   onChangeCounts,
   onClose,
   onSave,
+  saveDisabled = false,
+  saving = false,
   accessoryId,
 }: {
   visible: boolean;
@@ -1527,6 +1531,8 @@ function InitInventoryModal({
   onChangeCounts: (next: { full12: string; empty12: string; full48: string; empty48: string }) => void;
   onClose: () => void;
   onSave: () => void;
+  saveDisabled?: boolean;
+  saving?: boolean;
   accessoryId?: string;
 }) {
   return (
@@ -1596,6 +1602,8 @@ function InitInventoryModal({
                 onCancel={onClose}
                 onSave={onSave}
                 saveLabel="Save inventory"
+                saveDisabled={saveDisabled}
+                saving={saving}
               />
             </View>
           </ScrollView>
