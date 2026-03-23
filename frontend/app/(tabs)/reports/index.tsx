@@ -25,7 +25,6 @@ import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection"
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
-import { getDailyReportV2 } from "@/lib/api";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
@@ -285,9 +284,9 @@ export default function ReportsScreen() {
     v2Expanded,
     setV2Expanded,
     v2DayByDate,
-    setV2DayByDate,
+    v2DayStatusByDate,
     refetchV2,
-  } = useDailyReportScreen();
+  } = useDailyReportScreen(30, selectedDate);
   const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
 
   const [revealVisible, setRevealVisible] = useState(false);
@@ -400,35 +399,6 @@ export default function ReportsScreen() {
     if (selectedDate && v2Rows.some((row) => row.date === selectedDate)) return;
     setSelectedDate(v2Rows[0]?.date ?? null);
   }, [selectedDate, v2Rows]);
-
-  useEffect(() => {
-    if (!selectedDate) return;
-    if (v2DayByDate[selectedDate] !== undefined) return;
-    setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null }));
-    getDailyReportV2(selectedDate)
-      .then((day) => setV2DayByDate((prev) => ({ ...prev, [selectedDate]: day })))
-      .catch(() => setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null })));
-  }, [selectedDate, setV2DayByDate, v2DayByDate]);
-
-  // Clear cached day info when collapsing
-  useEffect(() => {
-    if (!v2Query.data) return;
-    setV2DayByDate((prev) => {
-      const expanded = new Set(v2Expanded);
-      const next: typeof prev = {};
-      Object.entries(prev).forEach(([date, value]) => {
-        if (expanded.has(date)) {
-          next[date] = value;
-        }
-      });
-      const prevKeys = Object.keys(prev);
-      const nextKeys = Object.keys(next);
-      if (prevKeys.length === nextKeys.length && prevKeys.every((key) => prev[key] === next[key])) {
-        return prev;
-      }
-      return next;
-    });
-  }, [v2Query.data, v2Expanded]);
 
   const toggleDay = useCallback((date: string) => {
     setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
@@ -571,6 +541,7 @@ export default function ReportsScreen() {
   const latestInventory = latestCard?.inventory_end;
   const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
+  const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
   const selectedEvents = ((selectedDayInfo?.events ?? []) as any[]) || [];
 
   const revealShelfContent =
@@ -735,9 +706,11 @@ export default function ReportsScreen() {
             </>
           }
           ListEmptyComponent={
-            selectedDayInfo === null && !v2Query.isLoading ? (
+            selectedDayStatus === "idle" || selectedDayStatus === "loading" ? (
               <Text style={styles.meta}>Loading activities...</Text>
-            ) : selectedDayInfo !== null && selectedEvents.length === 0 ? (
+            ) : selectedDayStatus === "error" ? (
+              <Text style={styles.error}>Failed to load activities.</Text>
+            ) : selectedDayStatus === "success" && selectedEvents.length === 0 ? (
               <Text style={styles.meta}>No activities on this day.</Text>
             ) : null
           }

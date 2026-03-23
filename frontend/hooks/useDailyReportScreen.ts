@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { getDailyReportV2 } from "@/lib/api";
@@ -12,7 +12,9 @@ const getLocalDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
-export function useDailyReportScreen(rangeDays = 30) {
+export type ReportDayLoadStatus = "idle" | "loading" | "success" | "error";
+
+export function useDailyReportScreen(rangeDays = 30, selectedDate?: string | null) {
   const today = getLocalDateString();
   const v2From = useMemo(() => {
     const start = new Date();
@@ -32,24 +34,47 @@ export function useDailyReportScreen(rangeDays = 30) {
 
   const [v2Expanded, setV2Expanded] = useState<string[]>([]);
   const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
+  const [v2DayStatusByDate, setV2DayStatusByDate] = useState<Record<string, ReportDayLoadStatus>>({});
+  const requestedDatesRef = useRef<Set<string>>(new Set());
+
+  const wantedDates = useMemo(() => {
+    const wanted = new Set<string>(v2Expanded);
+    if (selectedDate) {
+      wanted.add(selectedDate);
+    }
+    return Array.from(wanted);
+  }, [selectedDate, v2Expanded]);
 
   useEffect(() => {
-    const wanted = new Set<string>(v2Expanded);
-    if (wanted.size === 0) return;
+    if (wantedDates.length === 0) return;
 
-    const missing = Array.from(wanted).filter((date) => !(date in v2DayByDate));
+    const missing = wantedDates.filter(
+      (date) => !requestedDatesRef.current.has(date) && !(date in v2DayStatusByDate)
+    );
     if (missing.length === 0) return;
 
     let cancelled = false;
+    for (const date of missing) {
+      requestedDatesRef.current.add(date);
+    }
+    setV2DayStatusByDate((prev) => {
+      const next = { ...prev };
+      for (const date of missing) {
+        next[date] = "loading";
+      }
+      return next;
+    });
+
     const load = async () => {
       for (const date of missing) {
         try {
           const day = await getDailyReportV2(date);
           if (cancelled) return;
           setV2DayByDate((prev) => ({ ...prev, [date]: day }));
+          setV2DayStatusByDate((prev) => ({ ...prev, [date]: "success" }));
         } catch {
           if (cancelled) return;
-          setV2DayByDate((prev) => ({ ...prev, [date]: null }));
+          setV2DayStatusByDate((prev) => ({ ...prev, [date]: "error" }));
         }
       }
     };
@@ -58,12 +83,38 @@ export function useDailyReportScreen(rangeDays = 30) {
     return () => {
       cancelled = true;
     };
-  }, [v2Expanded, v2DayByDate, v2Rows]);
+  }, [v2Query.dataUpdatedAt, wantedDates]);
 
   useEffect(() => {
     if (!v2Query.data) return;
+    requestedDatesRef.current = new Set();
     setV2DayByDate({});
+    setV2DayStatusByDate({});
   }, [v2Query.data, v2Query.dataUpdatedAt]);
+
+  useEffect(() => {
+    setV2DayByDate((prev) => {
+      const wanted = new Set(wantedDates);
+      const next = Object.fromEntries(Object.entries(prev).filter(([date]) => wanted.has(date)));
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every((key) => prev[key] === next[key])) {
+        return prev;
+      }
+      return next;
+    });
+    setV2DayStatusByDate((prev) => {
+      const wanted = new Set(wantedDates);
+      const next = Object.fromEntries(Object.entries(prev).filter(([date]) => wanted.has(date)));
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every((key) => prev[key] === next[key])) {
+        return prev;
+      }
+      return next;
+    });
+    requestedDatesRef.current = new Set(Array.from(requestedDatesRef.current).filter((date) => wantedDates.includes(date)));
+  }, [wantedDates]);
 
   return {
     v2Query,
@@ -71,7 +122,7 @@ export function useDailyReportScreen(rangeDays = 30) {
     v2Expanded,
     setV2Expanded,
     v2DayByDate,
-    setV2DayByDate,
+    v2DayStatusByDate,
     refetchV2: v2Query.refetch,
   };
 }
