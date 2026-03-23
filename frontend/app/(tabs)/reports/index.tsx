@@ -453,7 +453,7 @@ export default function ReportsScreen() {
             <FlatList
               data={events}
               keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
-              ListHeaderComponent={card ? <DaySummaryBox card={card} /> : null}
+              ListHeaderComponent={card ? <View style={{ marginTop: 10 }}><DaySummaryBox card={card} /></View> : null}
               ListEmptyComponent={
                 dayInfo === null && !v2Query.isLoading ? (
                   <Text style={styles.meta}>Loading activities...</Text>

@@ -18,7 +18,7 @@ function CylIcon({
   const isLarge = variant === "48kg";
   const h = size * 2;
   return (
-    <Svg width={size * 0.55} height={h} viewBox="0 0 100 200" preserveAspectRatio="xMidYMax meet">
+    <Svg width={size * 0.55} height={h} viewBox="0 0 100 200" preserveAspectRatio="xMidYMax meet" color={color}>
       {isLarge ? (
         <>
           <Rect x="15" y="50" width="70" height="130" rx="10" fill="#B7D7E8" stroke={color} strokeWidth="4" />
@@ -98,23 +98,35 @@ const DayCard = memo(function DayCard({
 
 export default function DayPickerStrip({ rows, selectedDate, onSelect }: DayPickerStripProps) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-      {rows.map((item) => (
-        <DayCard key={item.date} item={item} selected={item.date === selectedDate} onSelect={onSelect} />
-      ))}
-    </ScrollView>
+    <View style={{ height: 180, backgroundColor: "#fff" }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.scroll}
+        contentContainerStyle={styles.strip}
+      >
+        {rows.map((item) => (
+          <DayCard key={item.date} item={item} selected={item.date === selectedDate} onSelect={onSelect} />
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flexGrow: 0,
+    height: 170,
+  },
   strip: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 20,
     gap: 8,
   },
   card: {
-    width: 84,
-    minHeight: 110,
+    width: 90,
+    height: 140,
     borderRadius: 14,
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -122,7 +134,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 10,
     justifyContent: "space-between",
-    gap: 6,
+    gap: 4,
   },
   cardSelected: {
     backgroundColor: "#0a7ea4",
@@ -132,24 +144,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    minHeight: 20,
+    minHeight: 26,
   },
   bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    minHeight: 20,
+    minHeight: 26,
   },
   centerBlock: {
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   cylRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
   },
   cylCount: {
     fontSize: FontSizes.sm,
@@ -170,7 +182,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.title,
     fontFamily: FontFamilies.extrabold,
     color: "#0f172a",
-    lineHeight: 22,
+    lineHeight: 28,
   },
   textWhite: {
     color: "#fff",
