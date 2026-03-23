@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -16,10 +16,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
+import ReportHeader from "@/components/reports/ReportHeader";
+import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
+import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
@@ -64,6 +68,20 @@ const buildCashMathLines = (cashMath?: any) => {
   pushLine("Other", cashMath.other);
   return lines;
 };
+
+function QuickReplacementIcon() {
+  return (
+    <View style={styles.quickReplacementIcon}>
+      <Svg width={14} height={20} viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
+        <Rect x="20" y="115" width="60" height="65" rx="10" fill="#B7D7E8" stroke="#ffffff" strokeWidth="4" />
+        <Line x1="20" y1="147" x2="80" y2="147" stroke="#ffffff" strokeWidth="3" />
+        <Path d="M35 115V100C35 97 38 95 40 95H60C62 95 65 97 65 100V115" fill="none" stroke="#ffffff" strokeWidth="4" />
+        <Rect x="30" y="180" width="40" height="10" rx="2" fill="#ffffff" />
+      </Svg>
+      <Ionicons name="sync-outline" size={13} color="#ffffff" style={styles.quickReplacementArrow} />
+    </View>
+  );
+}
 
 type ReportDayCardProps = {
   item: any;
@@ -294,7 +312,6 @@ export default function ReportsScreen() {
   const revealAnim = useRef(new Animated.Value(0)).current;
   const spacerAnim = useRef(new Animated.Value(0)).current;
   const shelfAnim = useRef(new Animated.Value(1)).current;
-  const hasDefaultedShelf = useRef(false);
   const scrollTracker = useRef<{ lastY: number; direction: "up" | "down" | null; travel: number }>({
     lastY: 0,
     direction: null,
@@ -439,18 +456,12 @@ export default function ReportsScreen() {
   }, [shelfAnim]);
 
   const showRevealLayer = useCallback(() => {
-    setRevealVisible((prev) => {
-      if (prev) return prev;
-      if (!hasDefaultedShelf.current) {
-        hasDefaultedShelf.current = true;
-        setActiveShelf("ledger");
-      }
-      return true;
-    });
+    setRevealVisible(true);
   }, []);
 
   const hideRevealLayer = useCallback(() => {
     setRevealVisible(false);
+    setActiveShelf(null);
   }, []);
 
   const handleShelfPress = useCallback(
@@ -511,59 +522,6 @@ export default function ReportsScreen() {
 
   const latestCard = v2Rows[0];
   const latestInventory = latestCard?.inventory_end;
-  const customerShelfBoxes = [
-    {
-      label: "Money debt",
-      value: formatMoney(balanceSummary.money.receivable.total),
-      tone: "positive" as const,
-    },
-    {
-      label: "Money credit",
-      value: formatMoney(balanceSummary.money.payable.total),
-      tone: "neutral" as const,
-    },
-    {
-      label: "12kg debt",
-      value: formatCount(balanceSummary.cyl12.receivable.total),
-      tone: "positive" as const,
-    },
-    {
-      label: "12kg credit",
-      value: formatCount(balanceSummary.cyl12.payable.total),
-      tone: "neutral" as const,
-    },
-    {
-      label: "48kg debt",
-      value: formatCount(balanceSummary.cyl48.receivable.total),
-      tone: "positive" as const,
-    },
-    {
-      label: "48kg credit",
-      value: formatCount(balanceSummary.cyl48.payable.total),
-      tone: "neutral" as const,
-    },
-  ];
-  const companyMoneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
-  const company12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
-  const company48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
-  const companyShelfBoxes = [
-    {
-      label: "Money balance",
-      value: companyBalancesQuery.data ? formatSigned(companyMoneyNet) : "Unavailable",
-      tone: companyMoneyNet < 0 ? ("warning" as const) : ("neutral" as const),
-    },
-    {
-      label: "12kg balance",
-      value: companyBalancesQuery.data ? formatSigned(company12Net) : "Unavailable",
-      tone: company12Net < 0 ? ("warning" as const) : ("neutral" as const),
-    },
-    {
-      label: "48kg balance",
-      value: companyBalancesQuery.data ? formatSigned(company48Net) : "Unavailable",
-      tone: company48Net < 0 ? ("warning" as const) : ("neutral" as const),
-    },
-  ];
-
   const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
   const selectedEvents = ((selectedDayInfo?.events ?? []) as any[]) || [];
@@ -587,30 +545,22 @@ export default function ReportsScreen() {
           },
         ]}
       >
-        <View style={styles.shelfGrid}>
-          <ValueBox label="12kg Full" value={formatCount(latestInventory?.full12 ?? 0)} compact />
-          <ValueBox label="12kg Empty" value={formatCount(latestInventory?.empty12 ?? 0)} compact />
-          <ValueBox label="48kg Full" value={formatCount(latestInventory?.full48 ?? 0)} compact />
-          <ValueBox label="48kg Empty" value={formatCount(latestInventory?.empty48 ?? 0)} compact />
-          <ValueBox label="Wallet" value={formatMoney(latestCard?.cash_end ?? 0)} compact />
-        </View>
-        <View style={styles.revealShelfActionRow}>
-          <Pressable
-            style={styles.shelfActionButton}
-            onPress={() => {
+        <View style={styles.reusedShelfWrap}>
+          <ReportHeader
+            inventory={{
+              full12: formatCount(latestInventory?.full12 ?? 0),
+              empty12: formatCount(latestInventory?.empty12 ?? 0),
+              full48: formatCount(latestInventory?.full48 ?? 0),
+              empty48: formatCount(latestInventory?.empty48 ?? 0),
+            }}
+            cashEnd={formatMoney(latestCard?.cash_end ?? 0)}
+            onAdjustInventory={() => {
               router.push("/(tabs)/add?open=adjust-inventory");
             }}
-          >
-            <Text style={styles.shelfActionText}>Adjust Inventory</Text>
-          </Pressable>
-          <Pressable
-            style={styles.shelfActionButton}
-            onPress={() => {
+            onAdjustCash={() => {
               router.push("/(tabs)/add?open=adjust-cash");
             }}
-          >
-            <Text style={styles.shelfActionText}>Adjust Wallet</Text>
-          </Pressable>
+          />
         </View>
       </Animated.View>
     ) : activeShelf === "customers" ? (
@@ -631,11 +581,13 @@ export default function ReportsScreen() {
           },
         ]}
       >
-        <View style={styles.shelfGrid}>
-          {customerShelfBoxes.map((box) => (
-            <SummaryChip key={box.label} label={box.label} value={box.value} compact />
-          ))}
-        </View>
+        <CustomerBalancesSection
+          balanceSummary={balanceSummary}
+          formatMoney={formatMoney}
+          formatCustomerCount={(count) => `${count} cust`}
+          containerStyle={styles.reusedSection}
+          initiallyExpanded
+        />
       </Animated.View>
     ) : activeShelf === "company" ? (
       <Animated.View
@@ -655,11 +607,14 @@ export default function ReportsScreen() {
           },
         ]}
       >
-        <View style={styles.shelfGrid}>
-          {companyShelfBoxes.map((box) => (
-            <SummaryChip key={box.label} label={box.label} value={box.value} compact bad={box.tone === "warning"} />
-          ))}
-        </View>
+        <CompanyBalancesSection
+          companySummary={companySummary}
+          companyBalancesReady={Boolean(companyBalancesQuery.data)}
+          formatMoney={formatMoney}
+          formatCount={formatCount}
+          containerStyle={styles.reusedSection}
+          initiallyExpanded
+        />
       </Animated.View>
     ) : null;
 
@@ -764,16 +719,21 @@ export default function ReportsScreen() {
           },
         ]}
       >
-        <Pressable style={styles.quickFab} onPress={() => router.push("/orders/new")}>
-          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+        <Pressable testID="reports-quick-replacement" style={styles.quickFab} onPress={() => router.push("/orders/new")}>
+          <QuickReplacementIcon />
           <Text style={styles.quickFabText}>Replacement</Text>
         </Pressable>
         <Pressable
+          testID="reports-quick-refill"
           style={styles.quickFab}
           onPress={() => router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } })}
         >
-          <Ionicons name="reload-outline" size={18} color="#fff" />
+          <MaterialCommunityIcons name="truck-delivery" size={18} color="#fff" />
           <Text style={styles.quickFabText}>Refill</Text>
+        </Pressable>
+        <Pressable testID="reports-quick-expense" style={styles.quickFab} onPress={() => router.push("/expenses/new")}>
+          <Ionicons name="receipt-outline" size={18} color="#fff" />
+          <Text style={styles.quickFabText}>Expense</Text>
         </Pressable>
       </Animated.View>
 
@@ -1467,66 +1427,6 @@ function DeltaBox({
   );
 }
 
-function ValueBox({
-  label,
-  value,
-  valueStyle,
-  compact,
-}: {
-  label: string;
-  value: string;
-  valueStyle?: any;
-  compact?: boolean;
-}) {
-  return (
-    <View style={[styles.deltaBox, compact && styles.deltaBoxCompact]}>
-      <Text style={styles.deltaBoxLabel}>{label}</Text>
-      <View style={styles.valueBoxRow}>
-        <Text style={[styles.valueBoxValue, valueStyle]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
-function SummaryChip({
-  label,
-  labelLines,
-  value,
-  bad,
-  compact,
-}: {
-  label?: string;
-  labelLines?: string[];
-  value: string;
-  bad?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <View style={[styles.summaryChip, compact && styles.summaryChipCompact, bad && styles.summaryChipBad]}>
-      {labelLines ? (
-        <View style={styles.summaryChipLabelStack}>
-          {labelLines.map((line, index) => (
-            <Text key={`${line}-${index}`} style={styles.summaryChipLabelLine}>
-              {line}
-            </Text>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.summaryChipLabel}>{label}</Text>
-      )}
-      <Text
-        style={[
-          styles.summaryChipValue,
-          bad && styles.summaryChipValueBad,
-          value === "OK" && styles.summaryChipValueOk,
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 /* -----------------------------------------
  * Styles (minimal, consistent)
  * ----------------------------------------- */
@@ -1582,43 +1482,17 @@ const styles = StyleSheet.create({
   },
   revealShelfBody: {
     marginTop: 10,
-    padding: 12,
+  },
+  reusedShelfWrap: {
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.97)",
-    borderWidth: 1,
-    borderColor: "#dbe3ee",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 2,
+    overflow: "hidden",
   },
-  shelfGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  revealShelfActionRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    gap: 8,
-  },
-  shelfActionButton: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#0a7ea4",
-  },
-  shelfActionText: {
-    color: "#fff",
-    fontSize: 12,
-    fontFamily: FontFamilies.semibold,
+  reusedSection: {
+    marginTop: 0,
   },
   activityListContent: {
     paddingTop: 10,
-    paddingBottom: 180,
+    paddingBottom: 236,
   },
   daySummaryWrap: {
     marginTop: 10,
@@ -1652,6 +1526,17 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontFamily: FontFamilies.semibold,
+  },
+  quickReplacementIcon: {
+    width: 18,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickReplacementArrow: {
+    position: "absolute",
+    right: -4,
+    bottom: -2,
   },
 
   tabRow: { flexDirection: "row", gap: 8, marginTop: 10, marginBottom: 10, flexWrap: "wrap" },

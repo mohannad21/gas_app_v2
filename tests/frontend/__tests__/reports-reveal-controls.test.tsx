@@ -111,6 +111,7 @@ jest.mock("@react-navigation/native", () => ({
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
+  MaterialCommunityIcons: () => null,
 }));
 
 describe("ReportsScreen reveal controls", () => {
@@ -139,8 +140,8 @@ describe("ReportsScreen reveal controls", () => {
     jest.restoreAllMocks();
   });
 
-  it("starts hidden and reveals controls plus quick actions after upward scroll intent", () => {
-    const { getByTestId, getByText } = render(<ReportsScreen />);
+  it("starts hidden and reveals only the top bar with no default shelf selected", () => {
+    const { getByTestId, getByText, queryByText } = render(<ReportsScreen />);
 
     expect(getByTestId("reports-reveal-layer").props.pointerEvents).toBe("none");
     expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("none");
@@ -150,25 +151,40 @@ describe("ReportsScreen reveal controls", () => {
 
     expect(getByTestId("reports-reveal-layer").props.pointerEvents).toBe("auto");
     expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("auto");
-    expect(getByText("12kg Full")).toBeTruthy();
+    expect(getByText("Ledger")).toBeTruthy();
+    expect(queryByText("Adjust Inventory")).toBeNull();
+    expect(queryByText("Customer Balances")).toBeNull();
+    expect(queryByText("Company Balances")).toBeNull();
   });
 
-  it("switches shelf content and routes quick actions", () => {
+  it("switches reused sections and routes the three quick actions", () => {
     const { getByTestId, getByText } = render(<ReportsScreen />);
 
     fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(120));
     fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(40));
 
+    fireEvent.press(getByText("Ledger"));
+    expect(getByText("Adjust Inventory")).toBeTruthy();
+    fireEvent.press(getByText("Ledger"));
+
     fireEvent.press(getByText("Customers"));
+    expect(getByText("Customer Balances")).toBeTruthy();
     expect(getByText("Money debt")).toBeTruthy();
 
-    fireEvent.press(getByText("Replacement"));
+    fireEvent.press(getByText("Company"));
+    expect(getByText("Company Balances")).toBeTruthy();
+    expect(getByText("Adjust balances")).toBeTruthy();
+
+    fireEvent.press(getByTestId("reports-quick-replacement"));
     expect(mockRouter.push).toHaveBeenCalledWith("/orders/new");
 
-    fireEvent.press(getByText("Refill"));
+    fireEvent.press(getByTestId("reports-quick-refill"));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: "/inventory/new",
       params: { section: "company", tab: "refill" },
     });
+
+    fireEvent.press(getByTestId("reports-quick-expense"));
+    expect(mockRouter.push).toHaveBeenCalledWith("/expenses/new");
   });
 });
