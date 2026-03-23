@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { Alert, View, Text, StyleSheet, Pressable } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 
 import { useOrders, useDeleteOrder } from "@/hooks/useOrders";
@@ -51,6 +51,16 @@ export default function OrderDetailsScreen() {
   };
   const cylBefore = order.cyl_balance_before ?? {};
   const cylAfter = order.cyl_balance_after ?? {};
+  const confirmDelete = () => {
+    Alert.alert("Remove order?", "This will reverse the order and update related ledger balances.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => deleteOrder.mutate(order.id),
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -90,7 +100,7 @@ export default function OrderDetailsScreen() {
         <Pressable onPress={() => router.push(`/orders/${order.id}/edit`)} style={styles.linkBtn}>
           <Text style={styles.linkText}>Update</Text>
         </Pressable>
-        <Pressable onPress={() => deleteOrder.mutate(order.id)} style={styles.linkBtn}>
+        <Pressable onPress={confirmDelete} style={styles.linkBtn}>
           <Text style={[styles.linkText, styles.dangerText]}>Remove</Text>
         </Pressable>
       </View>
