@@ -47,13 +47,13 @@ describe("DayPickerStrip", () => {
     expect(within(card).getByTestId("day-card-bottom-2026-03-22")).toBeTruthy();
   });
 
-  it("renders the truck icon in the bottom row when has_refill is true", () => {
+  it("renders the truck icon in the top row when has_refill is true", () => {
     const { getByTestId, getByText } = render(
       <DayPickerStrip rows={rows} selectedDate="2026-03-22" onSelect={() => {}} />
     );
 
-    const bottomRow = getByTestId("day-card-bottom-2026-03-22");
-    expect(within(bottomRow).getByText("truck-delivery")).toBeTruthy();
+    const topRow = getByTestId("day-card-top-2026-03-22");
+    expect(within(topRow).getByText("truck-delivery")).toBeTruthy();
     expect(getByText("truck-delivery")).toBeTruthy();
   });
 

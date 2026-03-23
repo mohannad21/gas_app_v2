@@ -35,9 +35,16 @@ const DayCard = memo(function DayCard({
       style={[styles.card, selected && styles.cardSelected]}
       testID={`day-card-${item.date}`}
     >
-      <View style={styles.topBlock} testID={`day-card-top-${item.date}`}>
-        <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
-        <Text style={[styles.monthText, selected && styles.textWhite]}>{month}</Text>
+      <View style={styles.topRow} testID={`day-card-top-${item.date}`}>
+        <View style={styles.topBlock}>
+          <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
+          <Text style={[styles.monthText, selected && styles.textWhite]}>{month}</Text>
+        </View>
+        {item.has_refill ? (
+          <MaterialCommunityIcons name="truck-delivery" size={16} color={selected ? "#fff" : "#f59e0b"} />
+        ) : (
+          <View style={styles.truckPlaceholder} />
+        )}
       </View>
 
       <View style={styles.centerSpacer} testID={`day-card-center-${item.date}`} />
@@ -58,14 +65,6 @@ const DayCard = memo(function DayCard({
               {netStr}
             </Text>
           </View>
-        </View>
-        <View style={styles.refillRow}>
-          <View style={styles.refillSpacer} />
-          {item.has_refill ? (
-            <MaterialCommunityIcons name="truck-delivery" size={16} color={selected ? "#fff" : "#f59e0b"} />
-          ) : (
-            <View style={styles.truckPlaceholder} />
-          )}
         </View>
       </View>
     </Pressable>
@@ -102,29 +101,35 @@ const styles = StyleSheet.create({
   },
   card: {
     width: 90,
-    height: 140,
+    height: 136,
     borderRadius: 14,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingVertical: 8,
     justifyContent: "space-between",
-    gap: 8,
+    gap: 4,
   },
   cardSelected: {
     backgroundColor: "#0a7ea4",
     borderColor: "#0a7ea4",
   },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    minHeight: 18,
+  },
   topBlock: {
     alignItems: "flex-start",
-    gap: 2,
+    gap: 1,
   },
   dayNum: {
     fontSize: FontSizes.title,
     fontFamily: FontFamilies.extrabold,
     color: "#0f172a",
-    lineHeight: 28,
+    lineHeight: 24,
   },
   monthText: {
     fontSize: FontSizes.xs,
@@ -136,13 +141,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bottomBlock: {
-    gap: 8,
+    gap: 2,
   },
   metricsColumn: {
-    gap: 4,
+    gap: 1,
   },
   metricRow: {
-    minHeight: 26,
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -150,7 +155,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 9,
-    lineHeight: 10,
+    lineHeight: 9,
     color: "#64748b",
     fontFamily: FontFamilies.semibold,
   },
@@ -159,27 +164,18 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 11,
-    lineHeight: 13,
+    lineHeight: 11,
     color: "#0f172a",
     fontFamily: FontFamilies.extrabold,
   },
   metricValueSelected: {
     color: "#fff",
   },
-  refillRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: 18,
-  },
-  refillSpacer: {
-    flex: 1,
-  },
   textWhite: {
     color: "#fff",
   },
   truckPlaceholder: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
   },
 });
