@@ -26,7 +26,6 @@ const DayCard = memo(function DayCard({
   const net = typeof item.net_today === "number" ? item.net_today : 0;
   const netStr = `${net >= 0 ? "+" : ""}₪${Math.abs(net)}`;
   const netColor = selected ? "#fff" : net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
-  const metricBoxStyle = selected ? styles.metricBoxSelected : styles.metricBox;
   const metricLabelStyle = selected ? styles.metricLabelSelected : styles.metricLabel;
   const metricValueStyle = selected ? styles.metricValueSelected : styles.metricValue;
 
@@ -45,15 +44,15 @@ const DayCard = memo(function DayCard({
 
       <View style={styles.bottomBlock} testID={`day-card-bottom-${item.date}`}>
         <View style={styles.metricsColumn}>
-          <View style={metricBoxStyle}>
+          <View style={styles.metricRow}>
             <Text style={metricLabelStyle}>12kg</Text>
             <Text style={metricValueStyle}>{item.sold_12kg ?? 0}</Text>
           </View>
-          <View style={metricBoxStyle}>
+          <View style={styles.metricRow}>
             <Text style={metricLabelStyle}>48kg</Text>
             <Text style={metricValueStyle}>{item.sold_48kg ?? 0}</Text>
           </View>
-          <View style={metricBoxStyle}>
+          <View style={styles.metricRow}>
             <Text style={metricLabelStyle}>Net</Text>
             <Text style={[metricValueStyle, { color: netColor }]} numberOfLines={1}>
               {netStr}
@@ -142,22 +141,12 @@ const styles = StyleSheet.create({
   metricsColumn: {
     gap: 4,
   },
-  metricBox: {
+  metricRow: {
     minHeight: 26,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 6,
-  },
-  metricBoxSelected: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderColor: "rgba(255,255,255,0.28)",
   },
   metricLabel: {
     fontSize: 9,
