@@ -1025,6 +1025,7 @@ ${cylLine}
     }
     try {
       const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: paymentDirection === "payout" ? "payout" : "payment",
@@ -1034,6 +1035,7 @@ ${cylLine}
         debt_cylinders_48: cylinder48Before,
         effective_at: effectiveAt,
         note: values.note || undefined,
+        request_id: requestId,
       });
       if (resetAfter) {
         setValue("paid_amount", "");
@@ -1074,6 +1076,7 @@ ${cylLine}
     }
     try {
       const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: "return",
@@ -1084,6 +1087,7 @@ ${cylLine}
         debt_cylinders_48: orderCylinderAfter48,
         effective_at: effectiveAt,
         note: values.note || undefined,
+        request_id: requestId,
       });
       if (resetAfter) {
         setValue("cylinders_received", "");
