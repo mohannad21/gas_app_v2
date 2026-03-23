@@ -73,12 +73,12 @@ function QuickReplacementIcon() {
   return (
     <View style={styles.quickReplacementIcon}>
       <Svg width={14} height={20} viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
-        <Rect x="20" y="115" width="60" height="65" rx="10" fill="#B7D7E8" stroke="#ffffff" strokeWidth="4" />
-        <Line x1="20" y1="147" x2="80" y2="147" stroke="#ffffff" strokeWidth="3" />
-        <Path d="M35 115V100C35 97 38 95 40 95H60C62 95 65 97 65 100V115" fill="none" stroke="#ffffff" strokeWidth="4" />
-        <Rect x="30" y="180" width="40" height="10" rx="2" fill="#ffffff" />
+        <Rect x="20" y="115" width="60" height="65" rx="10" fill="#B7D7E8" stroke="#0a7ea4" strokeWidth="4" />
+        <Line x1="20" y1="147" x2="80" y2="147" stroke="#0a7ea4" strokeWidth="3" />
+        <Path d="M35 115V100C35 97 38 95 40 95H60C62 95 65 97 65 100V115" fill="none" stroke="#0a7ea4" strokeWidth="4" />
+        <Rect x="30" y="180" width="40" height="10" rx="2" fill="#0a7ea4" />
       </Svg>
-      <Ionicons name="sync-outline" size={13} color="#ffffff" style={styles.quickReplacementArrow} />
+      <Ionicons name="sync-outline" size={13} color="#0a7ea4" style={styles.quickReplacementArrow} />
     </View>
   );
 }
@@ -307,13 +307,17 @@ export default function ReportsScreen() {
   const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
 
   const [revealVisible, setRevealVisible] = useState(false);
+  const [actionsVisible, setActionsVisible] = useState(false);
   const [activeShelf, setActiveShelf] = useState<RevealShelfKey | null>(null);
   const [revealHeight, setRevealHeight] = useState(0);
   const revealAnim = useRef(new Animated.Value(0)).current;
+  const actionsAnim = useRef(new Animated.Value(0)).current;
   const spacerAnim = useRef(new Animated.Value(0)).current;
   const shelfAnim = useRef(new Animated.Value(1)).current;
-  const scrollTracker = useRef<{ lastY: number; direction: "up" | "down" | null; travel: number }>({
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollTracker = useRef<{ lastY: number; lastTime: number; direction: "up" | "down" | null; travel: number }>({
     lastY: 0,
+    lastTime: 0,
     direction: null,
     travel: 0,
   });
@@ -460,8 +464,19 @@ export default function ReportsScreen() {
   }, []);
 
   const hideRevealLayer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
     setRevealVisible(false);
+    setActionsVisible(false);
     setActiveShelf(null);
+  }, []);
+
+  const resetScrollIntent = useCallback(() => {
+    scrollTracker.current.direction = null;
+    scrollTracker.current.travel = 0;
+    scrollTracker.current.lastTime = 0;
   }, []);
 
   const handleShelfPress = useCallback(
@@ -485,6 +500,34 @@ export default function ReportsScreen() {
   }, [revealAnim, revealVisible]);
 
   useEffect(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+    if (!revealVisible) {
+      setActionsVisible(false);
+      return;
+    }
+    revealTimerRef.current = setTimeout(() => {
+      setActionsVisible(true);
+    }, 180);
+    return () => {
+      if (revealTimerRef.current) {
+        clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
+  }, [revealVisible]);
+
+  useEffect(() => {
+    Animated.timing(actionsAnim, {
+      toValue: actionsVisible ? 1 : 0,
+      duration: actionsVisible ? 180 : 120,
+      useNativeDriver: true,
+    }).start();
+  }, [actionsAnim, actionsVisible]);
+
+  useEffect(() => {
     Animated.timing(spacerAnim, {
       toValue: revealVisible ? revealHeight : 0,
       duration: revealVisible ? 220 : 180,
@@ -494,14 +537,30 @@ export default function ReportsScreen() {
 
   const handleRevealScroll = useCallback(
     (offsetY: number) => {
+      const now = Date.now();
       const clampedY = Math.max(offsetY, 0);
       const previousY = scrollTracker.current.lastY;
       const delta = clampedY - previousY;
       scrollTracker.current.lastY = clampedY;
+      const elapsed = scrollTracker.current.lastTime ? now - scrollTracker.current.lastTime : 16;
+      scrollTracker.current.lastTime = now;
 
-      if (Math.abs(delta) < 2) return;
+      if (elapsed > 220) {
+        scrollTracker.current.direction = null;
+        scrollTracker.current.travel = 0;
+      }
+
+      if (Math.abs(delta) < 3) return;
 
       const direction: "up" | "down" = delta < 0 ? "up" : "down";
+      const speed = Math.abs(delta) / Math.max(elapsed, 16);
+
+      if (speed < 0.45) {
+        scrollTracker.current.direction = direction;
+        scrollTracker.current.travel = 0;
+        return;
+      }
+
       if (scrollTracker.current.direction !== direction) {
         scrollTracker.current.direction = direction;
         scrollTracker.current.travel = Math.abs(delta);
@@ -519,6 +578,10 @@ export default function ReportsScreen() {
     },
     [hideRevealLayer, showRevealLayer]
   );
+
+  const handleScrollEnd = useCallback(() => {
+    resetScrollIntent();
+  }, [resetScrollIntent]);
 
   const latestCard = v2Rows[0];
   const latestInventory = latestCard?.inventory_end;
@@ -671,6 +734,8 @@ export default function ReportsScreen() {
           data={selectedEvents}
           keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
           onScroll={(event) => handleRevealScroll(event.nativeEvent.contentOffset.y)}
+          onScrollEndDrag={handleScrollEnd}
+          onMomentumScrollEnd={handleScrollEnd}
           scrollEventThrottle={16}
           ListHeaderComponent={
             <>
@@ -703,14 +768,14 @@ export default function ReportsScreen() {
 
       <Animated.View
         testID="reports-quick-actions"
-        pointerEvents={revealVisible ? "auto" : "none"}
+        pointerEvents={actionsVisible ? "auto" : "none"}
         style={[
           styles.quickActions,
           {
-            opacity: revealAnim,
+            opacity: actionsAnim,
             transform: [
               {
-                translateY: revealAnim.interpolate({
+                translateY: actionsAnim.interpolate({
                   inputRange: [0, 1],
                   outputRange: [24, 0],
                 }),
@@ -719,21 +784,29 @@ export default function ReportsScreen() {
           },
         ]}
       >
-        <Pressable testID="reports-quick-replacement" style={styles.quickFab} onPress={() => router.push("/orders/new")}>
+        <Pressable
+          testID="reports-quick-replacement"
+          accessibilityLabel="Replacement"
+          style={styles.quickFab}
+          onPress={() => router.push("/orders/new")}
+        >
           <QuickReplacementIcon />
-          <Text style={styles.quickFabText}>Replacement</Text>
         </Pressable>
         <Pressable
           testID="reports-quick-refill"
+          accessibilityLabel="Refill"
           style={styles.quickFab}
           onPress={() => router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } })}
         >
-          <MaterialCommunityIcons name="truck-delivery" size={18} color="#fff" />
-          <Text style={styles.quickFabText}>Refill</Text>
+          <MaterialCommunityIcons name="truck-delivery" size={18} color="#f59e0b" />
         </Pressable>
-        <Pressable testID="reports-quick-expense" style={styles.quickFab} onPress={() => router.push("/expenses/new")}>
-          <Ionicons name="receipt-outline" size={18} color="#fff" />
-          <Text style={styles.quickFabText}>Expense</Text>
+        <Pressable
+          testID="reports-quick-expense"
+          accessibilityLabel="Expense"
+          style={styles.quickFab}
+          onPress={() => router.push("/expenses/new")}
+        >
+          <Ionicons name="receipt-outline" size={18} color="#0a7ea4" />
         </Pressable>
       </Animated.View>
 
@@ -1484,7 +1557,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   reusedShelfWrap: {
-    borderRadius: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     overflow: "hidden",
   },
   reusedSection: {
@@ -1509,23 +1586,19 @@ const styles = StyleSheet.create({
     zIndex: 25,
   },
   quickFab: {
-    minHeight: 42,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "#0a7ea4",
-    flexDirection: "row",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
     shadowColor: "#0f172a",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 10,
-    elevation: 4,
-  },
-  quickFabText: {
-    color: "#fff",
-    fontSize: 13,
-    fontFamily: FontFamilies.semibold,
+    elevation: 3,
   },
   quickReplacementIcon: {
     width: 18,

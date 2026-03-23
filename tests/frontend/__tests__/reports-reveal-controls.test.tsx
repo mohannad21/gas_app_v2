@@ -1,6 +1,6 @@
 import React from "react";
 import { Animated } from "react-native";
-import { fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render } from "@testing-library/react-native";
 
 import ReportsScreen from "@/app/(tabs)/reports";
 
@@ -124,6 +124,7 @@ describe("ReportsScreen reveal controls", () => {
   });
 
   beforeEach(() => {
+    jest.useFakeTimers();
     mockRouter.push.mockReset();
     jest.spyOn(Animated, "timing").mockImplementation(
       ((value: Animated.Value, config: { toValue: number }) =>
@@ -138,6 +139,7 @@ describe("ReportsScreen reveal controls", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   it("starts hidden and reveals only the top bar with no default shelf selected", () => {
@@ -150,11 +152,35 @@ describe("ReportsScreen reveal controls", () => {
     fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(40));
 
     expect(getByTestId("reports-reveal-layer").props.pointerEvents).toBe("auto");
-    expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("auto");
+    expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("none");
     expect(getByText("Ledger")).toBeTruthy();
     expect(queryByText("Adjust Inventory")).toBeNull();
     expect(queryByText("Customer Balances")).toBeNull();
     expect(queryByText("Company Balances")).toBeNull();
+
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("auto");
+  });
+
+  it("does not reveal on slow upward browsing", () => {
+    const { getByTestId } = render(<ReportsScreen />);
+
+    fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(120));
+
+    act(() => {
+      jest.advanceTimersByTime(260);
+    });
+    fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(104));
+
+    act(() => {
+      jest.advanceTimersByTime(260);
+    });
+    fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(88));
+
+    expect(getByTestId("reports-reveal-layer").props.pointerEvents).toBe("none");
+    expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("none");
   });
 
   it("switches reused sections and routes the three quick actions", () => {
@@ -162,6 +188,10 @@ describe("ReportsScreen reveal controls", () => {
 
     fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(120));
     fireEvent.scroll(getByTestId("reports-activity-list"), scrollEvent(40));
+
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
 
     fireEvent.press(getByText("Ledger"));
     expect(getByText("Adjust Inventory")).toBeTruthy();
