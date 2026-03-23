@@ -27,6 +27,10 @@ function extractErrorMessage(err: AxiosError) {
   return err.message || "Unknown error";
 }
 
+export function customerBalanceQueryKey(customerId?: string) {
+  return ["customers", "balance", customerId] as const;
+}
+
 export function useCustomers() {
   return useQuery<Customer[]>({
     queryKey: ["customers"],
@@ -61,7 +65,7 @@ export function useCreateCustomer(options?: { showToast?: boolean }) {
 
 export function useCustomerBalance(customerId?: string) {
   return useQuery<CustomerBalance>({
-    queryKey: ["customers", "balance", customerId],
+    queryKey: customerBalanceQueryKey(customerId),
     queryFn: () => getCustomerBalance(customerId ?? ""),
     enabled: Boolean(customerId),
   });
@@ -99,11 +103,12 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
       showToast(`Failed to create adjustment: ${message}`);
       console.error("[createCustomerAdjustment ERROR]", axiosError.response?.status, message);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       if (showSuccessToast) {
         showToast("Adjustment added");
       }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.customer_id) });
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });

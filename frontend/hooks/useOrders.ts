@@ -1,4 +1,5 @@
 import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
+import { customerBalanceQueryKey } from "@/hooks/useCustomers";
 import { showToast } from "@/lib/toast";
 import { Order, OrderUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +10,17 @@ function extractErrorMessage(err: AxiosError) {
   if (typeof detail === "string") return detail;
   if (detail) return JSON.stringify(detail);
   return "Unknown error";
+}
+
+function invalidateCustomerBalance(
+  queryClient: ReturnType<typeof useQueryClient>,
+  customerId?: string
+) {
+  if (customerId) {
+    queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(customerId) });
+    return;
+  }
+  queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
 export function useOrders() {
@@ -41,14 +53,14 @@ export function useCreateOrder() {
       console.error("[createOrder ERROR]", axiosError.response?.status, axiosError.response?.data ?? axiosError.message);
       showToast(`Failed to create order: ${extractErrorMessage(axiosError)}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showToast("Order created");
 
-      // FIX: remove activities/system/customer invalidations
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, variables.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -67,14 +79,14 @@ export function useUpdateOrder() {
       showToast(`Failed to update order: ${extractErrorMessage(axiosError)}`);
     },
 
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showToast("Order updated");
 
-      // FIX: remove activities/system/customer invalidations
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, variables.payload.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -89,15 +101,19 @@ export function useDeleteOrder() {
     onSuccess: (_, id) => {
       showToast("Order removed");
 
+      const existing = queryClient
+        .getQueryData<Order[]>(["orders"])
+        ?.find((order) => order.id === id);
+
       queryClient.setQueryData<Order[]>(["orders"], (prev) =>
         prev ? prev.filter((o) => o.id !== id) : prev
       );
 
-      // FIX: remove activities/system/customer invalidations
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
