@@ -31,10 +31,13 @@ const rows = [
 describe("DayPickerStrip", () => {
   it("renders top, center, and bottom sections for a card", () => {
     const { getByTestId } = render(<DayPickerStrip rows={rows} selectedDate="2026-03-22" onSelect={() => {}} />);
+    const card = getByTestId("day-card-2026-03-22");
 
     expect(getByTestId("day-card-top-2026-03-22")).toBeTruthy();
     expect(getByTestId("day-card-center-2026-03-22")).toBeTruthy();
     expect(getByTestId("day-card-bottom-2026-03-22")).toBeTruthy();
+    expect(within(card).getByText("22")).toBeTruthy();
+    expect(within(card).getByText("Mar")).toBeTruthy();
   });
 
   it("keeps the bottom row inside the card structure", () => {
@@ -54,10 +57,15 @@ describe("DayPickerStrip", () => {
     expect(getByText("truck-delivery")).toBeTruthy();
   });
 
-  it("renders both 12kg and 48kg count rows", () => {
-    const { getByText } = render(<DayPickerStrip rows={rows} selectedDate="2026-03-22" onSelect={() => {}} />);
+  it("renders the three bottom metric boxes", () => {
+    const { getByTestId } = render(<DayPickerStrip rows={rows} selectedDate="2026-03-22" onSelect={() => {}} />);
+    const card = getByTestId("day-card-2026-03-22");
 
-    expect(getByText("4")).toBeTruthy();
-    expect(getByText("2")).toBeTruthy();
+    expect(within(card).getByText("12kg")).toBeTruthy();
+    expect(within(card).getByText("48kg")).toBeTruthy();
+    expect(within(card).getByText("Net")).toBeTruthy();
+    expect(within(card).getByText("4")).toBeTruthy();
+    expect(within(card).getByText("2")).toBeTruthy();
+    expect(within(card).getByText("+₪120")).toBeTruthy();
   });
 });
