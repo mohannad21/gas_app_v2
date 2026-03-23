@@ -6,6 +6,10 @@ import { View } from "react-native";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import { level3Fixtures } from "@/dev/level3-fixtures";
 
+jest.mock("@expo/vector-icons", () => ({
+  Ionicons: () => null,
+}));
+
 describe("Level 3 feed rendering", () => {
   it("matches snapshot output", () => {
     let tree: renderer.ReactTestRendererJSON | renderer.ReactTestRendererJSON[] | null = null;
@@ -44,5 +48,50 @@ describe("Level 3 feed rendering", () => {
     expect(event).toBeTruthy();
     const { queryByText } = render(<SlimActivityRow event={event!} />);
     expect(queryByText(/Customer still owes/i)).toBeNull();
+  });
+
+  it("uses expense_type as the main title for expense rows", () => {
+    const event = {
+      event_type: "expense",
+      label: "Expense",
+      display_name: "Expense",
+      expense_type: "fuel",
+      context_line: "Expense · 13:04",
+      money_direction: "out",
+      money_amount: 50,
+      status: "none",
+    } as any;
+
+    const { getByText } = render(<SlimActivityRow event={event} />);
+    expect(getByText("fuel")).toBeTruthy();
+  });
+
+  it("does not show redundant bold Expense title for expense rows", () => {
+    const event = {
+      event_type: "expense",
+      label: "Expense",
+      display_name: "Expense",
+      expense_type: "fuel",
+      context_line: "Expense · 13:04",
+      status: "none",
+    } as any;
+
+    const { queryByText } = render(<SlimActivityRow event={event} />);
+    expect(queryByText(/^Expense$/)).toBeNull();
+  });
+
+  it("keeps non-expense row titles unchanged", () => {
+    const event = {
+      event_type: "company_payment",
+      label: "Paid company",
+      display_name: "Company",
+      context_line: "Paid company · 13:04",
+      money_direction: "out",
+      money_amount: 50,
+      status: "none",
+    } as any;
+
+    const { getByText } = render(<SlimActivityRow event={event} />);
+    expect(getByText("Company")).toBeTruthy();
   });
 });

@@ -232,13 +232,15 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
 
-  const headerNameRaw = event.display_name
-    ? event.display_name
-    : isCustomer
-    ? event.customer_name ?? counterparty?.display_name ?? "Customer"
-    : isCompany
-    ? "Company"
-    : event.expense_type ?? label;
+  const headerNameRaw = event.event_type === "expense"
+    ? (event.expense_type || label)
+    : event.display_name
+      ? event.display_name
+      : isCustomer
+        ? (event.customer_name ?? counterparty?.display_name ?? "Customer")
+        : isCompany
+          ? "Company"
+          : label;
 
   const headerDescBase = event.display_description ?? (isCustomer ? event.customer_description : event.reason);
   const { name: headerName, desc: headerDescFromName } = splitDisplayName(headerNameRaw);

@@ -752,6 +752,7 @@ class DailyReportV2Card(SQLModel):
   sold_12kg: int = 0
   sold_48kg: int = 0
   net_today: int = 0
+  has_refill: bool = False
   cash_math: DailyReportV2CashMath = Field(default_factory=DailyReportV2CashMath)
   math: Optional[DailyReportV2Math] = None
   company_start: int = 0
