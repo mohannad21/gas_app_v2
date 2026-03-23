@@ -10,6 +10,7 @@ type CustomerBalancesSectionProps = {
   formatMoney: (value: number) => string;
   formatCustomerCount: (count: number) => string;
   containerStyle?: StyleProp<ViewStyle>;
+  initiallyExpanded?: boolean;
 };
 
 type CustomerSummaryBox = {
@@ -66,8 +67,9 @@ export default function CustomerBalancesSection({
   formatMoney,
   formatCustomerCount,
   containerStyle,
+  initiallyExpanded = false,
 }: CustomerBalancesSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const customerBoxes = useMemo(
     () => buildCustomerBoxes(balanceSummary, formatMoney, formatCustomerCount),
     [balanceSummary, formatCustomerCount, formatMoney]

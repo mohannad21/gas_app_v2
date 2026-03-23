@@ -1,9 +1,10 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
+  Animated,
   FlatList,
   InputAccessoryView,
   Keyboard,
@@ -15,13 +16,15 @@ import {
   TextInput,
   View,
 } from "react-native";
-
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
 import ReportHeader from "@/components/reports/ReportHeader";
+import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
+import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
+import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import { getDailyReportV2 } from "@/lib/api";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
@@ -29,6 +32,8 @@ import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
 import DaySummaryBox from "@/components/reports/DaySummaryBox";
+
+type RevealShelfKey = "ledger" | "customers" | "company";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -283,6 +288,23 @@ export default function ReportsScreen() {
     setV2DayByDate,
     refetchV2,
   } = useDailyReportScreen();
+  const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
+
+  const [revealVisible, setRevealVisible] = useState(false);
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const [activeShelf, setActiveShelf] = useState<RevealShelfKey | null>(null);
+  const [revealHeight, setRevealHeight] = useState(0);
+  const revealAnim = useRef(new Animated.Value(0)).current;
+  const actionsAnim = useRef(new Animated.Value(0)).current;
+  const spacerAnim = useRef(new Animated.Value(0)).current;
+  const shelfAnim = useRef(new Animated.Value(1)).current;
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollTracker = useRef<{ lastY: number; lastTime: number; direction: "up" | "down" | null; travel: number }>({
+    lastY: 0,
+    lastTime: 0,
+    direction: null,
+    travel: 0,
+  });
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
@@ -374,6 +396,12 @@ export default function ReportsScreen() {
   );
 
   useEffect(() => {
+    if (!v2Rows.length) return;
+    if (selectedDate && v2Rows.some((row) => row.date === selectedDate)) return;
+    setSelectedDate(v2Rows[0]?.date ?? null);
+  }, [selectedDate, v2Rows]);
+
+  useEffect(() => {
     if (!selectedDate) return;
     if (v2DayByDate[selectedDate] !== undefined) return;
     setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null }));
@@ -406,68 +434,374 @@ export default function ReportsScreen() {
     setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
   }, [setV2Expanded]);
 
+  const animateShelfIn = useCallback(() => {
+    shelfAnim.setValue(0);
+    Animated.timing(shelfAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [shelfAnim]);
+
+  const showRevealLayer = useCallback(() => {
+    setRevealVisible(true);
+  }, []);
+
+  const hideRevealLayer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+    setRevealVisible(false);
+    setActionsVisible(false);
+    setActiveShelf(null);
+  }, []);
+
+  const resetScrollIntent = useCallback(() => {
+    scrollTracker.current.direction = null;
+    scrollTracker.current.travel = 0;
+    scrollTracker.current.lastTime = 0;
+  }, []);
+
+  const handleShelfPress = useCallback(
+    (nextShelf: RevealShelfKey) => {
+      if (activeShelf === nextShelf) {
+        setActiveShelf(null);
+        return;
+      }
+      setActiveShelf(nextShelf);
+      animateShelfIn();
+    },
+    [activeShelf, animateShelfIn]
+  );
+
+  useEffect(() => {
+    Animated.timing(revealAnim, {
+      toValue: revealVisible ? 1 : 0,
+      duration: revealVisible ? 220 : 180,
+      useNativeDriver: true,
+    }).start();
+  }, [revealAnim, revealVisible]);
+
+  useEffect(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+    if (!revealVisible) {
+      setActionsVisible(false);
+      return;
+    }
+    revealTimerRef.current = setTimeout(() => {
+      setActionsVisible(true);
+    }, 180);
+    return () => {
+      if (revealTimerRef.current) {
+        clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
+  }, [revealVisible]);
+
+  useEffect(() => {
+    Animated.timing(actionsAnim, {
+      toValue: actionsVisible ? 1 : 0,
+      duration: actionsVisible ? 180 : 120,
+      useNativeDriver: true,
+    }).start();
+  }, [actionsAnim, actionsVisible]);
+
+  useEffect(() => {
+    Animated.timing(spacerAnim, {
+      toValue: revealVisible ? revealHeight : 0,
+      duration: revealVisible ? 220 : 180,
+      useNativeDriver: false,
+    }).start();
+  }, [revealHeight, revealVisible, spacerAnim]);
+
+  const handleRevealScroll = useCallback(
+    (offsetY: number) => {
+      const now = Date.now();
+      const clampedY = Math.max(offsetY, 0);
+      const previousY = scrollTracker.current.lastY;
+      const delta = clampedY - previousY;
+      scrollTracker.current.lastY = clampedY;
+      const elapsed = scrollTracker.current.lastTime ? now - scrollTracker.current.lastTime : 16;
+      scrollTracker.current.lastTime = now;
+
+      if (elapsed > 220) {
+        scrollTracker.current.direction = null;
+        scrollTracker.current.travel = 0;
+      }
+
+      if (Math.abs(delta) < 3) return;
+
+      const direction: "up" | "down" = delta < 0 ? "up" : "down";
+      const speed = Math.abs(delta) / Math.max(elapsed, 16);
+
+      if (speed < 0.45) {
+        scrollTracker.current.direction = direction;
+        scrollTracker.current.travel = 0;
+        return;
+      }
+
+      if (scrollTracker.current.direction !== direction) {
+        scrollTracker.current.direction = direction;
+        scrollTracker.current.travel = Math.abs(delta);
+      } else {
+        scrollTracker.current.travel += Math.abs(delta);
+      }
+
+      if (direction === "up" && scrollTracker.current.travel >= 48) {
+        showRevealLayer();
+        scrollTracker.current.travel = 0;
+      } else if (direction === "down" && scrollTracker.current.travel >= 64) {
+        hideRevealLayer();
+        scrollTracker.current.travel = 0;
+      }
+    },
+    [hideRevealLayer, showRevealLayer]
+  );
+
+  const handleScrollEnd = useCallback(() => {
+    resetScrollIntent();
+  }, [resetScrollIntent]);
+
+  const latestCard = v2Rows[0];
+  const latestInventory = latestCard?.inventory_end;
+  const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
+  const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
+  const selectedEvents = ((selectedDayInfo?.events ?? []) as any[]) || [];
+
+  const revealShelfContent =
+    activeShelf === "ledger" ? (
+      <Animated.View
+        key="ledger"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.reusedShelfWrap}>
+          <ReportHeader
+            inventory={{
+              full12: formatCount(latestInventory?.full12 ?? 0),
+              empty12: formatCount(latestInventory?.empty12 ?? 0),
+              full48: formatCount(latestInventory?.full48 ?? 0),
+              empty48: formatCount(latestInventory?.empty48 ?? 0),
+            }}
+            cashEnd={formatMoney(latestCard?.cash_end ?? 0)}
+            onAdjustInventory={() => {
+              router.push("/(tabs)/add?open=adjust-inventory");
+            }}
+            onAdjustCash={() => {
+              router.push("/(tabs)/add?open=adjust-cash");
+            }}
+          />
+        </View>
+      </Animated.View>
+    ) : activeShelf === "customers" ? (
+      <Animated.View
+        key="customers"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <CustomerBalancesSection
+          balanceSummary={balanceSummary}
+          formatMoney={formatMoney}
+          formatCustomerCount={(count) => `${count} cust`}
+          containerStyle={styles.reusedSection}
+          initiallyExpanded
+        />
+      </Animated.View>
+    ) : activeShelf === "company" ? (
+      <Animated.View
+        key="company"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <CompanyBalancesSection
+          companySummary={companySummary}
+          companyBalancesReady={Boolean(companyBalancesQuery.data)}
+          formatMoney={formatMoney}
+          formatCount={formatCount}
+          containerStyle={styles.reusedSection}
+          initiallyExpanded
+        />
+      </Animated.View>
+    ) : null;
+
   // -------------------------
   // VIEW MODE: NEW (V2)
   // -------------------------
   return (
     <View style={styles.container}>
-      <View style={styles.stickyHeader}>
-        {(() => {
-          const latest = v2Rows[0];
-          const inventory = latest?.inventory_end;
-          return (
-            <ReportHeader
-              inventory={{
-                full12: formatCount(inventory?.full12 ?? 0),
-                empty12: formatCount(inventory?.empty12 ?? 0),
-                full48: formatCount(inventory?.full48 ?? 0),
-                empty48: formatCount(inventory?.empty48 ?? 0),
-              }}
-              cashEnd={formatMoney(latest?.cash_end ?? 0)}
-              onAdjustInventory={() => {
-                router.push("/(tabs)/add?open=adjust-inventory");
-              }}
-              onAdjustCash={() => {
-                router.push("/(tabs)/add?open=adjust-cash");
-              }}
-            />
-          );
-        })()}
-      </View>
-        {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
-        {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
+      <Animated.View
+        testID="reports-reveal-layer"
+        pointerEvents={revealVisible ? "auto" : "none"}
+        onLayout={(event) => {
+          const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+          if (nextHeight !== revealHeight) {
+            setRevealHeight(nextHeight);
+          }
+        }}
+        style={[
+          styles.revealLayer,
+          {
+            opacity: revealAnim,
+            transform: [
+              {
+                translateY: revealAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-18, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.segmentBar}>
+          {(["ledger", "customers", "company"] as RevealShelfKey[]).map((segment) => {
+            const isActive = activeShelf === segment;
+            const label = segment === "ledger" ? "Ledger" : segment === "customers" ? "Customers" : "Company";
+            return (
+              <Pressable
+                key={segment}
+                style={[styles.segmentButton, isActive && styles.segmentButtonActive]}
+                onPress={() => handleShelfPress(segment)}
+              >
+                <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {revealShelfContent}
+      </Animated.View>
 
-        <DayPickerStrip
-          rows={v2Rows}
-          selectedDate={selectedDate}
-          onSelect={(date) => {
-            setSelectedDate(date);
-          }}
+      {selectedDate ? (
+        <FlatList
+          testID="reports-activity-list"
+          data={selectedEvents}
+          keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
+          onScroll={(event) => handleRevealScroll(event.nativeEvent.contentOffset.y)}
+          onScrollEndDrag={handleScrollEnd}
+          onMomentumScrollEnd={handleScrollEnd}
+          scrollEventThrottle={16}
+          ListHeaderComponent={
+            <>
+              <Animated.View style={{ height: spacerAnim }} />
+              {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
+              {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
+              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} />
+              {selectedCard ? (
+                <View style={styles.daySummaryWrap}>
+                  <DaySummaryBox card={selectedCard} />
+                </View>
+              ) : null}
+            </>
+          }
+          ListEmptyComponent={
+            selectedDayInfo === null && !v2Query.isLoading ? (
+              <Text style={styles.meta}>Loading activities...</Text>
+            ) : selectedDayInfo !== null && selectedEvents.length === 0 ? (
+              <Text style={styles.meta}>No activities on this day.</Text>
+            ) : null
+          }
+          renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
+          contentContainerStyle={styles.activityListContent}
         />
-
-        {selectedDate ? (() => {
-          const card = v2Rows.find((r) => r.date === selectedDate);
-          const dayInfo = v2DayByDate[selectedDate] ?? null;
-          const events = (dayInfo?.events ?? []) as any[];
-          return (
-            <FlatList
-              data={events}
-              keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
-              ListHeaderComponent={card ? <View style={{ marginTop: 10 }}><DaySummaryBox card={card} /></View> : null}
-              ListEmptyComponent={
-                dayInfo === null && !v2Query.isLoading ? (
-                  <Text style={styles.meta}>Loading activities...</Text>
-                ) : dayInfo !== null && events.length === 0 ? (
-                  <Text style={styles.meta}>No activities on this day.</Text>
-                ) : null
-              }
-              renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
-              contentContainerStyle={{ paddingBottom: 32 }}
-            />
-          );
-        })() : (
+      ) : (
+        <View style={styles.emptyStateWrap}>
           <Text style={styles.meta}>Select a day above.</Text>
-        )}
+        </View>
+      )}
+
+      <Animated.View
+        testID="reports-quick-actions"
+        pointerEvents={actionsVisible ? "auto" : "none"}
+        style={[
+          styles.quickActions,
+          {
+            opacity: actionsAnim,
+            transform: [
+              {
+                translateY: actionsAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [24, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Pressable
+          testID="reports-quick-replacement"
+          accessibilityLabel="Replacement"
+          style={styles.quickFab}
+          onPress={() => router.push("/orders/new")}
+        >
+          <Ionicons name="swap-horizontal-outline" size={26} color="#0a7ea4" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
+        </Pressable>
+        <Pressable
+          testID="reports-quick-refill"
+          accessibilityLabel="Refill"
+          style={styles.quickFab}
+          onPress={() => router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } })}
+        >
+          <MaterialCommunityIcons name="truck-delivery" size={22} color="#f59e0b" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
+        </Pressable>
+        <Pressable
+          testID="reports-quick-expense"
+          accessibilityLabel="Expense"
+          style={styles.quickFab}
+          onPress={() => router.push("/expenses/new")}
+        >
+          <Ionicons name="receipt-outline" size={24} color="#0a7ea4" />
+          <View style={styles.quickFabBadge}>
+            <Text style={styles.quickFabBadgeText}>+</Text>
+          </View>
+        </Pressable>
+      </Animated.View>
 
         {/* Sync tooltip */}
         <Modal transparent visible={!!syncInfoDate} animationType="fade" onRequestClose={() => setSyncInfoDate(null)}>
@@ -1159,94 +1493,124 @@ function DeltaBox({
   );
 }
 
-function ValueBox({
-  label,
-  value,
-  valueStyle,
-  compact,
-}: {
-  label: string;
-  value: string;
-  valueStyle?: any;
-  compact?: boolean;
-}) {
-  return (
-    <View style={[styles.deltaBox, compact && styles.deltaBoxCompact]}>
-      <Text style={styles.deltaBoxLabel}>{label}</Text>
-      <View style={styles.valueBoxRow}>
-        <Text style={[styles.valueBoxValue, valueStyle]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
-function SummaryChip({
-  label,
-  labelLines,
-  value,
-  bad,
-  compact,
-}: {
-  label?: string;
-  labelLines?: string[];
-  value: string;
-  bad?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <View style={[styles.summaryChip, compact && styles.summaryChipCompact, bad && styles.summaryChipBad]}>
-      {labelLines ? (
-        <View style={styles.summaryChipLabelStack}>
-          {labelLines.map((line, index) => (
-            <Text key={`${line}-${index}`} style={styles.summaryChipLabelLine}>
-              {line}
-            </Text>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.summaryChipLabel}>{label}</Text>
-      )}
-      <Text
-        style={[
-          styles.summaryChipValue,
-          bad && styles.summaryChipValueBad,
-          value === "OK" && styles.summaryChipValueOk,
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 /* -----------------------------------------
  * Styles (minimal, consistent)
  * ----------------------------------------- */
-
-const HEADER_HEIGHT = 160;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: HEADER_HEIGHT + 14,
     backgroundColor: "#f6f7f9",
   },
   meta: { fontSize: 12, color: "#475569", fontFamily: FontFamilies.regular },
   error: { fontSize: 12, color: "#b91c1c", marginTop: 6, fontFamily: FontFamilies.semibold },
-
-  stickyHeader: {
+  revealLayer: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: HEADER_HEIGHT,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: "#f6f7f9",
-    zIndex: 10,
+    top: 10,
+    left: 14,
+    right: 14,
+    zIndex: 20,
+  },
+  segmentBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "#dbe3ee",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  segmentButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  segmentButtonActive: {
+    backgroundColor: "#0a7ea4",
+  },
+  segmentText: {
+    fontSize: 13,
+    color: "#475569",
+    fontFamily: FontFamilies.semibold,
+  },
+  segmentTextActive: {
+    color: "#fff",
+  },
+  revealShelfBody: {
+    marginTop: 10,
+  },
+  reusedShelfWrap: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  reusedSection: {
+    marginTop: 0,
+  },
+  activityListContent: {
+    paddingTop: 10,
+    paddingBottom: 236,
+  },
+  daySummaryWrap: {
+    marginTop: 10,
+  },
+  emptyStateWrap: {
+    flex: 1,
+    paddingTop: 18,
+  },
+  quickActions: {
+    position: "absolute",
+    right: 18,
+    bottom: 88,
+    gap: 10,
+    zIndex: 25,
+  },
+  quickFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  quickFabBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+  },
+  quickFabBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 12,
+    fontFamily: FontFamilies.extrabold,
   },
 
   tabRow: { flexDirection: "row", gap: 8, marginTop: 10, marginBottom: 10, flexWrap: "wrap" },

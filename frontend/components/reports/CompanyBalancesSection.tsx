@@ -12,6 +12,7 @@ type CompanyBalancesSectionProps = {
   formatMoney: (value: number) => string;
   formatCount: (value: number) => string;
   containerStyle?: StyleProp<ViewStyle>;
+  initiallyExpanded?: boolean;
 };
 
 type CompanySummaryBox = {
@@ -56,8 +57,9 @@ export default function CompanyBalancesSection({
   formatMoney,
   formatCount,
   containerStyle,
+  initiallyExpanded = false,
 }: CompanyBalancesSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const companyBoxes = useMemo(
     () => buildCompanyBoxes(companySummary, formatMoney, formatCount),
     [companySummary, formatCount, formatMoney]

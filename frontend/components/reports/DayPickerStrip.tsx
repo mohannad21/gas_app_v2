@@ -1,42 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { memo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { DailyReportV2Card } from "@/types/domain";
-
-function CylIcon({
-  variant,
-  size = 18,
-  color,
-}: {
-  variant: "12kg" | "48kg";
-  size?: number;
-  color: string;
-}) {
-  const isLarge = variant === "48kg";
-  const h = size * 2;
-  return (
-    <Svg width={size * 0.55} height={h} viewBox="0 0 100 200" preserveAspectRatio="xMidYMax meet" color={color}>
-      {isLarge ? (
-        <>
-          <Rect x="15" y="50" width="70" height="130" rx="10" fill="#B7D7E8" stroke={color} strokeWidth="4" />
-          <Line x1="15" y1="115" x2="85" y2="115" stroke={color} strokeWidth="3" />
-          <Path d="M30 50V35C30 30 35 25 40 25H60C65 25 70 30 70 35V50" fill="none" stroke={color} strokeWidth="4" />
-          <Rect x="25" y="180" width="50" height="10" rx="2" fill={color} />
-        </>
-      ) : (
-        <>
-          <Rect x="20" y="115" width="60" height="65" rx="10" fill="#B7D7E8" stroke={color} strokeWidth="4" />
-          <Line x1="20" y1="147" x2="80" y2="147" stroke={color} strokeWidth="3" />
-          <Path d="M35 115V100C35 97 38 95 40 95H60C62 95 65 97 65 100V115" fill="none" stroke={color} strokeWidth="4" />
-          <Rect x="30" y="180" width="40" height="10" rx="2" fill={color} />
-        </>
-      )}
-    </Svg>
-  );
-}
 
 type DayPickerStripProps = {
   rows: DailyReportV2Card[];
@@ -54,13 +21,13 @@ const DayCard = memo(function DayCard({
   onSelect: (date: string) => void;
 }) {
   const d = new Date(item.date + "T00:00:00");
-  const dayName = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
   const dayNum = d.getDate();
+  const month = d.toLocaleDateString("en-US", { month: "short" });
   const net = typeof item.net_today === "number" ? item.net_today : 0;
   const netStr = `${net >= 0 ? "+" : ""}₪${Math.abs(net)}`;
-  const cylColor = selected ? "#fff" : "#0f172a";
-
   const netColor = selected ? "#fff" : net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
+  const metricLabelStyle = selected ? styles.metricLabelSelected : styles.metricLabel;
+  const metricValueStyle = selected ? styles.metricValueSelected : styles.metricValue;
 
   return (
     <Pressable
@@ -69,28 +36,36 @@ const DayCard = memo(function DayCard({
       testID={`day-card-${item.date}`}
     >
       <View style={styles.topRow} testID={`day-card-top-${item.date}`}>
-        <View style={styles.cylRow}>
-          <CylIcon variant="12kg" size={14} color={cylColor} />
-          <Text style={[styles.cylCount, { color: cylColor }]}>{item.sold_12kg ?? 0}</Text>
-        </View>
-        <Text style={[styles.netText, { color: netColor }]}>{netStr}</Text>
-      </View>
-
-      <View style={styles.centerBlock} testID={`day-card-center-${item.date}`}>
-        <Text style={[styles.dayName, selected && styles.textWhite]}>{dayName}</Text>
-        <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
-      </View>
-
-      <View style={styles.bottomRow} testID={`day-card-bottom-${item.date}`}>
-        <View style={styles.cylRow}>
-          <CylIcon variant="48kg" size={14} color={cylColor} />
-          <Text style={[styles.cylCount, { color: cylColor }]}>{item.sold_48kg ?? 0}</Text>
+        <View style={styles.topBlock}>
+          <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
+          <Text style={[styles.monthText, selected && styles.textWhite]}>{month}</Text>
         </View>
         {item.has_refill ? (
           <MaterialCommunityIcons name="truck-delivery" size={16} color={selected ? "#fff" : "#f59e0b"} />
         ) : (
           <View style={styles.truckPlaceholder} />
         )}
+      </View>
+
+      <View style={styles.centerSpacer} testID={`day-card-center-${item.date}`} />
+
+      <View style={styles.bottomBlock} testID={`day-card-bottom-${item.date}`}>
+        <View style={styles.metricsColumn}>
+          <View style={styles.metricRow}>
+            <Text style={metricLabelStyle}>12kg</Text>
+            <Text style={metricValueStyle}>{item.sold_12kg ?? 0}</Text>
+          </View>
+          <View style={styles.metricRow}>
+            <Text style={metricLabelStyle}>48kg</Text>
+            <Text style={metricValueStyle}>{item.sold_48kg ?? 0}</Text>
+          </View>
+          <View style={styles.metricRow}>
+            <Text style={metricLabelStyle}>Net</Text>
+            <Text style={[metricValueStyle, { color: netColor }]} numberOfLines={1}>
+              {netStr}
+            </Text>
+          </View>
+        </View>
       </View>
     </Pressable>
   );
@@ -126,13 +101,13 @@ const styles = StyleSheet.create({
   },
   card: {
     width: 90,
-    height: 140,
+    height: 136,
     borderRadius: 14,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingVertical: 8,
     justifyContent: "space-between",
     gap: 4,
   },
@@ -142,53 +117,65 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: 26,
+    minHeight: 18,
   },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: 26,
-  },
-  centerBlock: {
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1,
-    paddingVertical: 6,
-  },
-  cylRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  cylCount: {
-    fontSize: FontSizes.sm,
-    fontFamily: FontFamilies.semibold,
-    color: "#0f172a",
-  },
-  netText: {
-    fontSize: FontSizes.sm,
-    fontFamily: FontFamilies.semibold,
-  },
-  dayName: {
-    fontSize: FontSizes.xs,
-    fontFamily: FontFamilies.semibold,
-    color: "#64748b",
-    letterSpacing: 0.5,
+  topBlock: {
+    alignItems: "flex-start",
+    gap: 1,
   },
   dayNum: {
     fontSize: FontSizes.title,
     fontFamily: FontFamilies.extrabold,
     color: "#0f172a",
-    lineHeight: 28,
+    lineHeight: 24,
+  },
+  monthText: {
+    fontSize: FontSizes.xs,
+    fontFamily: FontFamilies.semibold,
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  centerSpacer: {
+    flex: 1,
+  },
+  bottomBlock: {
+    gap: 2,
+  },
+  metricsColumn: {
+    gap: 1,
+  },
+  metricRow: {
+    minHeight: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  metricLabel: {
+    fontSize: 9,
+    lineHeight: 9,
+    color: "#64748b",
+    fontFamily: FontFamilies.semibold,
+  },
+  metricLabelSelected: {
+    color: "rgba(255,255,255,0.78)",
+  },
+  metricValue: {
+    fontSize: 11,
+    lineHeight: 11,
+    color: "#0f172a",
+    fontFamily: FontFamilies.extrabold,
+  },
+  metricValueSelected: {
+    color: "#fff",
   },
   textWhite: {
     color: "#fff",
   },
   truckPlaceholder: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
   },
 });
