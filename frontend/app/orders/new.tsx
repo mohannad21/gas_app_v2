@@ -935,7 +935,7 @@ export default function NewOrderScreen() {
       debt_cylinders_12: orderCylinderAfter12,
       debt_cylinders_48: orderCylinderAfter48,
       note: values.note,
-      client_request_id: requestId,
+      request_id: requestId,
     };
 
     const finalizeCreate = async () => {
