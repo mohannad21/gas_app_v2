@@ -44,7 +44,7 @@ const DayCard = memo(function DayCard({
       <View style={styles.centerSpacer} testID={`day-card-center-${item.date}`} />
 
       <View style={styles.bottomBlock} testID={`day-card-bottom-${item.date}`}>
-        <View style={styles.metricsRow}>
+        <View style={styles.metricsColumn}>
           <View style={metricBoxStyle}>
             <Text style={metricLabelStyle}>12kg</Text>
             <Text style={metricValueStyle}>{item.sold_12kg ?? 0}</Text>
@@ -139,20 +139,21 @@ const styles = StyleSheet.create({
   bottomBlock: {
     gap: 8,
   },
-  metricsRow: {
-    flexDirection: "row",
+  metricsColumn: {
     gap: 4,
   },
   metricBox: {
-    flex: 1,
-    minHeight: 38,
-    paddingHorizontal: 4,
-    paddingVertical: 5,
+    minHeight: 26,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderRadius: 8,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    gap: 6,
   },
   metricBoxSelected: {
     backgroundColor: "rgba(255,255,255,0.12)",
