@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
+  Animated,
   FlatList,
   InputAccessoryView,
   Keyboard,
@@ -19,9 +20,9 @@ import {
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
-import ReportHeader from "@/components/reports/ReportHeader";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
+import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import { getDailyReportV2 } from "@/lib/api";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
@@ -29,6 +30,8 @@ import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
 import DaySummaryBox from "@/components/reports/DaySummaryBox";
+
+type RevealShelfKey = "ledger" | "customers" | "company";
 
 const getExpenseIcon = (type?: string | null) => {
   const key = String(type ?? "").toLowerCase();
@@ -283,6 +286,20 @@ export default function ReportsScreen() {
     setV2DayByDate,
     refetchV2,
   } = useDailyReportScreen();
+  const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
+
+  const [revealVisible, setRevealVisible] = useState(false);
+  const [activeShelf, setActiveShelf] = useState<RevealShelfKey | null>(null);
+  const [revealHeight, setRevealHeight] = useState(0);
+  const revealAnim = useRef(new Animated.Value(0)).current;
+  const spacerAnim = useRef(new Animated.Value(0)).current;
+  const shelfAnim = useRef(new Animated.Value(1)).current;
+  const hasDefaultedShelf = useRef(false);
+  const scrollTracker = useRef<{ lastY: number; direction: "up" | "down" | null; travel: number }>({
+    lastY: 0,
+    direction: null,
+    travel: 0,
+  });
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
@@ -374,6 +391,12 @@ export default function ReportsScreen() {
   );
 
   useEffect(() => {
+    if (!v2Rows.length) return;
+    if (selectedDate && v2Rows.some((row) => row.date === selectedDate)) return;
+    setSelectedDate(v2Rows[0]?.date ?? null);
+  }, [selectedDate, v2Rows]);
+
+  useEffect(() => {
     if (!selectedDate) return;
     if (v2DayByDate[selectedDate] !== undefined) return;
     setV2DayByDate((prev) => ({ ...prev, [selectedDate]: null }));
@@ -406,68 +429,353 @@ export default function ReportsScreen() {
     setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
   }, [setV2Expanded]);
 
+  const animateShelfIn = useCallback(() => {
+    shelfAnim.setValue(0);
+    Animated.timing(shelfAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [shelfAnim]);
+
+  const showRevealLayer = useCallback(() => {
+    setRevealVisible((prev) => {
+      if (prev) return prev;
+      if (!hasDefaultedShelf.current) {
+        hasDefaultedShelf.current = true;
+        setActiveShelf("ledger");
+      }
+      return true;
+    });
+  }, []);
+
+  const hideRevealLayer = useCallback(() => {
+    setRevealVisible(false);
+  }, []);
+
+  const handleShelfPress = useCallback(
+    (nextShelf: RevealShelfKey) => {
+      if (activeShelf === nextShelf) {
+        setActiveShelf(null);
+        return;
+      }
+      setActiveShelf(nextShelf);
+      animateShelfIn();
+    },
+    [activeShelf, animateShelfIn]
+  );
+
+  useEffect(() => {
+    Animated.timing(revealAnim, {
+      toValue: revealVisible ? 1 : 0,
+      duration: revealVisible ? 220 : 180,
+      useNativeDriver: true,
+    }).start();
+  }, [revealAnim, revealVisible]);
+
+  useEffect(() => {
+    Animated.timing(spacerAnim, {
+      toValue: revealVisible ? revealHeight : 0,
+      duration: revealVisible ? 220 : 180,
+      useNativeDriver: false,
+    }).start();
+  }, [revealHeight, revealVisible, spacerAnim]);
+
+  const handleRevealScroll = useCallback(
+    (offsetY: number) => {
+      const clampedY = Math.max(offsetY, 0);
+      const previousY = scrollTracker.current.lastY;
+      const delta = clampedY - previousY;
+      scrollTracker.current.lastY = clampedY;
+
+      if (Math.abs(delta) < 2) return;
+
+      const direction: "up" | "down" = delta < 0 ? "up" : "down";
+      if (scrollTracker.current.direction !== direction) {
+        scrollTracker.current.direction = direction;
+        scrollTracker.current.travel = Math.abs(delta);
+      } else {
+        scrollTracker.current.travel += Math.abs(delta);
+      }
+
+      if (direction === "up" && scrollTracker.current.travel >= 48) {
+        showRevealLayer();
+        scrollTracker.current.travel = 0;
+      } else if (direction === "down" && scrollTracker.current.travel >= 64) {
+        hideRevealLayer();
+        scrollTracker.current.travel = 0;
+      }
+    },
+    [hideRevealLayer, showRevealLayer]
+  );
+
+  const latestCard = v2Rows[0];
+  const latestInventory = latestCard?.inventory_end;
+  const customerShelfBoxes = [
+    {
+      label: "Money debt",
+      value: formatMoney(balanceSummary.money.receivable.total),
+      tone: "positive" as const,
+    },
+    {
+      label: "Money credit",
+      value: formatMoney(balanceSummary.money.payable.total),
+      tone: "neutral" as const,
+    },
+    {
+      label: "12kg debt",
+      value: formatCount(balanceSummary.cyl12.receivable.total),
+      tone: "positive" as const,
+    },
+    {
+      label: "12kg credit",
+      value: formatCount(balanceSummary.cyl12.payable.total),
+      tone: "neutral" as const,
+    },
+    {
+      label: "48kg debt",
+      value: formatCount(balanceSummary.cyl48.receivable.total),
+      tone: "positive" as const,
+    },
+    {
+      label: "48kg credit",
+      value: formatCount(balanceSummary.cyl48.payable.total),
+      tone: "neutral" as const,
+    },
+  ];
+  const companyMoneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
+  const company12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
+  const company48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
+  const companyShelfBoxes = [
+    {
+      label: "Money balance",
+      value: companyBalancesQuery.data ? formatSigned(companyMoneyNet) : "Unavailable",
+      tone: companyMoneyNet < 0 ? ("warning" as const) : ("neutral" as const),
+    },
+    {
+      label: "12kg balance",
+      value: companyBalancesQuery.data ? formatSigned(company12Net) : "Unavailable",
+      tone: company12Net < 0 ? ("warning" as const) : ("neutral" as const),
+    },
+    {
+      label: "48kg balance",
+      value: companyBalancesQuery.data ? formatSigned(company48Net) : "Unavailable",
+      tone: company48Net < 0 ? ("warning" as const) : ("neutral" as const),
+    },
+  ];
+
+  const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
+  const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
+  const selectedEvents = ((selectedDayInfo?.events ?? []) as any[]) || [];
+
+  const revealShelfContent =
+    activeShelf === "ledger" ? (
+      <Animated.View
+        key="ledger"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.shelfGrid}>
+          <ValueBox label="12kg Full" value={formatCount(latestInventory?.full12 ?? 0)} compact />
+          <ValueBox label="12kg Empty" value={formatCount(latestInventory?.empty12 ?? 0)} compact />
+          <ValueBox label="48kg Full" value={formatCount(latestInventory?.full48 ?? 0)} compact />
+          <ValueBox label="48kg Empty" value={formatCount(latestInventory?.empty48 ?? 0)} compact />
+          <ValueBox label="Wallet" value={formatMoney(latestCard?.cash_end ?? 0)} compact />
+        </View>
+        <View style={styles.revealShelfActionRow}>
+          <Pressable
+            style={styles.shelfActionButton}
+            onPress={() => {
+              router.push("/(tabs)/add?open=adjust-inventory");
+            }}
+          >
+            <Text style={styles.shelfActionText}>Adjust Inventory</Text>
+          </Pressable>
+          <Pressable
+            style={styles.shelfActionButton}
+            onPress={() => {
+              router.push("/(tabs)/add?open=adjust-cash");
+            }}
+          >
+            <Text style={styles.shelfActionText}>Adjust Wallet</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    ) : activeShelf === "customers" ? (
+      <Animated.View
+        key="customers"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.shelfGrid}>
+          {customerShelfBoxes.map((box) => (
+            <SummaryChip key={box.label} label={box.label} value={box.value} compact />
+          ))}
+        </View>
+      </Animated.View>
+    ) : activeShelf === "company" ? (
+      <Animated.View
+        key="company"
+        style={[
+          styles.revealShelfBody,
+          {
+            opacity: shelfAnim,
+            transform: [
+              {
+                translateY: shelfAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [8, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.shelfGrid}>
+          {companyShelfBoxes.map((box) => (
+            <SummaryChip key={box.label} label={box.label} value={box.value} compact bad={box.tone === "warning"} />
+          ))}
+        </View>
+      </Animated.View>
+    ) : null;
+
   // -------------------------
   // VIEW MODE: NEW (V2)
   // -------------------------
   return (
     <View style={styles.container}>
-      <View style={styles.stickyHeader}>
-        {(() => {
-          const latest = v2Rows[0];
-          const inventory = latest?.inventory_end;
-          return (
-            <ReportHeader
-              inventory={{
-                full12: formatCount(inventory?.full12 ?? 0),
-                empty12: formatCount(inventory?.empty12 ?? 0),
-                full48: formatCount(inventory?.full48 ?? 0),
-                empty48: formatCount(inventory?.empty48 ?? 0),
-              }}
-              cashEnd={formatMoney(latest?.cash_end ?? 0)}
-              onAdjustInventory={() => {
-                router.push("/(tabs)/add?open=adjust-inventory");
-              }}
-              onAdjustCash={() => {
-                router.push("/(tabs)/add?open=adjust-cash");
-              }}
-            />
-          );
-        })()}
-      </View>
-        {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
-        {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
+      <Animated.View
+        testID="reports-reveal-layer"
+        pointerEvents={revealVisible ? "auto" : "none"}
+        onLayout={(event) => {
+          const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+          if (nextHeight !== revealHeight) {
+            setRevealHeight(nextHeight);
+          }
+        }}
+        style={[
+          styles.revealLayer,
+          {
+            opacity: revealAnim,
+            transform: [
+              {
+                translateY: revealAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-18, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.segmentBar}>
+          {(["ledger", "customers", "company"] as RevealShelfKey[]).map((segment) => {
+            const isActive = activeShelf === segment;
+            const label = segment === "ledger" ? "Ledger" : segment === "customers" ? "Customers" : "Company";
+            return (
+              <Pressable
+                key={segment}
+                style={[styles.segmentButton, isActive && styles.segmentButtonActive]}
+                onPress={() => handleShelfPress(segment)}
+              >
+                <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {revealShelfContent}
+      </Animated.View>
 
-        <DayPickerStrip
-          rows={v2Rows}
-          selectedDate={selectedDate}
-          onSelect={(date) => {
-            setSelectedDate(date);
-          }}
+      {selectedDate ? (
+        <FlatList
+          testID="reports-activity-list"
+          data={selectedEvents}
+          keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
+          onScroll={(event) => handleRevealScroll(event.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
+          ListHeaderComponent={
+            <>
+              <Animated.View style={{ height: spacerAnim }} />
+              {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
+              {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
+              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} />
+              {selectedCard ? (
+                <View style={styles.daySummaryWrap}>
+                  <DaySummaryBox card={selectedCard} />
+                </View>
+              ) : null}
+            </>
+          }
+          ListEmptyComponent={
+            selectedDayInfo === null && !v2Query.isLoading ? (
+              <Text style={styles.meta}>Loading activities...</Text>
+            ) : selectedDayInfo !== null && selectedEvents.length === 0 ? (
+              <Text style={styles.meta}>No activities on this day.</Text>
+            ) : null
+          }
+          renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
+          contentContainerStyle={styles.activityListContent}
         />
-
-        {selectedDate ? (() => {
-          const card = v2Rows.find((r) => r.date === selectedDate);
-          const dayInfo = v2DayByDate[selectedDate] ?? null;
-          const events = (dayInfo?.events ?? []) as any[];
-          return (
-            <FlatList
-              data={events}
-              keyExtractor={(ev, i) => String(ev?.id ?? ev?.source_id ?? `ev-${i}`)}
-              ListHeaderComponent={card ? <View style={{ marginTop: 10 }}><DaySummaryBox card={card} /></View> : null}
-              ListEmptyComponent={
-                dayInfo === null && !v2Query.isLoading ? (
-                  <Text style={styles.meta}>Loading activities...</Text>
-                ) : dayInfo !== null && events.length === 0 ? (
-                  <Text style={styles.meta}>No activities on this day.</Text>
-                ) : null
-              }
-              renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
-              contentContainerStyle={{ paddingBottom: 32 }}
-            />
-          );
-        })() : (
+      ) : (
+        <View style={styles.emptyStateWrap}>
           <Text style={styles.meta}>Select a day above.</Text>
-        )}
+        </View>
+      )}
+
+      <Animated.View
+        testID="reports-quick-actions"
+        pointerEvents={revealVisible ? "auto" : "none"}
+        style={[
+          styles.quickActions,
+          {
+            opacity: revealAnim,
+            transform: [
+              {
+                translateY: revealAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [24, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Pressable style={styles.quickFab} onPress={() => router.push("/orders/new")}>
+          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+          <Text style={styles.quickFabText}>Replacement</Text>
+        </Pressable>
+        <Pressable
+          style={styles.quickFab}
+          onPress={() => router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } })}
+        >
+          <Ionicons name="reload-outline" size={18} color="#fff" />
+          <Text style={styles.quickFabText}>Refill</Text>
+        </Pressable>
+      </Animated.View>
 
         {/* Sync tooltip */}
         <Modal transparent visible={!!syncInfoDate} animationType="fade" onRequestClose={() => setSyncInfoDate(null)}>
@@ -1223,30 +1531,127 @@ function SummaryChip({
  * Styles (minimal, consistent)
  * ----------------------------------------- */
 
-const HEADER_HEIGHT = 160;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: HEADER_HEIGHT + 14,
     backgroundColor: "#f6f7f9",
   },
   meta: { fontSize: 12, color: "#475569", fontFamily: FontFamilies.regular },
   error: { fontSize: 12, color: "#b91c1c", marginTop: 6, fontFamily: FontFamilies.semibold },
-
-  stickyHeader: {
+  revealLayer: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: HEADER_HEIGHT,
+    top: 10,
+    left: 14,
+    right: 14,
+    zIndex: 20,
+  },
+  segmentBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "#dbe3ee",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  segmentButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  segmentButtonActive: {
+    backgroundColor: "#0a7ea4",
+  },
+  segmentText: {
+    fontSize: 13,
+    color: "#475569",
+    fontFamily: FontFamilies.semibold,
+  },
+  segmentTextActive: {
+    color: "#fff",
+  },
+  revealShelfBody: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.97)",
+    borderWidth: 1,
+    borderColor: "#dbe3ee",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  shelfGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  revealShelfActionRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  shelfActionButton: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0a7ea4",
+  },
+  shelfActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontFamily: FontFamilies.semibold,
+  },
+  activityListContent: {
+    paddingTop: 10,
+    paddingBottom: 180,
+  },
+  daySummaryWrap: {
+    marginTop: 10,
+  },
+  emptyStateWrap: {
+    flex: 1,
+    paddingTop: 18,
+  },
+  quickActions: {
+    position: "absolute",
+    right: 18,
+    bottom: 88,
+    gap: 10,
+    zIndex: 25,
+  },
+  quickFab: {
+    minHeight: 42,
     paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: "#f6f7f9",
-    zIndex: 10,
+    borderRadius: 999,
+    backgroundColor: "#0a7ea4",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  quickFabText: {
+    color: "#fff",
+    fontSize: 13,
+    fontFamily: FontFamilies.semibold,
   },
 
   tabRow: { flexDirection: "row", gap: 8, marginTop: 10, marginBottom: 10, flexWrap: "wrap" },
