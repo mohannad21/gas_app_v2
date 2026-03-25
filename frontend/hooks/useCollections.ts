@@ -1,6 +1,7 @@
 import { createCollection, deleteCollection, listCollections, updateCollection } from "@/lib/api";
+import { customerBalanceQueryKey } from "@/hooks/useCustomers";
 import { showToast } from "@/lib/toast";
-import { CollectionCreateInput, CollectionUpdateInput } from "@/types/domain";
+import { CollectionCreateInput, CollectionEvent, CollectionUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
@@ -9,6 +10,17 @@ function extractErrorMessage(err: AxiosError) {
   if (typeof detail === "string") return detail;
   if (detail) return JSON.stringify(detail);
   return "Unknown error";
+}
+
+function invalidateCustomerBalance(
+  queryClient: ReturnType<typeof useQueryClient>,
+  customerId?: string
+) {
+  if (customerId) {
+    queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(customerId) });
+    return;
+  }
+  queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
 export function useCreateCollection() {
@@ -24,11 +36,12 @@ export function useCreateCollection() {
       );
       showToast(`Failed to save collection: ${extractErrorMessage(axiosError)}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showToast("Collection saved");
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, variables.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -57,10 +70,14 @@ export function useUpdateCollection() {
       );
       showToast(`Failed to update collection: ${extractErrorMessage(axiosError)}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showToast("Collection updated");
+      const existing = queryClient
+        .getQueryData<CollectionEvent[]>(["collections"])
+        ?.find((collection) => collection.id === variables.id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, variables.payload.customer_id ?? existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -81,10 +98,14 @@ export function useDeleteCollection() {
       );
       showToast(`Failed to delete collection: ${extractErrorMessage(axiosError)}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       showToast("Collection deleted");
+      const existing = queryClient
+        .getQueryData<CollectionEvent[]>(["collections"])
+        ?.find((collection) => collection.id === id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomerBalance(queryClient, existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
