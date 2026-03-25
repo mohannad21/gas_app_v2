@@ -48,3 +48,13 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local audit artifacts
+AUDIT_TODO.md
+scripts/backend.txt
+scripts/frontend.txt
+
+# local audit artifacts
+AUDIT_TODO.md
+scripts/backend.txt
+scripts/frontend.txt
