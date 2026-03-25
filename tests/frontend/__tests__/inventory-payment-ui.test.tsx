@@ -1,7 +1,9 @@
 import React from "react";
-import { render } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 
 let mockParams: Record<string, string> = { section: "company", tab: "payment" };
+let mockCreateCompanyPaymentPending = false;
+const mockCreateCompanyPaymentMutateAsync = jest.fn().mockResolvedValue({});
 
 jest.mock("expo-router", () => ({
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
@@ -34,7 +36,10 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
 }));
 
 jest.mock("@/hooks/useCompanyPayments", () => ({
-  useCreateCompanyPayment: () => ({ mutateAsync: jest.fn().mockResolvedValue({}) }),
+  useCreateCompanyPayment: () => ({
+    mutateAsync: mockCreateCompanyPaymentMutateAsync,
+    isPending: mockCreateCompanyPaymentPending,
+  }),
 }));
 
 jest.mock("@/hooks/useCash", () => ({
@@ -75,6 +80,11 @@ function hasWidthValue(node: any, target: string): boolean {
 }
 
 describe("InventoryNewScreen company payment layout", () => {
+  beforeEach(() => {
+    mockCreateCompanyPaymentPending = false;
+    mockCreateCompanyPaymentMutateAsync.mockClear();
+  });
+
   it("renders boxed sections for date, direction, and reason/type", () => {
     const { getByText, getByPlaceholderText, toJSON } = render(<InventoryNewScreen />);
 
@@ -83,5 +93,14 @@ describe("InventoryNewScreen company payment layout", () => {
     expect(getByText("Reason / type")).toBeTruthy();
     expect(getByPlaceholderText("Optional note")).toBeTruthy();
     expect(hasWidthValue(toJSON(), "50%")).toBe(false);
+  });
+
+  it("disables company payment save actions while the payment mutation is pending", () => {
+    mockCreateCompanyPaymentPending = true;
+    const { getByText } = render(<InventoryNewScreen />);
+
+    expect(getByText("Saving...")).toBeTruthy();
+    fireEvent.press(getByText("Saving..."));
+    expect(mockCreateCompanyPaymentMutateAsync).not.toHaveBeenCalled();
   });
 });

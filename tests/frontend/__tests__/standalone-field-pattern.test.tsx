@@ -217,4 +217,53 @@ describe("shared standalone field pattern", () => {
     const bankToWalletView = render(<CashExpensesView {...baseProps} expenseMode="bank_to_wallet" />);
     expect(bankToWalletView.getAllByTestId("standalone-field").length).toBeGreaterThan(0);
   });
+
+  it("disables expense save actions while the expense mutation is pending", () => {
+    const createExpense = { mutateAsync: jest.fn().mockResolvedValue({}), isPending: true };
+    const styles = new Proxy(
+      {},
+      {
+        get: () => ({}),
+      }
+    ) as Record<string, any>;
+
+    const { getByText } = render(
+      <CashExpensesView
+        cashBalance={300}
+        onRefreshCash={() => {}}
+        onClose={() => {}}
+        onTransferNow={() => {}}
+        expenseDate="2026-03-21"
+        setExpenseDate={() => {}}
+        expenseTime="18:00"
+        setExpenseTime={() => {}}
+        expenseTimeOpen={false}
+        setExpenseTimeOpen={() => {}}
+        expenseCalendarOpen={false}
+        setExpenseCalendarOpen={() => {}}
+        expenseMode="expense"
+        setExpenseMode={() => {}}
+        expenseTypes={["fuel", "food"]}
+        expenseType="fuel"
+        setExpenseType={() => {}}
+        expenseAmount="20"
+        setExpenseAmount={() => {}}
+        expenseNote=""
+        setExpenseNote={() => {}}
+        transferAmount="20"
+        setTransferAmount={() => {}}
+        transferNote=""
+        setTransferNote={() => {}}
+        createExpense={createExpense}
+        createBankDeposit={{ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }}
+        CalendarModal={() => null}
+        TimePickerModal={() => null}
+        styles={styles}
+      />
+    );
+
+    expect(getByText("Saving...")).toBeTruthy();
+    fireEvent.press(getByText("Saving..."));
+    expect(createExpense.mutateAsync).not.toHaveBeenCalled();
+  });
 });
