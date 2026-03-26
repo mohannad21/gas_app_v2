@@ -18,6 +18,7 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalances: () => ({
     data: { company_money: 0, company_cyl_12: 0, company_cyl_48: 0 },
     isSuccess: true,
+    refetch: jest.fn(),
   }),
 }));
 
@@ -55,6 +56,8 @@ jest.mock("@/hooks/useReports", () => ({
 jest.mock("@/hooks/useInventory", () => ({
   useCreateRefill: () => ({ mutateAsync: jest.fn() }),
   useInitInventory: () => ({ mutateAsync: jest.fn() }),
+  useInventoryAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useInventoryRefills: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useInventorySnapshot: () => ({ data: { full12: 10, empty12: 5, full48: 6, empty48: 3 } }),
   useDeleteRefill: () => ({ mutateAsync: jest.fn() }),
   useDeleteInventoryAdjustment: () => ({ mutateAsync: jest.fn() }),
@@ -70,7 +73,12 @@ jest.mock("@/hooks/useInventoryActivity", () => ({
 }));
 
 jest.mock("@/hooks/useCash", () => ({
+  useCashAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCashAdjustment: () => ({ mutateAsync: jest.fn() }),
+}));
+
+jest.mock("@/hooks/useCompanyPayments", () => ({
+  useCompanyPayments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
 jest.mock("@/hooks/usePrices", () => ({

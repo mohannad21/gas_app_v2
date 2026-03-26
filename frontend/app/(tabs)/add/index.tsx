@@ -578,6 +578,7 @@ const formatDateTime = (value?: string) => {
   useFocusEffect(
     useCallback(() => {
       if (isCompanyActivities || isLedgerAdjustments) {
+        companyBalancesQuery.refetch();
         if (isCompanyActivities) {
           companyRefillsQuery.refetch();
           companyPaymentsQuery.refetch();
@@ -590,6 +591,7 @@ const formatDateTime = (value?: string) => {
     }, [
       allCashAdjustmentsQuery,
       allInventoryAdjustmentsQuery,
+      companyBalancesQuery,
       companyPaymentsQuery,
       companyRefillsQuery,
       isCompanyActivities,
@@ -743,7 +745,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteRefill.mutateAsync(refillId);
-            companyRefillsQuery.refetch();
+            await Promise.all([companyRefillsQuery.refetch(), companyBalancesQuery.refetch()]);
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -762,7 +764,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
-            allInventoryAdjustmentsQuery.refetch();
+            await Promise.all([allInventoryAdjustmentsQuery.refetch(), companyBalancesQuery.refetch()]);
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
