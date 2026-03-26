@@ -1,6 +1,7 @@
 import {
   useCreateCustomerAdjustment,
   customerBalanceQueryKey,
+  useUpdateCustomer,
 } from "@/hooks/useCustomers";
 import { useCreateOrder, useDeleteOrder, useUpdateOrder } from "@/hooks/useOrders";
 import {
@@ -140,6 +141,16 @@ describe("customer balance invalidation hooks", () => {
 
     expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: customerBalanceQueryKey("cust-7"),
+    });
+  });
+
+  it("invalidates the exact customer balance query after updating a customer", () => {
+    const mutation = useUpdateCustomer() as any;
+
+    mutation.onSuccess({}, { id: "cust-8", payload: { name: "Alice" } });
+
+    expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: customerBalanceQueryKey("cust-8"),
     });
   });
 });
