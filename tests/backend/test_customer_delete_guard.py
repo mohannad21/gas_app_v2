@@ -25,6 +25,15 @@ def test_delete_customer_blocked_with_orders(client) -> None:
 
     delete_resp = client.delete(f"/customers/{customer_id}")
     assert delete_resp.status_code == 409
+    assert delete_resp.json()["detail"] == "customer_has_transactions"
+
+
+def test_delete_customer_blocked_with_non_order_transactions(client) -> None:
+    customer_id = create_customer(client, name="Has Adjustment", starting_money=25)
+
+    delete_resp = client.delete(f"/customers/{customer_id}")
+    assert delete_resp.status_code == 409
+    assert delete_resp.json()["detail"] == "customer_has_transactions"
 
 
 def test_delete_customer_without_orders_allowed(client) -> None:

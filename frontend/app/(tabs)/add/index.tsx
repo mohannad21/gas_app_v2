@@ -14,7 +14,13 @@ import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCompanyPayments } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
-import { useAllCustomerAdjustments, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
+import {
+  CUSTOMER_DELETE_BLOCKED_MESSAGE,
+  isCustomerDeleteBlockedError,
+  useAllCustomerAdjustments,
+  useCustomers,
+  useDeleteCustomer,
+} from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
@@ -1719,13 +1725,6 @@ export function AddCustomersSection({
   );
 
   const confirmDeleteCustomer = (id: string) => {
-    const customer = customers.find((entry) => entry.id === id);
-    const orderCount = customer?.order_count ?? 0;
-    const hasOrders = orderCount > 0 || orders.some((order) => order.customer_id === id);
-    if (hasOrders) {
-      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
-      return;
-    }
     setConfirmCustomerId(id);
   };
 
@@ -1866,11 +1865,8 @@ export function AddCustomersSection({
                   try {
                     await deleteCustomer.mutateAsync(confirmCustomerId);
                   } catch (error: any) {
-                    const detail = error?.response?.data?.detail;
-                    if (error?.response?.status === 409 || detail === "customer_has_orders") {
-                      setInfoMessage(
-                        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-                      );
+                    if (isCustomerDeleteBlockedError(error)) {
+                      setInfoMessage(CUSTOMER_DELETE_BLOCKED_MESSAGE);
                     } else {
                       setInfoMessage("Could not delete this customer. Please try again.");
                     }

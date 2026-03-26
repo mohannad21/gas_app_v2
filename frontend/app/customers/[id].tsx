@@ -8,6 +8,8 @@ import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections } from "@/hooks/useCollections";
 import {
+  CUSTOMER_DELETE_BLOCKED_MESSAGE,
+  isCustomerDeleteBlockedError,
   useCustomerAdjustments,
   useCustomerBalance,
   useCustomers,
@@ -498,14 +500,6 @@ export default function CustomerDetailsScreen() {
   };
 
   const handleDeleteCustomer = () => {
-    const hasOrders = orders.length > 0 || (customer.order_count ?? 0) > 0;
-    if (hasOrders) {
-      Alert.alert(
-        "Cannot delete customer",
-        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-      );
-      return;
-    }
     Alert.alert("Delete customer?", "This will remove the customer from the list.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -515,12 +509,8 @@ export default function CustomerDetailsScreen() {
           try {
             await deleteCustomer.mutateAsync(customer.id);
           } catch (error: any) {
-            const detail = error?.response?.data?.detail;
-            if (error?.response?.status === 409 || detail === "customer_has_orders") {
-              Alert.alert(
-                "Cannot delete customer",
-                "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-              );
+            if (isCustomerDeleteBlockedError(error)) {
+              Alert.alert("Cannot delete customer", CUSTOMER_DELETE_BLOCKED_MESSAGE);
             } else {
               Alert.alert("Delete failed", "Could not delete this customer. Please try again.");
             }
