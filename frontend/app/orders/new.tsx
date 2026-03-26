@@ -337,6 +337,10 @@ export default function NewOrderScreen() {
   const collectionBusy = createCollection.isPending;
   const previousCustomerRef = useRef<string | undefined>(undefined);
   const formatMoneyAmount = useCallback((value: number) => Math.abs(value).toFixed(0), []);
+  const refreshCustomerPreview = useCallback(async () => {
+    if (!selectedCustomer) return;
+    await customerBalanceQuery.refetch();
+  }, [customerBalanceQuery, selectedCustomer]);
   const sharedCustomerPreviewTransitions = useMemo(() => {
     if (!selectedCustomerEntry || !customerPreviewReady) return [];
     const transitions = [
@@ -1041,6 +1045,7 @@ ${cylLine}
         setValue("paid_amount", "");
         setValue("note", "");
         setPaidDirty(false);
+        await refreshCustomerPreview();
       } else {
         navigateToTodayReport();
       }
@@ -1092,6 +1097,7 @@ ${cylLine}
       if (resetAfter) {
         setValue("cylinders_received", "");
         setValue("note", "");
+        await refreshCustomerPreview();
       } else {
         navigateToTodayReport();
       }
