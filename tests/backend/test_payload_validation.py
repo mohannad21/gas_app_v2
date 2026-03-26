@@ -24,6 +24,40 @@ def test_refill_rejects_negative_counts(client) -> None:
     assert "buy12_must_be_non_negative" in resp.text
 
 
+def test_init_inventory_rejects_malformed_payload(client) -> None:
+    resp = client.post(
+        "/inventory/init",
+        json={
+            "date": "2025-10-09",
+            "full12": "abc",
+            "empty12": 0,
+            "full48": 0,
+            "empty48": 0,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_init_inventory_accepts_valid_typed_payload(client) -> None:
+    resp = client.post(
+        "/inventory/init",
+        json={
+            "date": "2025-10-09",
+            "full12": 10,
+            "empty12": 5,
+            "full48": 1,
+            "empty48": 2,
+            "reason": "initial",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["full12"] == 10
+    assert body["empty12"] == 5
+    assert body["full48"] == 1
+    assert body["empty48"] == 2
+
+
 def test_order_rejects_negative_counts(client) -> None:
     customer_id = create_customer(client, name="Negative Order")
     system_id = create_system(client, customer_id=customer_id)
@@ -42,6 +76,26 @@ def test_order_rejects_negative_counts(client) -> None:
     )
     assert resp.status_code == 422
     assert "cylinders_installed_must_be_non_negative" in resp.text
+
+
+def test_order_rejects_total_outside_ledger_range(client) -> None:
+    customer_id = create_customer(client, name="Range Order")
+    system_id = create_system(client, customer_id=customer_id)
+    resp = client.post(
+        "/orders",
+        json={
+            "customer_id": customer_id,
+            "system_id": system_id,
+            "happened_at": "2025-01-02T10:00:00",
+            "gas_type": "12kg",
+            "cylinders_installed": 1,
+            "cylinders_received": 0,
+            "price_total": 2147483648,
+            "paid_amount": 0,
+        },
+    )
+    assert resp.status_code == 422
+    assert "price_total_must_be_within_ledger_range" in resp.text
 
 
 def test_collection_rejects_negative_amounts(client) -> None:

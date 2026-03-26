@@ -10,6 +10,7 @@ from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
+from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -107,6 +108,30 @@ def _money_delta_for_mode(order_mode: str, total: int, paid: int) -> int:
   if order_mode == "buy_iron":
     return paid - total
   return total - paid
+
+
+def _order_gas_types(*values: Optional[str]) -> list[str]:
+  return [value for value in values if value]
+
+
+def _resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTransaction]:
+  current = session.get(CustomerTransaction, order_id)
+  if not current or current.kind != "order":
+    return current
+
+  visited: set[str] = set()
+  while current.is_reversed and current.id not in visited:
+    visited.add(current.id)
+    next_txn = session.exec(
+      select(CustomerTransaction)
+      .where(CustomerTransaction.kind == "order")
+      .where(CustomerTransaction.reversed_id == current.id)
+      .order_by(CustomerTransaction.created_at.desc())
+    ).first()
+    if not next_txn:
+      break
+    current = next_txn
+  return current
 
 
 def _order_out(txn: CustomerTransaction) -> OrderOut:
@@ -259,203 +284,209 @@ def list_orders(session: Session = Depends(get_session)) -> list[OrderOut]:
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def create_order(payload: OrderCreate, session: Session = Depends(get_session)) -> OrderOut:
-  if payload.request_id:
-    existing = session.exec(
-      select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
-    ).first()
-    if existing:
-      return _order_out(existing)
-
-  customer = session.get(Customer, payload.customer_id)
-  system = session.get(System, payload.system_id)
-  if not customer:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
-  if not system:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
-  if not system.is_active:
-    raise HTTPException(
-      status_code=status.HTTP_400_BAD_REQUEST,
-      detail="System is inactive, orders cannot be created against it",
-    )
-
   happened_at = normalize_happened_at(payload.happened_at)
-  paid_amount = payload.paid_amount or 0
-  money_delta = _money_delta_for_mode(payload.order_mode, payload.price_total, paid_amount)
-  cyl_delta = payload.cylinders_installed - payload.cylinders_received
-  if payload.order_mode in {"sell_iron", "buy_iron"}:
-    cyl_delta = 0
-  current_money = sum_customer_money(session, customer_id=payload.customer_id)
-  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
-  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
-  next_money = current_money + money_delta
-  next_cyl_12 = current_cyl_12 + (cyl_delta if payload.gas_type == "12kg" else 0)
-  next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
+  with session.begin():
+    acquire_customer_locks(session, [payload.customer_id])
+    acquire_inventory_locks(session, _order_gas_types(payload.gas_type))
+    if payload.request_id:
+      existing = session.exec(
+        select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
+      ).first()
+      if existing:
+        return _order_out(existing)
 
-  txn = CustomerTransaction(
-    customer_id=payload.customer_id,
-    system_id=payload.system_id,
-    happened_at=happened_at,
-    day=derive_day(happened_at),
-    kind="order",
-    mode=payload.order_mode,
-    gas_type=payload.gas_type,
-    installed=payload.cylinders_installed,
-    received=payload.cylinders_received,
-    total=payload.price_total,
-    paid=paid_amount,
-    debt_cash=next_money,
-    debt_cylinders_12=next_cyl_12,
-    debt_cylinders_48=next_cyl_48,
-    note=payload.note,
-    request_id=payload.request_id,
-    is_reversed=False,
-  )
-  session.add(txn)
-  post_customer_transaction(session, txn)
-  session.commit()
+    customer = session.get(Customer, payload.customer_id)
+    system = session.get(System, payload.system_id)
+    if not customer:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+    if not system:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+    if not system.is_active:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="System is inactive, orders cannot be created against it",
+      )
+
+    paid_amount = payload.paid_amount or 0
+    money_delta = _money_delta_for_mode(payload.order_mode, payload.price_total, paid_amount)
+    cyl_delta = payload.cylinders_installed - payload.cylinders_received
+    if payload.order_mode in {"sell_iron", "buy_iron"}:
+      cyl_delta = 0
+    current_money = sum_customer_money(session, customer_id=payload.customer_id)
+    current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+    current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+    next_money = current_money + money_delta
+    next_cyl_12 = current_cyl_12 + (cyl_delta if payload.gas_type == "12kg" else 0)
+    next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
+
+    txn = CustomerTransaction(
+      customer_id=payload.customer_id,
+      system_id=payload.system_id,
+      happened_at=happened_at,
+      day=derive_day(happened_at),
+      kind="order",
+      mode=payload.order_mode,
+      gas_type=payload.gas_type,
+      installed=payload.cylinders_installed,
+      received=payload.cylinders_received,
+      total=payload.price_total,
+      paid=paid_amount,
+      debt_cash=next_money,
+      debt_cylinders_12=next_cyl_12,
+      debt_cylinders_48=next_cyl_48,
+      note=payload.note,
+      request_id=payload.request_id,
+      is_reversed=False,
+    )
+    session.add(txn)
+    post_customer_transaction(session, txn)
   session.refresh(txn)
   return _order_out(txn)
 
 
 @router.put("/{order_id}", response_model=OrderOut)
 def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends(get_session)) -> OrderOut:
-  existing = session.get(CustomerTransaction, order_id)
-  if not existing or existing.kind != "order" or existing.is_reversed:
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-
   payload_data = payload.model_dump(exclude_unset=True)
-  customer_id, system_id, mode, gas_type = _resolve_update_order_context(
-    existing=existing,
-    payload_data=payload_data,
-  )
-  _validate_order_context_on_update(
-    session,
-    payload_data=payload_data,
-    customer_id=customer_id,
-    system_id=system_id,
-    order_mode=mode,
-    gas_type=gas_type,
-  )
+  with session.begin():
+    existing = _resolve_active_order(session, order_id)
+    if not existing or existing.kind != "order" or existing.is_reversed:
+      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
-  # reverse existing
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = CustomerTransaction(
-    customer_id=existing.customer_id,
-    system_id=existing.system_id,
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind="order",
-    mode=existing.mode,
-    gas_type=existing.gas_type,
-    installed=existing.installed,
-    received=existing.received,
-    total=existing.total,
-    paid=existing.paid,
-    debt_cash=existing.debt_cash,
-    debt_cylinders_12=existing.debt_cylinders_12,
-    debt_cylinders_48=existing.debt_cylinders_48,
-    note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="customer_txn",
-    source_id=existing.id,
-    reversal_source_type="customer_txn",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
-  session.flush()
+    customer_id, system_id, mode, gas_type = _resolve_update_order_context(
+      existing=existing,
+      payload_data=payload_data,
+    )
+    acquire_customer_locks(session, [existing.customer_id, customer_id])
+    acquire_inventory_locks(session, _order_gas_types(existing.gas_type, gas_type))
+    _validate_order_context_on_update(
+      session,
+      payload_data=payload_data,
+      customer_id=customer_id,
+      system_id=system_id,
+      order_mode=mode,
+      gas_type=gas_type,
+    )
 
-  happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else existing.happened_at
-  happened_at = normalize_happened_at(happened_at_raw)
-  paid_amount = _resolve_value(payload_data, "paid_amount", existing.paid)
-  total_amount = _resolve_value(payload_data, "price_total", existing.total)
-  installed = _resolve_value(payload_data, "cylinders_installed", existing.installed)
-  received = _resolve_value(payload_data, "cylinders_received", existing.received)
-  note = _resolve_value(payload_data, "note", existing.note)
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = CustomerTransaction(
+      customer_id=existing.customer_id,
+      system_id=existing.system_id,
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind="order",
+      mode=existing.mode,
+      gas_type=existing.gas_type,
+      installed=existing.installed,
+      received=existing.received,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="customer_txn",
+      source_id=existing.id,
+      reversal_source_type="customer_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
+    session.flush()
 
-  money_delta = _money_delta_for_mode(mode, total_amount, paid_amount)
-  cyl_delta = installed - received
-  if mode in {"sell_iron", "buy_iron"}:
-    cyl_delta = 0
-  current_money = sum_customer_money(session, customer_id=customer_id)
-  current_cyl_12 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="12kg")
-  current_cyl_48 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="48kg")
-  next_money = current_money + money_delta
-  next_cyl_12 = current_cyl_12 + (cyl_delta if gas_type == "12kg" else 0)
-  next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
+    happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else existing.happened_at
+    happened_at = normalize_happened_at(happened_at_raw)
+    paid_amount = _resolve_value(payload_data, "paid_amount", existing.paid)
+    total_amount = _resolve_value(payload_data, "price_total", existing.total)
+    installed = _resolve_value(payload_data, "cylinders_installed", existing.installed)
+    received = _resolve_value(payload_data, "cylinders_received", existing.received)
+    note = _resolve_value(payload_data, "note", existing.note)
 
-  txn = CustomerTransaction(
-    customer_id=customer_id,
-    system_id=system_id,
-    happened_at=happened_at,
-    day=derive_day(happened_at),
-    kind="order",
-    mode=mode,
-    gas_type=gas_type,
-    installed=installed,
-    received=received,
-    total=total_amount,
-    paid=paid_amount,
-    debt_cash=next_money,
-    debt_cylinders_12=next_cyl_12,
-    debt_cylinders_48=next_cyl_48,
-    note=note,
-    is_reversed=False,
-  )
-  session.add(txn)
-  post_customer_transaction(session, txn)
-  session.commit()
+    money_delta = _money_delta_for_mode(mode, total_amount, paid_amount)
+    cyl_delta = installed - received
+    if mode in {"sell_iron", "buy_iron"}:
+      cyl_delta = 0
+    current_money = sum_customer_money(session, customer_id=customer_id)
+    current_cyl_12 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="12kg")
+    current_cyl_48 = sum_customer_cylinders(session, customer_id=customer_id, gas_type="48kg")
+    next_money = current_money + money_delta
+    next_cyl_12 = current_cyl_12 + (cyl_delta if gas_type == "12kg" else 0)
+    next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
+
+    txn = CustomerTransaction(
+      customer_id=customer_id,
+      system_id=system_id,
+      happened_at=happened_at,
+      day=derive_day(happened_at),
+      kind="order",
+      mode=mode,
+      gas_type=gas_type,
+      installed=installed,
+      received=received,
+      total=total_amount,
+      paid=paid_amount,
+      debt_cash=next_money,
+      debt_cylinders_12=next_cyl_12,
+      debt_cylinders_48=next_cyl_48,
+      note=note,
+      reversed_id=existing.id,
+      is_reversed=False,
+    )
+    session.add(txn)
+    post_customer_transaction(session, txn)
   session.refresh(txn)
   return _order_out(txn)
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_order(order_id: str, session: Session = Depends(get_session)) -> None:
-  existing = session.get(CustomerTransaction, order_id)
-  if not existing or existing.kind != "order" or existing.is_reversed:
-    return
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = CustomerTransaction(
-    customer_id=existing.customer_id,
-    system_id=existing.system_id,
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind="order",
-    mode=existing.mode,
-    gas_type=existing.gas_type,
-    installed=existing.installed,
-    received=existing.received,
-    total=existing.total,
-    paid=existing.paid,
-    debt_cash=existing.debt_cash,
-    debt_cylinders_12=existing.debt_cylinders_12,
-    debt_cylinders_48=existing.debt_cylinders_48,
-    note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="customer_txn",
-    source_id=existing.id,
-    reversal_source_type="customer_txn",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
-  session.commit()
+  with session.begin():
+    existing = _resolve_active_order(session, order_id)
+    if not existing or existing.kind != "order" or existing.is_reversed:
+      return
+    acquire_customer_locks(session, [existing.customer_id])
+    acquire_inventory_locks(session, _order_gas_types(existing.gas_type))
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = CustomerTransaction(
+      customer_id=existing.customer_id,
+      system_id=existing.system_id,
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind="order",
+      mode=existing.mode,
+      gas_type=existing.gas_type,
+      installed=existing.installed,
+      received=existing.received,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="customer_txn",
+      source_id=existing.id,
+      reversal_source_type="customer_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
 

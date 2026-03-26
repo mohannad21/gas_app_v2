@@ -161,3 +161,29 @@ def test_order_create_is_idempotent_per_request_id(client: TestClient) -> None:
     assert orders_resp.status_code == 200
     orders = orders_resp.json()
     assert len(orders) == 2
+
+
+def test_order_allows_overridden_total_when_structurally_valid(client: TestClient) -> None:
+    init_inventory(client, date="2025-01-01")
+    customer_id = create_customer(client, name="Override Customer")
+    system_id = create_system(client, customer_id=customer_id)
+
+    resp = client.post(
+        "/orders",
+        json={
+            "customer_id": customer_id,
+            "system_id": system_id,
+            "happened_at": "2025-01-02T10:00:00",
+            "gas_type": "12kg",
+            "cylinders_installed": 1,
+            "cylinders_received": 1,
+            "price_total": 137,
+            "paid_amount": 100,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["price_total"] == 137
+
+    customer = _get_customer(client, customer_id)
+    assert customer["money_balance"] == 37
