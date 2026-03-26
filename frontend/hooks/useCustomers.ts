@@ -27,6 +27,17 @@ function extractErrorMessage(err: AxiosError) {
   return err.message || "Unknown error";
 }
 
+export const CUSTOMER_DELETE_BLOCKED_MESSAGE =
+  "You cannot delete this customer while they still have unreversed transactions. Remove or reverse their transactions first.";
+
+export function isCustomerDeleteBlockedError(err: unknown) {
+  const axiosError = err as AxiosError;
+  const data = axiosError.response?.data;
+  const detail =
+    data && typeof data === "object" ? (data as Record<string, unknown>).detail : undefined;
+  return detail === "customer_has_transactions" || (axiosError.response?.status === 409 && !detail);
+}
+
 export function customerBalanceQueryKey(customerId?: string) {
   return ["customers", "balance", customerId] as const;
 }
@@ -141,7 +152,9 @@ export function useDeleteCustomer() {
     mutationFn: deleteCustomer,
     onError: (err) => {
       const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
+      const message = isCustomerDeleteBlockedError(axiosError)
+        ? CUSTOMER_DELETE_BLOCKED_MESSAGE
+        : extractErrorMessage(axiosError);
       showToast(`Failed to delete customer: ${message}`);
       console.error("[deleteCustomer ERROR]", axiosError.response?.status, message);
     },
