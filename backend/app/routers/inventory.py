@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import CompanyTransaction, InventoryAdjustment
 from app.schemas import (
+  InventoryInitCreate,
   InventoryAdjustCreate,
   InventoryAdjustUpdate,
   InventoryAdjustmentRow,
@@ -19,6 +20,7 @@ from app.schemas import (
 from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.utils.time import business_date_start_utc
+from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -111,69 +113,72 @@ def get_inventory_snapshot(
 
 
 @router.post("/init", response_model=InventorySnapshot)
-def init_inventory(payload: dict, session: Session = Depends(get_session)) -> InventorySnapshot:
-  date_str = payload.get("date")
-  full12 = int(payload.get("full12", 0))
-  empty12 = int(payload.get("empty12", 0))
-  full48 = int(payload.get("full48", 0))
-  empty48 = int(payload.get("empty48", 0))
-  reason = payload.get("reason")
-
+def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
+  date_str = payload.date
+  full12 = payload.full12
+  empty12 = payload.empty12
+  full48 = payload.full48
+  empty48 = payload.empty48
+  reason = payload.reason
   happened_at = _parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
-  current = sum_inventory(session, up_to=happened_at)
 
-  delta_full12 = full12 - current["full12"]
-  delta_empty12 = empty12 - current["empty12"]
-  delta_full48 = full48 - current["full48"]
-  delta_empty48 = empty48 - current["empty48"]
+  with session.begin():
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    current = sum_inventory(session, up_to=happened_at)
 
-  for gas, delta_full, delta_empty in (
-    ("12kg", delta_full12, delta_empty12),
-    ("48kg", delta_full48, delta_empty48),
-  ):
-    if delta_full == 0 and delta_empty == 0:
-      continue
-    adj = InventoryAdjustment(
-      gas_type=gas,
-      delta_full=delta_full,
-      delta_empty=delta_empty,
-      note=reason,
-      happened_at=happened_at,
-      day=derive_day(happened_at),
-      is_reversed=False,
-    )
-    session.add(adj)
-    post_inventory_adjustment(session, adj)
+    delta_full12 = full12 - current["full12"]
+    delta_empty12 = empty12 - current["empty12"]
+    delta_full48 = full48 - current["full48"]
+    delta_empty48 = empty48 - current["empty48"]
 
-  session.commit()
+    for gas, delta_full, delta_empty in (
+      ("12kg", delta_full12, delta_empty12),
+      ("48kg", delta_full48, delta_empty48),
+    ):
+      if delta_full == 0 and delta_empty == 0:
+        continue
+      adj = InventoryAdjustment(
+        gas_type=gas,
+        delta_full=delta_full,
+        delta_empty=delta_empty,
+        note=reason,
+        happened_at=happened_at,
+        day=derive_day(happened_at),
+        is_reversed=False,
+      )
+      session.add(adj)
+      post_inventory_adjustment(session, adj)
   return _snapshot_at(session, happened_at, reason)
 
 
 @router.post("/adjust", response_model=InventorySnapshot)
 def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
-  if payload.request_id:
-    existing = session.exec(
-      select(InventoryAdjustment).where(InventoryAdjustment.request_id == payload.request_id)
-    ).first()
-    if existing:
-      return _snapshot_at(session, existing.happened_at, existing.note)
-
   _validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
   happened_at = normalize_happened_at(payload.happened_at)
-  adj = InventoryAdjustment(
-    group_id=payload.group_id,
-    gas_type=payload.gas_type,
-    delta_full=payload.delta_full,
-    delta_empty=payload.delta_empty,
-    note=payload.note or payload.reason,
-    happened_at=happened_at,
-    day=derive_day(happened_at),
-    request_id=payload.request_id,
-    is_reversed=False,
-  )
-  session.add(adj)
-  post_inventory_adjustment(session, adj)
-  session.commit()
+  with session.begin():
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, [payload.gas_type])
+    if payload.request_id:
+      existing = session.exec(
+        select(InventoryAdjustment).where(InventoryAdjustment.request_id == payload.request_id)
+      ).first()
+      if existing:
+        return _snapshot_at(session, existing.happened_at, existing.note)
+
+    adj = InventoryAdjustment(
+      group_id=payload.group_id,
+      gas_type=payload.gas_type,
+      delta_full=payload.delta_full,
+      delta_empty=payload.delta_empty,
+      note=payload.note or payload.reason,
+      happened_at=happened_at,
+      day=derive_day(happened_at),
+      request_id=payload.request_id,
+      is_reversed=False,
+    )
+    session.add(adj)
+    post_inventory_adjustment(session, adj)
   return _snapshot_at(session, happened_at, adj.note)
 
 
@@ -215,58 +220,61 @@ def update_inventory_adjustment(
   payload: InventoryAdjustUpdate,
   session: Session = Depends(get_session),
 ) -> InventoryAdjustmentRow:
-  existing = session.get(InventoryAdjustment, adjust_id)
-  if not existing or existing.is_reversed:
-    raise HTTPException(status_code=404, detail="Adjustment not found")
+  with session.begin():
+    existing = session.get(InventoryAdjustment, adjust_id)
+    if not existing or existing.is_reversed:
+      raise HTTPException(status_code=404, detail="Adjustment not found")
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, [existing.gas_type])
 
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = InventoryAdjustment(
-    group_id=existing.group_id,
-    gas_type=existing.gas_type,
-    delta_full=existing.delta_full,
-    delta_empty=existing.delta_empty,
-    note=f"Reversal of {existing.id}",
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="inventory_adjust",
-    source_id=existing.id,
-    reversal_source_type="inventory_adjust",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = InventoryAdjustment(
+      group_id=existing.group_id,
+      gas_type=existing.gas_type,
+      delta_full=existing.delta_full,
+      delta_empty=existing.delta_empty,
+      note=f"Reversal of {existing.id}",
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="inventory_adjust",
+      source_id=existing.id,
+      reversal_source_type="inventory_adjust",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
 
-  data = payload.model_dump(exclude_unset=True)
-  new_full = data.get("delta_full", existing.delta_full)
-  new_empty = data.get("delta_empty", existing.delta_empty)
-  next_reason = data.get("reason") if "reason" in data else existing.note
-  _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
-  new_note = data.get("note")
-  if new_note is None:
-    new_note = next_reason
-  new_adj = InventoryAdjustment(
-    group_id=existing.group_id,
-    gas_type=existing.gas_type,
-    delta_full=new_full,
-    delta_empty=new_empty,
-    note=new_note,
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    is_reversed=False,
-  )
-  session.add(new_adj)
-  post_inventory_adjustment(session, new_adj)
-  session.commit()
+    data = payload.model_dump(exclude_unset=True)
+    new_full = data.get("delta_full", existing.delta_full)
+    new_empty = data.get("delta_empty", existing.delta_empty)
+    next_reason = data.get("reason") if "reason" in data else existing.note
+    _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
+    new_note = data.get("note")
+    if new_note is None:
+      new_note = next_reason
+    new_adj = InventoryAdjustment(
+      group_id=existing.group_id,
+      gas_type=existing.gas_type,
+      delta_full=new_full,
+      delta_empty=new_empty,
+      note=new_note,
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      reversed_id=existing.id,
+      is_reversed=False,
+    )
+    session.add(new_adj)
+    post_inventory_adjustment(session, new_adj)
   session.refresh(new_adj)
   return InventoryAdjustmentRow(
     id=new_adj.id,
@@ -283,78 +291,82 @@ def update_inventory_adjustment(
 
 @router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
-  existing = session.get(InventoryAdjustment, adjust_id)
-  if not existing or existing.is_reversed:
-    return
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = InventoryAdjustment(
-    group_id=existing.group_id,
-    gas_type=existing.gas_type,
-    delta_full=existing.delta_full,
-    delta_empty=existing.delta_empty,
-    note=f"Reversal of {existing.id}",
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="inventory_adjust",
-    source_id=existing.id,
-    reversal_source_type="inventory_adjust",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
-  session.commit()
+  with session.begin():
+    existing = session.get(InventoryAdjustment, adjust_id)
+    if not existing or existing.is_reversed:
+      return
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, [existing.gas_type])
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = InventoryAdjustment(
+      group_id=existing.group_id,
+      gas_type=existing.gas_type,
+      delta_full=existing.delta_full,
+      delta_empty=existing.delta_empty,
+      note=f"Reversal of {existing.id}",
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="inventory_adjust",
+      source_id=existing.id,
+      reversal_source_type="inventory_adjust",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
 
 
 @router.post("/refill", response_model=InventorySnapshot)
 def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
-  if payload.request_id:
-    existing = session.exec(
-      select(CompanyTransaction)
-      .where(CompanyTransaction.request_id == payload.request_id)
-      .where(CompanyTransaction.kind == "refill")
-    ).first()
-    if existing:
-      return _snapshot_at(session, existing.happened_at, existing.note)
-
   _reject_new_shells_for_refill(payload.new12, payload.new48)
   happened_at = normalize_happened_at(payload.happened_at)
-  txn = CompanyTransaction(
-    happened_at=happened_at,
-    day=derive_day(happened_at),
-    kind="refill",
-    buy12=payload.buy12,
-    return12=payload.return12,
-    buy48=payload.buy48,
-    return48=payload.return48,
-    new12=0,
-    new48=0,
-    total=payload.total_cost,
-    paid=payload.paid_now,
-    debt_cash=0,
-    debt_cylinders_12=0,
-    debt_cylinders_48=0,
-    note=payload.note,
-    request_id=payload.request_id,
-    is_reversed=False,
-  )
-  session.add(txn)
-  entries = post_company_transaction(session, txn)
-  boundary = boundary_from_entries(entries)
-  snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
-  txn.debt_cash = snapshot["debt_cash"]
-  txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
-  txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
-  session.commit()
+  with session.begin():
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    if payload.request_id:
+      existing = session.exec(
+        select(CompanyTransaction)
+        .where(CompanyTransaction.request_id == payload.request_id)
+        .where(CompanyTransaction.kind == "refill")
+      ).first()
+      if existing:
+        return _snapshot_at(session, existing.happened_at, existing.note)
+
+    txn = CompanyTransaction(
+      happened_at=happened_at,
+      day=derive_day(happened_at),
+      kind="refill",
+      buy12=payload.buy12,
+      return12=payload.return12,
+      buy48=payload.buy48,
+      return48=payload.return48,
+      new12=0,
+      new48=0,
+      total=payload.total_cost,
+      paid=payload.paid_now,
+      debt_cash=0,
+      debt_cylinders_12=0,
+      debt_cylinders_48=0,
+      note=payload.note,
+      request_id=payload.request_id,
+      is_reversed=False,
+    )
+    session.add(txn)
+    entries = post_company_transaction(session, txn)
+    boundary = boundary_from_entries(entries)
+    snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
+    txn.debt_cash = snapshot["debt_cash"]
+    txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+    txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   return _snapshot_at(session, happened_at, payload.note)
 
 
@@ -418,72 +430,75 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
 
 @router.put("/refills/{refill_id}", response_model=InventoryRefillDetails)
 def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Session = Depends(get_session)) -> InventoryRefillDetails:
-  existing = session.get(CompanyTransaction, refill_id)
-  if not existing or existing.is_reversed or existing.kind != "refill":
-    raise HTTPException(status_code=404, detail="Refill not found")
-
   _reject_new_shells_for_refill(payload.new12, payload.new48)
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = CompanyTransaction(
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind=existing.kind,
-    buy12=existing.buy12,
-    return12=existing.return12,
-    buy48=existing.buy48,
-    return48=existing.return48,
-    new12=existing.new12,
-    new48=existing.new48,
-    total=existing.total,
-    paid=existing.paid,
-    debt_cash=existing.debt_cash,
-    debt_cylinders_12=existing.debt_cylinders_12,
-    debt_cylinders_48=existing.debt_cylinders_48,
-    note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="company_txn",
-    source_id=existing.id,
-    reversal_source_type="company_txn",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
+  with session.begin():
+    existing = session.get(CompanyTransaction, refill_id)
+    if not existing or existing.is_reversed or existing.kind != "refill":
+      raise HTTPException(status_code=404, detail="Refill not found")
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
 
-  new_txn = CompanyTransaction(
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind="refill",
-    buy12=payload.buy12,
-    return12=payload.return12,
-    buy48=payload.buy48,
-    return48=payload.return48,
-    new12=0,
-    new48=0,
-    total=payload.total_cost,
-    paid=payload.paid_now,
-    debt_cash=0,
-    debt_cylinders_12=0,
-    debt_cylinders_48=0,
-    note=payload.note,
-    is_reversed=False,
-  )
-  session.add(new_txn)
-  entries = post_company_transaction(session, new_txn)
-  boundary = boundary_from_entries(entries)
-  snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at, boundary=boundary)
-  new_txn.debt_cash = snapshot["debt_cash"]
-  new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
-  new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
-  session.commit()
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = CompanyTransaction(
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
+
+    new_txn = CompanyTransaction(
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind="refill",
+      buy12=payload.buy12,
+      return12=payload.return12,
+      buy48=payload.buy48,
+      return48=payload.return48,
+      new12=0,
+      new48=0,
+      total=payload.total_cost,
+      paid=payload.paid_now,
+      debt_cash=0,
+      debt_cylinders_12=0,
+      debt_cylinders_48=0,
+      note=payload.note,
+      reversed_id=existing.id,
+      is_reversed=False,
+    )
+    session.add(new_txn)
+    entries = post_company_transaction(session, new_txn)
+    boundary = boundary_from_entries(entries)
+    snapshot = snapshot_company_debts(session, up_to=new_txn.happened_at, boundary=boundary)
+    new_txn.debt_cash = snapshot["debt_cash"]
+    new_txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
+    new_txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
   session.refresh(new_txn)
   return InventoryRefillDetails(
     refill_id=new_txn.id,
@@ -509,42 +524,44 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
 
 @router.delete("/refills/{refill_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> None:
-  existing = session.get(CompanyTransaction, refill_id)
-  if not existing or existing.is_reversed or existing.kind != "refill":
-    return
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = CompanyTransaction(
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind=existing.kind,
-    buy12=existing.buy12,
-    return12=existing.return12,
-    buy48=existing.buy48,
-    return48=existing.return48,
-    new12=existing.new12,
-    new48=existing.new48,
-    total=existing.total,
-    paid=existing.paid,
-    debt_cash=existing.debt_cash,
-    debt_cylinders_12=existing.debt_cylinders_12,
-    debt_cylinders_48=existing.debt_cylinders_48,
-    note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
-  )
-  session.add(reversal)
-  reverse_source(
-    session,
-    source_type="company_txn",
-    source_id=existing.id,
-    reversal_source_type="company_txn",
-    reversal_source_id=reversal.id,
-    happened_at=reversal.happened_at,
-    day=reversal.day,
-    note=reversal.note,
-  )
-  existing.is_reversed = True
-  session.add(existing)
-  session.commit()
+  with session.begin():
+    existing = session.get(CompanyTransaction, refill_id)
+    if not existing or existing.is_reversed or existing.kind != "refill":
+      return
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = CompanyTransaction(
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      reversed_id=existing.id,
+      is_reversed=True,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.is_reversed = True
+    session.add(existing)
 
