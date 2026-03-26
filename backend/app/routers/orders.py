@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import quote
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -241,8 +242,7 @@ def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dic
     f"{AR_BEST},\n"
     f"{AR_COMPANY}"
   )
-  url = f"https://wa.me/{phone}?text={message}"
-  logger.info("whatsapp_link url=%s phone=%s", url, phone)
+  url = f"https://wa.me/{phone}?text={quote(message, safe='')}"
   return {"url": url}
 
 
