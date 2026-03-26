@@ -125,6 +125,7 @@ export function useUpdateCustomer() {
       showToast("Customer updated");
 
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.id) });
 
       // Refresh systems for this customer
       const key = variables.id ?? null;
