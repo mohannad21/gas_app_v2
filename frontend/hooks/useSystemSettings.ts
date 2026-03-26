@@ -1,18 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 
 import { getSystemSettings, initializeSystem } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { showToast } from "@/lib/toast";
 import { SystemInitializeInput, SystemSettings } from "@/types/domain";
-
-function extractErrorMessage(err: AxiosError) {
-  const data = err.response?.data;
-  if (data && typeof data === "object") {
-    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
-    if (typeof detail === "string") return detail;
-  }
-  return err.message || "Unknown error";
-}
 
 export function useSystemSettings() {
   return useQuery<SystemSettings>({
@@ -27,10 +18,8 @@ export function useInitializeSystem(options?: { showToast?: boolean }) {
   return useMutation({
     mutationFn: (payload: SystemInitializeInput) => initializeSystem(payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
-      showToast(`Failed to initialize system: ${message}`);
-      console.error("[initializeSystem ERROR]", axiosError.response?.status, message);
+      showToast(getUserFacingApiError(err, "Failed to initialize system."));
+      logApiError("[initializeSystem ERROR]", err);
     },
     onSuccess: () => {
       if (showSuccessToast) {

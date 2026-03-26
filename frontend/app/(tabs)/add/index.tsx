@@ -615,12 +615,10 @@ const formatDateTime = (value?: string) => {
   );
 
   const confirmDeleteOrder = (id: string) => {
-    console.log("[add] delete order pressed", id);
     setConfirm({ type: "order", id });
   };
 
   const confirmDeleteCollection = (id: string) => {
-    console.log("[add] delete collection pressed", id);
     setConfirm({ type: "collection", id });
   };
 

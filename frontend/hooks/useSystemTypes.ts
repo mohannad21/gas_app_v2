@@ -1,16 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 
 import { createSystemType, listSystemTypes, updateSystemType } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { SystemTypeOption } from "@/types/domain";
 import { showToast } from "@/lib/toast";
-
-function extractErrorMessage(err: AxiosError) {
-  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
-  if (typeof detail === "string") return detail;
-  if (detail) return JSON.stringify(detail);
-  return "Unknown error";
-}
 
 export function useSystemTypes() {
   return useQuery<SystemTypeOption[]>({
@@ -25,10 +18,8 @@ export function useCreateSystemType() {
   return useMutation({
     mutationFn: (name: string) => createSystemType(name),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
-      console.error("[createSystemType ERROR]", axiosError.response?.status, message);
-      showToast(`Failed to add system type: ${message}`);
+      logApiError("[createSystemType ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to add system type."));
     },
     onSuccess: () => {
       showToast("System type added");
@@ -43,10 +34,8 @@ export function useUpdateSystemType() {
     mutationFn: ({ id, payload }: { id: string; payload: Partial<Pick<SystemTypeOption, "name" | "is_active">> }) =>
       updateSystemType(id, payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
-      console.error("[updateSystemType ERROR]", axiosError.response?.status, message);
-      showToast(`Failed to update system type: ${message}`);
+      logApiError("[updateSystemType ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to update system type."));
     },
     onSuccess: () => {
       showToast("System type updated");

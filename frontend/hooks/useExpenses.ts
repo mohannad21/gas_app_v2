@@ -1,15 +1,8 @@
 import { createExpense, deleteExpense, listExpenses } from "@/lib/api";
+import { getUserFacingApiError } from "@/lib/apiErrors";
 import { Expense, ExpenseCreateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import { showToast } from "@/lib/toast";
-
-function extractErrorMessage(err: AxiosError) {
-  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
-  if (typeof detail === "string") return detail;
-  if (detail) return JSON.stringify(detail);
-  return "Unknown error";
-}
 
 export function useExpenses(date?: string, options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
@@ -25,8 +18,7 @@ export function useCreateExpense() {
   return useMutation({
     mutationFn: (payload: ExpenseCreateInput) => createExpense(payload),
     onError: (err) => {
-      const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to save expense: ${message}`);
+      showToast(getUserFacingApiError(err, "Failed to save expense."));
     },
     onSuccess: (_, variables) => {
       showToast("Expense saved");
@@ -43,8 +35,7 @@ export function useDeleteExpense() {
   return useMutation({
     mutationFn: ({ id }: { id: string; date: string }) => deleteExpense(id),
     onError: (err) => {
-      const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to remove expense: ${message}`);
+      showToast(getUserFacingApiError(err, "Failed to remove expense."));
     },
     onSuccess: (_, variables) => {
       showToast("Expense removed");

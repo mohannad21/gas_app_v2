@@ -1,16 +1,9 @@
 import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { customerBalanceQueryKey } from "@/hooks/useCustomers";
 import { showToast } from "@/lib/toast";
 import { Order, OrderUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
-
-function extractErrorMessage(err: AxiosError) {
-  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
-  if (typeof detail === "string") return detail;
-  if (detail) return JSON.stringify(detail);
-  return "Unknown error";
-}
 
 function invalidateCustomerBalance(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -49,9 +42,8 @@ export function useCreateOrder() {
   return useMutation({
     mutationFn: createOrder,
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      console.error("[createOrder ERROR]", axiosError.response?.status, axiosError.response?.data ?? axiosError.message);
-      showToast(`Failed to create order: ${extractErrorMessage(axiosError)}`);
+      logApiError("[createOrder ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to create order."));
     },
     onSuccess: (_, variables) => {
       showToast("Order created");
@@ -74,9 +66,8 @@ export function useUpdateOrder() {
     mutationFn: ({ id, payload }: { id: string; payload: OrderUpdateInput }) =>
       updateOrder(id, payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      console.error("[updateOrder ERROR]", axiosError.response?.status, axiosError.response?.data ?? axiosError.message);
-      showToast(`Failed to update order: ${extractErrorMessage(axiosError)}`);
+      logApiError("[updateOrder ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to update order."));
     },
 
     onSuccess: (_, variables) => {

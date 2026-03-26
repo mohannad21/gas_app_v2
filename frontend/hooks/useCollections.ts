@@ -1,16 +1,9 @@
 import { createCollection, deleteCollection, listCollections, updateCollection } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { customerBalanceQueryKey } from "@/hooks/useCustomers";
 import { showToast } from "@/lib/toast";
 import { CollectionCreateInput, CollectionEvent, CollectionUpdateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
-
-function extractErrorMessage(err: AxiosError) {
-  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
-  if (typeof detail === "string") return detail;
-  if (detail) return JSON.stringify(detail);
-  return "Unknown error";
-}
 
 function invalidateCustomerBalance(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -28,13 +21,8 @@ export function useCreateCollection() {
   return useMutation({
     mutationFn: (payload: CollectionCreateInput) => createCollection(payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      console.error(
-        "[createCollection ERROR]",
-        axiosError.response?.status,
-        axiosError.response?.data ?? axiosError.message
-      );
-      showToast(`Failed to save collection: ${extractErrorMessage(axiosError)}`);
+      logApiError("[createCollection ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to save collection."));
     },
     onSuccess: (_, variables) => {
       showToast("Collection saved");
@@ -62,13 +50,8 @@ export function useUpdateCollection() {
     mutationFn: ({ id, payload }: { id: string; payload: CollectionUpdateInput }) =>
       updateCollection(id, payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      console.error(
-        "[updateCollection ERROR]",
-        axiosError.response?.status,
-        axiosError.response?.data ?? axiosError.message
-      );
-      showToast(`Failed to update collection: ${extractErrorMessage(axiosError)}`);
+      logApiError("[updateCollection ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to update collection."));
     },
     onSuccess: (_, variables) => {
       showToast("Collection updated");
@@ -90,13 +73,8 @@ export function useDeleteCollection() {
   return useMutation({
     mutationFn: (id: string) => deleteCollection(id),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      console.error(
-        "[deleteCollection ERROR]",
-        axiosError.response?.status,
-        axiosError.response?.data ?? axiosError.message
-      );
-      showToast(`Failed to delete collection: ${extractErrorMessage(axiosError)}`);
+      logApiError("[deleteCollection ERROR]", err);
+      showToast(getUserFacingApiError(err, "Failed to delete collection."));
     },
     onSuccess: (_, id) => {
       showToast("Collection deleted");

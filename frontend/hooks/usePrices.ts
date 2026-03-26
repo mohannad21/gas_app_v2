@@ -1,8 +1,8 @@
 import { listPriceSettings, savePriceSetting } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { showToast } from "@/lib/toast";
 import { PriceSetting } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 
 export function usePriceSettings() {
   return useQuery<PriceSetting[]>({
@@ -20,15 +20,8 @@ export function useSavePriceSetting() {
       queryClient.invalidateQueries({ queryKey: ["prices"] });
     },
     onError: (err) => {
-      const axiosErr = err as AxiosError;
-      const detail =
-        axiosErr.response?.data?.detail ?? axiosErr.response?.data ?? axiosErr.message;
-      console.error("savePriceSetting failed", axiosErr.response ?? axiosErr.message);
-      showToast(
-        detail
-          ? `Unable to save price${typeof detail === "string" ? `: ${detail}` : ""}`
-          : "Unable to save price"
-      );
+      logApiError("[savePriceSetting ERROR]", err);
+      showToast(getUserFacingApiError(err, "Unable to save price."));
     },
   });
 }
