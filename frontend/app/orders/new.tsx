@@ -34,6 +34,7 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
@@ -624,17 +625,20 @@ export default function NewOrderScreen() {
     setCustomerSearch(selectedCustomerEntry?.name ?? "");
   }, [isCustomerSearchOpen, selectedCustomerEntry]);
 
+  const customerQueryRefetchRef = useRef(customersQuery.refetch);
+  customerQueryRefetchRef.current = customersQuery.refetch;
+
   useFocusEffect(
     useCallback(() => {
-      customersQuery.refetch();
-    }, [customersQuery])
+      customerQueryRefetchRef.current();
+    }, [])
   );
 
   useEffect(() => {
     if (isCustomerSearchOpen) {
-      customersQuery.refetch();
+      customerQueryRefetchRef.current();
     }
-  }, [isCustomerSearchOpen, customersQuery]);
+  }, [isCustomerSearchOpen]);
 
   useEffect(() => {
     if (!initialSystemId || !selectedCustomer) return;
@@ -954,9 +958,8 @@ export default function NewOrderScreen() {
           resetOrderForm();
         }
       } catch (err) {
-        const axiosError = err as AxiosError;
-        const detail = (axiosError.response?.data as { detail?: string } | undefined)?.detail;
-        Alert.alert("Error", `Failed to create order. ${detail ?? "Please try again."}`);
+        logApiError("[new order submit] error", err);
+        Alert.alert("Error", getUserFacingApiError(err, "Failed to create order. Please try again."));
       } finally {
         setSubmitting(false);
       }
@@ -1051,7 +1054,8 @@ ${cylLine}
       }
     } catch (err) {
       const axiosError = err as AxiosError;
-      Alert.alert("Payment failed", axiosError.response?.data?.detail ?? axiosError.message);
+      logApiError("[new order payment] error", err);
+      Alert.alert("Payment failed", getUserFacingApiError(axiosError, "Failed to save payment."));
     }
   };
 
@@ -1103,7 +1107,8 @@ ${cylLine}
       }
     } catch (err) {
       const axiosError = err as AxiosError;
-      Alert.alert("Return failed", axiosError.response?.data?.detail ?? axiosError.message);
+      logApiError("[new order return] error", err);
+      Alert.alert("Return failed", getUserFacingApiError(axiosError, "Failed to save return."));
     }
   };
 

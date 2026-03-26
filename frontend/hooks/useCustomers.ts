@@ -7,6 +7,7 @@ import {
   listCustomers,
   updateCustomer,
 } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { showToast } from "@/lib/toast";
 import {
   Customer,
@@ -17,15 +18,6 @@ import {
 } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-
-function extractErrorMessage(err: AxiosError) {
-  const data = err.response?.data;
-  if (data && typeof data === "object") {
-    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
-    if (typeof detail === "string") return detail;
-  }
-  return err.message || "Unknown error";
-}
 
 export const CUSTOMER_DELETE_BLOCKED_MESSAGE =
   "You cannot delete this customer while they still have unreversed transactions. Remove or reverse their transactions first.";
@@ -60,10 +52,8 @@ export function useCreateCustomer(options?: { showToast?: boolean }) {
   return useMutation({
     mutationFn: createCustomer,
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
-      showToast(`Failed to create customer: ${message}`);
-      console.error("[createCustomer ERROR]", axiosError.response?.status, message);
+      showToast(getUserFacingApiError(err, "Failed to create customer."));
+      logApiError("[createCustomer ERROR]", err);
     },
     onSuccess: () => {
       if (showSuccessToast) {
@@ -109,10 +99,8 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
   return useMutation({
     mutationFn: (payload: CustomerAdjustmentCreateInput) => createCustomerAdjustment(payload),
     onError: (err) => {
-      const axiosError = err as AxiosError;
-      const message = extractErrorMessage(axiosError);
-      showToast(`Failed to create adjustment: ${message}`);
-      console.error("[createCustomerAdjustment ERROR]", axiosError.response?.status, message);
+      showToast(getUserFacingApiError(err, "Failed to create adjustment."));
+      logApiError("[createCustomerAdjustment ERROR]", err);
     },
     onSuccess: (_, variables) => {
       if (showSuccessToast) {
@@ -154,9 +142,9 @@ export function useDeleteCustomer() {
       const axiosError = err as AxiosError;
       const message = isCustomerDeleteBlockedError(axiosError)
         ? CUSTOMER_DELETE_BLOCKED_MESSAGE
-        : extractErrorMessage(axiosError);
-      showToast(`Failed to delete customer: ${message}`);
-      console.error("[deleteCustomer ERROR]", axiosError.response?.status, message);
+        : getUserFacingApiError(axiosError, "Failed to delete customer.");
+      showToast(message);
+      logApiError("[deleteCustomer ERROR]", err);
     },
     onSuccess: (_, id) => {
       showToast("Customer removed");

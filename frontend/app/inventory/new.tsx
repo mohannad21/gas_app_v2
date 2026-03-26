@@ -23,6 +23,7 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
@@ -352,7 +353,8 @@ function InventoryAdjustForm({
         onSaved();
       }
     } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
+      logApiError("[inventory adjustment save] error", err);
+      Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save adjustment."));
     }
   };
 
@@ -563,7 +565,8 @@ function CashAdjustForm({
         onSaved();
       }
     } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save adjustment.");
+      logApiError("[cash adjustment save] error", err);
+      Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save adjustment."));
     }
   };
 
@@ -724,7 +727,8 @@ function CompanyPaymentForm({
         onSaved();
       }
     } catch (err: any) {
-      Alert.alert("Payment failed", err?.response?.data?.detail ?? "Failed to save payment.");
+      logApiError("[company payment save] error", err);
+      Alert.alert("Payment failed", getUserFacingApiError(err, "Failed to save payment."));
     }
   };
 

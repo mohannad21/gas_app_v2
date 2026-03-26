@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { ScrollView, View, Text, TextInput, Pressable, StyleSheet, Alert, Keyboard } from "react-native";
 import { router } from "expo-router";
-import { AxiosError } from "axios";
 
 import { CalendarModal } from "@/components/AddRefillModal";
 import { useCreateCustomer, useCreateCustomerAdjustment } from "@/hooks/useCustomers";
 import { useCreateSystem } from "@/hooks/useSystems";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { useSystemTypes } from "@/hooks/useSystemTypes";
 import { showToast } from "@/lib/toast";
 
@@ -33,18 +33,6 @@ type NewSystemForm = {
   security_check_exists: boolean;
   last_security_check_at?: string;
 };
-
-function extractErrorMessage(err: unknown) {
-  if (!err || typeof err !== "object") return "Unknown error";
-  const axiosError = err as AxiosError;
-  const data = axiosError.response?.data;
-  if (data && typeof data === "object") {
-    const detail = (data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message;
-    if (typeof detail === "string") return detail;
-  }
-  if (typeof axiosError.message === "string" && axiosError.message) return axiosError.message;
-  return "Unknown error";
-}
 
 export default function NewCustomerScreen() {
   const {
@@ -171,9 +159,8 @@ export default function NewCustomerScreen() {
       showToast("Customer created");
       router.replace({ pathname: "/", params: { flash: "customer-created" } });
     } catch (err) {
-      const message = extractErrorMessage(err);
-      console.error("[new customer submit] error", message);
-      Alert.alert("Error", `Failed to create customer. ${message}`);
+      logApiError("[new customer submit] error", err);
+      Alert.alert("Error", getUserFacingApiError(err, "Failed to create customer."));
     } finally {
       setSubmitting(false);
     }
