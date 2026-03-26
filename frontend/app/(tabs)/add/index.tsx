@@ -558,48 +558,69 @@ const formatDateTime = (value?: string) => {
     }
   }, [addParams.open, addParams.prices]);
 
+  const customerActivitiesFocusRefetchers = useRef({
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    customers: customersQuery.refetch,
+    adjustments: customerAdjustmentsQuery.refetch,
+    expenses: expensesQuery.refetch,
+    bankDeposits: bankDepositsQuery.refetch,
+  });
+  customerActivitiesFocusRefetchers.current = {
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    customers: customersQuery.refetch,
+    adjustments: customerAdjustmentsQuery.refetch,
+    expenses: expensesQuery.refetch,
+    bankDeposits: bankDepositsQuery.refetch,
+  };
+
+  const companyActivitiesFocusRefetchers = useRef({
+    balances: companyBalancesQuery.refetch,
+    refills: companyRefillsQuery.refetch,
+    payments: companyPaymentsQuery.refetch,
+    inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
+    cashAdjustments: allCashAdjustmentsQuery.refetch,
+  });
+  companyActivitiesFocusRefetchers.current = {
+    balances: companyBalancesQuery.refetch,
+    refills: companyRefillsQuery.refetch,
+    payments: companyPaymentsQuery.refetch,
+    inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
+    cashAdjustments: allCashAdjustmentsQuery.refetch,
+  };
+
   useFocusEffect(
     useCallback(() => {
-      ordersQuery.refetch();
-      collectionsQuery.refetch();
-      customersQuery.refetch();
+      customerActivitiesFocusRefetchers.current.orders();
+      customerActivitiesFocusRefetchers.current.collections();
+      customerActivitiesFocusRefetchers.current.customers();
       if (isCustomerActivities) {
-        customerAdjustmentsQuery.refetch();
+        customerActivitiesFocusRefetchers.current.adjustments();
       }
       if (isExpenses) {
-        expensesQuery.refetch();
-        bankDepositsQuery.refetch();
+        customerActivitiesFocusRefetchers.current.expenses();
+        customerActivitiesFocusRefetchers.current.bankDeposits();
       }
     }, [
-      bankDepositsQuery,
-      collectionsQuery,
-      customerAdjustmentsQuery,
-      customersQuery,
-      expensesQuery,
       isCustomerActivities,
       isExpenses,
-      ordersQuery,
     ])
   );
   useFocusEffect(
     useCallback(() => {
       if (isCompanyActivities || isLedgerAdjustments) {
-        companyBalancesQuery.refetch();
+        companyActivitiesFocusRefetchers.current.balances();
         if (isCompanyActivities) {
-          companyRefillsQuery.refetch();
-          companyPaymentsQuery.refetch();
+          companyActivitiesFocusRefetchers.current.refills();
+          companyActivitiesFocusRefetchers.current.payments();
         }
         if (isLedgerAdjustments) {
-          allInventoryAdjustmentsQuery.refetch();
-          allCashAdjustmentsQuery.refetch();
+          companyActivitiesFocusRefetchers.current.inventoryAdjustments();
+          companyActivitiesFocusRefetchers.current.cashAdjustments();
         }
       }
     }, [
-      allCashAdjustmentsQuery,
-      allInventoryAdjustmentsQuery,
-      companyBalancesQuery,
-      companyPaymentsQuery,
-      companyRefillsQuery,
       isCompanyActivities,
       isLedgerAdjustments,
     ])
@@ -1714,12 +1735,23 @@ export function AddCustomersSection({
       ? "No customers match these filters."
       : "No customers yet.";
 
+  const customerListFocusRefetchers = useRef({
+    customers: customersQuery.refetch,
+    orders: ordersQuery.refetch,
+    systems: systemsQuery.refetch,
+  });
+  customerListFocusRefetchers.current = {
+    customers: customersQuery.refetch,
+    orders: ordersQuery.refetch,
+    systems: systemsQuery.refetch,
+  };
+
   useFocusEffect(
     useCallback(() => {
-      customersQuery.refetch();
-      ordersQuery.refetch();
-      systemsQuery.refetch();
-    }, [customersQuery, ordersQuery, systemsQuery])
+      customerListFocusRefetchers.current.customers();
+      customerListFocusRefetchers.current.orders();
+      customerListFocusRefetchers.current.systems();
+    }, [])
   );
 
   const confirmDeleteCustomer = (id: string) => {

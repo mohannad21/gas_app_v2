@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
@@ -344,6 +344,17 @@ export default function CustomerDetailsScreen() {
   const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
+  const focusRefetchers = useRef({
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    adjustments: adjustmentsQuery.refetch,
+  });
+
+  focusRefetchers.current = {
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    adjustments: adjustmentsQuery.refetch,
+  };
 
   const customer = useMemo(
     () => (customersQuery.data ?? []).find((c) => c.id === customerId),
@@ -373,10 +384,10 @@ export default function CustomerDetailsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      ordersQuery.refetch();
-      collectionsQuery.refetch();
-      adjustmentsQuery.refetch();
-    }, [adjustmentsQuery, collectionsQuery, ordersQuery])
+      focusRefetchers.current.orders();
+      focusRefetchers.current.collections();
+      focusRefetchers.current.adjustments();
+    }, [customerId])
   );
 
   const orderCylinders = useMemo(() => {

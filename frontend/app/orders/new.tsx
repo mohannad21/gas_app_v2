@@ -625,17 +625,20 @@ export default function NewOrderScreen() {
     setCustomerSearch(selectedCustomerEntry?.name ?? "");
   }, [isCustomerSearchOpen, selectedCustomerEntry]);
 
+  const customerQueryRefetchRef = useRef(customersQuery.refetch);
+  customerQueryRefetchRef.current = customersQuery.refetch;
+
   useFocusEffect(
     useCallback(() => {
-      customersQuery.refetch();
-    }, [customersQuery])
+      customerQueryRefetchRef.current();
+    }, [])
   );
 
   useEffect(() => {
     if (isCustomerSearchOpen) {
-      customersQuery.refetch();
+      customerQueryRefetchRef.current();
     }
-  }, [isCustomerSearchOpen, customersQuery]);
+  }, [isCustomerSearchOpen]);
 
   useEffect(() => {
     if (!initialSystemId || !selectedCustomer) return;
