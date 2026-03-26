@@ -49,8 +49,14 @@ export default function OrderDetailsScreen() {
     if (amount > 0) return `Debt ${amount.toFixed(0)}`;
     return "Settled";
   };
-  const cylBefore = order.cyl_balance_before ?? {};
-  const cylAfter = order.cyl_balance_after ?? {};
+  const hasMoneyBalanceSnapshot =
+    typeof order.money_balance_before === "number" && typeof order.money_balance_after === "number";
+  const cylBefore12 = order.cyl_balance_before?.["12kg"];
+  const cylAfter12 = order.cyl_balance_after?.["12kg"];
+  const cylBefore48 = order.cyl_balance_before?.["48kg"];
+  const cylAfter48 = order.cyl_balance_after?.["48kg"];
+  const hasCyl12BalanceSnapshot = typeof cylBefore12 === "number" && typeof cylAfter12 === "number";
+  const hasCyl48BalanceSnapshot = typeof cylBefore48 === "number" && typeof cylAfter48 === "number";
   const confirmDelete = () => {
     Alert.alert("Remove order?", "This will reverse the order and update related ledger balances.", [
       { text: "Cancel", style: "cancel" },
@@ -82,15 +88,21 @@ export default function OrderDetailsScreen() {
       {typeof order.applied_credit === "number" ? (
         <Text style={styles.meta}>Applied credit: ${order.applied_credit.toFixed(0)}</Text>
       ) : null}
-      <Text style={styles.meta}>
-        Balance: {formatBalance(order.money_balance_before)} → {formatBalance(order.money_balance_after)}
-      </Text>
-      <Text style={styles.meta}>
-        Cyl 12: {cylBefore["12kg"] ?? 0} → {cylAfter["12kg"] ?? 0}
-      </Text>
-      <Text style={styles.meta}>
-        Cyl 48: {cylBefore["48kg"] ?? 0} → {cylAfter["48kg"] ?? 0}
-      </Text>
+      {hasMoneyBalanceSnapshot ? (
+        <Text style={styles.meta}>
+          Balance: {formatBalance(order.money_balance_before)} → {formatBalance(order.money_balance_after)}
+        </Text>
+      ) : null}
+      {hasCyl12BalanceSnapshot ? (
+        <Text style={styles.meta}>
+          Cyl 12: {cylBefore12} → {cylAfter12}
+        </Text>
+      ) : null}
+      {hasCyl48BalanceSnapshot ? (
+        <Text style={styles.meta}>
+          Cyl 48: {cylBefore48} → {cylAfter48}
+        </Text>
+      ) : null}
       <Text style={[styles.meta, remaining > 0 ? styles.unpaid : styles.paid]}>
         {remaining > 0 ? `Unpaid $${remaining}` : "Paid"}
       </Text>
