@@ -4,7 +4,7 @@ from conftest import (
     init_inventory, create_customer, create_system,
     create_order, get_daily_row, assert_inventory, iso_at
 )
-from app.utils.locks import acquire_inventory_lock
+from app.utils.locks import acquire_company_lock, acquire_customer_lock, acquire_inventory_lock
 
 def test_full_recalculate_integrity_pass(client) -> None:
     init_inventory(client, date="2025-01-01")
@@ -170,7 +170,55 @@ def test_advisory_lock_uses_hashtext_for_postgres() -> None:
     assert session.calls
     sql, params = session.calls[0]
     assert "pg_advisory_xact_lock(hashtext(:key))" in sql
-    assert params == {"key": "12kg"}
+    assert params == {"key": "inventory:12kg"}
+
+
+def test_customer_advisory_lock_uses_customer_namespace() -> None:
+    class _Dialect:
+        name = "postgresql"
+
+    class _Bind:
+        dialect = _Dialect()
+
+    class _Session:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get_bind(self):
+            return _Bind()
+
+        def exec(self, stmt, params=None):
+            self.calls.append((str(stmt), params))
+
+    session = _Session()
+    acquire_customer_lock(session, "cust-1")
+    assert session.calls
+    _, params = session.calls[0]
+    assert params == {"key": "customer:cust-1"}
+
+
+def test_company_advisory_lock_uses_company_namespace() -> None:
+    class _Dialect:
+        name = "postgresql"
+
+    class _Bind:
+        dialect = _Dialect()
+
+    class _Session:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get_bind(self):
+            return _Bind()
+
+        def exec(self, stmt, params=None):
+            self.calls.append((str(stmt), params))
+
+    session = _Session()
+    acquire_company_lock(session)
+    assert session.calls
+    _, params = session.calls[0]
+    assert params == {"key": "company"}
 
 def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
     init_inventory(client, date="2025-01-01")
