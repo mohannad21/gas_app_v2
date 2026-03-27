@@ -65,6 +65,7 @@ type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
 type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = "all_categories" | string;
 type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
+type PriceSaveStatusTone = "success" | "warning" | "error";
 
 type CustomerActivityListItem =
   | {
@@ -122,6 +123,10 @@ type CompanyActivityListItem =
       is_deleted: false;
       data: CompanyPayment;
     };
+
+function formatPriceGasList(items: string[]) {
+  return items.join(", ");
+}
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -454,6 +459,10 @@ const formatDateTime = (value?: string) => {
   const [lastSavedPrices, setLastSavedPrices] = useState<PriceInputs>(() => createDefaultPriceInputs());
   const dirtyPriceCombosRef = useRef<Set<string>>(new Set());
   const [savingPrices, setSavingPrices] = useState(false);
+  const [priceSaveStatus, setPriceSaveStatus] = useState<{
+    tone: PriceSaveStatusTone;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!priceModalOpen || !priceSettingsQuery.data) {
@@ -526,6 +535,7 @@ const formatDateTime = (value?: string) => {
   useEffect(() => {
     if (!priceModalOpen) {
       dirtyPriceCombosRef.current.clear();
+      setPriceSaveStatus(null);
     }
   }, [priceModalOpen]);
 
@@ -688,6 +698,7 @@ const formatDateTime = (value?: string) => {
     field: "selling" | "buying" | "selling_iron" | "buying_iron",
     value: string
   ) => {
+    setPriceSaveStatus(null);
     const comboKey = gas;
     setPriceInputs((prev) => {
       const nextValue = {
@@ -727,34 +738,55 @@ const formatDateTime = (value?: string) => {
       return;
     }
     setSavingPrices(true);
+    setPriceSaveStatus(null);
+    const savedCombos: GasType[] = [];
+    const failedCombos: GasType[] = [];
     try {
       for (const comboKey of dirtyCombos) {
         const gas = comboKey as GasType;
         const { selling, buying, selling_iron, buying_iron } = priceInputs[gas];
-        const savedPrice = await savePrice.mutateAsync({
-          gas_type: gas,
-          selling_price: Number(selling) || 0,
-          buying_price: buying ? Number(buying) : undefined,
-          selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
-          buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
-        });
-        dirtyPriceCombosRef.current.delete(comboKey);
-        const normalized = {
-          selling: savedPrice.selling_price.toString(),
-          buying: savedPrice.buying_price?.toString() ?? "",
-          selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
-          buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
-        };
-        setLastSavedPrices((prev) => ({
-          ...prev,
-          [gas]: normalized,
-        }));
-        setPriceInputs((prev) => ({
-          ...prev,
-          [gas]: normalized,
-        }));
+        try {
+          const savedPrice = await savePrice.mutateAsync({
+            gas_type: gas,
+            selling_price: Number(selling) || 0,
+            buying_price: buying ? Number(buying) : undefined,
+            selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
+            buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
+          });
+          savedCombos.push(gas);
+          dirtyPriceCombosRef.current.delete(comboKey);
+          const normalized = {
+            selling: savedPrice.selling_price.toString(),
+            buying: savedPrice.buying_price?.toString() ?? "",
+            selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
+            buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
+          };
+          setLastSavedPrices((prev) => ({
+            ...prev,
+            [gas]: normalized,
+          }));
+          setPriceInputs((prev) => ({
+            ...prev,
+            [gas]: normalized,
+          }));
+        } catch {
+          failedCombos.push(gas);
+        }
       }
-      setPriceModalOpen(false);
+      if (failedCombos.length === 0) {
+        setPriceModalOpen(false);
+        return;
+      }
+      const savedText = savedCombos.length
+        ? `Saved: ${formatPriceGasList(savedCombos)}.`
+        : "No rows were saved.";
+      const failedText = `Failed: ${formatPriceGasList(failedCombos)}. Review the failed rows and try again.`;
+      const message = `${savedText} ${failedText}`;
+      setPriceSaveStatus({
+        tone: savedCombos.length > 0 ? "warning" : "error",
+        message,
+      });
+      Alert.alert(savedCombos.length > 0 ? "Some prices saved" : "Price save failed", message);
     } finally {
       setSavingPrices(false);
     }
@@ -1600,6 +1632,20 @@ const formatDateTime = (value?: string) => {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
+              {priceSaveStatus ? (
+                <View
+                  style={[
+                    styles.priceSaveStatusCard,
+                    priceSaveStatus.tone === "error"
+                      ? styles.priceSaveStatusError
+                      : priceSaveStatus.tone === "warning"
+                        ? styles.priceSaveStatusWarning
+                        : styles.priceSaveStatusSuccess,
+                  ]}
+                >
+                  <Text style={styles.priceSaveStatusText}>{priceSaveStatus.message}</Text>
+                </View>
+              ) : null}
               {gasTypes.map((gas) => (
               <PriceMatrixSection
                   key={gas}
@@ -2991,6 +3037,23 @@ const styles = StyleSheet.create({
   priceModalContentInner: {
     gap: 12,
     paddingBottom: 12,
+  },
+  priceSaveStatusCard: {
+    borderRadius: 12,
+    padding: 12,
+  },
+  priceSaveStatusError: {
+    backgroundColor: "#fee2e2",
+  },
+  priceSaveStatusWarning: {
+    backgroundColor: "#fef3c7",
+  },
+  priceSaveStatusSuccess: {
+    backgroundColor: "#dcfce7",
+  },
+  priceSaveStatusText: {
+    color: "#1f2937",
+    fontWeight: "600",
   },
   drawerSave: {
     marginTop: 0,
