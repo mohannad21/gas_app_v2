@@ -1,12 +1,13 @@
 import { useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { usePriceSettings } from "@/hooks/usePrices";
-import { GasType, PriceSetting } from "@/types/domain";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
 import { gasTypes } from "@/components/PriceMatrix";
 import { gasColor } from "@/constants/gas";
+import { usePriceSettings } from "@/hooks/usePrices";
+import { GasType, PriceSetting } from "@/types/domain";
 
 export default function PricesScreen() {
-  const { data, isLoading, error } = usePriceSettings();
+  const { data, isLoading, isFetching, error, refetch } = usePriceSettings();
   const groupedPrices = useMemo(
     () =>
       gasTypes.reduce((acc, gas) => {
@@ -15,31 +16,43 @@ export default function PricesScreen() {
       }, {} as Record<GasType, PriceSetting[]>),
     [data]
   );
+  const hasAnyPrices = gasTypes.some((gas) => (groupedPrices[gas] ?? []).length > 0);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Gas Price Settings</Text>
-      {isLoading && <Text style={styles.meta}>Loading…</Text>}
-      {error && <Text style={styles.error}>Failed to load prices</Text>}
-
-      <Text style={[styles.label, { marginTop: 18 }]}>Current prices</Text>
-      {gasTypes.map((gas) => (
-        <View key={`group-${gas}`} style={styles.priceGroup}>
-          <Text style={[styles.sectionHeader, { color: gasColor(gas) }]}>{gas}</Text>
-          {(groupedPrices[gas] ?? []).map((p) => (
-            <View key={p.id} style={styles.priceRow}>
-              <Text style={styles.meta}>
-                Sell ${p.selling_price}
-                {p.buying_price ? ` • Buy $${p.buying_price}` : ""}
-                {p.selling_iron_price != null || p.buying_iron_price != null
-                  ? ` - Iron Sell $${p.selling_iron_price ?? 0} - Iron Buy $${p.buying_iron_price ?? 0}`
-                  : ""}
-              </Text>
-              <Text style={styles.meta}>From {p.effective_from}</Text>
-            </View>
-          ))}
+      {isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+      {isFetching && !isLoading ? <Text style={styles.meta}>Refreshing...</Text> : null}
+      {error ? (
+        <View style={styles.feedbackCard}>
+          <Text style={styles.error}>Failed to load prices.</Text>
+          <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
         </View>
-      ))}
+      ) : null}
+      {!isLoading && !error && !hasAnyPrices ? <Text style={styles.meta}>No prices yet.</Text> : null}
+
+      {hasAnyPrices ? <Text style={[styles.label, { marginTop: 18 }]}>Current prices</Text> : null}
+      {!error
+        ? gasTypes.map((gas) => (
+            <View key={`group-${gas}`} style={styles.priceGroup}>
+              <Text style={[styles.sectionHeader, { color: gasColor(gas) }]}>{gas}</Text>
+              {(groupedPrices[gas] ?? []).map((p) => (
+                <View key={p.id} style={styles.priceRow}>
+                  <Text style={styles.meta}>
+                    Sell ${p.selling_price}
+                    {p.buying_price ? ` • Buy $${p.buying_price}` : ""}
+                    {p.selling_iron_price != null || p.buying_iron_price != null
+                      ? ` - Iron Sell $${p.selling_iron_price ?? 0} - Iron Buy $${p.buying_iron_price ?? 0}`
+                      : ""}
+                  </Text>
+                  <Text style={styles.meta}>From {p.effective_from}</Text>
+                </View>
+              ))}
+            </View>
+          ))
+        : null}
     </View>
   );
 }
@@ -66,6 +79,23 @@ const styles = StyleSheet.create({
   error: {
     color: "#b00020",
   },
+  feedbackCard: {
+    gap: 10,
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 10,
+  },
+  retryBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: "#0a7ea4",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  retryText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
   priceRow: {
     backgroundColor: "#fff",
     padding: 10,
@@ -81,4 +111,3 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 });
-
