@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import get_current_user
 from .config import get_settings
 from .routers import (
+  auth,
   cash,
   collections,
   company,
@@ -20,6 +22,7 @@ from .routers import (
 )
 
 settings = get_settings()
+protected_route_dependencies = [Depends(get_current_user)]
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
@@ -32,17 +35,18 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(customers.router)
-app.include_router(customer_adjustments.router)
-app.include_router(systems.router)
-app.include_router(system.router)
-app.include_router(system_types.router)
-app.include_router(prices.router)
-app.include_router(orders.router)
-app.include_router(collections.router)
-app.include_router(inventory.router)
-app.include_router(company.router)
-app.include_router(cash.router)
-app.include_router(expenses.router)
-app.include_router(reports.router)
+app.include_router(auth.router)
+app.include_router(customers.router, dependencies=protected_route_dependencies)
+app.include_router(customer_adjustments.router, dependencies=protected_route_dependencies)
+app.include_router(systems.router, dependencies=protected_route_dependencies)
+app.include_router(system.router, dependencies=protected_route_dependencies)
+app.include_router(system_types.router, dependencies=protected_route_dependencies)
+app.include_router(prices.router, dependencies=protected_route_dependencies)
+app.include_router(orders.router, dependencies=protected_route_dependencies)
+app.include_router(collections.router, dependencies=protected_route_dependencies)
+app.include_router(inventory.router, dependencies=protected_route_dependencies)
+app.include_router(company.router, dependencies=protected_route_dependencies)
+app.include_router(cash.router, dependencies=protected_route_dependencies)
+app.include_router(expenses.router, dependencies=protected_route_dependencies)
+app.include_router(reports.router, dependencies=protected_route_dependencies)
 
