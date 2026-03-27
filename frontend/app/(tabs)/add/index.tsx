@@ -770,7 +770,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteRefill.mutateAsync(refillId);
-            await Promise.all([companyRefillsQuery.refetch(), companyBalancesQuery.refetch()]);
+            await companyRefillsQuery.refetch();
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -789,7 +789,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
-            await Promise.all([allInventoryAdjustmentsQuery.refetch(), companyBalancesQuery.refetch()]);
+            await allInventoryAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");

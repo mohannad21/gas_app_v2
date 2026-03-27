@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { useCustomers } from "@/hooks/useCustomers";
+import { useCustomerBalance, useCustomers } from "@/hooks/useCustomers";
 import { useOrders, useUpdateOrder } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
 import type { GasType } from "@/types/domain";
@@ -71,10 +71,12 @@ export default function EditOrderScreen() {
 
   const customersQuery = useCustomers();
   const selectedCustomer = watch("customer_id");
+  const balanceCustomerId = selectedCustomer || order?.customer_id;
 
   const systemsQuery = useSystems(
     selectedCustomer || order?.customer_id
   );
+  const customerBalanceQuery = useCustomerBalance(balanceCustomerId);
 
   const systemOptions = useMemo(
     () => systemsQuery.data ?? [],
@@ -99,11 +101,12 @@ export default function EditOrderScreen() {
 
   const diff = calcCustomerCylinderDelta("replacement", installed, received);
   const remaining = calcMoneyUiResult(total, paid);
+  const liveCustomerBalance = customerBalanceQuery.data;
   const cylinderBefore =
     selectedGas === "12kg"
-      ? Number(selectedCustomerEntry?.cylinder_balance_12kg ?? 0)
-      : Number(selectedCustomerEntry?.cylinder_balance_48kg ?? 0);
-  const moneyBefore = Number(selectedCustomerEntry?.money_balance ?? 0);
+      ? Number(liveCustomerBalance?.cylinder_balance_12kg ?? 0)
+      : Number(liveCustomerBalance?.cylinder_balance_48kg ?? 0);
+  const moneyBefore = Number(liveCustomerBalance?.money_balance ?? 0);
   const cylinderAfter = cylinderBefore + diff;
   const moneyAfter = moneyBefore + remaining;
   const cylinderStatusLine = formatBalanceTransitions(
@@ -156,7 +159,7 @@ export default function EditOrderScreen() {
       const totalValue = Number(values.price_total) || 0;
       const paidValue = Number(values.paid_amount) || 0;
       const overpay = paidValue - totalValue;
-      const priorDebt = Math.max(selectedCustomerEntry?.money_balance ?? 0, 0);
+      const priorDebt = Math.max(liveCustomerBalance?.money_balance ?? 0, 0);
       const paidEarlier = Math.min(Math.max(overpay, 0), priorDebt);
       const extraCredit = Math.max(overpay - paidEarlier, 0);
 

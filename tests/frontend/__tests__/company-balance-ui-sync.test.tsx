@@ -26,8 +26,20 @@ const mockCompanyBalancesRefetch = jest.fn(async () => {
   }
   return { data: mockCurrentCompanyBalances };
 });
-const mockDeleteRefillMutateAsync = jest.fn(async () => ({}));
-const mockDeleteInventoryAdjustmentMutateAsync = jest.fn(async () => ({}));
+const mockDeleteRefillMutateAsync = jest.fn(async () => {
+  if (mockNextCompanyBalances) {
+    mockCurrentCompanyBalances = mockNextCompanyBalances;
+    mockNextCompanyBalances = null;
+  }
+  return {};
+});
+const mockDeleteInventoryAdjustmentMutateAsync = jest.fn(async () => {
+  if (mockNextCompanyBalances) {
+    mockCurrentCompanyBalances = mockNextCompanyBalances;
+    mockNextCompanyBalances = null;
+  }
+  return {};
+});
 const mockCompanyRefillsRefetch = jest.fn(async () => ({}));
 const mockInventoryAdjustmentsRefetch = jest.fn(async () => ({}));
 
@@ -216,9 +228,7 @@ describe("company balance UI sync", () => {
     });
     view.rerender(<AddChooserScreen />);
 
-    await waitFor(() => {
-      expect(mockCompanyBalancesRefetch).toHaveBeenCalled();
-    });
+    expect(mockCompanyBalancesRefetch).not.toHaveBeenCalled();
     expect(view.getByText("0 shekels")).toBeTruthy();
     expect(view.queryByText("10 shekels")).toBeNull();
   });
