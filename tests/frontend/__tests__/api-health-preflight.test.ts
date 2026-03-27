@@ -1,5 +1,6 @@
 const mockApiGet = jest.fn();
 const mockHealthGet = jest.fn();
+const mockAuthGet = jest.fn();
 const mockResponseUse = jest.fn();
 let requestHandler: ((config: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>) | null =
   null;
@@ -25,6 +26,9 @@ jest.mock("axios", () => {
     }))
     .mockImplementationOnce(() => ({
       get: mockHealthGet,
+    }))
+    .mockImplementationOnce(() => ({
+      get: mockAuthGet,
     }));
 
   return {
@@ -39,11 +43,15 @@ describe("api health preflight", () => {
     jest.resetModules();
     mockApiGet.mockReset();
     mockHealthGet.mockReset();
+    mockAuthGet.mockReset();
     mockResponseUse.mockReset();
     requestHandler = null;
+    delete process.env.EXPO_PUBLIC_API_TOKEN;
+    delete process.env.EXPO_PUBLIC_API_DEBUG_AUTH;
   });
 
   it("does not block requests when the health preflight fails transiently", async () => {
+    process.env.EXPO_PUBLIC_API_DEBUG_AUTH = "false";
     mockHealthGet.mockRejectedValueOnce(new Error("temporary health failure"));
 
     jest.isolateModules(() => {
@@ -56,5 +64,22 @@ describe("api health preflight", () => {
 
     expect(mockHealthGet).toHaveBeenCalledTimes(1);
     expect(mockHealthGet).toHaveBeenCalledWith("/health");
+    expect(mockAuthGet).not.toHaveBeenCalled();
+  });
+
+  it("attaches a dev auth token to protected requests when no explicit token is configured", async () => {
+    mockHealthGet.mockResolvedValueOnce({ data: { status: "ok" } });
+    mockAuthGet.mockResolvedValueOnce({ data: { access_token: "dev-token" } });
+
+    jest.isolateModules(() => {
+      require("@/lib/api");
+    });
+
+    const config = { url: "/customers", headers: {} };
+    await expect(Promise.resolve(requestHandler?.(config))).resolves.toMatchObject({
+      headers: { Authorization: "Bearer dev-token" },
+    });
+
+    expect(mockAuthGet).toHaveBeenCalledWith("/auth/dev-token");
   });
 });

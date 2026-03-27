@@ -1585,12 +1585,23 @@ const formatDateTime = (value?: string) => {
                 ? "Delete order?"
                 : "Delete collection?"}
             </Text>
-            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <Text style={styles.modalText}>
+              {confirm?.type === "order"
+                ? "This will reverse the order and update related ledger balances."
+                : "This will permanently remove the collection and update related balances."}
+            </Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setConfirm(null)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel delete"
+                style={styles.modalBtn}
+                onPress={() => setConfirm(null)}
+              >
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={confirm?.type === "order" ? "Delete order permanently" : "Delete collection permanently"}
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (confirm?.type === "order") {
@@ -1929,12 +1940,21 @@ export function AddCustomersSection({
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete customer?</Text>
-            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <Text style={styles.modalText}>
+              This will permanently remove the customer if they have no unreversed transactions.
+            </Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setConfirmCustomerId(null)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel customer deletion"
+                style={styles.modalBtn}
+                onPress={() => setConfirmCustomerId(null)}
+              >
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete customer permanently"
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (!confirmCustomerId) return;

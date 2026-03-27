@@ -84,8 +84,15 @@ const healthClient = axios.create({
   timeout: 2000,
 });
 
+const authClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 2000,
+});
+
 let lastHealthCheckAt = 0;
 let lastHealthOk = true;
+let devAccessToken: string | null = process.env.EXPO_PUBLIC_API_TOKEN || null;
+let devAccessTokenPromise: Promise<string | null> | null = null;
 
 async function ensureBackendHealthy() {
   const now = Date.now();
@@ -102,9 +109,43 @@ async function ensureBackendHealthy() {
   return lastHealthOk;
 }
 
-api.interceptors.request.use((config) => {
+async function getAccessToken(): Promise<string | null> {
+  if (devAccessToken) {
+    return devAccessToken;
+  }
+  if (process.env.EXPO_PUBLIC_API_DEBUG_AUTH === "false") {
+    return null;
+  }
+  if (!devAccessTokenPromise) {
+    devAccessTokenPromise = authClient
+      .get("/auth/dev-token")
+      .then((response) => {
+        const token = typeof response?.data?.access_token === "string" ? response.data.access_token : null;
+        devAccessToken = token;
+        return token;
+      })
+      .catch(() => null)
+      .finally(() => {
+        devAccessTokenPromise = null;
+      });
+  }
+  return devAccessTokenPromise;
+}
+
+api.interceptors.request.use(async (config) => {
   (config as any).metadata = { start: Date.now() };
   void ensureBackendHealthy();
+  const url = config.url ?? "";
+  if (!url.startsWith("/health") && !url.startsWith("/auth/")) {
+    const token = await getAccessToken();
+    if (token) {
+      const headers = (config.headers ?? {}) as Record<string, string>;
+      if (!headers.Authorization) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      config.headers = headers;
+    }
+  }
   return config;
 });
 
