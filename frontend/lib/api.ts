@@ -89,8 +89,8 @@ let lastHealthOk = true;
 
 async function ensureBackendHealthy() {
   const now = Date.now();
-  if (lastHealthOk && now - lastHealthCheckAt < 5000) {
-    return;
+  if (now - lastHealthCheckAt < 5000) {
+    return lastHealthOk;
   }
   lastHealthCheckAt = now;
   try {
@@ -98,13 +98,13 @@ async function ensureBackendHealthy() {
     lastHealthOk = true;
   } catch {
     lastHealthOk = false;
-    throw new Error("Backend unavailable");
   }
+  return lastHealthOk;
 }
 
-api.interceptors.request.use(async (config) => {
+api.interceptors.request.use((config) => {
   (config as any).metadata = { start: Date.now() };
-  await ensureBackendHealthy();
+  void ensureBackendHealthy();
   return config;
 });
 
