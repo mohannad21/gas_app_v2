@@ -3,6 +3,10 @@ import { render } from "@testing-library/react-native";
 
 import CustomerDetailsScreen from "@/app/customers/[id]";
 
+const mockOrdersRefetch = jest.fn();
+const mockCollectionsRefetch = jest.fn();
+const mockAdjustmentsRefetch = jest.fn();
+
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({
     data: [
@@ -34,7 +38,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     isLoading: false,
     isFetching: false,
     error: null,
-    refetch: jest.fn(),
+    refetch: mockAdjustmentsRefetch,
   }),
   useDeleteCustomer: () => ({ mutateAsync: jest.fn() }),
 }));
@@ -58,7 +62,7 @@ jest.mock("@/hooks/useCollections", () => ({
     isLoading: false,
     isFetching: false,
     error: null,
-    refetch: jest.fn(),
+    refetch: mockCollectionsRefetch,
   }),
 }));
 
@@ -85,7 +89,7 @@ jest.mock("@/hooks/useOrders", () => ({
     isLoading: false,
     isFetching: false,
     error: null,
-    refetch: jest.fn(),
+    refetch: mockOrdersRefetch,
   }),
 }));
 
@@ -104,7 +108,10 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@react-navigation/native", () => ({
-  useFocusEffect: (cb: () => void) => cb(),
+  useFocusEffect: (cb: () => void) => {
+    const React = require("react");
+    React.useEffect(() => cb(), [cb]);
+  },
 }));
 
 jest.mock("expo-linking", () => ({
@@ -116,6 +123,12 @@ jest.mock("@expo/vector-icons", () => ({
 }));
 
 describe("Customer detail balance boxes", () => {
+  beforeEach(() => {
+    mockOrdersRefetch.mockClear();
+    mockCollectionsRefetch.mockClear();
+    mockAdjustmentsRefetch.mockClear();
+  });
+
   it("replaces the old balances section with compact boxes below the filters", () => {
     const { getByText, queryByText, toJSON } = render(<CustomerDetailsScreen />);
 
@@ -131,5 +144,19 @@ describe("Customer detail balance boxes", () => {
     const tree = JSON.stringify(toJSON());
     expect(tree.indexOf("Adjustments")).toBeLessThan(tree.indexOf("Money balance"));
     expect(tree.indexOf("Money balance")).toBeLessThan(tree.indexOf("Collected $20.00"));
+  });
+
+  it("does not re-trigger focus refetches on same-customer rerenders", () => {
+    const { rerender } = render(<CustomerDetailsScreen />);
+
+    expect(mockOrdersRefetch).toHaveBeenCalledTimes(1);
+    expect(mockCollectionsRefetch).toHaveBeenCalledTimes(1);
+    expect(mockAdjustmentsRefetch).toHaveBeenCalledTimes(1);
+
+    rerender(<CustomerDetailsScreen />);
+
+    expect(mockOrdersRefetch).toHaveBeenCalledTimes(1);
+    expect(mockCollectionsRefetch).toHaveBeenCalledTimes(1);
+    expect(mockAdjustmentsRefetch).toHaveBeenCalledTimes(1);
   });
 });

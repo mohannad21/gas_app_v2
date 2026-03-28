@@ -200,3 +200,41 @@ def test_delete_return_allows_negative_inventory(client):
     assert latest.status_code == 200
     data = latest.json()
     assert data["empty12"] == -1
+
+
+def test_collection_create_is_idempotent_per_request_id(client):
+    now = datetime.now(timezone.utc)
+    d0 = (now - timedelta(days=2)).date().isoformat()
+
+    init_inventory(client, date=d0, full12=5, empty12=1, full48=0, empty48=0)
+    customer_id = create_customer(client, name="Idempotent Customer")
+
+    payment_payload = {
+        "customer_id": customer_id,
+        "action_type": "payment",
+        "amount_money": 100,
+        "happened_at": f"{d0}T10:00:00",
+        "request_id": "collection-req-1",
+    }
+
+    first = client.post("/collections", json=payment_payload)
+    assert first.status_code == 201
+
+    repeated = client.post("/collections", json=payment_payload)
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == first.json()["id"]
+
+    listed = client.get("/collections")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+    second = client.post(
+        "/collections",
+        json={**payment_payload, "request_id": "collection-req-2"},
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] != first.json()["id"]
+
+    listed = client.get("/collections")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 2

@@ -14,7 +14,13 @@ import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCompanyPayments } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
-import { useAllCustomerAdjustments, useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
+import {
+  CUSTOMER_DELETE_BLOCKED_MESSAGE,
+  isCustomerDeleteBlockedError,
+  useAllCustomerAdjustments,
+  useCustomers,
+  useDeleteCustomer,
+} from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
@@ -59,6 +65,7 @@ type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
 type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = "all_categories" | string;
 type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
+type PriceSaveStatusTone = "success" | "warning" | "error";
 
 type CustomerActivityListItem =
   | {
@@ -116,6 +123,10 @@ type CompanyActivityListItem =
       is_deleted: false;
       data: CompanyPayment;
     };
+
+function formatPriceGasList(items: string[]) {
+  return items.join(", ");
+}
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -448,6 +459,10 @@ const formatDateTime = (value?: string) => {
   const [lastSavedPrices, setLastSavedPrices] = useState<PriceInputs>(() => createDefaultPriceInputs());
   const dirtyPriceCombosRef = useRef<Set<string>>(new Set());
   const [savingPrices, setSavingPrices] = useState(false);
+  const [priceSaveStatus, setPriceSaveStatus] = useState<{
+    tone: PriceSaveStatusTone;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!priceModalOpen || !priceSettingsQuery.data) {
@@ -520,6 +535,7 @@ const formatDateTime = (value?: string) => {
   useEffect(() => {
     if (!priceModalOpen) {
       dirtyPriceCombosRef.current.clear();
+      setPriceSaveStatus(null);
     }
   }, [priceModalOpen]);
 
@@ -552,46 +568,69 @@ const formatDateTime = (value?: string) => {
     }
   }, [addParams.open, addParams.prices]);
 
+  const customerActivitiesFocusRefetchers = useRef({
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    customers: customersQuery.refetch,
+    adjustments: customerAdjustmentsQuery.refetch,
+    expenses: expensesQuery.refetch,
+    bankDeposits: bankDepositsQuery.refetch,
+  });
+  customerActivitiesFocusRefetchers.current = {
+    orders: ordersQuery.refetch,
+    collections: collectionsQuery.refetch,
+    customers: customersQuery.refetch,
+    adjustments: customerAdjustmentsQuery.refetch,
+    expenses: expensesQuery.refetch,
+    bankDeposits: bankDepositsQuery.refetch,
+  };
+
+  const companyActivitiesFocusRefetchers = useRef({
+    balances: companyBalancesQuery.refetch,
+    refills: companyRefillsQuery.refetch,
+    payments: companyPaymentsQuery.refetch,
+    inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
+    cashAdjustments: allCashAdjustmentsQuery.refetch,
+  });
+  companyActivitiesFocusRefetchers.current = {
+    balances: companyBalancesQuery.refetch,
+    refills: companyRefillsQuery.refetch,
+    payments: companyPaymentsQuery.refetch,
+    inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
+    cashAdjustments: allCashAdjustmentsQuery.refetch,
+  };
+
   useFocusEffect(
     useCallback(() => {
-      ordersQuery.refetch();
-      collectionsQuery.refetch();
-      customersQuery.refetch();
+      customerActivitiesFocusRefetchers.current.orders();
+      customerActivitiesFocusRefetchers.current.collections();
+      customerActivitiesFocusRefetchers.current.customers();
       if (isCustomerActivities) {
-        customerAdjustmentsQuery.refetch();
+        customerActivitiesFocusRefetchers.current.adjustments();
       }
       if (isExpenses) {
-        expensesQuery.refetch();
-        bankDepositsQuery.refetch();
+        customerActivitiesFocusRefetchers.current.expenses();
+        customerActivitiesFocusRefetchers.current.bankDeposits();
       }
     }, [
-      bankDepositsQuery,
-      collectionsQuery,
-      customerAdjustmentsQuery,
-      customersQuery,
-      expensesQuery,
       isCustomerActivities,
       isExpenses,
-      ordersQuery,
     ])
   );
   useFocusEffect(
     useCallback(() => {
       if (isCompanyActivities || isLedgerAdjustments) {
+        companyActivitiesFocusRefetchers.current.balances();
         if (isCompanyActivities) {
-          companyRefillsQuery.refetch();
-          companyPaymentsQuery.refetch();
+          companyActivitiesFocusRefetchers.current.refills();
+          companyActivitiesFocusRefetchers.current.payments();
         }
         if (isLedgerAdjustments) {
-          allInventoryAdjustmentsQuery.refetch();
-          allCashAdjustmentsQuery.refetch();
+          companyActivitiesFocusRefetchers.current.inventoryAdjustments();
+          companyActivitiesFocusRefetchers.current.cashAdjustments();
         }
       }
     }, [
-      allCashAdjustmentsQuery,
-      allInventoryAdjustmentsQuery,
-      companyPaymentsQuery,
-      companyRefillsQuery,
       isCompanyActivities,
       isLedgerAdjustments,
     ])
@@ -607,12 +646,10 @@ const formatDateTime = (value?: string) => {
   );
 
   const confirmDeleteOrder = (id: string) => {
-    console.log("[add] delete order pressed", id);
     setConfirm({ type: "order", id });
   };
 
   const confirmDeleteCollection = (id: string) => {
-    console.log("[add] delete collection pressed", id);
     setConfirm({ type: "collection", id });
   };
 
@@ -661,6 +698,7 @@ const formatDateTime = (value?: string) => {
     field: "selling" | "buying" | "selling_iron" | "buying_iron",
     value: string
   ) => {
+    setPriceSaveStatus(null);
     const comboKey = gas;
     setPriceInputs((prev) => {
       const nextValue = {
@@ -700,34 +738,55 @@ const formatDateTime = (value?: string) => {
       return;
     }
     setSavingPrices(true);
+    setPriceSaveStatus(null);
+    const savedCombos: GasType[] = [];
+    const failedCombos: GasType[] = [];
     try {
       for (const comboKey of dirtyCombos) {
         const gas = comboKey as GasType;
         const { selling, buying, selling_iron, buying_iron } = priceInputs[gas];
-        const savedPrice = await savePrice.mutateAsync({
-          gas_type: gas,
-          selling_price: Number(selling) || 0,
-          buying_price: buying ? Number(buying) : undefined,
-          selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
-          buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
-        });
-        dirtyPriceCombosRef.current.delete(comboKey);
-        const normalized = {
-          selling: savedPrice.selling_price.toString(),
-          buying: savedPrice.buying_price?.toString() ?? "",
-          selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
-          buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
-        };
-        setLastSavedPrices((prev) => ({
-          ...prev,
-          [gas]: normalized,
-        }));
-        setPriceInputs((prev) => ({
-          ...prev,
-          [gas]: normalized,
-        }));
+        try {
+          const savedPrice = await savePrice.mutateAsync({
+            gas_type: gas,
+            selling_price: Number(selling) || 0,
+            buying_price: buying ? Number(buying) : undefined,
+            selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
+            buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
+          });
+          savedCombos.push(gas);
+          dirtyPriceCombosRef.current.delete(comboKey);
+          const normalized = {
+            selling: savedPrice.selling_price.toString(),
+            buying: savedPrice.buying_price?.toString() ?? "",
+            selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
+            buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
+          };
+          setLastSavedPrices((prev) => ({
+            ...prev,
+            [gas]: normalized,
+          }));
+          setPriceInputs((prev) => ({
+            ...prev,
+            [gas]: normalized,
+          }));
+        } catch {
+          failedCombos.push(gas);
+        }
       }
-      setPriceModalOpen(false);
+      if (failedCombos.length === 0) {
+        setPriceModalOpen(false);
+        return;
+      }
+      const savedText = savedCombos.length
+        ? `Saved: ${formatPriceGasList(savedCombos)}.`
+        : "No rows were saved.";
+      const failedText = `Failed: ${formatPriceGasList(failedCombos)}. Review the failed rows and try again.`;
+      const message = `${savedText} ${failedText}`;
+      setPriceSaveStatus({
+        tone: savedCombos.length > 0 ? "warning" : "error",
+        message,
+      });
+      Alert.alert(savedCombos.length > 0 ? "Some prices saved" : "Price save failed", message);
     } finally {
       setSavingPrices(false);
     }
@@ -743,7 +802,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteRefill.mutateAsync(refillId);
-            companyRefillsQuery.refetch();
+            await companyRefillsQuery.refetch();
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -762,7 +821,7 @@ const formatDateTime = (value?: string) => {
         onPress: async () => {
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
-            allInventoryAdjustmentsQuery.refetch();
+            await allInventoryAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
@@ -1526,12 +1585,23 @@ const formatDateTime = (value?: string) => {
                 ? "Delete order?"
                 : "Delete collection?"}
             </Text>
-            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <Text style={styles.modalText}>
+              {confirm?.type === "order"
+                ? "This will reverse the order and update related ledger balances."
+                : "This will permanently remove the collection and update related balances."}
+            </Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setConfirm(null)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel delete"
+                style={styles.modalBtn}
+                onPress={() => setConfirm(null)}
+              >
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={confirm?.type === "order" ? "Delete order permanently" : "Delete collection permanently"}
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (confirm?.type === "order") {
@@ -1573,6 +1643,20 @@ const formatDateTime = (value?: string) => {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
+              {priceSaveStatus ? (
+                <View
+                  style={[
+                    styles.priceSaveStatusCard,
+                    priceSaveStatus.tone === "error"
+                      ? styles.priceSaveStatusError
+                      : priceSaveStatus.tone === "warning"
+                        ? styles.priceSaveStatusWarning
+                        : styles.priceSaveStatusSuccess,
+                  ]}
+                >
+                  <Text style={styles.priceSaveStatusText}>{priceSaveStatus.message}</Text>
+                </View>
+              ) : null}
               {gasTypes.map((gas) => (
               <PriceMatrixSection
                   key={gas}
@@ -1708,22 +1792,26 @@ export function AddCustomersSection({
       ? "No customers match these filters."
       : "No customers yet.";
 
+  const customerListFocusRefetchers = useRef({
+    customers: customersQuery.refetch,
+    orders: ordersQuery.refetch,
+    systems: systemsQuery.refetch,
+  });
+  customerListFocusRefetchers.current = {
+    customers: customersQuery.refetch,
+    orders: ordersQuery.refetch,
+    systems: systemsQuery.refetch,
+  };
+
   useFocusEffect(
     useCallback(() => {
-      customersQuery.refetch();
-      ordersQuery.refetch();
-      systemsQuery.refetch();
-    }, [customersQuery, ordersQuery, systemsQuery])
+      customerListFocusRefetchers.current.customers();
+      customerListFocusRefetchers.current.orders();
+      customerListFocusRefetchers.current.systems();
+    }, [])
   );
 
   const confirmDeleteCustomer = (id: string) => {
-    const customer = customers.find((entry) => entry.id === id);
-    const orderCount = customer?.order_count ?? 0;
-    const hasOrders = orderCount > 0 || orders.some((order) => order.customer_id === id);
-    if (hasOrders) {
-      setInfoMessage("You cannot delete this customer while they still have orders. Remove or reassign their orders first.");
-      return;
-    }
     setConfirmCustomerId(id);
   };
 
@@ -1852,23 +1940,29 @@ export function AddCustomersSection({
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete customer?</Text>
-            <Text style={styles.modalText}>This action cannot be undone in this mock data. Proceed?</Text>
+            <Text style={styles.modalText}>
+              This will permanently remove the customer if they have no unreversed transactions.
+            </Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setConfirmCustomerId(null)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel customer deletion"
+                style={styles.modalBtn}
+                onPress={() => setConfirmCustomerId(null)}
+              >
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete customer permanently"
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (!confirmCustomerId) return;
                   try {
                     await deleteCustomer.mutateAsync(confirmCustomerId);
                   } catch (error: any) {
-                    const detail = error?.response?.data?.detail;
-                    if (error?.response?.status === 409 || detail === "customer_has_orders") {
-                      setInfoMessage(
-                        "You cannot delete this customer while they still have orders. Remove or reassign their orders first."
-                      );
+                    if (isCustomerDeleteBlockedError(error)) {
+                      setInfoMessage(CUSTOMER_DELETE_BLOCKED_MESSAGE);
                     } else {
                       setInfoMessage("Could not delete this customer. Please try again.");
                     }
@@ -2963,6 +3057,23 @@ const styles = StyleSheet.create({
   priceModalContentInner: {
     gap: 12,
     paddingBottom: 12,
+  },
+  priceSaveStatusCard: {
+    borderRadius: 12,
+    padding: 12,
+  },
+  priceSaveStatusError: {
+    backgroundColor: "#fee2e2",
+  },
+  priceSaveStatusWarning: {
+    backgroundColor: "#fef3c7",
+  },
+  priceSaveStatusSuccess: {
+    backgroundColor: "#dcfce7",
+  },
+  priceSaveStatusText: {
+    color: "#1f2937",
+    fontWeight: "600",
   },
   drawerSave: {
     marginTop: 0,

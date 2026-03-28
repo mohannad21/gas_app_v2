@@ -119,3 +119,71 @@ def test_order_cylinder_swap_credit(client: TestClient) -> None:
 
     customer = _get_customer(client, customer_id)
     assert customer["cylinder_balance_12kg"] == -1
+
+
+def test_order_create_is_idempotent_per_request_id(client: TestClient) -> None:
+    init_inventory(client, date="2025-01-01")
+    customer_id = create_customer(client, name="Idempotent Customer")
+    system_id = create_system(client, customer_id=customer_id)
+
+    base_payload = {
+        "customer_id": customer_id,
+        "system_id": system_id,
+        "happened_at": "2025-01-02T10:00:00",
+        "gas_type": "12kg",
+        "cylinders_installed": 1,
+        "cylinders_received": 1,
+        "price_total": 120,
+        "paid_amount": 120,
+    }
+
+    first = client.post("/orders", json={**base_payload, "request_id": "order-req-1"})
+    assert first.status_code == 201
+    first_body = first.json()
+
+    repeated = client.post("/orders", json={**base_payload, "request_id": "order-req-1"})
+    assert repeated.status_code == 201
+    repeated_body = repeated.json()
+
+    assert repeated_body["id"] == first_body["id"]
+
+    orders_resp = client.get("/orders")
+    assert orders_resp.status_code == 200
+    orders = orders_resp.json()
+    assert len(orders) == 1
+
+    second = client.post("/orders", json={**base_payload, "request_id": "order-req-2"})
+    assert second.status_code == 201
+    second_body = second.json()
+    assert second_body["id"] != first_body["id"]
+
+    orders_resp = client.get("/orders")
+    assert orders_resp.status_code == 200
+    orders = orders_resp.json()
+    assert len(orders) == 2
+
+
+def test_order_allows_overridden_total_when_structurally_valid(client: TestClient) -> None:
+    init_inventory(client, date="2025-01-01")
+    customer_id = create_customer(client, name="Override Customer")
+    system_id = create_system(client, customer_id=customer_id)
+
+    resp = client.post(
+        "/orders",
+        json={
+            "customer_id": customer_id,
+            "system_id": system_id,
+            "happened_at": "2025-01-02T10:00:00",
+            "gas_type": "12kg",
+            "cylinders_installed": 1,
+            "cylinders_received": 1,
+            "price_total": 137,
+            "paid_amount": 100,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["price_total"] == 137
+
+    customer = _get_customer(client, customer_id)
+    assert customer["money_balance"] == 37

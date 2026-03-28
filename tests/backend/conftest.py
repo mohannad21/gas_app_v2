@@ -52,6 +52,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app_factory = getattr(app_main, "create_app", None)
     app = app_factory() if callable(app_factory) else app_main.app
     with TestClient(app) as test_client:
+        from app.auth import create_access_token
+
+        test_client.headers.update({"Authorization": f"Bearer {create_access_token('test-user')}"})
         yield test_client
 
 # --- SHARED HELPERS ---

@@ -57,6 +57,8 @@ const dayDetail = {
   ],
 };
 
+const mockGetDailyReportV2 = jest.fn();
+
 jest.mock("@/hooks/useDailyReportScreen", () => ({
   useDailyReportScreen: () => ({
     v2Query: { isLoading: false, error: null, data: [dayRow] },
@@ -64,7 +66,7 @@ jest.mock("@/hooks/useDailyReportScreen", () => ({
     v2Expanded: [],
     setV2Expanded: jest.fn(),
     v2DayByDate: { "2025-01-01": dayDetail },
-    setV2DayByDate: jest.fn(),
+    v2DayStatusByDate: { "2025-01-01": "success" },
     refetchV2: jest.fn(),
   }),
 }));
@@ -94,7 +96,7 @@ jest.mock("@/hooks/useExpenses", () => ({
 }));
 
 jest.mock("@/lib/api", () => ({
-  getDailyReportV2: jest.fn().mockResolvedValue(dayDetail),
+  getDailyReportV2: (...args: unknown[]) => mockGetDailyReportV2(...args),
 }));
 
 jest.mock("expo-router", () => ({
@@ -126,6 +128,8 @@ describe("ReportsScreen reveal controls", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockRouter.push.mockReset();
+    mockGetDailyReportV2.mockReset();
+    mockGetDailyReportV2.mockResolvedValue(dayDetail);
     jest.spyOn(Animated, "timing").mockImplementation(
       ((value: Animated.Value, config: { toValue: number }) =>
         ({
@@ -144,6 +148,8 @@ describe("ReportsScreen reveal controls", () => {
 
   it("starts hidden and reveals only the top bar with no default shelf selected", () => {
     const { getByTestId, getByText, queryByText } = render(<ReportsScreen />);
+
+    expect(mockGetDailyReportV2).not.toHaveBeenCalled();
 
     expect(getByTestId("reports-reveal-layer").props.pointerEvents).toBe("none");
     expect(getByTestId("reports-quick-actions").props.pointerEvents).toBe("none");

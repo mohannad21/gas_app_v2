@@ -5,15 +5,10 @@ from sqlmodel import Session, SQLModel, create_engine
 from .config import get_settings
 
 settings = get_settings()
-db_url = settings.database_url
-
-# Ensure the URL is in the format 'postgresql://' (SQLAlchemy requirement)
-if db_url.startswith("postgres://"):
-  db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 engine = create_engine(
-  db_url,
-  echo=settings.debug,
+  settings.database_url,
+  echo=settings.debug and settings.sql_echo,
   future=True,
   pool_pre_ping=True,  # Checks if connection is alive before using it
   pool_size=10,        # How many permanent connections to keep

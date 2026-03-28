@@ -34,6 +34,7 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { buildHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
@@ -337,6 +338,10 @@ export default function NewOrderScreen() {
   const collectionBusy = createCollection.isPending;
   const previousCustomerRef = useRef<string | undefined>(undefined);
   const formatMoneyAmount = useCallback((value: number) => Math.abs(value).toFixed(0), []);
+  const refreshCustomerPreview = useCallback(async () => {
+    if (!selectedCustomer) return;
+    await customerBalanceQuery.refetch();
+  }, [customerBalanceQuery, selectedCustomer]);
   const sharedCustomerPreviewTransitions = useMemo(() => {
     if (!selectedCustomerEntry || !customerPreviewReady) return [];
     const transitions = [
@@ -620,17 +625,20 @@ export default function NewOrderScreen() {
     setCustomerSearch(selectedCustomerEntry?.name ?? "");
   }, [isCustomerSearchOpen, selectedCustomerEntry]);
 
+  const customerQueryRefetchRef = useRef(customersQuery.refetch);
+  customerQueryRefetchRef.current = customersQuery.refetch;
+
   useFocusEffect(
     useCallback(() => {
-      customersQuery.refetch();
-    }, [customersQuery])
+      customerQueryRefetchRef.current();
+    }, [])
   );
 
   useEffect(() => {
     if (isCustomerSearchOpen) {
-      customersQuery.refetch();
+      customerQueryRefetchRef.current();
     }
-  }, [isCustomerSearchOpen, customersQuery]);
+  }, [isCustomerSearchOpen]);
 
   useEffect(() => {
     if (!initialSystemId || !selectedCustomer) return;
@@ -935,7 +943,7 @@ export default function NewOrderScreen() {
       debt_cylinders_12: orderCylinderAfter12,
       debt_cylinders_48: orderCylinderAfter48,
       note: values.note,
-      client_request_id: requestId,
+      request_id: requestId,
     };
 
     const finalizeCreate = async () => {
@@ -950,9 +958,8 @@ export default function NewOrderScreen() {
           resetOrderForm();
         }
       } catch (err) {
-        const axiosError = err as AxiosError;
-        const detail = (axiosError.response?.data as { detail?: string } | undefined)?.detail;
-        Alert.alert("Error", `Failed to create order. ${detail ?? "Please try again."}`);
+        logApiError("[new order submit] error", err);
+        Alert.alert("Error", getUserFacingApiError(err, "Failed to create order. Please try again."));
       } finally {
         setSubmitting(false);
       }
@@ -1025,6 +1032,7 @@ ${cylLine}
     }
     try {
       const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: paymentDirection === "payout" ? "payout" : "payment",
@@ -1034,17 +1042,20 @@ ${cylLine}
         debt_cylinders_48: cylinder48Before,
         effective_at: effectiveAt,
         note: values.note || undefined,
+        request_id: requestId,
       });
       if (resetAfter) {
         setValue("paid_amount", "");
         setValue("note", "");
         setPaidDirty(false);
+        await refreshCustomerPreview();
       } else {
         navigateToTodayReport();
       }
     } catch (err) {
       const axiosError = err as AxiosError;
-      Alert.alert("Payment failed", axiosError.response?.data?.detail ?? axiosError.message);
+      logApiError("[new order payment] error", err);
+      Alert.alert("Payment failed", getUserFacingApiError(axiosError, "Failed to save payment."));
     }
   };
 
@@ -1074,6 +1085,7 @@ ${cylLine}
     }
     try {
       const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: "return",
@@ -1084,16 +1096,19 @@ ${cylLine}
         debt_cylinders_48: orderCylinderAfter48,
         effective_at: effectiveAt,
         note: values.note || undefined,
+        request_id: requestId,
       });
       if (resetAfter) {
         setValue("cylinders_received", "");
         setValue("note", "");
+        await refreshCustomerPreview();
       } else {
         navigateToTodayReport();
       }
     } catch (err) {
       const axiosError = err as AxiosError;
-      Alert.alert("Return failed", axiosError.response?.data?.detail ?? axiosError.message);
+      logApiError("[new order return] error", err);
+      Alert.alert("Return failed", getUserFacingApiError(axiosError, "Failed to save return."));
     }
   };
 

@@ -392,6 +392,7 @@ export const CollectionCreateInputSchema = z.object({
   system_id: z.string().nullish().optional(),
   effective_at: z.string().optional(),
   note: z.string().nullish().optional(),
+  request_id: z.string().optional(),
 });
 export type CollectionCreateInput = z.infer<typeof CollectionCreateInputSchema>;
 

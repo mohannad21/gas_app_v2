@@ -9,6 +9,7 @@ from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
+from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 
@@ -27,6 +28,24 @@ def _current_customer_state(session: Session, *, customer_id: str) -> tuple[int,
     sum_customer_cylinders(session, customer_id=customer_id, gas_type="12kg"),
     sum_customer_cylinders(session, customer_id=customer_id, gas_type="48kg"),
   )
+
+
+def _collection_inventory_gas_types(
+  *,
+  action_type: str,
+  qty_12kg: Optional[int] = None,
+  qty_48kg: Optional[int] = None,
+  txns: Optional[list[CustomerTransaction]] = None,
+) -> list[str]:
+  gas_types: set[str] = set()
+  if action_type == "return":
+    if (qty_12kg or 0) > 0:
+      gas_types.add("12kg")
+    if (qty_48kg or 0) > 0:
+      gas_types.add("48kg")
+  if txns:
+    gas_types.update(txn.gas_type for txn in txns if txn.gas_type)
+  return sorted(gas_types)
 
 
 def _build_collection_transactions(
@@ -182,44 +201,52 @@ def list_collections(session: Session = Depends(get_session)) -> list[Collection
 
 @router.post("", response_model=CollectionEvent, status_code=status.HTTP_201_CREATED)
 def create_collection(payload: CollectionCreate, session: Session = Depends(get_session)) -> CollectionEvent:
-  customer = session.get(Customer, payload.customer_id)
-  if not customer:
-    raise HTTPException(status_code=400, detail="Customer not found")
-  if payload.system_id:
-    system = session.get(System, payload.system_id)
-    if not system:
-      raise HTTPException(status_code=400, detail="System not found")
-
-  if payload.request_id:
-    existing = session.exec(
-      select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
-    ).first()
-    if existing:
-      group_id = existing.group_id or existing.id
-      txns = session.exec(
-        select(CustomerTransaction)
-        .where(CustomerTransaction.group_id == group_id)
-        .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-      ).all()
-      return _as_event(txns or [existing])
-
   happened_at = normalize_happened_at(payload.happened_at)
-  group_id = _new_group_id()
-  txns = _build_collection_transactions(
-    session,
-    customer_id=payload.customer_id,
-    system_id=payload.system_id,
-    action_type=payload.action_type,
-    happened_at=happened_at,
-    note=payload.note,
-    group_id=group_id,
-    amount_money=payload.amount_money,
-    qty_12kg=payload.qty_12kg,
-    qty_48kg=payload.qty_48kg,
-    request_id=payload.request_id,
-  )
+  with session.begin():
+    acquire_customer_locks(session, [payload.customer_id])
+    acquire_inventory_locks(
+      session,
+      _collection_inventory_gas_types(
+        action_type=payload.action_type,
+        qty_12kg=payload.qty_12kg,
+        qty_48kg=payload.qty_48kg,
+      ),
+    )
+    customer = session.get(Customer, payload.customer_id)
+    if not customer:
+      raise HTTPException(status_code=400, detail="Customer not found")
+    if payload.system_id:
+      system = session.get(System, payload.system_id)
+      if not system:
+        raise HTTPException(status_code=400, detail="System not found")
 
-  session.commit()
+    if payload.request_id:
+      existing = session.exec(
+        select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
+      ).first()
+      if existing:
+        group_id = existing.group_id or existing.id
+        txns = session.exec(
+          select(CustomerTransaction)
+          .where(CustomerTransaction.group_id == group_id)
+          .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+        ).all()
+        return _as_event(txns or [existing])
+
+    group_id = _new_group_id()
+    txns = _build_collection_transactions(
+      session,
+      customer_id=payload.customer_id,
+      system_id=payload.system_id,
+      action_type=payload.action_type,
+      happened_at=happened_at,
+      note=payload.note,
+      group_id=group_id,
+      amount_money=payload.amount_money,
+      qty_12kg=payload.qty_12kg,
+      qty_48kg=payload.qty_48kg,
+      request_id=payload.request_id,
+    )
   for txn in txns:
     session.refresh(txn)
   return _as_event(txns)
@@ -227,90 +254,99 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
 
 @router.put("/{collection_id}", response_model=CollectionEvent)
 def update_collection(collection_id: str, payload: CollectionUpdate, session: Session = Depends(get_session)) -> CollectionEvent:
-  txns = session.exec(
-    select(CustomerTransaction)
-    .where(
-      (CustomerTransaction.id == collection_id)
-      | (CustomerTransaction.group_id == collection_id)
-    )
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).all()
-  if not txns:
-    raise HTTPException(status_code=404, detail="Collection not found")
-  base = txns[0]
   payload_data = payload.model_dump(exclude_unset=True)
-  action_type = payload_data.get("action_type") or (
-    "payment"
-    if base.kind == "payment"
-    else "payout"
-    if base.kind == "payout"
-    else "return"
-  )
-  happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else base.happened_at
-  happened_at = normalize_happened_at(happened_at_raw)
-  note = payload_data.get("note") if payload_data.get("note") is not None else base.note
-  amount_money = payload_data.get("amount_money")
-  qty_12kg = payload_data.get("qty_12kg")
-  qty_48kg = payload_data.get("qty_48kg")
-  if amount_money is None:
-    amount_money = sum(t.paid for t in txns if t.kind in {"payment", "payout"}) or None
-  if qty_12kg is None:
-    qty_12kg = sum(t.received for t in txns if t.gas_type == "12kg")
-  if qty_48kg is None:
-    qty_48kg = sum(t.received for t in txns if t.gas_type == "48kg")
-
-  for txn in txns:
-    reversal_happened_at = txn.happened_at
-    reversal_day = txn.day
-    reversal = CustomerTransaction(
-      customer_id=txn.customer_id,
-      system_id=txn.system_id,
-      happened_at=reversal_happened_at,
-      day=reversal_day,
-      kind=txn.kind,
-      gas_type=txn.gas_type,
-      installed=txn.installed,
-      received=txn.received,
-      total=txn.total,
-      paid=txn.paid,
-      debt_cash=txn.debt_cash,
-      debt_cylinders_12=txn.debt_cylinders_12,
-      debt_cylinders_48=txn.debt_cylinders_48,
-      note=f"Reversal of {txn.id}",
-      reversed_id=txn.id,
-      is_reversed=True,
-      group_id=collection_id,
+  with session.begin():
+    txns = session.exec(
+      select(CustomerTransaction)
+      .where(
+        (CustomerTransaction.id == collection_id)
+        | (CustomerTransaction.group_id == collection_id)
+      )
+      .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    ).all()
+    if not txns:
+      raise HTTPException(status_code=404, detail="Collection not found")
+    base = txns[0]
+    action_type = payload_data.get("action_type") or (
+      "payment"
+      if base.kind == "payment"
+      else "payout"
+      if base.kind == "payout"
+      else "return"
     )
-    session.add(reversal)
-    reverse_source(
+    amount_money = payload_data.get("amount_money")
+    qty_12kg = payload_data.get("qty_12kg")
+    qty_48kg = payload_data.get("qty_48kg")
+    if amount_money is None:
+      amount_money = sum(t.paid for t in txns if t.kind in {"payment", "payout"}) or None
+    if qty_12kg is None:
+      qty_12kg = sum(t.received for t in txns if t.gas_type == "12kg")
+    if qty_48kg is None:
+      qty_48kg = sum(t.received for t in txns if t.gas_type == "48kg")
+    acquire_customer_locks(session, [base.customer_id])
+    acquire_inventory_locks(
       session,
-      source_type="customer_txn",
-      source_id=txn.id,
-      reversal_source_type="customer_txn",
-      reversal_source_id=reversal.id,
-      happened_at=reversal.happened_at,
-      day=reversal.day,
-      note=reversal.note,
+      _collection_inventory_gas_types(
+        action_type=action_type,
+        qty_12kg=qty_12kg,
+        qty_48kg=qty_48kg,
+        txns=txns,
+      ),
     )
-    txn.is_reversed = True
-    session.add(txn)
+    happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else base.happened_at
+    happened_at = normalize_happened_at(happened_at_raw)
+    note = payload_data.get("note") if payload_data.get("note") is not None else base.note
 
-  session.flush()
-  group_id = collection_id
-  new_txns = _build_collection_transactions(
-    session,
-    customer_id=base.customer_id,
-    system_id=base.system_id,
-    action_type=action_type,
-    happened_at=happened_at,
-    note=note,
-    group_id=group_id,
-    amount_money=amount_money,
-    qty_12kg=qty_12kg,
-    qty_48kg=qty_48kg,
-  )
+    for txn in txns:
+      reversal_happened_at = txn.happened_at
+      reversal_day = txn.day
+      reversal = CustomerTransaction(
+        customer_id=txn.customer_id,
+        system_id=txn.system_id,
+        happened_at=reversal_happened_at,
+        day=reversal_day,
+        kind=txn.kind,
+        gas_type=txn.gas_type,
+        installed=txn.installed,
+        received=txn.received,
+        total=txn.total,
+        paid=txn.paid,
+        debt_cash=txn.debt_cash,
+        debt_cylinders_12=txn.debt_cylinders_12,
+        debt_cylinders_48=txn.debt_cylinders_48,
+        note=f"Reversal of {txn.id}",
+        reversed_id=txn.id,
+        is_reversed=True,
+        group_id=collection_id,
+      )
+      session.add(reversal)
+      reverse_source(
+        session,
+        source_type="customer_txn",
+        source_id=txn.id,
+        reversal_source_type="customer_txn",
+        reversal_source_id=reversal.id,
+        happened_at=reversal.happened_at,
+        day=reversal.day,
+        note=reversal.note,
+      )
+      txn.is_reversed = True
+      session.add(txn)
 
-  session.commit()
+    session.flush()
+    group_id = collection_id
+    new_txns = _build_collection_transactions(
+      session,
+      customer_id=base.customer_id,
+      system_id=base.system_id,
+      action_type=action_type,
+      happened_at=happened_at,
+      note=note,
+      group_id=group_id,
+      amount_money=amount_money,
+      qty_12kg=qty_12kg,
+      qty_48kg=qty_48kg,
+    )
   for txn in new_txns:
     session.refresh(txn)
   return _as_event(new_txns)
@@ -318,50 +354,55 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
 
 @router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_collection(collection_id: str, session: Session = Depends(get_session)) -> None:
-  txns = session.exec(
-    select(CustomerTransaction)
-    .where(
-      (CustomerTransaction.id == collection_id)
-      | (CustomerTransaction.group_id == collection_id)
-    )
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-  ).all()
-  if not txns:
-    return
-  for txn in txns:
-    reversal_happened_at = txn.happened_at
-    reversal_day = txn.day
-    reversal = CustomerTransaction(
-      customer_id=txn.customer_id,
-      system_id=txn.system_id,
-      happened_at=reversal_happened_at,
-      day=reversal_day,
-      kind=txn.kind,
-      gas_type=txn.gas_type,
-      installed=txn.installed,
-      received=txn.received,
-      total=txn.total,
-      paid=txn.paid,
-      debt_cash=txn.debt_cash,
-      debt_cylinders_12=txn.debt_cylinders_12,
-      debt_cylinders_48=txn.debt_cylinders_48,
-      note=f"Reversal of {txn.id}",
-      reversed_id=txn.id,
-      is_reversed=True,
-      group_id=collection_id,
-    )
-    session.add(reversal)
-    reverse_source(
+  with session.begin():
+    txns = session.exec(
+      select(CustomerTransaction)
+      .where(
+        (CustomerTransaction.id == collection_id)
+        | (CustomerTransaction.group_id == collection_id)
+      )
+      .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    ).all()
+    if not txns:
+      return
+    acquire_customer_locks(session, [txns[0].customer_id])
+    acquire_inventory_locks(
       session,
-      source_type="customer_txn",
-      source_id=txn.id,
-      reversal_source_type="customer_txn",
-      reversal_source_id=reversal.id,
-      happened_at=reversal.happened_at,
-      day=reversal.day,
-      note=reversal.note,
+      _collection_inventory_gas_types(action_type="return", txns=txns),
     )
-    txn.is_reversed = True
-    session.add(txn)
-  session.commit()
+    for txn in txns:
+      reversal_happened_at = txn.happened_at
+      reversal_day = txn.day
+      reversal = CustomerTransaction(
+        customer_id=txn.customer_id,
+        system_id=txn.system_id,
+        happened_at=reversal_happened_at,
+        day=reversal_day,
+        kind=txn.kind,
+        gas_type=txn.gas_type,
+        installed=txn.installed,
+        received=txn.received,
+        total=txn.total,
+        paid=txn.paid,
+        debt_cash=txn.debt_cash,
+        debt_cylinders_12=txn.debt_cylinders_12,
+        debt_cylinders_48=txn.debt_cylinders_48,
+        note=f"Reversal of {txn.id}",
+        reversed_id=txn.id,
+        is_reversed=True,
+        group_id=collection_id,
+      )
+      session.add(reversal)
+      reverse_source(
+        session,
+        source_type="customer_txn",
+        source_id=txn.id,
+        reversal_source_type="customer_txn",
+        reversal_source_id=reversal.id,
+        happened_at=reversal.happened_at,
+        day=reversal.day,
+        note=reversal.note,
+      )
+      txn.is_reversed = True
+      session.add(txn)
 

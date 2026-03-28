@@ -136,7 +136,6 @@ def get_customer_balances(customer_id: str, session: Session = Depends(get_sessi
 
 @router.post("", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, session: Session = Depends(get_session)) -> CustomerOut:
-  logger.info("create_customer payload=%s", payload.model_dump())
   customer = Customer(
     name=payload.name,
     phone=payload.phone,

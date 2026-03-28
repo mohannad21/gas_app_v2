@@ -7,6 +7,8 @@ const mockUpdateInventoryAdjustmentMutateAsync = jest.fn().mockResolvedValue({})
 const mockCreateCashAdjustmentMutateAsync = jest.fn().mockResolvedValue({});
 const mockUpdateCashAdjustmentMutateAsync = jest.fn().mockResolvedValue({});
 const mockCreateCompanyPaymentMutateAsync = jest.fn().mockResolvedValue({});
+let mockAdjustInventoryPending = false;
+let mockCreateCashAdjustmentPending = false;
 const mockRouterBack = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockRouterCanGoBack = jest.fn().mockReturnValue(false);
@@ -52,19 +54,22 @@ jest.mock("@/hooks/useCompanyPayments", () => ({
 
 jest.mock("@/hooks/useCash", () => ({
   useCashAdjustments: () => ({ data: [], isLoading: false, isError: false }),
-  useCreateCashAdjustment: () => ({ mutateAsync: mockCreateCashAdjustmentMutateAsync }),
-  useUpdateCashAdjustment: () => ({ mutateAsync: mockUpdateCashAdjustmentMutateAsync }),
+  useCreateCashAdjustment: () => ({
+    mutateAsync: mockCreateCashAdjustmentMutateAsync,
+    isPending: mockCreateCashAdjustmentPending,
+  }),
+  useUpdateCashAdjustment: () => ({ mutateAsync: mockUpdateCashAdjustmentMutateAsync, isPending: false }),
 }));
 
 jest.mock("@/hooks/useInventory", () => ({
-  useAdjustInventory: () => ({ mutateAsync: mockAdjustInventoryMutateAsync }),
+  useAdjustInventory: () => ({ mutateAsync: mockAdjustInventoryMutateAsync, isPending: mockAdjustInventoryPending }),
   useInventoryAdjustments: () => ({ data: [], isLoading: false, isError: false }),
   useInventoryLatest: () => ({
     data: { full12: 10, empty12: 3, full48: 6, empty48: 1 },
     isLoading: false,
   }),
   useInventoryRefillDetails: () => ({ data: null, isLoading: false }),
-  useUpdateInventoryAdjustment: () => ({ mutateAsync: mockUpdateInventoryAdjustmentMutateAsync }),
+  useUpdateInventoryAdjustment: () => ({ mutateAsync: mockUpdateInventoryAdjustmentMutateAsync, isPending: false }),
 }));
 
 jest.mock("@/hooks/useReports", () => ({
@@ -85,6 +90,8 @@ describe("InventoryNewScreen ledger adjustments", () => {
     mockCreateCashAdjustmentMutateAsync.mockClear();
     mockUpdateCashAdjustmentMutateAsync.mockClear();
     mockCreateCompanyPaymentMutateAsync.mockClear();
+    mockAdjustInventoryPending = false;
+    mockCreateCashAdjustmentPending = false;
     mockRouterBack.mockClear();
     mockRouterReplace.mockClear();
     mockRouterCanGoBack.mockReset();
@@ -147,5 +154,24 @@ describe("InventoryNewScreen ledger adjustments", () => {
       );
     });
 
+  });
+
+  it("disables inventory save actions while the inventory mutation is pending", () => {
+    mockAdjustInventoryPending = true;
+    const { getByText } = render(<InventoryNewScreen />);
+
+    expect(getByText("Saving...")).toBeTruthy();
+    fireEvent.press(getByText("Saving..."));
+    expect(mockAdjustInventoryMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("disables wallet adjustment save actions while the cash mutation is pending", () => {
+    mockParams = { section: "ledger", tab: "cash" };
+    mockCreateCashAdjustmentPending = true;
+    const { getByText } = render(<InventoryNewScreen />);
+
+    expect(getByText("Saving...")).toBeTruthy();
+    fireEvent.press(getByText("Saving..."));
+    expect(mockCreateCashAdjustmentMutateAsync).not.toHaveBeenCalled();
   });
 });

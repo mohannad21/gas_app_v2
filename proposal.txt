@@ -386,6 +386,7 @@ Primary filters
 - All
 - Replacement
 - Late payment
+- Payout
 - Return empties
 - Buy empty
 - Sell full

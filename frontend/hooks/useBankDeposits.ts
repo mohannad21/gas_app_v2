@@ -1,15 +1,8 @@
 import { createBankDeposit, deleteBankDeposit, listBankDeposits } from "@/lib/api";
+import { getUserFacingApiError } from "@/lib/apiErrors";
 import { BankDeposit } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import { showToast } from "@/lib/toast";
-
-function extractErrorMessage(err: AxiosError) {
-  const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
-  if (typeof detail === "string") return detail;
-  if (detail) return JSON.stringify(detail);
-  return "Unknown error";
-}
 
 export function useBankDeposits(date?: string, options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
@@ -25,8 +18,7 @@ export function useCreateBankDeposit() {
   return useMutation({
     mutationFn: createBankDeposit,
     onError: (err) => {
-      const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to save transfer: ${message}`);
+      showToast(getUserFacingApiError(err, "Failed to save transfer."));
     },
     onSuccess: (_, variables) => {
       const directionLabel =
@@ -45,8 +37,7 @@ export function useDeleteBankDeposit() {
   return useMutation({
     mutationFn: ({ id }: { id: string; date: string }) => deleteBankDeposit(id),
     onError: (err) => {
-      const message = extractErrorMessage(err as AxiosError);
-      showToast(`Failed to remove transfer: ${message}`);
+      showToast(getUserFacingApiError(err, "Failed to remove transfer."));
     },
     onSuccess: (_, variables) => {
       showToast("Transfer removed");

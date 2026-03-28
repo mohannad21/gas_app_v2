@@ -11,6 +11,7 @@ GasType = Literal["12kg", "48kg"]
 OrderMode = Literal["replacement", "sell_iron", "buy_iron"]
 InventoryAdjustReason = Literal["count_correction", "shrinkage", "damage"]
 TransferDirection = Literal["wallet_to_bank", "bank_to_wallet"]
+MAX_LEDGER_INT = 2_147_483_647
 
 
 def new_id(prefix: str = "") -> str:
@@ -22,6 +23,8 @@ def _non_negative(value: Optional[int], field_name: str) -> Optional[int]:
     return value
   if value < 0:
     raise ValueError(f"{field_name}_must_be_non_negative")
+  if value > MAX_LEDGER_INT:
+    raise ValueError(f"{field_name}_must_be_within_ledger_range")
   return value
 
 
@@ -581,6 +584,20 @@ class InventorySnapshot(SQLModel):
   empty48: int
   total48: int
   reason: Optional[str] = None
+
+
+class InventoryInitCreate(SQLModel):
+  date: Optional[str] = None
+  full12: int = 0
+  empty12: int = 0
+  full48: int = 0
+  empty48: int = 0
+  reason: Optional[str] = None
+
+  @field_validator("full12", "empty12", "full48", "empty48")
+  @classmethod
+  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
+    return _non_negative(value, info.field_name)
 
 
 class InventoryRefillCreate(SQLModel):

@@ -22,6 +22,7 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { useCompanyBalances, useCreateCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
+import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 
 const MONEY_STEPPERS: FieldStepper[] = [
   { delta: 20, label: "+20", position: "top" },
@@ -228,7 +229,8 @@ export default function CompanyBalanceAdjustScreen() {
       Keyboard.dismiss();
       router.back();
     } catch (err: any) {
-      Alert.alert("Adjustment failed", err?.response?.data?.detail ?? "Failed to save company balance adjustment.");
+      logApiError("[company balance adjustment save] error", err);
+      Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save company balance adjustment."));
     }
   };
 
