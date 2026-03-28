@@ -21,6 +21,37 @@ Principle
   - Ledger Adjustments
   - any other add/update flow that should immediately reflect in the visible operational list
 
+Dead code confirmed by code audit (safe to delete):
+Frontend files:
+  - delete frontend/dev/level3-fixtures.ts (351 lines, zero imports anywhere, /dev/level3 route has no screen)
+  - delete frontend/hooks/use-theme-color.ts (Expo scaffold leftover, never imported)
+  - delete frontend/lib/addShortcut.ts (setAddShortcut has zero callers; consumeAddShortcut always returns null; remove its call in add/index.tsx line 640)
+  - delete frontend/app/customers/index.tsx (legacy screen, no router.push or href points to /customers anywhere; active tab is customers-home.tsx)
+  - delete frontend/components/reports/CollapsibleSectionCard.tsx (zero imports anywhere)
+  - delete frontend/components/reports/BalancesCard.tsx (zero imports anywhere)
+  - after icon unification is done (see section 5 below): delete frontend/components/reports/ActivityIcon.tsx current dead state and replace with the canonical icon source
+
+Dead exports confirmed by code audit (remove the export, keep the file if other exports are used):
+  - formatHourLabel in frontend/lib/date.ts (zero callers)
+  - formatDateMedium in frontend/lib/date.ts (zero callers)
+  - formatDateTimeYMDHM in frontend/lib/date.ts (zero callers)
+  - getExpenseIcon in frontend/app/(tabs)/reports/index.tsx line 37 (defined but never called)
+  - ActivityApiSchema, ActivitySchema, and Activity type in frontend/types/domain.ts (never imported anywhere)
+
+Dead backend functions confirmed by code audit:
+  - effective_business_tz_name() in backend/app/utils/time.py (defined, never called)
+  - business_date_end_utc() in backend/app/utils/time.py (defined, never called)
+  - boundary_for_source() in backend/app/services/ledger.py (defined, never imported or called)
+
+Quick bugs confirmed by code audit:
+  - FontFamilies.medium runtime bug: constants/typography.ts has no medium key (only regular, semibold, bold, extrabold); used in components/reports/SlimActivityRow.tsx lines 410 and 464 and constants/level3.ts lines 18 and 24; all four produce undefined at runtime and fall back to system font silently; fix by adding the key or replacing usages with an existing key
+  - alembic.ini DB URL mismatch: alembic.ini points to gas_app with user postgres and password postgres; .env points to gas_db with user postgres and password password; Alembic migrations run against a different database than the running app; sync them
+  - applied_credit null-checks are dead code: backend orders.py always sends applied_credit as 0, never null; frontend has null-check branches in four places in lib/api.ts and in app/orders/[id].tsx; remove the null-checks and treat as always a number
+
+Duplication confirmed by code audit (consolidate):
+  - getLocalDateString is duplicated in three places: add/index.tsx line 206, inventory/new.tsx line 57, hooks/useDailyReportScreen.ts line 7; replace all three with toDateKey(new Date()) which already exists in lib/date.ts
+  - formatMoney has five diverging implementations: reports/index.tsx line 47 uses toFixed(0); add/index.tsx line 997 uses the same; AddRefillModal.tsx line 118 uses Math.round and handles null; DaySummaryBox.tsx line 8 includes the currency symbol; smartTicket.ts line 27 delegates to a passed-in formatter; add one canonical formatMoneyAmount(value: number): string to lib/money.ts and replace all five usages; the currency symbol question is resolved once the Profile/Settings ticket adds currency config
+
 2. Structure of tabs, pages, and visible distributor information
 
 This category should be finished first.
@@ -29,24 +60,14 @@ This category should be finished first.
 - keep `Customers`, `New`, `Daily`, `Dashboard`, and `Account` conceptually clean and non-overlapping
 - keep business settings under Settings, not personal Profile
 - finalize the full Settings catalog list
-- complete the Expenses section end to end around:
-  - Expense
-  - Wallet to Bank
-  - Bank to Wallet
+- finalize the Expenses section end to end (entry forms for Expense, Wallet to Bank, and Bank to Wallet exist; verify edge cases and list sync)
 
 3. Balance and list structure changes
 
-Customers / add customer destination
-- keep the current 6 compact summary boxes below filters and above the list
-- keep the wording compact and the values aligned with backend truth
-- preserve positive-only debt/credit display in the customer summary boxes
-
-Company Activities
-- keep the current 3 compact company summary boxes below filters and above the list
-- keep the short sign note aligned with backend sign meaning
-
 Customer history / customer view
-- keep the current compact customer-detail balance boxes below filters and above the activity list
+- move the money balance, 12kg balance, and 48kg balance boxes to appear directly below the Cylinders Ordered section and before the Systems section (currently they appear below the activity filters, too far down the page)
+- remove the text note "Positive = Customer owes. Negative = Customer credit." (app/customers/[id].tsx line 738)
+- replace with positive-only display: show the absolute value with a contextual label inside each box; for example money box shows "Customer owes X" or "Credit X for customer"; 12kg box shows "Missing X" or "Credit X"; 48kg the same; never show a negative number in these boxes
 - keep customer history cards aligned with the same operational meaning used in Daily and Add lists
 
 4. Missing functional parts after structure is stable
@@ -66,8 +87,6 @@ Customer and system behavior
 
 Company / wallet / payment flows
 - finalize the exact Company Activities type list after full code review
-- keep the current minimal inline funding prompt behavior on distributor-paid flows
-- verify the `Transfer now` shortcut continues to open `Bank to Wallet` with shortfall prefill where possible
 - support negative-cash prevention or warning on refill and similar payment-heavy flows
 
 Expenses and settings
@@ -83,6 +102,9 @@ Ledger adjustments
 Daily report / reporting logic
 - fix remaining daily-report issues where activities are missing from lists or reports
 - fix any remaining wrong ordering in the daily report
+- restore before/after state when clicking an activity row in the daily report: the main activity FlatList (reports/index.tsx line 717) renders SlimActivityRow without a Pressable wrapper so clicking does nothing; the expand logic and DeltaBox before/after display exists in V2Timeline but is not wired to the main list; wrap each row with a Pressable and show the expanded state panel the same way V2Timeline already does at line 1386
+- split the daily report ledger reveal into two tabs: Wallet and Ledger; currently both cylinder state and wallet are shown together in a single ledger panel; Wallet tab shows only cash/wallet delta; Ledger tab shows only cylinders
+- in the Ledger tab show one row per product type: line 1 is 12kg with full count and empty count; line 2 is 48kg with full count and empty count; the structure must be driven by the product list from settings so adding a new product type adds a new row without code changes
 - verify and merge the stable expanded ledger-box ordering work:
   - 3 boxes = full, empty, wallet
   - 5 boxes = line 1 full + empty, line 2 full + empty, line 3 wallet
@@ -93,17 +115,43 @@ Daily report / reporting logic
 - keep expanded day content focused on activities, not redundant closing balance boxes
 - track report-generation latency, day-detail fetch latency, payload size, and posting/report errors
 
-5. Deferred design, style, wording, and UX polish
+5. Activity card unification, edit/delete flow, and UX polish
 
-This category should be handled later in one full pass, after structure and missing functional parts are stable.
+Activity card unification (confirmed needed by code audit):
+- define one shared activity card component based on SlimActivityRow styling (icon on rail, color-coded money, transition pills); use it in the daily report list, the company activity list in the Add tab, the customer activity list in the Add tab, and the customer detail view; changing the card style or icon in one place must change it everywhere
+- make ActivityIcon.tsx the single icon authority for all activity types; SlimActivityRow currently has its own local getActivityIcon function that must delegate to ActivityIcon.tsx instead; after this, ActivityIcon.tsx is no longer dead and must not be deleted
+- the daily report uses SlimActivityRow; the Add tab company/customer lists use bespoke cards; the customer detail view uses yet another custom card; all three must converge on the same component
 
+Edit flow (confirmed not working by code audit):
+- every activity type: pressing Edit must open the same screen that was used to create it, with all fields pre-populated from the existing record; currently pressing Edit on a collection opens a simplified qty-only modal instead of the full form; customer orders have no edit button at all on the activity cards in customers/[id].tsx
+- customer orders: add an Edit button to each activity card in customers/[id].tsx; pressing it must open orders/new in edit mode with all order data loaded
+- collections: Edit must open the full collection form, not the current simplified modal (collectionEditOpen in add/index.tsx lines 1516-1570)
+- all other activity types: follow the same pattern
+
+Delete flow:
+- apply the soft-delete pattern (blurred card with Deleted label) to the activity types that still lack it: customer orders, collections, expenses, cash adjustments (refills and inventory adjustments already have it)
+- deleted entries must remain visible in the list in their blurred state so the distributor can see what was reversed
+- deleted entries must not disappear or be hidden by default
+
+Buttons on activity cards:
+- every activity card in every list must have an Update button and a Delete button
+- Update opens the pre-populated form (see edit flow above)
+- Delete triggers soft-delete with confirmation (see delete flow above)
+- disabled state for both buttons when the entry is already deleted
+
+Scrolling fix (confirmed broken by user):
+- activity lists in the Add tab cannot scroll; likely caused by a nested ScrollView or missing flex:1 or fixed height; the company activity section lists (refills, collections, adjustments) must scroll independently within the screen
+
+Filters for problematic entries (per activity type):
+- replacement: add sub-filters Unpaid, Extra paid, Empties not returned
+- collection/return: add sub-filter Partial return
+- expense: add sub-filter No category
+- ledger adjustment: add sub-filter Unresolved
+- each activity type has a different definition of problematic; implement filters per type as chip rows below the activity type filter
+
+Deferred style and wording polish (do in one pass after the above is stable):
 - continue cleaning up wording across customer wording, company wording, filter wording, and card wording
 - keep Wallet wording consistent on new and touched frontend surfaces
-- keep customer activities visually aligned with Daily activities as much as practical
-- keep the styles of all history/card lists aligned across the entire app, especially under:
-  - Add Customer Activity
-  - Add Company Activity
-  - Add Customer / Customers destination
 - keep company balance wording structurally aligned with customer balance wording and Daily
 - remove the confusing third/result box everywhere it still exists in the 4 add tabs:
   - Customer Activities
@@ -116,12 +164,23 @@ This category should be handled later in one full pass, after structure and miss
 - align tabs and layouts consistently
 - remove confusing or redundant information across screens
 - keep forms simple and mobile-friendly
-- finalize the icon system for all activity types
 - keep the customer/company/distributor relationship icon direction available for replacement/exchange semantics
 - finalize customer balance labels
 - finalize company balance labels
 
-6. Documentation and alignment
+6. Architecture and code structure (confirmed by code audit)
+
+God components:
+- add/index.tsx is 3150 lines and exports AddChooserScreen (default), AddCustomersSection, and AddCustomerEntryAction; customers-home.tsx imports AddCustomersSection and AddCustomerEntryAction directly from add/index.tsx creating cross-tab coupling; extract AddCustomersSection and AddCustomerEntryAction into components/customers/ so the Add tab does not own customer UI that other tabs need
+- reports/index.tsx is 1928 lines and defines ReportDayCard, V2Timeline, and DeltaArrowRow as inline functions; extract them to components/reports/ so they can be reused and tested independently
+- buildCashMathLines is defined inside reports/index.tsx but belongs in lib/reports/utils.ts; move it
+
+Source of truth conflicts:
+- useDailyReportScreen hook and reports/index.tsx screen have competing state ownership for the daily report data; clarify which one owns the state and which one reads from it
+- the domain vocabulary mixes debt/credit/owes/receivable across different screens; standardize on one set of terms per concept and apply consistently across backend field names, frontend labels, and filter chip text
+- is_reversed on the backend is exposed as is_deleted on the frontend in some places; align the naming contract to one term used everywhere
+
+7. Documentation and alignment
 
 - merge `scripts/distributor_app_product_summary.txt` into `proposal.txt`
 - keep one final proposal document and maintain open work in this TODO file
@@ -129,12 +188,12 @@ This category should be handled later in one full pass, after structure and miss
 - confirm one event catalog shared across proposal, product direction, backend contracts, and frontend labels
 - confirm one wording contract shared across balances, previews, day cards, event rows, and expanded detail
 
-7. Testing and review workflow
+8. Testing and review workflow
 
 - expand regression coverage where current tests still leave gaps
 - improve screenshot/testing workflow through stable web/demo rendering and browser screenshots for fast UI review
 
-8. Auth, roles, logging, and security
+9. Auth, roles, logging, and security
 
 - build the proper auth foundation beyond the current stub state
 - implement first-login credential flow, forced password change for temporary credentials, and biometric unlock/session unlock
@@ -144,21 +203,21 @@ This category should be handled later in one full pass, after structure and miss
 - add structured logs, request tracing, actor/user context, and better error context
 - keep security and authorization separated cleanly by role
 
-9. Reminders
+10. Reminders
 
 - build the minimum reminder version for incomplete payment, incomplete empties, and follow-up cases
 - add reminder list and basic reminder actions
 - finalize the reminder schema and quick actions
 - add richer reminder workflows and filters
 
-10. Pricing, costing, and profitability
+11. Pricing, costing, and profitability
 
 - enforce monthly prices before the first refill of the month
 - save selling price at sale time
 - begin cost-layer / FIFO design for later true profitability
 - keep later profitability/costing logic on the roadmap without mixing it into current operational cleanup work
 
-11. Backoffice, billing, and subscription administration
+12. Backoffice, billing, and subscription administration
 
 - build the developer backoffice web app
 - add distributor management for:
@@ -178,7 +237,7 @@ This category should be handled later in one full pass, after structure and miss
 - keep billing history immutable and effective-date-based
 - finalize the subscription plan structure and pricing model in Backoffice
 
-12. Near future
+13. Near future
 
 - add billing screen in Account
 - build the full Dashboard with KPIs and charts
@@ -191,7 +250,7 @@ This category should be handled later in one full pass, after structure and miss
 - add multilingual support for system types and catalogs
 - finalize multilingual implementation timing and scope
 
-13. Far future
+14. Far future
 
 - build the future customer app
 - build the future company web/mobile app
@@ -203,7 +262,7 @@ This category should be handled later in one full pass, after structure and miss
 - add photo capture/upload for stove, system, and cylinder place as part of that safety workflow
 - add future system/safety metadata such as gas type, stove type, burners, and related fields if still needed
 
-14. Open questions to finalize later
+15. Open questions to finalize later
 
 - finalize the full health/security-check schema and workflow
 - decide exact future scope for multilingual labels and catalogs
