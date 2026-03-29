@@ -316,6 +316,9 @@ export default function CustomerDetailsScreen() {
   const deleteSystem = useDeleteSystem();
   const deleteOrder = useDeleteOrder();
   const deleteCollection = useDeleteCollection();
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
+  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const focusRefetchers = useRef({
     orders: ordersQuery.refetch,
     collections: collectionsQuery.refetch,
@@ -509,14 +512,28 @@ export default function CustomerDetailsScreen() {
   const handleDeleteOrder = (orderId: string) => {
     Alert.alert("Delete order?", "This will reverse the order and update related balances.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteOrder.mutate(orderId) },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          markDeleting(orderId);
+          deleteOrder.mutate(orderId, { onSettled: () => unmarkDeleting(orderId) });
+        },
+      },
     ]);
   };
 
   const handleDeleteCollection = (collectionId: string) => {
     Alert.alert("Delete collection?", "This will remove the collection and update related balances.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteCollection.mutate(collectionId) },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          markDeleting(collectionId);
+          deleteCollection.mutate(collectionId, { onSettled: () => unmarkDeleting(collectionId) });
+        },
+      },
     ]);
   };
 
@@ -786,6 +803,7 @@ export default function CustomerDetailsScreen() {
                 onEdit={rawCol ? () => {
                   /* collections edit not yet supported via dedicated screen */
                 } : undefined}
+                isDeleted={rawCol ? deletingIds.has(rawCol.id) : false}
                 onDelete={rawCol ? () => handleDeleteCollection(rawCol.id) : undefined}
               />
             );
@@ -795,6 +813,7 @@ export default function CustomerDetailsScreen() {
           return (
             <SlimActivityRow
               key={activity.id}
+              isDeleted={activity.orderId ? deletingIds.has(activity.orderId) : false}
               event={rawOrder
                 ? orderToEvent(rawOrder, {
                     customerName,

@@ -183,6 +183,9 @@ export default function AddChooserScreen() {
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
+  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
@@ -810,12 +813,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(refillId);
           try {
             await deleteRefill.mutateAsync(refillId);
             await companyRefillsQuery.refetch();
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(refillId);
           }
         },
       },
@@ -829,12 +835,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
             await allInventoryAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -848,12 +857,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteCashAdjust.mutateAsync(entry.id);
             allCashAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete cash adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -867,12 +879,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
             expensesQuery.refetch();
           } catch (error) {
             console.error("[add] delete expense failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -887,12 +902,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteBankDeposit.mutateAsync({ id: entry.id, date });
             bankDepositsQuery.refetch();
           } catch (error) {
             console.error("[add] delete bank transfer failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -1075,6 +1093,7 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={collectionToEvent(collection, { customerName: item.customerName })}
                     formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(collection.id)}
                     onEdit={() => openCollectionEdit(collection)}
                     onDelete={() => confirmDeleteCollection(collection.id)}
                   />
@@ -1087,6 +1106,7 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={orderToEvent(order, { customerName: item.customerName, systemName })}
                     formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(order.id)}
                     onEdit={() => router.push(`/orders/${order.id}/edit`)}
                     onDelete={() => confirmDeleteOrder(order.id)}
                   />
@@ -1121,6 +1141,7 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={bankDepositToEvent(item.data)}
                       formatMoney={fmtMoney}
+                      isDeleted={deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
                   );
@@ -1129,6 +1150,7 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={expenseToEvent(item.data)}
                     formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(item.data.id)}
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
                 );
@@ -1157,12 +1179,11 @@ const formatDateTime = (value?: string) => {
                   );
                 }
                 const refill = entry.data;
-                const isDeleted = entry.is_deleted;
                 return (
                   <SlimActivityRow
                     event={refillSummaryToEvent(refill)}
                     formatMoney={fmtMoney}
-                    isDeleted={isDeleted}
+                    isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
                     onEdit={() =>
                       router.push({
                         pathname: "/inventory/new",
@@ -1190,12 +1211,11 @@ const formatDateTime = (value?: string) => {
                 const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
                 if (entry.kind === "inventory_adjustment") {
                   const adjustment = entry.data;
-                  const isDeleted = entry.is_deleted;
                   return (
                     <SlimActivityRow
                       event={inventoryAdjustmentToEvent(adjustment)}
                       formatMoney={fmtMoney}
-                      isDeleted={isDeleted}
+                      isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                       onEdit={() =>
                         router.push({
                           pathname: "/inventory/new",
@@ -1207,12 +1227,11 @@ const formatDateTime = (value?: string) => {
                   );
                 }
                 const adjustment = entry.data;
-                const isDeleted = entry.is_deleted;
                 return (
                   <SlimActivityRow
                     event={cashAdjustmentToEvent(adjustment)}
                     formatMoney={fmtMoney}
-                    isDeleted={isDeleted}
+                    isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                     onEdit={() =>
                       router.push({
                         pathname: "/inventory/new",
@@ -1332,12 +1351,16 @@ const formatDateTime = (value?: string) => {
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (confirm?.type === "order") {
-                    deleteOrder.mutate(confirm.id);
+                    const id = confirm.id;
+                    markDeleting(id);
+                    deleteOrder.mutate(id, { onSettled: () => unmarkDeleting(id) });
                     setConfirm(null);
                     return;
                   }
                   if (confirm?.type === "collection") {
-                    deleteCollection.mutate(confirm.id);
+                    const id = confirm.id;
+                    markDeleting(id);
+                    deleteCollection.mutate(id, { onSettled: () => unmarkDeleting(id) });
                     setConfirm(null);
                     return;
                   }
