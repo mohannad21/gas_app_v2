@@ -290,7 +290,7 @@ export async function createCompanyPayment(payload: CompanyPaymentCreateInput): 
 }
 
 export async function listCompanyPayments(): Promise<CompanyPayment[]> {
-  const { data } = await api.get("/company/payments");
+  const { data } = await api.get("/company/payments", { params: { limit: 50 } });
   return parseArray(CompanyPaymentSchema, data).map((row) => ({
     ...row,
     amount: fromMinorUnits(row.amount),
@@ -394,7 +394,7 @@ export async function listInventoryAdjustments(
   includeDeleted?: boolean
 ): Promise<InventoryAdjustment[]> {
   const { data } = await api.get("/inventory/adjustments", {
-    params: { date, include_deleted: includeDeleted ?? false },
+    params: { date, include_deleted: includeDeleted ?? false, limit: 50 },
   });
   return parseArray(InventoryAdjustmentSchema, data);
 }
@@ -417,7 +417,7 @@ export async function listCashAdjustments(
   includeDeleted?: boolean
 ): Promise<CashAdjustment[]> {
   const { data } = await api.get("/cash/adjustments", {
-    params: { date, include_deleted: includeDeleted ?? false },
+    params: { date, include_deleted: includeDeleted ?? false, limit: 50 },
   });
   return parseArray(CashAdjustmentSchema, data).map((c) => ({
     ...c,
@@ -455,7 +455,7 @@ export async function deleteCashAdjustment(deltaId: string): Promise<void> {
 
 // Orders
 export async function listOrders(): Promise<Order[]> {
-  const { data } = await api.get("/orders");
+  const { data } = await api.get("/orders", { params: { limit: 50 } });
   return parseArray(OrderSchema, data).map((o) => ({
     ...o,
     price_total: fromMinorUnits(o.price_total),
@@ -545,7 +545,7 @@ export async function createCollection(payload: CollectionCreateInput): Promise<
 }
 
 export async function listCollections(): Promise<CollectionEvent[]> {
-  const { data } = await api.get("/collections");
+  const { data } = await api.get("/collections", { params: { limit: 50 } });
   return parseArray(CollectionEventSchema, data).map((ev) => ({
     ...ev,
     amount_money: ev.amount_money != null ? fromMinorUnits(ev.amount_money) : ev.amount_money,
@@ -760,7 +760,7 @@ export async function createInventoryRefill(payload: {
 
 export async function listInventoryRefills(includeDeleted?: boolean): Promise<InventoryRefillSummary[]> {
   const { data } = await api.get("/inventory/refills", {
-    params: { include_deleted: includeDeleted ?? false },
+    params: { include_deleted: includeDeleted ?? false, limit: 50 },
   });
   return parseArray(InventoryRefillSummarySchema, data).map((row) => ({
     ...row,
@@ -911,7 +911,7 @@ export async function savePriceSetting(payload: {
 
 // Expenses
 export async function listExpenses(date?: string): Promise<Expense[]> {
-  const { data } = await api.get("/expenses", { params: date ? { date } : undefined });
+  const { data } = await api.get("/expenses", { params: { date, limit: 50 } });
   return parseArray(ExpenseSchema, data).map((e) => ({
     ...e,
     amount: fromMinorUnits(e.amount),
@@ -935,7 +935,7 @@ export async function deleteExpense(expenseId: string): Promise<void> {
 
 // Bank deposits
 export async function listBankDeposits(date?: string): Promise<BankDeposit[]> {
-  const { data } = await api.get("/cash/bank_deposits", { params: date ? { date } : undefined });
+  const { data } = await api.get("/cash/bank_deposits", { params: { date, limit: 50 } });
   return parseArray(BankDepositSchema, data).map((d) => ({
     ...d,
     amount: fromMinorUnits(d.amount),

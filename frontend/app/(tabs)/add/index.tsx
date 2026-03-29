@@ -812,14 +812,13 @@ const formatDateTime = (value?: string) => {
       {
         text: "Remove",
         style: "destructive",
-        onPress: async () => {
-          markDeleting(refillId);
-          try {
-            await deleteRefill.mutateAsync(refillId);
-            await companyRefillsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete refill failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
+      onPress: async () => {
+        markDeleting(refillId);
+        try {
+          await deleteRefill.mutateAsync(refillId);
+        } catch (error) {
+          console.error("[add] delete refill failed", error);
+          Alert.alert("Failed to delete", "Try again later.");
           } finally {
             unmarkDeleting(refillId);
           }
@@ -834,14 +833,13 @@ const formatDateTime = (value?: string) => {
       {
         text: "Remove",
         style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteInventoryAdjust.mutateAsync(entry.id);
-            await allInventoryAdjustmentsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete inventory adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
+      onPress: async () => {
+        markDeleting(entry.id);
+        try {
+          await deleteInventoryAdjust.mutateAsync(entry.id);
+        } catch (error) {
+          console.error("[add] delete inventory adjustment failed", error);
+          Alert.alert("Failed to delete", "Try again later.");
           } finally {
             unmarkDeleting(entry.id);
           }
@@ -856,14 +854,13 @@ const formatDateTime = (value?: string) => {
       {
         text: "Remove",
         style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteCashAdjust.mutateAsync(entry.id);
-            allCashAdjustmentsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete cash adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
+      onPress: async () => {
+        markDeleting(entry.id);
+        try {
+          await deleteCashAdjust.mutateAsync(entry.id);
+        } catch (error) {
+          console.error("[add] delete cash adjustment failed", error);
+          Alert.alert("Failed to delete", "Try again later.");
           } finally {
             unmarkDeleting(entry.id);
           }
@@ -878,14 +875,13 @@ const formatDateTime = (value?: string) => {
       {
         text: "Remove",
         style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
-            expensesQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete expense failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
+      onPress: async () => {
+        markDeleting(entry.id);
+        try {
+          await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
+        } catch (error) {
+          console.error("[add] delete expense failed", error);
+          Alert.alert("Failed to delete", "Try again later.");
           } finally {
             unmarkDeleting(entry.id);
           }
@@ -901,14 +897,13 @@ const formatDateTime = (value?: string) => {
       {
         text: "Remove",
         style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteBankDeposit.mutateAsync({ id: entry.id, date });
-            bankDepositsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete bank transfer failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
+      onPress: async () => {
+        markDeleting(entry.id);
+        try {
+          await deleteBankDeposit.mutateAsync({ id: entry.id, date });
+        } catch (error) {
+          console.error("[add] delete bank transfer failed", error);
+          Alert.alert("Failed to delete", "Try again later.");
           } finally {
             unmarkDeleting(entry.id);
           }
@@ -1151,6 +1146,12 @@ const formatDateTime = (value?: string) => {
                     event={expenseToEvent(item.data)}
                     formatMoney={fmtMoney}
                     isDeleted={deletingIds.has(item.data.id)}
+                    onEdit={() =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: { expenseId: item.data.id },
+                      })
+                    }
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
                 );
