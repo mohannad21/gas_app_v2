@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Level3Tokens } from "@/constants/level3";
@@ -6,10 +6,14 @@ import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { DailyReportV2Event } from "@/types/domain";
+import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
 type SlimActivityRowProps = {
   event: DailyReportV2Event;
   formatMoney?: (value: number) => string;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isDeleted?: boolean;
 };
 
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) => `₪${formatMoney(amount)}`;
@@ -192,39 +196,7 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
   return "generic" as const;
 };
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
-
-function getActivityIcon(
-  eventType: string,
-  orderMode: string | null | undefined,
-  moneyDirection: string | null | undefined
-): IoniconName {
-  if (eventType === "order") {
-    if (orderMode === "replacement") return "swap-horizontal-outline";
-    if (orderMode === "sell_iron") return "arrow-up-circle-outline";
-    if (orderMode === "buy_iron") return "arrow-down-circle-outline";
-    return "swap-horizontal-outline";
-  }
-  if (eventType === "collection_money") return "cash-outline";
-  if (eventType === "collection_payout") return "cash-outline";
-  if (eventType === "collection_empty") return "refresh-outline";
-  if (eventType === "customer_adjust") return "build-outline";
-  if (eventType === "refill") return "reload-outline";
-  if (eventType === "company_buy_iron") return "download-outline";
-  if (eventType === "company_payment") {
-    if (moneyDirection === "in" || moneyDirection === "received") return "arrow-down-circle-outline";
-    return "arrow-up-circle-outline";
-  }
-  if (eventType === "company_adjustment") return "build-outline";
-  if (eventType === "expense") return "receipt-outline";
-  if (eventType === "bank_deposit") return "card-outline";
-  if (eventType === "cash_adjust") return "wallet-outline";
-  if (eventType === "adjust") return "cube-outline";
-  if (eventType === "init") return "flag-outline";
-  return "ellipse-outline";
-}
-
-export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowProps) {
+export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const eventType = String(event?.event_type ?? "event");
   const label = event?.label ?? eventType;
@@ -276,8 +248,10 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
   const dotColor = getEventColor(eventType);
   const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
 
+  const hasActions = !!(onEdit || onDelete);
+
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isDeleted && styles.rowDeleted]}>
       <View style={styles.railCol}>
         <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
@@ -348,6 +322,36 @@ export default function SlimActivityRow({ event, formatMoney }: SlimActivityRowP
               ))}
             </View>
             {showStatus ? <Text style={styles.okText}>{okLabel}</Text> : null}
+          </View>
+        ) : null}
+
+        {hasActions ? (
+          <View style={styles.actionsRow}>
+            {isDeleted ? (
+              <Text style={styles.deletedLabel}>Deleted</Text>
+            ) : null}
+            <View style={styles.actionBtns}>
+              {onEdit ? (
+                <Pressable
+                  onPress={isDeleted ? undefined : onEdit}
+                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                  accessibilityLabel="Edit"
+                >
+                  <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                  <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
+                </Pressable>
+              ) : null}
+              {onDelete ? (
+                <Pressable
+                  onPress={isDeleted ? undefined : onDelete}
+                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                  accessibilityLabel="Delete"
+                >
+                  <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
+                  <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         ) : null}
       </View>
@@ -476,6 +480,48 @@ const styles = StyleSheet.create({
   },
   pillDangerText: {
     color: "#b91c1c",
+  },
+  rowDeleted: {
+    opacity: 0.55,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+  deletedLabel: {
+    fontSize: FontSizes.sm,
+    color: "#b91c1c",
+    fontFamily: FontFamilies.semibold,
+  },
+  actionBtns: {
+    flexDirection: "row",
+    gap: 12,
+    marginLeft: "auto",
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "#f1f5f9",
+  },
+  actionBtnDisabled: {
+    opacity: 0.5,
+  },
+  actionBtnText: {
+    fontSize: FontSizes.sm,
+    color: "#0a7ea4",
+    fontFamily: FontFamilies.semibold,
+  },
+  actionBtnTextDanger: {
+    color: "#b91c1c",
+  },
+  actionBtnTextDisabled: {
+    color: "#94a3b8",
   },
 });
 

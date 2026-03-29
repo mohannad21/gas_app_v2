@@ -10,6 +10,18 @@ import {
   CustomerListTopFilter,
 } from "@/components/customers/customerListFilters";
 import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
+import SlimActivityRow from "@/components/reports/SlimActivityRow";
+import {
+  bankDepositToEvent,
+  cashAdjustmentToEvent,
+  collectionToEvent,
+  companyPaymentToEvent,
+  customerAdjustmentToEvent,
+  expenseToEvent,
+  inventoryAdjustmentToEvent,
+  orderToEvent,
+  refillSummaryToEvent,
+} from "@/lib/activityAdapter";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useCompanyPayments } from "@/hooks/useCompanyPayments";
@@ -35,8 +47,6 @@ import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeLocale, toDateKey } from "@/lib/date";
-import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
-import { gasColor } from "@/constants/gas";
 import {
   PriceInputs,
   createDefaultPriceInputs,
@@ -173,6 +183,9 @@ export default function AddChooserScreen() {
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
   const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
+  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const ordersQuery = useOrders();
   const collectionsQuery = useCollections();
   const updateCollection = useUpdateCollection();
@@ -800,12 +813,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(refillId);
           try {
             await deleteRefill.mutateAsync(refillId);
             await companyRefillsQuery.refetch();
           } catch (error) {
             console.error("[add] delete refill failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(refillId);
           }
         },
       },
@@ -819,12 +835,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteInventoryAdjust.mutateAsync(entry.id);
             await allInventoryAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete inventory adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -838,12 +857,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteCashAdjust.mutateAsync(entry.id);
             allCashAdjustmentsQuery.refetch();
           } catch (error) {
             console.error("[add] delete cash adjustment failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -857,12 +879,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
             expensesQuery.refetch();
           } catch (error) {
             console.error("[add] delete expense failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -877,12 +902,15 @@ const formatDateTime = (value?: string) => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
+          markDeleting(entry.id);
           try {
             await deleteBankDeposit.mutateAsync({ id: entry.id, date });
             bankDepositsQuery.refetch();
           } catch (error) {
             console.error("[add] delete bank transfer failed", error);
             Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(entry.id);
           }
         },
       },
@@ -1043,196 +1071,52 @@ const formatDateTime = (value?: string) => {
             key="orders-list"
             data={filteredCustomerActivityItems}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 10 }}
+            contentContainerStyle={{ gap: 0 }}
             ListEmptyComponent={
               !ordersQuery.isLoading && !collectionsQuery.isLoading && !customerAdjustmentsQuery.isLoading ? (
                 <Text style={styles.meta}>{customerActivityEmptyMessage}</Text>
               ) : null
             }
             renderItem={({ item }) => {
+              const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
               if (item.kind === "adjustment") {
-                const adjustment = item.data;
-                const money = Number(adjustment.amount_money ?? 0);
-                const qty12 = Number(adjustment.count_12kg ?? 0);
-                const qty48 = Number(adjustment.count_48kg ?? 0);
-                const summaryParts = [
-                  money !== 0 ? `Money ${money > 0 ? "+" : ""}${money.toFixed(0)}` : null,
-                  qty12 !== 0 ? `12kg ${qty12 > 0 ? "+" : ""}${qty12}` : null,
-                  qty48 !== 0 ? `48kg ${qty48 > 0 ? "+" : ""}${qty48}` : null,
-                ].filter(Boolean);
                 return (
-                  <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <Text style={styles.name}>{item.customerName}</Text>
-                        {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
-                      </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.time}>{formatDateTime(adjustment.created_at ?? adjustment.effective_at)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <View style={styles.leftInfo}>
-                        <Text style={styles.metaLine}>
-                          {summaryParts.length > 0 ? summaryParts.join(" | ") : "Manual adjustment"}
-                        </Text>
-                      </View>
-                      <View style={styles.badgeStack}>
-                        <Text style={[styles.statusBadge, styles.collectionBadge]}>Adjustment</Text>
-                      </View>
-                    </View>
-                  </View>
+                  <SlimActivityRow
+                    event={customerAdjustmentToEvent(item.data, { customerName: item.customerName })}
+                    formatMoney={fmtMoney}
+                  />
                 );
               }
-
               if (item.kind === "collection") {
                 const collection = item.data;
-                const customer = customersById.get(collection.customer_id);
-                const createdAt = new Date(
-                  normalizeIso(collection.created_at ?? collection.effective_at ?? "")
-                );
-                const system = systemsQuery.data?.find((s) => s.id === collection.system_id);
-                const label =
-                  collection.action_type === "payment"
-                    ? "Receive"
-                    : collection.action_type === "payout"
-                      ? "Payout"
-                      : "ReturnEmp";
-                const amount = Number(collection.amount_money ?? 0);
-                const qty12 = Number(collection.qty_12kg ?? 0);
-                const qty48 = Number(collection.qty_48kg ?? 0);
                 return (
-                  <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <Text style={styles.name}>{customer?.name ?? collection.id}</Text>
-                        {customer?.note ? <Text style={styles.customerNote}>{customer.note}</Text> : null}
-                        {system ? <Text style={styles.metaLine}>{system.name}</Text> : null}
-                        {collection.note ? <Text style={styles.note}>{collection.note}</Text> : null}
-                      </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.time}>{formatDateTimeLocale(createdAt)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <View style={styles.leftInfo}>
-                        {collection.action_type !== "return" ? (
-                          <Text style={styles.metaLine}>Amount {amount.toFixed(0)}</Text>
-                        ) : (
-                          <Text style={styles.metaLine}>
-                            12kg {qty12.toFixed(0)} | 48kg {qty48.toFixed(0)}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.badgeStack}>
-                        <Text style={[styles.statusBadge, styles.collectionBadge]}>{label}</Text>
-                        <View style={styles.actionsCompact}>
-                          <Pressable
-                            accessibilityLabel="Edit collection"
-                            onPress={(e) => {
-                              e.stopPropagation?.();
-                              openCollectionEdit(collection);
-                            }}
-                            style={styles.iconBtn}
-                          >
-                            <Ionicons name="build-outline" size={16} color="#0a7ea4" />
-                          </Pressable>
-                          <Pressable
-                            accessibilityLabel="Remove collection"
-                            onPress={(e) => {
-                              e.stopPropagation?.();
-                              confirmDeleteCollection(collection.id);
-                            }}
-                            style={styles.iconBtn}
-                          >
-                            <Ionicons name="trash" size={16} color="#b00020" />
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
+                  <SlimActivityRow
+                    event={collectionToEvent(collection, { customerName: item.customerName })}
+                    formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(collection.id)}
+                    onEdit={() => openCollectionEdit(collection)}
+                    onDelete={() => confirmDeleteCollection(collection.id)}
+                  />
                 );
               }
-
               const order = item.data;
-              const unpaid = calcMoneyUiResult(order.price_total, order.paid_amount ?? 0);
-              const system = systemsQuery.data?.find((s) => s.id === order.system_id);
-              const customer = customersById.get(order.customer_id);
-              const createdAt = new Date(normalizeIso(order.created_at));
-              const deliveredAt = new Date(normalizeIso(order.delivered_at));
-              const outstandingCyl = Math.max(
-                0,
-                calcCustomerCylinderDelta(
-                  order.order_mode ?? "replacement",
-                  order.cylinders_installed ?? 0,
-                  order.cylinders_received ?? 0
-                )
-              );
-              const fullyReturned = outstandingCyl === 0;
-              const returnedLabel = fullyReturned
-                ? "Returned"
-                : `Unreturned ${outstandingCyl} x ${order.gas_type}`;
+              const systemName = systemsQuery.data?.find((s) => s.id === order.system_id)?.name;
               return (
-                <Pressable onPress={() => router.push(`/orders/${order.id}`)} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.titleBlock}>
-                      <Text style={styles.name}>{customer?.name ?? order.id}</Text>
-                      {customer?.note ? <Text style={styles.customerNote}>{customer.note}</Text> : null}
-                      {order.note ? <Text style={styles.note}>{order.note}</Text> : null}
-                    </View>
-                    <View style={styles.headerRight}>
-                      <Text style={styles.time}>{formatDateTimeLocale(createdAt)}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <View style={styles.leftInfo}>
-                      {system ? <Text style={styles.metaLine}>{system.name}</Text> : null}
-                      <View style={styles.pillRow}>
-                        <Text style={[styles.pill, styles.pillPrimary]}>{order.cylinders_installed} x</Text>
-                        <Text style={[styles.pill, { backgroundColor: gasColor(order.gas_type), color: "#fff" }]}>
-                          {order.gas_type}
-                        </Text>
-                        <Text style={[styles.pill, styles.pillPrimary]}>Paid {(order.paid_amount ?? 0).toFixed(0)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.badgeStack}>
-                      <Text style={[styles.statusBadge, unpaid > 0 ? styles.unpaidBadge : styles.paidBadge]}>
-                        {unpaid > 0 ? `Unpaid ${unpaid.toFixed(0)}` : "Paid"}
-                      </Text>
-                      <Text style={[styles.statusBadge, fullyReturned ? styles.returnedBadge : styles.unreturnedBadge]}>
-                        {returnedLabel}
-                      </Text>
-                      <View style={styles.actionsCompact}>
-                        <Pressable
-                          accessibilityLabel="Edit order"
-                          onPress={() => router.push(`/orders/${order.id}/edit`)}
-                          style={styles.iconBtn}
-                        >
-                          <Ionicons name="build-outline" size={16} color="#0a7ea4" />
-                        </Pressable>
-                        <Pressable
-                          accessibilityLabel="Remove order"
-                          onPress={(e) => {
-                            e.stopPropagation?.();
-                            confirmDeleteOrder(order.id);
-                          }}
-                          style={styles.iconBtn}
-                        >
-                          <Ionicons name="trash" size={16} color="#b00020" />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.footerRow}>
-                    <Text style={styles.time}>Delivered {formatDateTimeLocale(deliveredAt)}</Text>
-                  </View>
+                <Pressable onPress={() => router.push(`/orders/${order.id}`)}>
+                  <SlimActivityRow
+                    event={orderToEvent(order, { customerName: item.customerName, systemName })}
+                    formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(order.id)}
+                    onEdit={() => router.push(`/orders/${order.id}/edit`)}
+                    onDelete={() => confirmDeleteOrder(order.id)}
+                  />
                 </Pressable>
               );
             }}
           />
         </>
       ) : isExpenses ? (
-        <View style={styles.formCard}>
+        <>
           {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
           {expensesQuery.error || bankDepositsQuery.error ? (
             <View style={styles.errorBox}>
@@ -1245,260 +1129,122 @@ const formatDateTime = (value?: string) => {
           {filteredExpenseItems.length === 0 && !expensesQuery.isLoading && !bankDepositsQuery.isLoading ? (
             <Text style={styles.meta}>{expenseEmptyMessage}</Text>
           ) : (
-            <View style={styles.listBlock}>
-              {filteredExpenseItems.map((item) => {
+            <FlatList
+              key="expenses-list"
+              data={filteredExpenseItems}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ gap: 0 }}
+              renderItem={({ item }) => {
+                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
                 if (item.kind === "bank_transfer") {
-                  const label = item.direction === "wallet_to_bank" ? "Wallet to Bank" : "Bank to Wallet";
                   return (
-                    <View key={item.id} style={styles.card}>
-                      <View style={styles.cardHeader}>
-                        <View style={styles.titleBlock}>
-                          <View style={styles.pillRow}>
-                            <Text style={[styles.pill, styles.pillPrimary]}>{label}</Text>
-                          </View>
-                          <Text style={styles.metaLine}>{formatDateTime(item.data.happened_at)}</Text>
-                          {item.data.note ? <Text style={styles.note}>{item.data.note}</Text> : null}
-                        </View>
-                        <View style={styles.headerRight}>
-                          <Text style={styles.expenseAmount}>{Math.abs(item.data.amount)}</Text>
-                          <Pressable
-                            accessibilityLabel="Remove bank transfer"
-                            onPress={() => handleDeleteBankTransfer(item.data)}
-                            style={styles.iconBtn}
-                          >
-                            <Ionicons name="trash" size={16} color="#b00020" />
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
+                    <SlimActivityRow
+                      event={bankDepositToEvent(item.data)}
+                      formatMoney={fmtMoney}
+                      isDeleted={deletingIds.has(item.data.id)}
+                      onDelete={() => handleDeleteBankTransfer(item.data)}
+                    />
                   );
                 }
-
                 return (
-                  <View key={item.id} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <View style={styles.pillRow}>
-                          <Text style={[styles.pill, styles.pillPrimary]}>{item.data.expense_type}</Text>
-                        </View>
-                        <Text style={styles.metaLine}>{formatDateTime(item.data.created_at ?? item.data.date)}</Text>
-                        {item.data.note ? <Text style={styles.note}>{item.data.note}</Text> : null}
-                      </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.expenseAmount}>{item.data.amount}</Text>
-                        <Pressable
-                          accessibilityLabel="Remove expense"
-                          onPress={() => handleDeleteExpense(item.data)}
-                          style={styles.iconBtn}
-                        >
-                          <Ionicons name="trash" size={16} color="#b00020" />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
+                  <SlimActivityRow
+                    event={expenseToEvent(item.data)}
+                    formatMoney={fmtMoney}
+                    isDeleted={deletingIds.has(item.data.id)}
+                    onDelete={() => handleDeleteExpense(item.data)}
+                  />
                 );
-              })}
-            </View>
+              }}
+            />
           )}
-        </View>
+        </>
       ) : isCompanyActivities ? (
-        <View style={styles.formCard}>
-          <View style={styles.listBlock}>
-            {filteredCompanyActivityItems.map((entry) => {
-              if (entry.kind === "company_payment") {
-                const amount = Number(entry.data.amount ?? 0);
+        <>
+          {filteredCompanyActivityItems.length === 0 ? (
+            <Text style={styles.meta}>No company activities match these filters.</Text>
+          ) : (
+            <FlatList
+              key="company-list"
+              data={filteredCompanyActivityItems}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ gap: 0 }}
+              renderItem={({ item: entry }) => {
+                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+                if (entry.kind === "company_payment") {
+                  return (
+                    <SlimActivityRow
+                      event={companyPaymentToEvent(entry.data)}
+                      formatMoney={fmtMoney}
+                    />
+                  );
+                }
+                const refill = entry.data;
                 return (
-                  <View key={entry.id} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <View style={styles.inventoryLabelRow}>
-                          <View style={styles.inventoryTypeBadge}>
-                            <Text style={styles.inventoryTypeBadgeText}>Company Payment</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.metaLine}>{formatDateTime(entry.data.happened_at)}</Text>
-                        {entry.data.note ? <Text style={styles.note}>{entry.data.note}</Text> : null}
-                      </View>
-                      <View style={styles.headerRight}>
-                        <Text style={styles.expenseAmount}>{amount.toFixed(0)}</Text>
-                      </View>
-                    </View>
-                  </View>
+                  <SlimActivityRow
+                    event={refillSummaryToEvent(refill)}
+                    formatMoney={fmtMoney}
+                    isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
+                    onEdit={() =>
+                      router.push({
+                        pathname: "/inventory/new",
+                        params: { section: "company", tab: "refill", refillId: refill.refill_id },
+                      })
+                    }
+                    onDelete={() => handleRemoveRefill(refill.refill_id)}
+                  />
                 );
-              }
-
-              const refill = entry.data;
-              const isDeleted = entry.is_deleted;
-              return (
-                <View key={`refill_${refill.refill_id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.titleBlock}>
-                      <View style={styles.inventoryLabelRow}>
-                        <View style={styles.inventoryTypeBadge}>
-                          <Text style={styles.inventoryTypeBadgeText}>Refill</Text>
-                        </View>
-                        {isDeleted && (
-                          <View style={styles.inventoryBadge}>
-                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.metaLine}>
-                        {refill.date} {refill.time_of_day}
-                      </Text>
-                      <Text style={styles.metaLine}>
-                        <Text style={[styles.metaLine, { color: gasColor("12kg"), fontWeight: "700" }]}>12kg</Text>
-                        : buy {refill.buy12} return {refill.return12}
-                      </Text>
-                      <Text style={styles.metaLine}>
-                        <Text style={[styles.metaLine, { color: gasColor("48kg"), fontWeight: "700" }]}>48kg</Text>
-                        : buy {refill.buy48} return {refill.return48}
-                      </Text>
-                    </View>
-                    <View style={styles.actionsCompact}>
-                      <Pressable
-                        accessibilityLabel="Update refill"
-                        onPress={() => {
-                          if (isDeleted) return;
-                          router.push({
-                            pathname: "/inventory/new",
-                            params: { section: "company", tab: "refill", refillId: refill.refill_id },
-                          });
-                        }}
-                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                      >
-                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Remove refill"
-                        onPress={() => {
-                          if (isDeleted) return;
-                          handleRemoveRefill(refill.refill_id);
-                        }}
-                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                      >
-                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-            {filteredCompanyActivityItems.length === 0 && <Text style={styles.meta}>No company activities match these filters.</Text>}
-          </View>
-        </View>
+              }}
+            />
+          )}
+        </>
       ) : (
-        <View style={styles.formCard}>
-          <View style={styles.listBlock}>
-            {filteredLedgerAdjustmentItems.map((entry) => {
-              if (entry.kind === "inventory_adjustment") {
+        <>
+          {filteredLedgerAdjustmentItems.length === 0 ? (
+            <Text style={styles.meta}>No ledger adjustments match these filters.</Text>
+          ) : (
+            <FlatList
+              key="ledger-list"
+              data={filteredLedgerAdjustmentItems}
+              keyExtractor={(item) => `${item.kind}-${item.data.id}`}
+              contentContainerStyle={{ gap: 0 }}
+              renderItem={({ item: entry }) => {
+                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+                if (entry.kind === "inventory_adjustment") {
+                  const adjustment = entry.data;
+                  return (
+                    <SlimActivityRow
+                      event={inventoryAdjustmentToEvent(adjustment)}
+                      formatMoney={fmtMoney}
+                      isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
+                      onEdit={() =>
+                        router.push({
+                          pathname: "/inventory/new",
+                          params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
+                        })
+                      }
+                      onDelete={() => handleDeleteInventoryAdjustment(adjustment)}
+                    />
+                  );
+                }
                 const adjustment = entry.data;
-                const isDeleted = entry.is_deleted;
                 return (
-                  <View key={`inv_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.titleBlock}>
-                        <View style={styles.inventoryLabelRow}>
-                          <View style={styles.inventoryTypeBadge}>
-                            <Text style={styles.inventoryTypeBadgeText}>Inventory Adjustment</Text>
-                          </View>
-                          {isDeleted && (
-                            <View style={styles.inventoryBadge}>
-                              <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
-                        <Text style={styles.metaLine}>
-                          <Text style={[styles.metaLine, { color: gasColor(adjustment.gas_type), fontWeight: "700" }]}>
-                            {adjustment.gas_type}
-                          </Text>
-                          : full {adjustment.delta_full} empty {adjustment.delta_empty}
-                        </Text>
-                        {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
-                      </View>
-                      <View style={styles.actionsCompact}>
-                        <Pressable
-                          accessibilityLabel="Update adjustment"
-                          onPress={() => {
-                            if (isDeleted) return;
-                            router.push({
-                              pathname: "/inventory/new",
-                              params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
-                            });
-                          }}
-                          style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                        >
-                          <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                        </Pressable>
-                        <Pressable
-                          accessibilityLabel="Remove adjustment"
-                          onPress={() => {
-                            if (isDeleted) return;
-                            handleDeleteInventoryAdjustment(adjustment);
-                          }}
-                          style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                        >
-                          <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
+                  <SlimActivityRow
+                    event={cashAdjustmentToEvent(adjustment)}
+                    formatMoney={fmtMoney}
+                    isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
+                    onEdit={() =>
+                      router.push({
+                        pathname: "/inventory/new",
+                        params: { section: "ledger", tab: "cash", cashId: adjustment.id },
+                      })
+                    }
+                    onDelete={() => handleDeleteCashAdjustment(adjustment)}
+                  />
                 );
-              }
-
-              const adjustment = entry.data;
-              const isDeleted = entry.is_deleted;
-              return (
-                <View key={`cash_adj_${adjustment.id}`} style={[styles.card, isDeleted && styles.cardMuted]}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.titleBlock}>
-                      <View style={styles.inventoryLabelRow}>
-                        <View style={styles.inventoryTypeBadge}>
-                          <Text style={styles.inventoryTypeBadgeText}>Wallet Adjustment</Text>
-                        </View>
-                        {isDeleted && (
-                          <View style={styles.inventoryBadge}>
-                            <Text style={styles.inventoryBadgeText}>Deleted</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.metaLine}>{formatDateTime(adjustment.effective_at)}</Text>
-                      <Text style={styles.metaLine}>Amount: {adjustment.delta_cash}</Text>
-                      {adjustment.reason ? <Text style={styles.note}>{adjustment.reason}</Text> : null}
-                    </View>
-                    <View style={styles.actionsCompact}>
-                      <Pressable
-                        accessibilityLabel="Update wallet adjustment"
-                        onPress={() => {
-                          if (isDeleted) return;
-                          router.push({
-                            pathname: "/inventory/new",
-                            params: { section: "ledger", tab: "cash", cashId: adjustment.id },
-                          });
-                        }}
-                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                      >
-                        <Ionicons name="build-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Remove wallet adjustment"
-                        onPress={() => {
-                          if (isDeleted) return;
-                          handleDeleteCashAdjustment(adjustment);
-                        }}
-                        style={[styles.iconBtn, isDeleted && styles.iconBtnDisabled]}
-                      >
-                        <Ionicons name="trash" size={16} color={isDeleted ? "#94a3b8" : "#b00020"} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-            {filteredLedgerAdjustmentItems.length === 0 && <Text style={styles.meta}>No ledger adjustments match these filters.</Text>}
-          </View>
-        </View>
+              }}
+            />
+          )}
+        </>
       )}
 
       {Platform.OS === "ios" && (
@@ -1605,12 +1351,16 @@ const formatDateTime = (value?: string) => {
                 style={[styles.modalBtn, styles.modalBtnDanger]}
                 onPress={async () => {
                   if (confirm?.type === "order") {
-                    deleteOrder.mutate(confirm.id);
+                    const id = confirm.id;
+                    markDeleting(id);
+                    deleteOrder.mutate(id, { onSettled: () => unmarkDeleting(id) });
                     setConfirm(null);
                     return;
                   }
                   if (confirm?.type === "collection") {
-                    deleteCollection.mutate(confirm.id);
+                    const id = confirm.id;
+                    markDeleting(id);
+                    deleteCollection.mutate(id, { onSettled: () => unmarkDeleting(id) });
                     setConfirm(null);
                     return;
                   }
@@ -1711,7 +1461,6 @@ export function AddCustomersSection({
   const systemsQuery = useSystems();
   const deleteCustomer = useDeleteCustomer();
   const customers = customersQuery.data ?? [];
-  const orders = ordersQuery.data ?? [];
   const [confirmCustomerId, setConfirmCustomerId] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 

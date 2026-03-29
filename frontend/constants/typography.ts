@@ -1,5 +1,6 @@
 export const FontFamilies = {
   regular: "NunitoSans-Regular",
+  medium: "NunitoSans-SemiBold",
   semibold: "NunitoSans-SemiBold",
   bold: "NunitoSans-Bold",
   extrabold: "NunitoSans-ExtraBold",
