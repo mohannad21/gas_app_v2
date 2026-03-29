@@ -34,15 +34,6 @@ import DaySummaryBox from "@/components/reports/DaySummaryBox";
 
 type RevealShelfKey = "ledger" | "customers" | "company";
 
-const getExpenseIcon = (type?: string | null) => {
-  const key = String(type ?? "").toLowerCase();
-  if (key === "fuel") return "car-outline";
-  if (key === "food") return "fast-food-outline";
-  if (key === "car test") return "analytics-outline";
-  if (key === "car repair") return "construct-outline";
-  if (key === "car insurance") return "shield-checkmark-outline";
-  return "receipt-outline";
-};
 
 const formatMoney = (value: number) => Number(value || 0).toFixed(0);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
@@ -537,6 +528,11 @@ export default function ReportsScreen() {
     resetScrollIntent();
   }, [resetScrollIntent]);
 
+  const [openEventKeys, setOpenEventKeys] = useState<string[]>([]);
+  const toggleEventKey = useCallback((key: string) => {
+    setOpenEventKeys((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+  }, []);
+
   const latestCard = v2Rows[0];
   const latestInventory = latestCard?.inventory_end;
   const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
@@ -714,7 +710,20 @@ export default function ReportsScreen() {
               <Text style={styles.meta}>No activities on this day.</Text>
             ) : null
           }
-          renderItem={({ item }) => <SlimActivityRow event={item} formatMoney={formatMoney} />}
+          renderItem={({ item, index }) => {
+            const eventKey = String(item?.id ?? item?.source_id ?? `${item?.event_type ?? "ev"}:${item?.effective_at ?? index}`);
+            const isOpen = openEventKeys.includes(eventKey);
+            return (
+              <View key={eventKey}>
+                <Pressable onPress={() => toggleEventKey(eventKey)}>
+                  <SlimActivityRow event={item} formatMoney={formatMoney} />
+                </Pressable>
+                {isOpen ? (
+                  <V2Timeline events={[item]} formatMoney={formatMoney} formatCount={formatCount} />
+                ) : null}
+              </View>
+            );
+          }}
           contentContainerStyle={styles.activityListContent}
         />
       ) : (

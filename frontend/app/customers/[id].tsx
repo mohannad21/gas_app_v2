@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCollections } from "@/hooks/useCollections";
+import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
 import {
   CUSTOMER_DELETE_BLOCKED_MESSAGE,
   isCustomerDeleteBlockedError,
@@ -15,9 +15,15 @@ import {
   useCustomers,
   useDeleteCustomer,
 } from "@/hooks/useCustomers";
-import { useOrders } from "@/hooks/useOrders";
+import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
 import { CollectionEvent, CustomerAdjustment, Order } from "@/types/domain";
+import SlimActivityRow from "@/components/reports/SlimActivityRow";
+import {
+  collectionToEvent,
+  customerAdjustmentToEvent,
+  orderToEvent,
+} from "@/lib/activityAdapter";
 
 type ActivityFilter =
   | "all"
@@ -107,41 +113,6 @@ const toTimeValue = (value?: string | null) => {
   return Number.isNaN(ms) ? 0 : ms;
 };
 
-function ActivityDeltaBox({
-  label,
-  before,
-  after,
-  format,
-  accent,
-}: {
-  label: string;
-  before: number;
-  after: number;
-  format: (value: number) => string;
-  accent?: string;
-}) {
-  const delta = after - before;
-  const isNoChange = delta === 0;
-
-  return (
-    <View style={[styles.deltaBox, accent ? { borderColor: accent } : null]}>
-      <Text style={styles.deltaBoxLabel}>{label}</Text>
-      <View
-        style={[
-          styles.deltaBadge,
-          isNoChange ? styles.deltaBadgeNeutral : delta > 0 ? styles.deltaBadgePositive : styles.deltaBadgeNegative,
-        ]}
-      >
-        <Text style={styles.deltaBadgeText}>{formatSignedValue(delta, format)}</Text>
-      </View>
-      <View style={styles.deltaBoxRow}>
-        <Text style={styles.deltaBoxValue}>{format(before)}</Text>
-        <Text style={styles.deltaBoxArrow}>{"->"}</Text>
-        <Text style={styles.deltaBoxValue}>{format(after)}</Text>
-      </View>
-    </View>
-  );
-}
 
 function DetailBalanceBox({
   label,
@@ -335,7 +306,6 @@ export default function CustomerDetailsScreen() {
   const customerId = Array.isArray(id) ? id[0] : id;
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
   const [selectedSystemId, setSelectedSystemId] = useState("all");
-  const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections();
@@ -344,6 +314,8 @@ export default function CustomerDetailsScreen() {
   const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
+  const deleteOrder = useDeleteOrder();
+  const deleteCollection = useDeleteCollection();
   const focusRefetchers = useRef({
     orders: ordersQuery.refetch,
     collections: collectionsQuery.refetch,
@@ -381,6 +353,9 @@ export default function CustomerDetailsScreen() {
     [collectionsQuery.data, customerId]
   );
   const adjustments = useMemo(() => adjustmentsQuery.data ?? [], [adjustmentsQuery.data]);
+
+  const ordersById = useMemo(() => new Map(orders.map((o) => [o.id, o])), [orders]);
+  const collectionsById = useMemo(() => new Map(collections.map((c) => [c.id, c])), [collections]);
 
   useFocusEffect(
     useCallback(() => {
@@ -528,6 +503,20 @@ export default function CustomerDetailsScreen() {
           }
         },
       },
+    ]);
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    Alert.alert("Delete order?", "This will reverse the order and update related balances.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteOrder.mutate(orderId) },
+    ]);
+  };
+
+  const handleDeleteCollection = (collectionId: string) => {
+    Alert.alert("Delete collection?", "This will remove the collection and update related balances.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteCollection.mutate(collectionId) },
     ]);
   };
 
@@ -735,7 +724,6 @@ export default function CustomerDetailsScreen() {
             />
           ))}
         </View>
-        <Text style={styles.balanceNote}>Positive = Customer owes. Negative = Customer credit.</Text>
       </View>
 
       {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
@@ -747,83 +735,89 @@ export default function CustomerDetailsScreen() {
       {!activitiesLoading &&
         !activitiesError &&
         filteredActivities.map((activity) => {
-          const expanded = expandedActivityId === activity.id;
+          const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+          const customerName = customer.name;
+
+          if (activity.kind === "adjustment") {
+            const rawAdj = adjustments.find((a) => `adjustment-${a.id}` === activity.id);
+            return (
+              <SlimActivityRow
+                key={activity.id}
+                event={customerAdjustmentToEvent(
+                  rawAdj ?? {
+                    id: activity.id.replace("adjustment-", ""),
+                    customer_id: customerId,
+                    amount_money: 0,
+                    count_12kg: 0,
+                    count_48kg: 0,
+                    reason: activity.note ?? null,
+                    effective_at: activity.effectiveAt,
+                    created_at: activity.createdAt ?? activity.effectiveAt,
+                  },
+                  { customerName }
+                )}
+                formatMoney={fmtMoney}
+              />
+            );
+          }
+
+          if (activity.kind === "late_payment" || activity.kind === "return_empties" || activity.kind === "payout") {
+            const rawCol = collections.find((c) => `collection-${c.id}` === activity.id);
+            return (
+              <SlimActivityRow
+                key={activity.id}
+                event={rawCol
+                  ? collectionToEvent(rawCol, { customerName })
+                  : {
+                      cash_before: 0,
+                      cash_after: 0,
+                      event_type: activity.kind === "late_payment" ? "collection_money" : activity.kind === "payout" ? "collection_payout" : "collection_empty",
+                      id: activity.id,
+                      effective_at: activity.effectiveAt,
+                      created_at: activity.createdAt ?? activity.effectiveAt,
+                      context_line: activity.title,
+                      display_name: customerName,
+                      hero_text: activity.summary,
+                      note: activity.note ?? null,
+                      label: activity.title,
+                    }
+                }
+                formatMoney={fmtMoney}
+                onEdit={rawCol ? () => {
+                  /* collections edit not yet supported via dedicated screen */
+                } : undefined}
+                onDelete={rawCol ? () => handleDeleteCollection(rawCol.id) : undefined}
+              />
+            );
+          }
+
+          const rawOrder = activity.orderId ? ordersById.get(activity.orderId) : undefined;
           return (
-            <Pressable
+            <SlimActivityRow
               key={activity.id}
-              onPress={() => setExpandedActivityId(expanded ? null : activity.id)}
-              style={[styles.activityCard, expanded && styles.activityCardExpanded]}
-            >
-              <View style={styles.activityHeader}>
-                <View style={styles.activityTitleBlock}>
-                  <Text style={styles.activityTitle}>{activity.title}</Text>
-                  <Text style={styles.activityTimestamp}>{formatDeliveredAt(activity.effectiveAt)}</Text>
-                </View>
-                <Ionicons
-                  name={expanded ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color="#64748b"
-                />
-              </View>
-
-              <Text style={styles.activitySummary}>{activity.summary}</Text>
-
-              <View style={styles.activityTagRow}>
-                {activity.systemName ? (
-                  <View style={styles.activityTag}>
-                    <Text style={styles.activityTagText}>{activity.systemName}</Text>
-                  </View>
-                ) : null}
-                {activity.note ? (
-                  <View style={styles.activityTag}>
-                    <Text style={styles.activityTagText} numberOfLines={1}>
-                      {activity.note}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {expanded ? (
-                <View style={styles.activityExpanded}>
-                  <View style={styles.deltaGrid}>
-                    <ActivityDeltaBox
-                      label="Money"
-                      before={activity.moneyBefore}
-                      after={activity.moneyAfter}
-                      format={formatCurrency}
-                    />
-                    <ActivityDeltaBox
-                      label="12kg"
-                      before={activity.cyl12Before}
-                      after={activity.cyl12After}
-                      format={formatCylinder}
-                      accent={gasColor("12kg")}
-                    />
-                    <ActivityDeltaBox
-                      label="48kg"
-                      before={activity.cyl48Before}
-                      after={activity.cyl48After}
-                      format={formatCylinder}
-                      accent={gasColor("48kg")}
-                    />
-                  </View>
-
-                  {activity.orderId ? (
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: "/orders/[id]",
-                          params: { id: activity.orderId! },
-                        })
-                      }
-                      style={styles.activityLinkBtn}
-                    >
-                      <Text style={styles.linkText}>Open order</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-            </Pressable>
+              event={rawOrder
+                ? orderToEvent(rawOrder, {
+                    customerName,
+                    systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
+                  })
+                : {
+                    cash_before: 0,
+                    cash_after: 0,
+                    event_type: "order",
+                    id: activity.id,
+                    effective_at: activity.effectiveAt,
+                    created_at: activity.createdAt ?? activity.effectiveAt,
+                    context_line: "Order",
+                    display_name: customerName,
+                    hero_text: activity.summary,
+                    note: activity.note ?? null,
+                    label: activity.title,
+                  }
+              }
+              formatMoney={fmtMoney}
+              onEdit={activity.orderId ? () => router.push(`/orders/${activity.orderId}/edit`) : undefined}
+              onDelete={activity.orderId ? () => handleDeleteOrder(activity.orderId!) : undefined}
+            />
           );
         })}
     </ScrollView>

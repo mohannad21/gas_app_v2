@@ -267,6 +267,38 @@ export default function ActivityIcon({ type, color, size = 20 }: Props) {
   );
 }
 
+export type IoniconName = React.ComponentProps<typeof import("@expo/vector-icons").Ionicons>["name"];
+
+export function getActivityIcon(
+  eventType: string,
+  orderMode: string | null | undefined,
+  moneyDirection: string | null | undefined
+): IoniconName {
+  if (eventType === "order") {
+    if (orderMode === "replacement") return "swap-horizontal-outline";
+    if (orderMode === "sell_iron") return "arrow-up-circle-outline";
+    if (orderMode === "buy_iron") return "arrow-down-circle-outline";
+    return "swap-horizontal-outline";
+  }
+  if (eventType === "collection_money") return "cash-outline";
+  if (eventType === "collection_payout") return "cash-outline";
+  if (eventType === "collection_empty") return "refresh-outline";
+  if (eventType === "customer_adjust") return "build-outline";
+  if (eventType === "refill") return "reload-outline";
+  if (eventType === "company_buy_iron") return "download-outline";
+  if (eventType === "company_payment") {
+    if (moneyDirection === "in" || moneyDirection === "received") return "arrow-down-circle-outline";
+    return "arrow-up-circle-outline";
+  }
+  if (eventType === "company_adjustment") return "build-outline";
+  if (eventType === "expense") return "receipt-outline";
+  if (eventType === "bank_deposit") return "card-outline";
+  if (eventType === "cash_adjust") return "wallet-outline";
+  if (eventType === "adjust") return "cube-outline";
+  if (eventType === "init") return "flag-outline";
+  return "ellipse-outline";
+}
+
 export function iconTypeForEvent(eventType: string, orderMode?: string | null): ActivityIconType {
   if (eventType === "order") {
     if (orderMode === "buy_iron") return "customer_to_dist";
