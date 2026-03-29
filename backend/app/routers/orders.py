@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
@@ -272,13 +273,24 @@ def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dic
 
 
 @router.get("", response_model=list[OrderOut])
-def list_orders(session: Session = Depends(get_session)) -> list[OrderOut]:
-  rows = session.exec(
+def list_orders(
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
+  session: Session = Depends(get_session),
+) -> list[OrderOut]:
+  stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind == "order")
     .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-    .order_by(CustomerTransaction.happened_at.desc())
-  ).all()
+  )
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CustomerTransaction.happened_at < cursor_dt)
+  stmt = stmt.order_by(CustomerTransaction.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [_order_out(row) for row in rows]
 
 

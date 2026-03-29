@@ -185,6 +185,8 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
 @router.get("/adjustments", response_model=list[InventoryAdjustmentRow])
 def list_inventory_adjustments(
   date: Optional[str] = None,
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[InventoryAdjustmentRow]:
@@ -197,7 +199,14 @@ def list_inventory_adjustments(
     stmt = stmt.where(InventoryAdjustment.day == day)
   if not include_deleted:
     stmt = stmt.where(InventoryAdjustment.is_reversed == False)  # noqa: E712
-  rows = session.exec(stmt.order_by(InventoryAdjustment.happened_at.desc())).all()
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(InventoryAdjustment.happened_at < cursor_dt)
+  stmt = stmt.order_by(InventoryAdjustment.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [
     InventoryAdjustmentRow(
       id=row.id,
@@ -372,13 +381,22 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
 
 @router.get("/refills", response_model=list[InventoryRefillSummary])
 def list_refills(
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[InventoryRefillSummary]:
   stmt = select(CompanyTransaction).where(CompanyTransaction.kind == "refill")
   if not include_deleted:
     stmt = stmt.where(CompanyTransaction.is_reversed == False)  # noqa: E712
-  rows = session.exec(stmt.order_by(CompanyTransaction.happened_at.desc())).all()
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CompanyTransaction.happened_at < cursor_dt)
+  stmt = stmt.order_by(CompanyTransaction.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [
     InventoryRefillSummary(
       refill_id=row.id,

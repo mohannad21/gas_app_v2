@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.db import get_session
@@ -193,13 +193,24 @@ def create_company_payment(
 
 
 @router.get("/payments", response_model=list[CompanyPaymentOut])
-def list_company_payments(session: Session = Depends(get_session)) -> list[CompanyPaymentOut]:
-  rows = session.exec(
+def list_company_payments(
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
+  session: Session = Depends(get_session),
+) -> list[CompanyPaymentOut]:
+  stmt = (
     select(CompanyTransaction)
     .where(CompanyTransaction.kind == "payment")
     .where(CompanyTransaction.is_reversed == False)  # noqa: E712
-    .order_by(CompanyTransaction.happened_at.desc())
-  ).all()
+  )
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CompanyTransaction.happened_at < cursor_dt)
+  stmt = stmt.order_by(CompanyTransaction.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [
     CompanyPaymentOut(
       id=row.id,

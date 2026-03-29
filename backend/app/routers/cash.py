@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
@@ -19,6 +20,8 @@ def _transfer_direction(expense: Expense) -> str:
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
 def list_cash_adjustments(
   date: str | None = None,
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[CashAdjustmentRow]:
@@ -31,7 +34,14 @@ def list_cash_adjustments(
     stmt = stmt.where(CashAdjustment.day == day)
   if not include_deleted:
     stmt = stmt.where(CashAdjustment.is_reversed == False)  # noqa: E712
-  rows = session.exec(stmt.order_by(CashAdjustment.happened_at.desc())).all()
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CashAdjustment.happened_at < cursor_dt)
+  stmt = stmt.order_by(CashAdjustment.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [
     CashAdjustmentRow(
       id=row.id,
@@ -179,6 +189,8 @@ def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_sessio
 @router.get("/bank_deposits", response_model=list[BankDepositOut])
 def list_bank_deposits(
   date: str | None = None,
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
   session: Session = Depends(get_session),
 ) -> list[BankDepositOut]:
   stmt = (
@@ -192,7 +204,14 @@ def list_bank_deposits(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(Expense.day == day)
-  rows = session.exec(stmt.order_by(Expense.happened_at.desc())).all()
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(Expense.happened_at < cursor_dt)
+  stmt = stmt.order_by(Expense.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   return [
     BankDepositOut(
       id=row.id,

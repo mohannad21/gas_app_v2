@@ -2217,8 +2217,7 @@ def list_daily_reports_v2(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid from date format") from exc
   else:
-    min_day = session.exec(select(func.min(LedgerEntry.day))).first()
-    start_date = min_day if min_day else end_date
+    start_date = end_date - timedelta(days=14)
 
   if end_date < start_date:
     return []

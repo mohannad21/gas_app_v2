@@ -391,6 +391,14 @@ class ExpenseCreateLegacy(SQLModel):
   happened_at: Optional[datetime] = None
 
 
+class ExpenseUpdate(SQLModel):
+  date: Optional[str] = None
+  expense_type: Optional[str] = None
+  amount: Optional[int] = None
+  note: Optional[str] = None
+  happened_at: Optional[datetime] = None
+
+
 class ExpenseOutLegacy(SQLModel):
   id: str
   date: str

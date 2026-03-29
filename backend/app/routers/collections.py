@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.db import get_session
@@ -185,13 +186,27 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
 
 
 @router.get("", response_model=list[CollectionEvent])
-def list_collections(session: Session = Depends(get_session)) -> list[CollectionEvent]:
-  rows = session.exec(
+def list_collections(
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
+  customer_id: Optional[str] = Query(default=None),
+  session: Session = Depends(get_session),
+) -> list[CollectionEvent]:
+  stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
     .where(CustomerTransaction.is_reversed == False)  # noqa: E712
-    .order_by(CustomerTransaction.happened_at.desc())
-  ).all()
+  )
+  if customer_id:
+    stmt = stmt.where(CustomerTransaction.customer_id == customer_id)
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CustomerTransaction.happened_at < cursor_dt)
+  stmt = stmt.order_by(CustomerTransaction.happened_at.desc()).limit(limit)
+  rows = session.exec(stmt).all()
   groups: dict[str, list[CustomerTransaction]] = {}
   for row in rows:
     key = row.group_id or row.id
