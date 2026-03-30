@@ -196,13 +196,15 @@ def create_company_payment(
 def list_company_payments(
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[CompanyPaymentOut]:
   stmt = (
     select(CompanyTransaction)
     .where(CompanyTransaction.kind == "payment")
-    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
   )
+  if not include_deleted:
+    stmt = stmt.where(CompanyTransaction.is_reversed == False)  # noqa: E712
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -217,6 +219,7 @@ def list_company_payments(
       happened_at=row.happened_at,
       amount=row.paid,
       note=row.note,
+      is_deleted=row.is_reversed,
     )
     for row in rows
   ]

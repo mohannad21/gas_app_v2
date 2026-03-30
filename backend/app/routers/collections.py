@@ -182,6 +182,7 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
     created_at=base.created_at,
     effective_at=base.happened_at,
     note=base.note,
+    is_deleted=txns[0].is_reversed,
   )
 
 
@@ -190,13 +191,15 @@ def list_collections(
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
   customer_id: Optional[str] = Query(default=None),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[CollectionEvent]:
   stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
   )
+  if not include_deleted:
+    stmt = stmt.where(CustomerTransaction.is_reversed == False)  # noqa: E712
   if customer_id:
     stmt = stmt.where(CustomerTransaction.customer_id == customer_id)
   if before:

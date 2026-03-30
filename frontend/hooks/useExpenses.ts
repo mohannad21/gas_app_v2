@@ -4,12 +4,12 @@ import { Expense, ExpenseCreateInput } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showToast } from "@/lib/toast";
 
-export function useExpenses(date?: string, options?: { enabled?: boolean }) {
+export function useExpenses(date?: string, options?: { enabled?: boolean; includeDeleted?: boolean }) {
   const enabled = options?.enabled ?? true;
   return useQuery<Expense[]>({
-    queryKey: ["expenses", date ?? "all"],
+    queryKey: ["expenses", date ?? "all", options?.includeDeleted ?? false],
     enabled,
-    queryFn: () => listExpenses(date),
+    queryFn: () => listExpenses(date, options?.includeDeleted),
   });
 }
 

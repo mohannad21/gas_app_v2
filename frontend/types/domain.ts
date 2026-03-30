@@ -135,6 +135,7 @@ export const CompanyPaymentSchema = z.object({
   happened_at: z.string(),
   amount: z.number(),
   note: z.string().nullish(),
+  is_deleted: z.boolean().optional(),
 });
 export type CompanyPayment = z.infer<typeof CompanyPaymentSchema>;
 export type CompanyPaymentCreateInput = {
@@ -355,6 +356,7 @@ export const OrderSchema = z
     cyl_balance_before: z.record(z.string(), z.number()).optional().nullish(),
     cyl_balance_after: z.record(z.string(), z.number()).optional().nullish(),
     note: z.string().nullish(),
+    is_deleted: z.boolean().optional(),
   })
   .passthrough();
 export type Order = z.infer<typeof OrderSchema>;
@@ -414,6 +416,7 @@ export const CollectionEventSchema = z
     created_at: z.string(),
     effective_at: z.string().nullish(),
     note: z.string().nullish(),
+    is_deleted: z.boolean().optional(),
   })
   .passthrough();
 export type CollectionEvent = z.infer<typeof CollectionEventSchema>;
@@ -849,6 +852,7 @@ export const ExpenseSchema = z
     note: z.string().nullish(),
     created_at: z.string().optional(),
     created_by: z.string().nullish(),
+    is_deleted: z.boolean().optional(),
   })
   .passthrough();
 export type Expense = z.infer<typeof ExpenseSchema>;
@@ -869,6 +873,7 @@ export const BankDepositSchema = z.object({
   amount: z.number(),
   direction: z.enum(["wallet_to_bank", "bank_to_wallet"]),
   note: z.string().nullish(),
+  is_deleted: z.boolean().optional(),
 });
 export type BankDeposit = z.infer<typeof BankDepositSchema>;
 

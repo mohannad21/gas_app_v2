@@ -4,12 +4,12 @@ import { BankDeposit } from "@/types/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showToast } from "@/lib/toast";
 
-export function useBankDeposits(date?: string, options?: { enabled?: boolean }) {
+export function useBankDeposits(date?: string, options?: { enabled?: boolean; includeDeleted?: boolean }) {
   const enabled = options?.enabled ?? true;
   return useQuery<BankDeposit[]>({
-    queryKey: ["bank_deposits", date ?? "all"],
+    queryKey: ["bank_deposits", date ?? "all", options?.includeDeleted ?? false],
     enabled,
-    queryFn: () => listBankDeposits(date),
+    queryFn: () => listBankDeposits(date, options?.includeDeleted),
   });
 }
 

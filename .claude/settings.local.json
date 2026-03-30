@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/Mohannad/gas_app_v2/frontend -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.expo/*)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|HACK\\\\|XXX\\\\|DEPRECATED\" /c/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
+      "Bash(grep -rn \"wallet.*tab\\\\|ledger.*tab\\\\|TabView\\\\|tab.*wallet\\\\|tab.*ledger\\\\|splitLedger\\\\|walletTab\\\\|ledgerTab\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)"
+    ]
+  }
+}

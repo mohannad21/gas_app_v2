@@ -308,9 +308,9 @@ export default function CustomerDetailsScreen() {
   const [selectedSystemId, setSelectedSystemId] = useState("all");
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
-  const collectionsQuery = useCollections();
+  const collectionsQuery = useCollections(true);
   const systemsQuery = useSystems(id, { enabled: !!id });
-  const ordersQuery = useOrders();
+  const ordersQuery = useOrders(true);
   const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
@@ -803,7 +803,7 @@ export default function CustomerDetailsScreen() {
                 onEdit={rawCol ? () => {
                   /* collections edit not yet supported via dedicated screen */
                 } : undefined}
-                isDeleted={rawCol ? deletingIds.has(rawCol.id) : false}
+                isDeleted={rawCol ? (rawCol.is_deleted || deletingIds.has(rawCol.id)) : false}
                 onDelete={rawCol ? () => handleDeleteCollection(rawCol.id) : undefined}
               />
             );
@@ -813,7 +813,7 @@ export default function CustomerDetailsScreen() {
           return (
             <SlimActivityRow
               key={activity.id}
-              isDeleted={activity.orderId ? deletingIds.has(activity.orderId) : false}
+              isDeleted={rawOrder ? (rawOrder.is_deleted || deletingIds.has(rawOrder.id)) : (activity.orderId ? deletingIds.has(activity.orderId) : false)}
               event={rawOrder
                 ? orderToEvent(rawOrder, {
                     customerName,

@@ -257,6 +257,7 @@ class OrderOut(SQLModel):
   money_balance_after: Optional[int] = None
   cyl_balance_before: Optional[dict[str, int]] = None
   cyl_balance_after: Optional[dict[str, int]] = None
+  is_deleted: bool = False
 
 
 class CollectionCreate(SQLModel):
@@ -325,6 +326,7 @@ class CollectionEvent(SQLModel):
   created_at: datetime
   effective_at: datetime
   note: Optional[str] = None
+  is_deleted: bool = False
 
 
 class PriceCreate(SQLModel):
@@ -407,6 +409,7 @@ class ExpenseOutLegacy(SQLModel):
   note: Optional[str] = None
   created_at: Optional[datetime] = None
   created_by: Optional[str] = None
+  is_deleted: bool = False
 
 
 class CompanyCylinderSettleCreate(SQLModel):
@@ -448,6 +451,7 @@ class CompanyPaymentOut(SQLModel):
   happened_at: datetime
   amount: int
   note: Optional[str] = None
+  is_deleted: bool = False
 
 
 class CompanyBuyIronCreate(SQLModel):
@@ -530,6 +534,7 @@ class BankDepositOut(SQLModel):
   amount: int
   direction: TransferDirection
   note: Optional[str] = None
+  is_deleted: bool = False
 
 
 class CashAdjustCreate(SQLModel):

@@ -289,8 +289,8 @@ export async function createCompanyPayment(payload: CompanyPaymentCreateInput): 
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };
 }
 
-export async function listCompanyPayments(): Promise<CompanyPayment[]> {
-  const { data } = await api.get("/company/payments", { params: { limit: 50 } });
+export async function listCompanyPayments(includeDeleted?: boolean): Promise<CompanyPayment[]> {
+  const { data } = await api.get("/company/payments", { params: { limit: 50, include_deleted: includeDeleted ?? false } });
   return parseArray(CompanyPaymentSchema, data).map((row) => ({
     ...row,
     amount: fromMinorUnits(row.amount),
@@ -454,8 +454,8 @@ export async function deleteCashAdjustment(deltaId: string): Promise<void> {
 }
 
 // Orders
-export async function listOrders(): Promise<Order[]> {
-  const { data } = await api.get("/orders", { params: { limit: 50 } });
+export async function listOrders(includeDeleted?: boolean): Promise<Order[]> {
+  const { data } = await api.get("/orders", { params: { limit: 50, include_deleted: includeDeleted ?? false } });
   return parseArray(OrderSchema, data).map((o) => ({
     ...o,
     price_total: fromMinorUnits(o.price_total),
@@ -544,8 +544,8 @@ export async function createCollection(payload: CollectionCreateInput): Promise<
   };
 }
 
-export async function listCollections(): Promise<CollectionEvent[]> {
-  const { data } = await api.get("/collections", { params: { limit: 50 } });
+export async function listCollections(includeDeleted?: boolean): Promise<CollectionEvent[]> {
+  const { data } = await api.get("/collections", { params: { limit: 50, include_deleted: includeDeleted ?? false } });
   return parseArray(CollectionEventSchema, data).map((ev) => ({
     ...ev,
     amount_money: ev.amount_money != null ? fromMinorUnits(ev.amount_money) : ev.amount_money,
@@ -910,8 +910,8 @@ export async function savePriceSetting(payload: {
 }
 
 // Expenses
-export async function listExpenses(date?: string): Promise<Expense[]> {
-  const { data } = await api.get("/expenses", { params: { date, limit: 50 } });
+export async function listExpenses(date?: string, includeDeleted?: boolean): Promise<Expense[]> {
+  const { data } = await api.get("/expenses", { params: { date, limit: 50, include_deleted: includeDeleted ?? false } });
   return parseArray(ExpenseSchema, data).map((e) => ({
     ...e,
     amount: fromMinorUnits(e.amount),
@@ -934,8 +934,8 @@ export async function deleteExpense(expenseId: string): Promise<void> {
 }
 
 // Bank deposits
-export async function listBankDeposits(date?: string): Promise<BankDeposit[]> {
-  const { data } = await api.get("/cash/bank_deposits", { params: { date, limit: 50 } });
+export async function listBankDeposits(date?: string, includeDeleted?: boolean): Promise<BankDeposit[]> {
+  const { data } = await api.get("/cash/bank_deposits", { params: { date, limit: 50, include_deleted: includeDeleted ?? false } });
   return parseArray(BankDepositSchema, data).map((d) => ({
     ...d,
     amount: fromMinorUnits(d.amount),

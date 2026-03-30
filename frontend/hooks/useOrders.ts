@@ -16,11 +16,11 @@ function invalidateCustomerBalance(
   queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
-export function useOrders() {
+export function useOrders(includeDeleted?: boolean) {
   return useQuery<Order[]>({
-    queryKey: ["orders"],
+    queryKey: ["orders", includeDeleted ?? false],
     queryFn: async () => {
-      const data = await listOrders();
+      const data = await listOrders(includeDeleted);
       const deduped = Array.from(new Map(data.map((o) => [o.id, o])).values());
       return deduped.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()

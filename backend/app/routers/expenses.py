@@ -36,6 +36,7 @@ def list_expenses(
   date: str | None = Query(default=None),
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[ExpenseOutLegacy]:
   stmt = select(Expense).where(Expense.kind == "expense")
@@ -45,7 +46,8 @@ def list_expenses(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(Expense.day == day)
-  stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
+  if not include_deleted:
+    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -68,6 +70,7 @@ def list_expenses(
       note=row.note,
       created_at=row.created_at,
       created_by=None,
+      is_deleted=row.is_reversed,
     )
     for row in rows
   ]

@@ -189,8 +189,8 @@ export default function AddChooserScreen() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
   const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-  const ordersQuery = useOrders();
-  const collectionsQuery = useCollections();
+  const ordersQuery = useOrders(true);
+  const collectionsQuery = useCollections(true);
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
@@ -230,9 +230,9 @@ const formatDateTime = (value?: string) => {
   const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, true);
   const allCashAdjustmentsQuery = useCashAdjustments(undefined, true);
   const companyRefillsQuery = useInventoryRefills(true);
-  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities });
-  const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
-  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses });
+  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities, includeDeleted: true });
+  const expensesQuery = useExpenses(undefined, { enabled: isExpenses, includeDeleted: true });
+  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses, includeDeleted: true });
   const deleteBankDeposit = useDeleteBankDeposit();
 
 
@@ -999,13 +999,13 @@ const formatDateTime = (value?: string) => {
               if (item.kind === "collection") {
                 const collection = item.data;
                 return (
-                  <SlimActivityRow
-                    event={collectionToEvent(collection, { customerName: item.customerName })}
-                    formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(collection.id)}
-                    onEdit={() => openCollectionEdit(collection)}
-                    onDelete={() => confirmDeleteCollection(collection.id)}
-                  />
+                    <SlimActivityRow
+                      event={collectionToEvent(collection, { customerName: item.customerName })}
+                      formatMoney={fmtMoney}
+                      isDeleted={collection.is_deleted || deletingIds.has(collection.id)}
+                      onEdit={() => openCollectionEdit(collection)}
+                      onDelete={() => confirmDeleteCollection(collection.id)}
+                    />
                 );
               }
               const order = item.data;
@@ -1015,7 +1015,7 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={orderToEvent(order, { customerName: item.customerName, systemName })}
                     formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(order.id)}
+                    isDeleted={order.is_deleted || deletingIds.has(order.id)}
                     onEdit={() => router.push(`/orders/${order.id}/edit`)}
                     onDelete={() => confirmDeleteOrder(order.id)}
                   />
@@ -1050,7 +1050,7 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={bankDepositToEvent(item.data)}
                       formatMoney={fmtMoney}
-                      isDeleted={deletingIds.has(item.data.id)}
+                      isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
                   );
@@ -1059,7 +1059,7 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={expenseToEvent(item.data)}
                     formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(item.data.id)}
+                    isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                     onEdit={() =>
                       router.push({
                         pathname: "/expenses/new",

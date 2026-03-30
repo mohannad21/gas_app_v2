@@ -157,6 +157,7 @@ def _order_out(txn: CustomerTransaction) -> OrderOut:
     money_balance_after=None,
     cyl_balance_before=None,
     cyl_balance_after=None,
+    is_deleted=txn.is_reversed,
   )
 
 
@@ -276,13 +277,15 @@ def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dic
 def list_orders(
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[OrderOut]:
   stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
   )
+  if not include_deleted:
+    stmt = stmt.where(CustomerTransaction.is_reversed == False)  # noqa: E712
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
