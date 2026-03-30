@@ -14,21 +14,31 @@
 - **Line reduction:** 2,252 → 2,111 lines (141 lines removed)
 - **State hooks extracted:** 17+ hooks consolidated into `useRefillFormState`
 - **New hook:** `frontend/hooks/useRefillFormState.ts` (236 lines)
+- **Commit:** `68a834f` - refactor(frontend): extract AddRefillModal state management into useRefillFormState hook
 
-**Extracted state includes:**
-- Date/time management (date, time, calendarOpen, timeOpen)
-- Cylinder amounts (buy12, ret12, buy48, ret48, touched flags)
-- Money and pricing (paidNow, paidTouched, price inputs, iron prices)
-- Form initialization and reset logic
-- Mode-aware state initialization (refill/buy/return modes)
+### 2. orders/new.tsx State Management Extraction ✅
+
+**File:** `frontend/app/orders/new.tsx`
+- **Line reduction:** 3,386 → 3,379 lines (7 lines removed from component)
+- **State hooks extracted:** 24 useState declarations into 4 focused hooks
+- **New hooks created:**
+  - `frontend/hooks/useOrderDateTimeState.ts` (69 lines) — delivery/collection date+time (8 states + 1 effect)
+  - `frontend/hooks/useInitInventoryModal.ts` (42 lines) — init modal state (4 states)
+  - `frontend/hooks/useOrderPriceOverride.ts` (34 lines) — price override flags (6 states)
+  - `frontend/hooks/useOrderKeyboardLayout.ts` (44 lines) — keyboard/layout tracking (6 states + keyboard listener effect)
+
+**Extraction strategy:**
+- Simple state-only hooks with no complex external dependencies
+- Component retains effects with interdependent logic (action mode changes, customer selection)
+- Effects with single-level dependencies moved into hooks (keyboard listener, datetime sync)
 
 **Benefits realized:**
-- AddRefillModal state logic centralized and reusable
-- Component props cleaner (now accepts form state via single hook call)
-- State management testable independently
-- Reduced complexity in main component
+- Each hook self-contained and independently testable
+- Reduced component visual complexity (24 → 4 hook calls)
+- Reusable state patterns across forms
+- Consistent with Phase 3 pattern from useRefillFormState
 
-**Commit:** `68a834f` - refactor(frontend): extract AddRefillModal state management into useRefillFormState hook
+**Commit:** `035d1a4` - refactor(frontend): extract orders/new.tsx state management into 4 focused hooks
 
 ---
 
@@ -36,10 +46,10 @@
 
 ### Phase 3 Remaining Components
 
-1. **orders/new.tsx** (3,386 lines)
-   - Estimate: 20+ useState hooks
-   - Target: Extract order form state management into `useOrderFormState` hook
-   - Reduction goal: ~300 lines
+1. **reports/index.tsx** (1,806 lines)
+   - Estimate: 8-10 useState hooks
+   - Target: Extract report filtering/state management into `useReportFilters` hook
+   - Reduction goal: ~200 lines
 
 2. **reports/index.tsx** (1,806 lines)
    - Estimate: 8-10 useState hooks
@@ -77,10 +87,13 @@ This approach:
 
 ## Metrics (Phase 3 So Far)
 
-| Component | Before | After | Reduction | Hooks Extracted |
-|-----------|--------|-------|-----------|-----------------|
-| AddRefillModal | 2,252 | 2,111 | 141 | 17+ |
-| **TOTAL** | **2,252** | **2,111** | **141 (6.3%)** | **17+** |
+| Component | Before | After | Reduction | Hooks Created |
+|-----------|--------|-------|-----------|---------------|
+| AddRefillModal | 2,252 | 2,111 | 141 | 1 hook |
+| orders/new.tsx | 3,386 | 3,379 | 7 | 4 hooks |
+| **TOTAL** | **5,638** | **5,490** | **148 (2.6%)** | **5 hooks** |
+
+**Note:** Component line reduction is modest due to multi-line destructuring of hook return values. Real benefit is in code organization, reusability, and independent testability of state logic (189 lines of new hooks created).
 
 ---
 
