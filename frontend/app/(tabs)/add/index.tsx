@@ -48,6 +48,10 @@ import {
 import { InventoryActivityItem } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
+import { useActivityFilters } from "@/hooks/useActivityFilters";
+import { useCollectionEdit } from "@/hooks/useCollectionEdit";
+import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
+import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeLocale, toDateKey } from "@/lib/date";
 import {
@@ -174,21 +178,30 @@ const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
 
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
-  const [mode, setMode] = useState<AddMode>("customer_activities");
+  // Extract activity filters state into custom hook
+  const {
+    mode,
+    setMode,
+    customerActivityFilter,
+    setCustomerActivityFilter,
+    companyActivityFilter,
+    setCompanyActivityFilter,
+    expensePrimaryFilter,
+    setExpensePrimaryFilter,
+    expenseCategoryFilter,
+    setExpenseCategoryFilter,
+    ledgerActivityFilter,
+    setLedgerActivityFilter,
+  } = useActivityFilters();
+
   const [customerSearch, setCustomerSearch] = useState("");
-  const [customerActivityFilter, setCustomerActivityFilter] = useState<CustomerActivityFilter>("all");
-  const [companyActivityFilter, setCompanyActivityFilter] = useState<CompanyActivityFilter>("all");
-  const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
-  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
-  const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
-  const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
-  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+
+  // Extract delete confirm state into custom hook
+  const { confirm, setConfirm, deletingIds, setDeletingIds, markDeleting, unmarkDeleting } = useDeleteConfirm();
   const ordersQuery = useOrders(true);
   const collectionsQuery = useCollections(true);
   const updateCollection = useUpdateCollection();
@@ -202,13 +215,22 @@ export default function AddChooserScreen() {
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
   const { companySummary, companyBalancesQuery } = useBalancesSummary();
-  const [priceModalOpen, setPriceModalOpen] = useState(false);
-  const [collectionEditOpen, setCollectionEditOpen] = useState(false);
-  const [collectionEditTarget, setCollectionEditTarget] = useState<any | null>(null);
-  const [collectionAmount, setCollectionAmount] = useState("");
-  const [collectionQty12, setCollectionQty12] = useState("");
-  const [collectionQty48, setCollectionQty48] = useState("");
-  const [collectionNote, setCollectionNote] = useState("");
+  // Extract collection edit state into custom hook
+  const {
+    collectionEditOpen,
+    setCollectionEditOpen,
+    collectionEditTarget,
+    setCollectionEditTarget,
+    collectionAmount,
+    setCollectionAmount,
+    collectionQty12,
+    setCollectionQty12,
+    collectionQty48,
+    setCollectionQty48,
+    collectionNote,
+    setCollectionNote,
+    resetCollectionForm,
+  } = useCollectionEdit();
   const accessoryId = Platform.OS === "ios" ? "addAccessory" : undefined;
   const deleteRefill = useDeleteRefill();
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
@@ -471,95 +493,22 @@ const formatDateTime = (value?: string) => {
   );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
-  const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
-  const [lastSavedPrices, setLastSavedPrices] = useState<PriceInputs>(() => createDefaultPriceInputs());
-  const dirtyPriceCombosRef = useRef<Set<string>>(new Set());
-  const [savingPrices, setSavingPrices] = useState(false);
-  const [priceSaveStatus, setPriceSaveStatus] = useState<{
-    tone: PriceSaveStatusTone;
-    message: string;
-  } | null>(null);
 
-  useEffect(() => {
-    if (!priceModalOpen || !priceSettingsQuery.data) {
-      return;
-    }
-    const latestByGas = priceSettingsQuery.data.reduce<Record<GasType, PriceSetting>>(
-      (acc, entry) => {
-        const existing = acc[entry.gas_type];
-        if (
-          !existing ||
-          new Date(entry.effective_from).getTime() > new Date(existing.effective_from).getTime()
-        ) {
-          acc[entry.gas_type] = entry;
-        }
-        return acc;
-      },
-      {} as Record<GasType, PriceSetting>
-    );
-    setLastSavedPrices((prev) => {
-      const nextSaved = createDefaultPriceInputs();
-      gasTypes.forEach((gas) => {
-        const combo = latestByGas[gas];
-        if (combo) {
-          nextSaved[gas] = {
-            selling: combo.selling_price.toString(),
-            buying: combo.buying_price?.toString() ?? "",
-            selling_iron: combo.selling_iron_price?.toString() ?? "",
-            buying_iron: combo.buying_iron_price?.toString() ?? "",
-          };
-        } else {
-          nextSaved[gas] = prev[gas] ?? {
-            selling: "",
-            buying: "",
-            selling_iron: "",
-            buying_iron: "",
-          };
-        }
-      });
-      return nextSaved;
-    });
-    setPriceInputs((prev) => {
-      const dirtyCombos = dirtyPriceCombosRef.current;
-      const next = createDefaultPriceInputs();
-      gasTypes.forEach((gas) => {
-        const combo = latestByGas[gas];
-        const comboKey = gas;
-        const previousValue = prev[gas] ?? {
-          selling: "",
-          buying: "",
-          selling_iron: "",
-          buying_iron: "",
-        };
-        if (dirtyCombos.has(comboKey)) {
-          next[gas] = { ...previousValue };
-        } else if (combo) {
-          next[gas] = {
-            selling: combo.selling_price.toString(),
-            buying: combo.buying_price?.toString() ?? "",
-            selling_iron: combo.selling_iron_price?.toString() ?? "",
-            buying_iron: combo.buying_iron_price?.toString() ?? "",
-          };
-        } else {
-          next[gas] = { ...previousValue };
-        }
-      });
-      return next;
-    });
-  }, [priceModalOpen, priceSettingsQuery.data]);
+  // Extract price modal state into custom hook
+  const {
+    priceModalOpen,
+    setPriceModalOpen,
+    priceInputs,
+    setPriceInputs,
+    lastSavedPrices,
+    setLastSavedPrices,
+    savingPrices,
+    setSavingPrices,
+    priceSaveStatus,
+    setPriceSaveStatus,
+    dirtyPriceCombosRef,
+  } = usePriceModal(priceSettingsQuery.data);
 
-  useEffect(() => {
-    if (!priceModalOpen) {
-      dirtyPriceCombosRef.current.clear();
-      setPriceSaveStatus(null);
-    }
-  }, [priceModalOpen]);
-
-  useEffect(() => {
-    if (expensePrimaryFilter !== "expense" && expenseCategoryFilter !== "all_categories") {
-      setExpenseCategoryFilter("all_categories");
-    }
-  }, [expenseCategoryFilter, expensePrimaryFilter]);
 
   useEffect(() => {
     const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
