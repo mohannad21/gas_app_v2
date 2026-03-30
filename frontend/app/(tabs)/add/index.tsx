@@ -5,6 +5,8 @@ import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Mo
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
+import CollectionEditModal from "@/components/add/CollectionEditModal";
+import ActivityListSection from "@/components/add/ActivityListSection";
 import {
   CustomerListSubFilter,
   CustomerListTopFilter,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/activityAdapter";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
 import { useCompanyPayments } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import {
@@ -806,111 +809,22 @@ const formatDateTime = (value?: string) => {
   };
   const canSavePrices = dirtyPriceCombosRef.current.size > 0;
 
-  const handleRemoveRefill = (refillId: string) => {
-    Alert.alert("Remove refill?", "This will delete the refill entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(refillId);
-          try {
-            await deleteRefill.mutateAsync(refillId);
-          } catch (error) {
-            console.error("[add] delete refill failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(refillId);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteInventoryAdjustment = (entry: InventoryAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the adjustment entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteInventoryAdjust.mutateAsync(entry.id);
-          } catch (error) {
-            console.error("[add] delete inventory adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteCashAdjustment = (entry: CashAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the wallet adjustment.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteCashAdjust.mutateAsync(entry.id);
-          } catch (error) {
-            console.error("[add] delete cash adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteExpense = (entry: Expense) => {
-    Alert.alert("Remove expense?", "This will delete the expense entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
-          } catch (error) {
-            console.error("[add] delete expense failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteBankTransfer = (entry: BankDeposit) => {
-    const date = (entry.happened_at ?? "").slice(0, 10) || todayDate;
-    Alert.alert("Remove transfer?", "This will delete the wallet/bank transfer entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteBankDeposit.mutateAsync({ id: entry.id, date });
-          } catch (error) {
-            console.error("[add] delete bank transfer failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
+  const {
+    handleRemoveRefill,
+    handleDeleteInventoryAdjustment,
+    handleDeleteCashAdjustment,
+    handleDeleteExpense,
+    handleDeleteBankTransfer,
+  } = useAddEntryDeleteHandlers({
+    deleteRefill,
+    deleteInventoryAdjust,
+    deleteCashAdjust,
+    deleteExpense,
+    deleteBankDeposit,
+    markDeleting,
+    unmarkDeleting,
+    todayDate,
+  });
 
   const handleRetryCustomerActivities = () => {
     ordersQuery.refetch();
@@ -1258,70 +1172,20 @@ const formatDateTime = (value?: string) => {
         </InputAccessoryView>
       )}
 
-      <Modal
-        transparent
-        visible={collectionEditOpen}
-        animationType="fade"
-        onRequestClose={() => setCollectionEditOpen(false)}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit collection</Text>
-            {collectionEditTarget?.action_type !== "return" ? (
-              <>
-                <Text style={styles.modalLabel}>Amount</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionAmount}
-                  onChangeText={setCollectionAmount}
-                  placeholder="0"
-                />
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalLabel}>12kg</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionQty12}
-                  onChangeText={setCollectionQty12}
-                  placeholder="0"
-                />
-                <Text style={styles.modalLabel}>48kg</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionQty48}
-                  onChangeText={setCollectionQty48}
-                  placeholder="0"
-                />
-              </>
-            )}
-            <Text style={styles.modalLabel}>Note</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={collectionNote}
-              onChangeText={setCollectionNote}
-              placeholder="Optional note"
-            />
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setCollectionEditOpen(false)}>
-                <Text style={styles.modalBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={handleSaveCollectionEdit}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <CollectionEditModal
+        isOpen={collectionEditOpen}
+        target={collectionEditTarget}
+        amount={collectionAmount}
+        qty12={collectionQty12}
+        qty48={collectionQty48}
+        note={collectionNote}
+        onAmountChange={setCollectionAmount}
+        onQty12Change={setCollectionQty12}
+        onQty48Change={setCollectionQty48}
+        onNoteChange={setCollectionNote}
+        onClose={() => setCollectionEditOpen(false)}
+        onSave={handleSaveCollectionEdit}
+      />
 
       {/* Confirm modal */}
       <Modal transparent visible={!!confirm} animationType="fade" onRequestClose={() => setConfirm(null)}>
