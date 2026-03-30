@@ -25,6 +25,9 @@ import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection"
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
+import { useExpenseModal } from "@/hooks/useExpenseModal";
+import { useDaySelection } from "@/hooks/useDaySelection";
+import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
@@ -247,25 +250,36 @@ const ReportDayCard = memo(function ReportDayCard({
 
 export default function ReportsScreen() {
   // Expense modal state
-  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
-  const [expenseDate, setExpenseDate] = useState<string | null>(null);
-  const [expenseType, setExpenseType] = useState("fuel");
-  const [customExpenseType, setCustomExpenseType] = useState("");
-  const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseNote, setExpenseNote] = useState("");
-  const [useCustomType, setUseCustomType] = useState(false);
+  // Extract expense modal state into custom hook
+  const {
+    expenseModalOpen,
+    setExpenseModalOpen,
+    expenseDate,
+    setExpenseDate,
+    expenseType,
+    setExpenseType,
+    customExpenseType,
+    setCustomExpenseType,
+    expenseAmount,
+    setExpenseAmount,
+    expenseNote,
+    setExpenseNote,
+    useCustomType,
+    setUseCustomType,
+    allowExpenseInput,
+    setAllowExpenseInput,
+    resetExpenseForm,
+  } = useExpenseModal();
 
   // Sync tooltip
   const [syncInfoDate, setSyncInfoDate] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  });
+
+  // Extract day selection state into custom hook
+  const { selectedDate, setSelectedDate, openEventKeys, setOpenEventKeys } = useDaySelection();
 
   // Route handling
   const params = useLocalSearchParams<{ mode?: string; addExpense?: string; expand?: string; date?: string }>();
   const [routeHandled, setRouteHandled] = useState(false);
-  const [allowExpenseInput, setAllowExpenseInput] = useState(false);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -280,21 +294,24 @@ export default function ReportsScreen() {
   } = useDailyReportScreen(30, selectedDate);
   const { balanceSummary, companySummary, companyBalancesQuery } = useBalancesSummary();
 
-  const [revealVisible, setRevealVisible] = useState(false);
-  const [actionsVisible, setActionsVisible] = useState(false);
-  const [activeShelf, setActiveShelf] = useState<RevealShelfKey | null>(null);
-  const [revealHeight, setRevealHeight] = useState(0);
-  const revealAnim = useRef(new Animated.Value(0)).current;
-  const actionsAnim = useRef(new Animated.Value(0)).current;
-  const spacerAnim = useRef(new Animated.Value(0)).current;
-  const shelfAnim = useRef(new Animated.Value(1)).current;
-  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollTracker = useRef<{ lastY: number; lastTime: number; direction: "up" | "down" | null; travel: number }>({
-    lastY: 0,
-    lastTime: 0,
-    direction: null,
-    travel: 0,
-  });
+  // Extract reveal shelf state and animations into custom hook
+  const {
+    revealVisible,
+    setRevealVisible,
+    actionsVisible,
+    setActionsVisible,
+    activeShelf,
+    setActiveShelf,
+    revealHeight,
+    setRevealHeight,
+    revealAnim,
+    actionsAnim,
+    spacerAnim,
+    shelfAnim,
+    revealTimerRef,
+    scrollTracker,
+    animateShelfIn,
+  } = useRevealShelf();
 
   const expenseTypes = ["fuel", "food", "car test", "car repair", "car insurance", "others"];
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
@@ -395,18 +412,9 @@ export default function ReportsScreen() {
     setV2Expanded((prev) => (prev.includes(date) ? prev.filter((value) => value !== date) : [...prev, date]));
   }, [setV2Expanded]);
 
-  const animateShelfIn = useCallback(() => {
-    shelfAnim.setValue(0);
-    Animated.timing(shelfAnim, {
-      toValue: 1,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [shelfAnim]);
-
   const showRevealLayer = useCallback(() => {
     setRevealVisible(true);
-  }, []);
+  }, [setRevealVisible]);
 
   const hideRevealLayer = useCallback(() => {
     if (revealTimerRef.current) {
@@ -435,50 +443,6 @@ export default function ReportsScreen() {
     },
     [activeShelf, animateShelfIn]
   );
-
-  useEffect(() => {
-    Animated.timing(revealAnim, {
-      toValue: revealVisible ? 1 : 0,
-      duration: revealVisible ? 220 : 180,
-      useNativeDriver: true,
-    }).start();
-  }, [revealAnim, revealVisible]);
-
-  useEffect(() => {
-    if (revealTimerRef.current) {
-      clearTimeout(revealTimerRef.current);
-      revealTimerRef.current = null;
-    }
-    if (!revealVisible) {
-      setActionsVisible(false);
-      return;
-    }
-    revealTimerRef.current = setTimeout(() => {
-      setActionsVisible(true);
-    }, 180);
-    return () => {
-      if (revealTimerRef.current) {
-        clearTimeout(revealTimerRef.current);
-        revealTimerRef.current = null;
-      }
-    };
-  }, [revealVisible]);
-
-  useEffect(() => {
-    Animated.timing(actionsAnim, {
-      toValue: actionsVisible ? 1 : 0,
-      duration: actionsVisible ? 180 : 120,
-      useNativeDriver: true,
-    }).start();
-  }, [actionsAnim, actionsVisible]);
-
-  useEffect(() => {
-    Animated.timing(spacerAnim, {
-      toValue: revealVisible ? revealHeight : 0,
-      duration: revealVisible ? 220 : 180,
-      useNativeDriver: false,
-    }).start();
-  }, [revealHeight, revealVisible, spacerAnim]);
 
   const handleRevealScroll = useCallback(
     (offsetY: number) => {
@@ -528,10 +492,9 @@ export default function ReportsScreen() {
     resetScrollIntent();
   }, [resetScrollIntent]);
 
-  const [openEventKeys, setOpenEventKeys] = useState<string[]>([]);
   const toggleEventKey = useCallback((key: string) => {
     setOpenEventKeys((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
-  }, []);
+  }, [setOpenEventKeys]);
 
   const latestCard = v2Rows[0];
   const latestInventory = latestCard?.inventory_end;
