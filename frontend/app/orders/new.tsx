@@ -28,6 +28,10 @@ import { useInventoryLatest, useInitInventory } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useSystems } from "@/hooks/useSystems";
+import { useOrderDateTimeState } from "@/hooks/useOrderDateTimeState";
+import { useInitInventoryModal } from "@/hooks/useInitInventoryModal";
+import { useOrderPriceOverride } from "@/hooks/useOrderPriceOverride";
+import { useOrderKeyboardLayout } from "@/hooks/useOrderKeyboardLayout";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
@@ -120,58 +124,68 @@ export default function NewOrderScreen() {
   const [paymentDirection, setPaymentDirection] = useState<"receive" | "payout">("receive");
   const [customerSearch, setCustomerSearch] = useState("");
   const searchInputRef = useRef<TextInput | null>(null);
-  const [manualPrice, setManualPrice] = useState(false);
+
+  // Extract price override state into custom hook
+  const {
+    manualPrice,
+    setManualPrice,
+    gasPriceInput,
+    setGasPriceInput,
+    gasPriceDirty,
+    setGasPriceDirty,
+    ironPriceInput,
+    setIronPriceInput,
+    ironPriceDirty,
+    setIronPriceDirty,
+    paidDirty,
+    setPaidDirty,
+    resetPriceOverrides,
+  } = useOrderPriceOverride();
+
   const [whatsappOrderId, setWhatsappOrderId] = useState<string | null>(null);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
-  const [gasPriceInput, setGasPriceInput] = useState("");
-  const [gasPriceDirty, setGasPriceDirty] = useState(false);
-  const [ironPriceInput, setIronPriceInput] = useState("");
-  const [ironPriceDirty, setIronPriceDirty] = useState(false);
-  const [paidDirty, setPaidDirty] = useState(false);
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [customerInputArmed, setCustomerInputArmed] = useState(false);
   const [customerTyping, setCustomerTyping] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [avoidKeyboard, setAvoidKeyboard] = useState(false);
-  const [scrollViewHeight, setScrollViewHeight] = useState(0);
-  const [focusTarget, setFocusTarget] = useState<"amounts" | "payments" | null>(null);
-  const [amountsLayoutY, setAmountsLayoutY] = useState<number | null>(null);
-  const [totalsLayout, setTotalsLayout] = useState<{ y: number; height: number } | null>(null);
-  const effectiveKeyboardHeight = avoidKeyboard ? keyboardHeight : 0;
-  const contentBottomPadding = 24;
-  const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
-  const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
-  const [deliveryDate, setDeliveryDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  });
-  const [deliveryTime, setDeliveryTime] = useState(() => {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, "0");
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
-  });
-  const [collectionDateOpen, setCollectionDateOpen] = useState(false);
-  const [collectionTimeOpen, setCollectionTimeOpen] = useState(false);
-  const [collectionDate, setCollectionDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  });
-  const [collectionTime, setCollectionTime] = useState(() => {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, "0");
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
-  });
+
+  // Extract keyboard/scroll layout state into custom hook
+  const {
+    keyboardHeight,
+    avoidKeyboard,
+    setAvoidKeyboard,
+    scrollViewHeight,
+    setScrollViewHeight,
+    focusTarget,
+    setFocusTarget,
+    amountsLayoutY,
+    setAmountsLayoutY,
+    totalsLayout,
+    setTotalsLayout,
+    effectiveKeyboardHeight,
+    contentBottomPadding,
+  } = useOrderKeyboardLayout();
+  // Extract date/time state into custom hook
+  const {
+    deliveryDate,
+    setDeliveryDate,
+    deliveryDateOpen,
+    setDeliveryDateOpen,
+    deliveryTime,
+    setDeliveryTime,
+    deliveryTimeOpen,
+    setDeliveryTimeOpen,
+    collectionDate,
+    setCollectionDate,
+    collectionDateOpen,
+    setCollectionDateOpen,
+    collectionTime,
+    setCollectionTime,
+    collectionTimeOpen,
+    setCollectionTimeOpen,
+  } = useOrderDateTimeState(setValue);
 
   const currentAction: ActionMode = entryMode === "order" ? orderMode : entryMode;
   const setActionMode = (mode: ActionMode) => {
@@ -234,22 +248,19 @@ export default function NewOrderScreen() {
   const cylinderResultLabel =
     cylinderResult > 0 ? "Customer owes (debt)" : cylinderResult < 0 ? "Customer credit" : "Settled";
   const inventoryInitBlocked = inventoryLatest.data === null;
-  const inventoryPromptedRef = useRef(false);
-  const [initModalVisible, setInitModalVisible] = useState(false);
-  const [initCounts, setInitCounts] = useState({
-    full12: "",
-    empty12: "",
-    full48: "",
-    empty48: "",
-  });
-  const [initDateOpen, setInitDateOpen] = useState(false);
-  const [initDate, setInitDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  });
+
+  // Extract init inventory modal state into custom hook
+  const {
+    initModalVisible,
+    setInitModalVisible,
+    initCounts,
+    setInitCounts,
+    initDateOpen,
+    setInitDateOpen,
+    initDate,
+    setInitDate,
+    inventoryPromptedRef,
+  } = useInitInventoryModal();
   const initAccessoryId = Platform.OS === "ios" ? "initInventoryAccessory" : undefined;
   const orderAccessoryId = Platform.OS === "ios" ? "orderFormAccessory" : undefined;
   const doneInputProps = {
@@ -695,12 +706,6 @@ export default function NewOrderScreen() {
   }, [currentAction, installed, manualPrice, paidDirty, setValue, unitPrice]);
 
   useEffect(() => {
-    const next = buildHappenedAt({ date: deliveryDate, time: deliveryTime });
-    if (!next) return;
-    setValue("delivered_at", next);
-  }, [deliveryDate, deliveryTime, setValue]);
-
-  useEffect(() => {
     if (!isSellIron && !isBuyIron) return;
     const nextTotal = computedTradeTotal;
     setValue("price_total", nextTotal ? String(nextTotal) : "0");
@@ -765,18 +770,6 @@ export default function NewOrderScreen() {
     }
   };
 
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
   useEffect(() => {
     if (!avoidKeyboard || focusTarget !== "amounts" || keyboardHeight <= 0) return;
     const timer = setTimeout(() => {
