@@ -39,7 +39,14 @@ export function useUpdateExpense() {
     },
     onSuccess: (_, variables) => {
       showToast("Expense updated");
+      const existing = queryClient
+        .getQueriesData<Expense[]>({ queryKey: ["expenses"] })
+        .flatMap(([, expenses]) => expenses ?? [])
+        .find((expense) => expense.id === variables.id);
       queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
+      if (existing?.date) {
+        queryClient.invalidateQueries({ queryKey: ["expenses", existing.date] });
+      }
       if (variables.payload.date) {
         queryClient.invalidateQueries({ queryKey: ["expenses", variables.payload.date] });
       }

@@ -754,6 +754,7 @@ export default function CustomerDetailsScreen() {
         filteredActivities.map((activity) => {
           const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
           const customerName = customer.name;
+          const customerDescription = customer.note ?? null;
 
           if (activity.kind === "adjustment") {
             const rawAdj = adjustments.find((a) => `adjustment-${a.id}` === activity.id);
@@ -771,9 +772,11 @@ export default function CustomerDetailsScreen() {
                     effective_at: activity.effectiveAt,
                     created_at: activity.createdAt ?? activity.effectiveAt,
                   },
-                  { customerName }
+                  { customerName, customerDescription }
                 )}
                 formatMoney={fmtMoney}
+                showCreatedAt
+                showEffectiveAtBottom
               />
             );
           }
@@ -784,7 +787,7 @@ export default function CustomerDetailsScreen() {
               <SlimActivityRow
                 key={activity.id}
                 event={rawCol
-                  ? collectionToEvent(rawCol, { customerName })
+                  ? collectionToEvent(rawCol, { customerName, customerDescription })
                   : {
                       cash_before: 0,
                       cash_after: 0,
@@ -800,6 +803,8 @@ export default function CustomerDetailsScreen() {
                     }
                 }
                 formatMoney={fmtMoney}
+                showCreatedAt
+                showEffectiveAtBottom
                 onEdit={rawCol ? () => {
                   /* collections edit not yet supported via dedicated screen */
                 } : undefined}
@@ -814,9 +819,10 @@ export default function CustomerDetailsScreen() {
             <SlimActivityRow
               key={activity.id}
               isDeleted={rawOrder ? (rawOrder.is_deleted || deletingIds.has(rawOrder.id)) : (activity.orderId ? deletingIds.has(activity.orderId) : false)}
-              event={rawOrder
-                ? orderToEvent(rawOrder, {
+                event={rawOrder
+                  ? orderToEvent(rawOrder, {
                     customerName,
+                    customerDescription,
                     systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
                   })
                 : {
@@ -834,6 +840,8 @@ export default function CustomerDetailsScreen() {
                   }
               }
               formatMoney={fmtMoney}
+              showCreatedAt
+              showEffectiveAtBottom
               onEdit={activity.orderId ? () => router.push(`/orders/${activity.orderId}/edit`) : undefined}
               onDelete={activity.orderId ? () => handleDeleteOrder(activity.orderId!) : undefined}
             />

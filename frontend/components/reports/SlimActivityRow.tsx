@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
+import { formatDateTimeYMDHM } from "@/lib/date";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { DailyReportV2Event } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
@@ -14,6 +15,8 @@ type SlimActivityRowProps = {
   onEdit?: () => void;
   onDelete?: () => void;
   isDeleted?: boolean;
+  showCreatedAt?: boolean;
+  showEffectiveAtBottom?: boolean;
 };
 
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) => `₪${formatMoney(amount)}`;
@@ -106,7 +109,9 @@ const formatOrderMetric = (event: DailyReportV2Event) => {
   const installed = Number(event.order_installed ?? 0);
   const received = Number(event.order_received ?? 0);
   if (installed > 0) lines.push(`Installed: ${installed}x ${gas}`);
-  lines.push(`Received: ${received}x ${gas}`);
+  if (event.order_mode !== "sell_iron") {
+    lines.push(`Received: ${received}x ${gas}`);
+  }
   return lines.length > 0 ? lines.join("\n") : null;
 };
 
@@ -195,7 +200,7 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
   return "generic" as const;
 };
 
-export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted }: SlimActivityRowProps) {
+export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted, showCreatedAt, showEffectiveAtBottom }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const eventType = String(event?.event_type ?? "event");
   const label = event?.event_type === "order" ? "Replacement" : event?.label ?? eventType;
@@ -233,16 +238,12 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       ? Number(event.total_cost ?? 0)
       : event.event_type === "order"
         ? Number(event.order_total ?? 0)
-        : event.event_type === "collection_money" || event.event_type === "collection_payout"
-        ? Number(event.order_total ?? 0)
         : event.event_type === "company_payment"
           ? Number(event.total_cost ?? 0)
           : 0;
   const showPaymentRatio =
     (event.event_type === "refill" ||
       event.event_type === "order" ||
-      event.event_type === "collection_money" ||
-      event.event_type === "collection_payout" ||
       event.event_type === "company_payment") &&
     paymentTotal > 0;
   const moneyText =
@@ -270,6 +271,10 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           : label
       )
     : event.context_line ?? label;
+  const createdAtLine = showCreatedAt && event.created_at ? formatDateTimeYMDHM(event.created_at) : "";
+  const effectiveAtBottomLine =
+    showEffectiveAtBottom && event.effective_at ? formatDateTimeYMDHM(event.effective_at) : "";
+  const topLine = createdAtLine ? `${displayContextLine} · ${createdAtLine}` : displayContextLine;
 
   const transitionLines = formatBalanceTransitions(event?.balance_transitions, {
     mode: "transition",
@@ -278,11 +283,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
     formatMoney: fmtMoney,
   });
   const notes = transitionLines.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
-  const showOk = event?.status === "atomic_ok" && event?.event_type !== "expense";
-  const showSettled = event?.status === "balance_settled";
   const showNotes = transitionLines.length > 0 || notes.length > 0;
-  const showStatus = (showOk || showSettled) && transitionLines.length === 0;
-  const okLabel = showSettled ? "✅ Balance settled" : "✅ OK";
   const dotColor = getEventColor(eventType);
   const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
   const heroLines = heroAction ? heroAction.split("\n") : [];
@@ -298,7 +299,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.actionText} numberOfLines={1}>
-            {displayContextLine}
+            {topLine}
           </Text>
           {showPaymentRatio ? (
             <Text style={styles.moneyText} numberOfLines={1}>
@@ -328,8 +329,12 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
 
         <Text style={styles.headerName} numberOfLines={1}>
           {headerName}
-          {headerDesc ? <Text style={styles.headerDesc}>{` — ${headerDesc}`}</Text> : null}
         </Text>
+        {headerDesc ? (
+          <Text style={styles.headerDesc} numberOfLines={1}>
+            {headerDesc}
+          </Text>
+        ) : null}
 
 
         {heroLines.length > 0 ? (
@@ -352,8 +357,6 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
             })}
           </View>
         ) : null}
-
-        {showStatus && !showNotes ? <Text style={styles.okText}>{okLabel}</Text> : null}
 
         {showNotes ? (
           <View style={styles.statusRow}>
@@ -388,9 +391,10 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
                 </View>
               ))}
             </View>
-            {showStatus ? <Text style={styles.okText}>{okLabel}</Text> : null}
           </View>
         ) : null}
+
+        {effectiveAtBottomLine ? <Text style={styles.contextText}>{effectiveAtBottomLine}</Text> : null}
 
         {hasActions ? (
           <View style={styles.actionsRow}>

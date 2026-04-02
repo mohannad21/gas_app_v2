@@ -19,7 +19,7 @@ const BASE: Pick<DailyReportV2Event, "cash_before" | "cash_after"> = {
 
 export function orderToEvent(
   order: Order,
-  opts?: { customerName?: string; systemName?: string }
+  opts?: { customerName?: string; customerDescription?: string | null; systemName?: string }
 ): DailyReportV2Event {
   const mode = order.order_mode ?? "replacement";
   const modeLabel =
@@ -69,13 +69,15 @@ export function orderToEvent(
     money_delta: moneyDelta > 0 ? moneyDelta : null,
     context_line: "Order",
     display_name: opts?.customerName ?? null,
+    display_description: opts?.customerDescription ?? null,
     customer_name: opts?.customerName ?? null,
+    customer_description: opts?.customerDescription ?? null,
     system_name: opts?.systemName ?? null,
     hero_text: heroText,
     note: order.note ?? null,
     label: modeLabel,
     counterparty: opts?.customerName
-      ? { type: "customer", display_name: opts.customerName, description: null, display: null }
+      ? { type: "customer", display_name: opts.customerName, description: opts.customerDescription ?? null, display: null }
       : null,
     balance_transitions: transitions.length > 0 ? transitions : null,
     status: unpaid === 0 && (order.debt_cylinders_12 ?? 0) === 0 && (order.debt_cylinders_48 ?? 0) === 0 ? "atomic_ok" : "needs_action",
@@ -84,7 +86,7 @@ export function orderToEvent(
 
 export function collectionToEvent(
   col: CollectionEvent,
-  opts?: { customerName?: string }
+  opts?: { customerName?: string; customerDescription?: string | null }
 ): DailyReportV2Event {
   const actionType = col.action_type;
   const amount = col.amount_money ?? 0;
@@ -141,7 +143,9 @@ export function collectionToEvent(
     created_at: col.created_at,
     context_line: contextLine,
     display_name: opts?.customerName ?? null,
+    display_description: opts?.customerDescription ?? null,
     customer_name: opts?.customerName ?? null,
+    customer_description: opts?.customerDescription ?? null,
     hero_text: heroText,
     note: col.note ?? null,
     money_amount: moneyDelta ?? null,
@@ -150,7 +154,7 @@ export function collectionToEvent(
     return12: actionType === "return" ? qty12 : null,
     return48: actionType === "return" ? qty48 : null,
     counterparty: opts?.customerName
-      ? { type: "customer", display_name: opts.customerName, description: null, display: null }
+      ? { type: "customer", display_name: opts.customerName, description: opts.customerDescription ?? null, display: null }
       : null,
     balance_transitions: transitions.length > 0 ? transitions : null,
     label: contextLine,
@@ -159,7 +163,7 @@ export function collectionToEvent(
 
 export function customerAdjustmentToEvent(
   adj: CustomerAdjustment,
-  opts?: { customerName?: string }
+  opts?: { customerName?: string; customerDescription?: string | null }
 ): DailyReportV2Event {
   const money = adj.amount_money ?? 0;
   const qty12 = adj.count_12kg ?? 0;
@@ -189,12 +193,14 @@ export function customerAdjustmentToEvent(
     created_at: adj.created_at,
     context_line: "Adjustment",
     display_name: opts?.customerName ?? null,
+    display_description: opts?.customerDescription ?? null,
     customer_name: opts?.customerName ?? null,
+    customer_description: opts?.customerDescription ?? null,
     hero_text: parts.length > 0 ? parts.join(" | ") : "Manual adjustment",
     reason: adj.reason ?? null,
     note: adj.reason ?? null,
     counterparty: opts?.customerName
-      ? { type: "customer", display_name: opts.customerName, description: null, display: null }
+      ? { type: "customer", display_name: opts.customerName, description: opts.customerDescription ?? null, display: null }
       : null,
     balance_transitions: transitions.length > 0 ? transitions : null,
     label: "Adjustment",

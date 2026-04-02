@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import field_validator
@@ -55,7 +55,7 @@ class ExpenseCreate(SQLModel):
 class ExpenseOut(SQLModel):
   id: str
   happened_at: datetime
-  day: datetime
+  day: date
   kind: str
   category_id: Optional[str] = None
   amount: int

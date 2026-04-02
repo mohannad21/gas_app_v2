@@ -501,9 +501,14 @@ export default function ReportsScreen() {
   const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
   const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
-  const selectedEvents = ((selectedDayInfo?.events ?? []) as any[]).filter(
-    (ev) => ev?.event_type !== "customer_adjust"
-  );
+  const selectedEvents = ((selectedDayInfo?.events ?? []) as any[])
+    .filter((ev) => ev?.event_type !== "customer_adjust")
+    .sort((left, right) => {
+      const rightTime = new Date(right?.effective_at ?? right?.created_at ?? 0).getTime();
+      const leftTime = new Date(left?.effective_at ?? left?.created_at ?? 0).getTime();
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
+    });
 
   const revealShelfContent =
     activeShelf === "ledger" ? (
@@ -1208,7 +1213,12 @@ function V2Timeline({
         existing.gas_type = ev?.gas_type;
       }
     });
-    return merged;
+    return merged.sort((left, right) => {
+      const rightTime = new Date(right?.effective_at ?? right?.created_at ?? 0).getTime();
+      const leftTime = new Date(left?.effective_at ?? left?.created_at ?? 0).getTime();
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
+    });
   }, [events]);
 
   const toggleEvent = useCallback((key: string) => {

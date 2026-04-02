@@ -381,8 +381,8 @@ const formatDateTime = (value?: string) => {
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
     return [...rows].sort((a, b) => {
-      const aTime = new Date(a.created_at ?? a.date).getTime();
-      const bTime = new Date(b.created_at ?? b.date).getTime();
+      const aTime = new Date(a.created_at ?? a.happened_at ?? a.date).getTime();
+      const bTime = new Date(b.created_at ?? b.happened_at ?? b.date).getTime();
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
@@ -443,7 +443,7 @@ const formatDateTime = (value?: string) => {
     const expenseItems = expenses.map<ExpenseListItem>((item) => ({
       id: `expense-${item.id}`,
       kind: "expense" as const,
-      sortAt: item.created_at ?? item.date,
+      sortAt: item.created_at ?? item.happened_at ?? item.date,
       data: item,
     }));
     const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
@@ -940,8 +940,13 @@ const formatDateTime = (value?: string) => {
               if (item.kind === "adjustment") {
                 return (
                   <SlimActivityRow
-                    event={customerAdjustmentToEvent(item.data, { customerName: item.customerName })}
+                    event={customerAdjustmentToEvent(item.data, {
+                      customerName: item.customerName,
+                      customerDescription: customersById.get(item.data.customer_id)?.note ?? null,
+                    })}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                   />
                 );
               }
@@ -949,8 +954,13 @@ const formatDateTime = (value?: string) => {
                 const collection = item.data;
                 return (
                     <SlimActivityRow
-                      event={collectionToEvent(collection, { customerName: item.customerName })}
+                      event={collectionToEvent(collection, {
+                        customerName: item.customerName,
+                        customerDescription: customersById.get(collection.customer_id)?.note ?? null,
+                      })}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                       isDeleted={collection.is_deleted || deletingIds.has(collection.id)}
                       onEdit={() => openCollectionEdit(collection)}
                       onDelete={() => confirmDeleteCollection(collection.id)}
@@ -962,8 +972,14 @@ const formatDateTime = (value?: string) => {
               return (
                 <Pressable onPress={() => router.push(`/orders/${order.id}`)}>
                   <SlimActivityRow
-                    event={orderToEvent(order, { customerName: item.customerName, systemName })}
+                    event={orderToEvent(order, {
+                      customerName: item.customerName,
+                      customerDescription: customersById.get(order.customer_id)?.note ?? null,
+                      systemName,
+                    })}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={order.is_deleted || deletingIds.has(order.id)}
                     onEdit={() => router.push(`/orders/${order.id}/edit`)}
                     onDelete={() => confirmDeleteOrder(order.id)}
@@ -999,6 +1015,8 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={bankDepositToEvent(item.data)}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                       isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
@@ -1008,6 +1026,8 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={expenseToEvent(item.data)}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                     onEdit={() =>
                       router.push({
@@ -1039,6 +1059,8 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={companyPaymentToEvent(entry.data)}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                     />
                   );
                 }
@@ -1047,6 +1069,8 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={refillSummaryToEvent(refill)}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
                     onEdit={() =>
                       router.push({
@@ -1079,6 +1103,8 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={inventoryAdjustmentToEvent(adjustment)}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                       isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                       onEdit={() =>
                         router.push({
@@ -1095,6 +1121,8 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={cashAdjustmentToEvent(adjustment)}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                     onEdit={() =>
                       router.push({
