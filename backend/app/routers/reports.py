@@ -40,6 +40,7 @@ from app.services.reports_aggregates import (
   _sum_inventory_before_day,
   _sum_cash_at_day_end,
   _sum_cash_before_day,
+  _sum_bank_before_day,
   _sum_company_at_day_end,
   _sum_company_before_day,
   _sum_company_cyl_at_day_end,
@@ -59,6 +60,8 @@ from app.services.reports_aggregates import (
   _snapshot_transitions_for_company,
   _snapshot_lines_for_customer,
   _snapshot_lines_for_company,
+  _report_inventory_state,
+  _apply_ledger_entries_to_balances,
   get_daily_audit_summary,
   CustomerLedgerState,
 )
@@ -249,6 +252,7 @@ def list_daily_reports_v2(
     running_empty48 += inv_empty_48.get(current, 0)
 
     problem_lines: list[tuple[str, str, str]] = []
+    problem_transitions = []
 
     # Identify customers with outstanding balances
     active_customers = customer_activity_by_day.get(current, set())
@@ -260,6 +264,9 @@ def list_daily_reports_v2(
       problem_lines.extend(
         _snapshot_lines_for_customer(customer_id=customer_id, before=before, after=after)
       )
+      problem_transitions.extend(
+        _snapshot_transitions_for_customer(before=before, after=after)
+      )
 
     # Company problems
     if current in company_activity_days or current in refill_days:
@@ -267,24 +274,51 @@ def list_daily_reports_v2(
       problem_lines.extend(
         _snapshot_lines_for_company(before=company_before, after=company_after)
       )
+      problem_transitions.extend(
+        _snapshot_transitions_for_company(
+          money_before=company_before[0],
+          money_after=company_after[0],
+          cyl12_before=company_before[1],
+          cyl12_after=company_after[1],
+          cyl48_before=company_before[2],
+          cyl48_after=company_after[2],
+        )
+      )
 
     card = DailyReportV2Card(
       date=current.isoformat(),
       cash_start=cash_start,
       cash_end=running_cash,
+      sold_12kg=sold_full.get((current, "12kg"), 0),
+      sold_48kg=sold_full.get((current, "48kg"), 0),
+      net_today=running_cash - cash_start,
       cash_math=DailyReportV2CashMath(
         sales=customer_sales_by_day.get(current, 0),
         late=customer_pay_by_day.get(current, 0),
         expenses=expenses_by_day.get(current, 0),
         company=company_paid_by_day.get(current, 0),
         adjust=adjustments_by_day.get(current, 0),
+        other=0,
       ),
+      math=None,
       company_start=company_start,
       company_end=running_company,
       company_12kg_start=company_12_start,
       company_12kg_end=running_company_12,
       company_48kg_start=company_48_start,
       company_48kg_end=running_company_48,
+      company_give_start=0,
+      company_give_end=0,
+      company_receive_start=0,
+      company_receive_end=0,
+      company_12kg_give_start=0,
+      company_12kg_give_end=0,
+      company_12kg_receive_start=0,
+      company_12kg_receive_end=0,
+      company_48kg_give_start=0,
+      company_48kg_give_end=0,
+      company_48kg_receive_start=0,
+      company_48kg_receive_end=0,
       inventory_start=ReportInventoryTotals(
         full12=inv_12_full_start,
         empty12=inv_12_empty_start,
@@ -299,6 +333,8 @@ def list_daily_reports_v2(
       ),
       has_refill=current in refill_days,
       problems=[f"{line[0]}-{line[1]}: {line[2]}" if isinstance(line, tuple) else line for line in problem_lines],
+      problem_transitions=problem_transitions,
+      recalculated=False,
     )
     response.append(card)
 
@@ -307,15 +343,15 @@ def list_daily_reports_v2(
 
 @router.get("/day_v2", response_model=DailyReportV2Day)
 def get_daily_report_v2(
-  day: Optional[str] = Query(default=None),
+  date: Optional[str] = Query(default=None),
   session: Session = Depends(get_session),
 ) -> DailyReportV2Day:
   """Return full event feed for a single business date."""
-  if day:
+  if date:
     try:
-      report_day = datetime.fromisoformat(day).date()
+      report_day = datetime.fromisoformat(date).date()
     except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid day format") from exc
+      raise HTTPException(status_code=400, detail="Invalid date format") from exc
   else:
     report_day = datetime.now(timezone.utc).date()
 
@@ -377,19 +413,27 @@ def get_daily_report_v2(
     cid: customer_before_states.get(cid, (0, 0, 0)) for cid in customer_ids
   }
 
+  running_cash = _sum_cash_before_day(session, report_day)
+  running_bank = _sum_bank_before_day(session, report_day)
   running_company_money = _sum_company_before_day(session, report_day)
   running_company_12 = _sum_company_cyl_before_day(session, report_day, "12kg")
   running_company_48 = _sum_company_cyl_before_day(session, report_day, "48kg")
+  running_inventory = _sum_inventory_before_day(session, report_day)
 
   # Build event objects
   events: list[DailyReportV2Event] = []
   event_sort_ids: dict[int, str] = {}
+  event_source_keys: dict[int, tuple[str, str]] = {}
+
+  entries_by_source: dict[tuple[str, str], list[LedgerEntry]] = defaultdict(list)
+  for entry in entries:
+    entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
   for txn in customer_txns:
     event = DailyReportV2Event(
       id=txn.id,
       source_id=txn.id,
-      event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else txn.kind,
+      event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else "customer_adjust" if txn.kind == "adjust" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
       customer_id=txn.customer_id,
@@ -397,35 +441,54 @@ def get_daily_report_v2(
       customer_description=customers[txn.customer_id].note if txn.customer_id and txn.customer_id in customers else None,
       order_total=txn.total if txn.kind == "order" else None,
       order_paid=txn.paid if txn.kind == "order" else None,
-      order_mode=txn.order_mode if hasattr(txn, "order_mode") else None,
-      gas_type=txn.gas_type if hasattr(txn, "gas_type") else None,
+      order_mode=txn.mode if txn.kind == "order" else None,
+      gas_type=txn.gas_type,
+      system_name=systems[txn.system_id].name if txn.system_id and txn.system_id in systems else None,
+      system_type=systems[txn.system_id].gas_type if txn.system_id and txn.system_id in systems else None,
+      reason=txn.note,
+      order_installed=txn.installed if txn.kind == "order" else None,
+      order_received=txn.received if txn.kind == "order" else None,
+      return12=txn.received if txn.kind == "return" and txn.gas_type == "12kg" else None,
+      return48=txn.received if txn.kind == "return" and txn.gas_type == "48kg" else None,
     )
     events.append(event)
     event_sort_ids[id(event)] = txn.id or ""
+    event_source_keys[id(event)] = ("customer_txn", txn.id)
 
   for txn in company_txns:
     event = DailyReportV2Event(
       id=txn.id,
       source_id=txn.id,
-      event_type=txn.kind,
+      event_type="refill" if txn.kind == "refill" else "company_buy_iron" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else "company_adjustment" if txn.kind == "adjust" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
+      reason=txn.note,
+      buy12=txn.buy12,
+      return12=txn.return12,
+      buy48=txn.buy48,
+      return48=txn.return48,
+      total_cost=txn.total,
+      paid_now=txn.paid,
     )
     events.append(event)
     event_sort_ids[id(event)] = txn.id or ""
+    event_source_keys[id(event)] = ("company_txn", txn.id)
 
   for exp in expenses:
     event = DailyReportV2Event(
       id=exp.id,
       source_id=exp.id,
-      event_type="expense",
-      effective_at=exp.created_at,
+      event_type="bank_deposit" if exp.kind == "deposit" else "expense",
+      effective_at=exp.happened_at,
       created_at=exp.created_at,
       total_cost=exp.amount,
-      expense_type=expense_categories[exp.category_id].name if exp.category_id and exp.category_id in expense_categories else None,
+      expense_type=expense_categories[exp.category_id].name if exp.kind == "expense" and exp.category_id and exp.category_id in expense_categories else None,
+      transfer_direction="bank_to_wallet" if exp.kind == "deposit" and exp.paid_from == "bank" else "wallet_to_bank" if exp.kind == "deposit" else None,
+      reason=exp.note,
     )
     events.append(event)
     event_sort_ids[id(event)] = exp.id or ""
+    event_source_keys[id(event)] = ("expense", exp.id)
 
   for ca in cash_adjustments:
     event = DailyReportV2Event(
@@ -435,9 +498,11 @@ def get_daily_report_v2(
       effective_at=ca.happened_at,
       created_at=ca.created_at,
       total_cost=ca.delta_cash,
+      reason=ca.note,
     )
     events.append(event)
     event_sort_ids[id(event)] = ca.id or ""
+    event_source_keys[id(event)] = ("cash_adjust", ca.id)
 
   for ia in inventory_adjustments:
     event = DailyReportV2Event(
@@ -446,41 +511,91 @@ def get_daily_report_v2(
       event_type="adjust",
       effective_at=ia.happened_at,
       created_at=ia.created_at,
+      gas_type=ia.gas_type,
+      reason=ia.note,
     )
     events.append(event)
     event_sort_ids[id(event)] = ia.id or ""
+    event_source_keys[id(event)] = ("inventory_adjust", ia.id)
 
   # Get settings
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
 
-  # Apply fields in order: ticket → level3 → UI → status
+  events.sort(key=lambda e: _event_order_key(e, event_sort_ids=event_sort_ids))
+
+  # Apply fields in order: ticket -> level3 -> UI -> status
   for event in events:
+    customer_before = running_customer_states.get(event.customer_id, (0, 0, 0)) if event.customer_id else None
+    company_before = (running_company_money, running_company_12, running_company_48)
+
+    event.cash_before = running_cash
+    event.bank_before = running_bank
+    if customer_before is not None:
+      event.customer_money_before = customer_before[0]
+      event.customer_12kg_before = customer_before[1]
+      event.customer_48kg_before = customer_before[2]
+    event.company_before = running_company_money
+    event.company_12kg_before = running_company_12
+    event.company_48kg_before = running_company_48
+    event.inventory_before = _report_inventory_state(running_inventory)
+
+    source_key = event_source_keys.get(id(event))
+    event_entries = entries_by_source.get(source_key, []) if source_key else []
+    running_cash, running_bank, running_company_money, running_company_12, running_company_48, running_inventory = _apply_ledger_entries_to_balances(
+      event_entries,
+      cash=running_cash,
+      bank=running_bank,
+      company_money=running_company_money,
+      company_12=running_company_12,
+      company_48=running_company_48,
+      inventory=running_inventory,
+      customer_states=running_customer_states,
+    )
+
+    customer_after = running_customer_states.get(event.customer_id, customer_before) if event.customer_id else None
+
+    event.cash_after = running_cash
+    event.bank_after = running_bank
+    if customer_after is not None:
+      event.customer_money_after = customer_after[0]
+      event.customer_12kg_after = customer_after[1]
+      event.customer_48kg_after = customer_after[2]
+    event.company_after = running_company_money
+    event.company_12kg_after = running_company_12
+    event.company_48kg_after = running_company_48
+    event.inventory_after = _report_inventory_state(running_inventory)
+
+    balance_transitions = []
+    if customer_before is not None and customer_after is not None:
+      balance_transitions.extend(
+        _customer_balance_transitions(
+          before=customer_before,
+          after=customer_after,
+          display_name=event.customer_name,
+          display_description=event.customer_description,
+        )
+      )
+    balance_transitions.extend(
+      _company_balance_transitions(
+        money_before=company_before[0],
+        money_after=running_company_money,
+        cyl12_before=company_before[1],
+        cyl12_after=running_company_12,
+        cyl48_before=company_before[2],
+        cyl48_after=running_company_48,
+      )
+    )
+    event.balance_transitions = balance_transitions
+
     # Ticket fields
     _apply_ticket_fields(event)
-
-    # Get customer state after this event
-    customer_after = None
-    if event.customer_id and event.customer_id in running_customer_states:
-      entries_for_customer = [e for e in entries if e.customer_id == event.customer_id and e.happened_at <= event.effective_at]
-      if entries_for_customer:
-        delta = _customer_state_delta_from_entries(entries_for_customer)
-        before = customer_before_states.get(event.customer_id, (0, 0, 0))
-        customer_after = _add_customer_state(before, delta)
 
     # Level3 fields
     _apply_level3_fields(event, customer_after=customer_after)
 
-    # Get company state after this event
-    company_money_after = _sum_cash_at_day_end(session, report_day)
-    company_12_after = _sum_company_cyl_at_day_end(session, report_day, "12kg")
-    company_48_after = _sum_company_cyl_at_day_end(session, report_day, "48kg")
-    event.company_after = company_money_after
-    event.company_12kg_after = company_12_after
-    event.company_48kg_after = company_48_after
-
     # UI fields
-    notes = _notes_for_event(event)
+    notes = []
     _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
 
     # Status fields
@@ -489,14 +604,33 @@ def get_daily_report_v2(
     # Remaining actions
     event.action_pills = _remaining_actions_for_event(event, customer_after=customer_after)
 
-  # Sort events
-  events.sort(key=lambda e: _event_order_key(e, event_sort_ids=event_sort_ids))
-
   # Get audit summary
   audit_summary = get_daily_audit_summary(session, day=report_day)
 
   return DailyReportV2Day(
-    day=report_day,
-    events=events,
+    date=report_day.isoformat(),
+    cash_start=_sum_cash_before_day(session, report_day),
+    cash_end=_sum_cash_at_day_end(session, report_day),
+    company_start=_sum_company_before_day(session, report_day),
+    company_end=_sum_company_at_day_end(session, report_day),
+    company_12kg_start=_sum_company_cyl_before_day(session, report_day, "12kg"),
+    company_12kg_end=_sum_company_cyl_at_day_end(session, report_day, "12kg"),
+    company_48kg_start=_sum_company_cyl_before_day(session, report_day, "48kg"),
+    company_48kg_end=_sum_company_cyl_at_day_end(session, report_day, "48kg"),
+    company_give_start=0,
+    company_give_end=0,
+    company_receive_start=0,
+    company_receive_end=0,
+    company_12kg_give_start=0,
+    company_12kg_give_end=0,
+    company_12kg_receive_start=0,
+    company_12kg_receive_end=0,
+    company_48kg_give_start=0,
+    company_48kg_give_end=0,
+    company_48kg_receive_start=0,
+    company_48kg_receive_end=0,
+    inventory_start=_sum_inventory_before_day(session, report_day),
+    inventory_end=_sum_inventory_at_day_end(session, report_day),
     audit_summary=audit_summary,
+    events=events,
   )

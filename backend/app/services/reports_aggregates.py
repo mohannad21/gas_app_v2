@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.models import LedgerEntry
-from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportV2Event, ReportInventoryTotals
+from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportV2Event, ReportInventoryState, ReportInventoryTotals
 from app.services.ledger import sum_ledger
 
 
@@ -153,6 +153,73 @@ def _add_customer_state(state: CustomerLedgerState, delta: CustomerLedgerState) 
     state[1] + delta[1],
     state[2] + delta[2],
   )
+
+
+def _report_inventory_state(totals: ReportInventoryTotals) -> ReportInventoryState:
+  return ReportInventoryState(
+    full12=totals.full12,
+    empty12=totals.empty12,
+    full48=totals.full48,
+    empty48=totals.empty48,
+  )
+
+
+def _apply_ledger_entries_to_balances(
+  entries: list[LedgerEntry],
+  *,
+  cash: int,
+  bank: int,
+  company_money: int,
+  company_12: int,
+  company_48: int,
+  inventory: ReportInventoryTotals,
+  customer_states: dict[str, CustomerLedgerState],
+) -> tuple[int, int, int, int, int, ReportInventoryTotals]:
+  next_inventory = ReportInventoryTotals(
+    full12=inventory.full12,
+    empty12=inventory.empty12,
+    full48=inventory.full48,
+    empty48=inventory.empty48,
+  )
+
+  for row in entries:
+    if row.account == "cash" and row.unit == "money":
+      cash += row.amount
+      continue
+    if row.account == "bank" and row.unit == "money":
+      bank += row.amount
+      continue
+    if row.account == "company_money_debts" and row.unit == "money":
+      company_money += row.amount
+      continue
+    if row.account == "company_cylinders_debts" and row.unit == "count":
+      if row.gas_type == "12kg":
+        company_12 += row.amount
+      elif row.gas_type == "48kg":
+        company_48 += row.amount
+      continue
+    if row.account == "cust_money_debts" and row.unit == "money" and row.customer_id:
+      before = customer_states.get(row.customer_id, (0, 0, 0))
+      customer_states[row.customer_id] = (before[0] + row.amount, before[1], before[2])
+      continue
+    if row.account == "cust_cylinders_debts" and row.unit == "count" and row.customer_id:
+      before = customer_states.get(row.customer_id, (0, 0, 0))
+      if row.gas_type == "12kg":
+        customer_states[row.customer_id] = (before[0], before[1] + row.amount, before[2])
+      elif row.gas_type == "48kg":
+        customer_states[row.customer_id] = (before[0], before[1], before[2] + row.amount)
+      continue
+    if row.account == "inv" and row.unit == "count":
+      if row.gas_type == "12kg" and row.state == "full":
+        next_inventory.full12 += row.amount
+      elif row.gas_type == "12kg" and row.state == "empty":
+        next_inventory.empty12 += row.amount
+      elif row.gas_type == "48kg" and row.state == "full":
+        next_inventory.full48 += row.amount
+      elif row.gas_type == "48kg" and row.state == "empty":
+        next_inventory.empty48 += row.amount
+
+  return (cash, bank, company_money, company_12, company_48, next_inventory)
 
 
 def _balance_transition(
