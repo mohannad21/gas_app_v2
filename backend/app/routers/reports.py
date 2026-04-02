@@ -323,7 +323,7 @@ def get_daily_report_v2(
   entries = session.exec(
     select(LedgerEntry)
     .where(LedgerEntry.day == report_day)
-    .order_by(LedgerEntry.effective_at)
+    .order_by(LedgerEntry.happened_at)
   ).all()
 
   customer_txns = session.exec(
@@ -390,7 +390,7 @@ def get_daily_report_v2(
       id=txn.id,
       source_id=txn.id,
       event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else txn.kind,
-      effective_at=txn.effective_at,
+      effective_at=txn.happened_at,
       created_at=txn.created_at,
       customer_id=txn.customer_id,
       customer_name=customers[txn.customer_id].name if txn.customer_id and txn.customer_id in customers else None,
@@ -408,7 +408,7 @@ def get_daily_report_v2(
       id=txn.id,
       source_id=txn.id,
       event_type=txn.kind,
-      effective_at=txn.effective_at,
+      effective_at=txn.happened_at,
       created_at=txn.created_at,
     )
     events.append(event)
@@ -432,7 +432,7 @@ def get_daily_report_v2(
       id=ca.id,
       source_id=ca.id,
       event_type="cash_adjust",
-      effective_at=ca.effective_at,
+      effective_at=ca.happened_at,
       created_at=ca.created_at,
       total_cost=ca.delta_cash,
     )
@@ -444,7 +444,7 @@ def get_daily_report_v2(
       id=ia.id,
       source_id=ia.id,
       event_type="adjust",
-      effective_at=ia.effective_at,
+      effective_at=ia.happened_at,
       created_at=ia.created_at,
     )
     events.append(event)
@@ -462,7 +462,7 @@ def get_daily_report_v2(
     # Get customer state after this event
     customer_after = None
     if event.customer_id and event.customer_id in running_customer_states:
-      entries_for_customer = [e for e in entries if e.customer_id == event.customer_id and e.effective_at <= event.effective_at]
+      entries_for_customer = [e for e in entries if e.customer_id == event.customer_id and e.happened_at <= event.happened_at]
       if entries_for_customer:
         delta = _customer_state_delta_from_entries(entries_for_customer)
         before = customer_before_states.get(event.customer_id, (0, 0, 0))
