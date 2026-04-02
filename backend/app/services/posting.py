@@ -6,6 +6,7 @@ from typing import Iterable, Optional
 
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.models import (
   CompanyTransaction,
   CashAdjustment,
@@ -70,6 +71,7 @@ def _insert_ledger_entries(
     if line.amount == 0:
       continue
     entry = LedgerEntry(
+      tenant_id=DEFAULT_TENANT_ID,
       source_type=source_type,
       source_id=source_id,
       happened_at=happened_at,

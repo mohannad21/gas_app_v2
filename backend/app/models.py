@@ -15,10 +15,28 @@ def _uuid() -> str:
   return str(uuid4())
 
 
+class Tenant(SQLModel, table=True):
+  __tablename__ = "tenants"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  name: str
+  status: str = Field(default="active", index=True)  # "active" | "suspended" | "disabled"
+  owner_user_id: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+
+
 class Customer(SQLModel, table=True):
   __tablename__ = "customers"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   name: str
   phone: Optional[str] = Field(default=None, nullable=True)
   address: Optional[str] = Field(default=None, nullable=True)
@@ -27,12 +45,18 @@ class Customer(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class System(SQLModel, table=True):
   __tablename__ = "systems"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   customer_id: str = Field(foreign_key="customers.id", index=True)
   name: str
   gas_type: str = Field(index=True)
@@ -52,6 +76,11 @@ class System(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class SystemTypeOption(SQLModel, table=True):
@@ -101,33 +130,7 @@ class Expense(SQLModel, table=True):
   __tablename__ = "expenses"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
-  request_id: Optional[str] = Field(
-    default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
-  )
-  happened_at: datetime = Field(
-    default_factory=_utcnow,
-    sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
-  )
-  created_at: datetime = Field(
-    default_factory=_utcnow,
-    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
-  )
-  day: date = Field(sa_column=sa.Column(sa.Date, index=True))
-  kind: str = Field(index=True)  # "expense" | "deposit"
-  category_id: Optional[str] = Field(default=None, foreign_key="expense_categories.id")
-  amount: int
-  paid_from: Optional[str] = Field(default=None)  # "cash" | "bank" for expenses
-  note: Optional[str] = Field(default=None, nullable=True)
-  vendor: Optional[str] = Field(default=None, nullable=True)
-  reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
-  is_reversed: bool = Field(default=False, index=True)
-
-
-class CustomerTransaction(SQLModel, table=True):
-  __tablename__ = "customer_transactions"
-
-  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
@@ -141,6 +144,53 @@ class CustomerTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  day: date = Field(sa_column=sa.Column(sa.Date, index=True))
+  kind: str = Field(index=True)  # "expense" | "deposit"
+  category_id: Optional[str] = Field(default=None, foreign_key="expense_categories.id")
+  amount: int
+  paid_from: Optional[str] = Field(default=None)  # "cash" | "bank" for expenses
+  note: Optional[str] = Field(default=None, nullable=True)
+  vendor: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
+  reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
+  is_reversed: bool = Field(default=False, index=True)
+
+
+class CustomerTransaction(SQLModel, table=True):
+  __tablename__ = "customer_transactions"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  group_id: Optional[str] = Field(default=None, index=True)
+  request_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+  )
+  happened_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(index=True)  # "order" | "payment" | "return" | "adjust"
   mode: Optional[str] = Field(default=None, index=True)  # order mode
@@ -155,6 +205,12 @@ class CustomerTransaction(SQLModel, table=True):
   debt_cylinders_12: int = Field(default=0)
   debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
 
@@ -163,6 +219,8 @@ class CompanyTransaction(SQLModel, table=True):
   __tablename__ = "company_transactions"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
@@ -175,6 +233,12 @@ class CompanyTransaction(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   kind: str = Field(default="refill", index=True)  # "refill" | "buy_iron" | "payment"
   buy12: int = Field(default=0)
@@ -189,6 +253,12 @@ class CompanyTransaction(SQLModel, table=True):
   debt_cylinders_12: int = Field(default=0)
   debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
 
@@ -197,6 +267,7 @@ class InventoryAdjustment(SQLModel, table=True):
   __tablename__ = "inventory_adjustments"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
@@ -210,11 +281,23 @@ class InventoryAdjustment(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   gas_type: str = Field(index=True)
   delta_full: int = 0
   delta_empty: int = 0
   note: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
 
@@ -234,6 +317,7 @@ class LedgerEntry(SQLModel, table=True):
   )
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
@@ -258,6 +342,8 @@ class CashAdjustment(SQLModel, table=True):
   __tablename__ = "cash_adjustments"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
@@ -270,9 +356,21 @@ class CashAdjustment(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
   delta_cash: int
   note: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
 

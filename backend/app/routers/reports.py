@@ -130,7 +130,7 @@ def list_daily_reports_v2(
       .where(CompanyTransaction.day >= start_date)
       .where(CompanyTransaction.day <= end_date)
       .where(CompanyTransaction.kind.in_(["refill", "buy_iron"]))
-      .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+      .where(CompanyTransaction.deleted_at == None)  # noqa: E711
       .distinct()
     ).all()
   )
@@ -156,7 +156,7 @@ def list_daily_reports_v2(
     select(CustomerTransaction.day, CustomerTransaction.customer_id, CustomerTransaction.kind)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   ).all()
   customer_activity_by_day: dict[date, set[str]] = defaultdict(set)
   customer_activity_kinds: dict[tuple[date, str], set[str]] = defaultdict(set)
@@ -169,7 +169,7 @@ def list_daily_reports_v2(
     select(CompanyTransaction.day)
     .where(CompanyTransaction.day >= start_date)
     .where(CompanyTransaction.day <= end_date)
-    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    .where(CompanyTransaction.deleted_at == None)  # noqa: E711
   ).all()
   company_activity_days = {row[0] if isinstance(row, tuple) else row for row in company_activity_rows}
 
@@ -178,7 +178,7 @@ def list_daily_reports_v2(
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
     .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.day)
   ).all()
   customer_sales_by_day = {row[0]: int(row[1] or 0) for row in customer_sales_rows}
@@ -188,7 +188,7 @@ def list_daily_reports_v2(
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
     .where(CustomerTransaction.kind == "payment")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.day)
   ).all()
   customer_pay_by_day = {row[0]: int(row[1] or 0) for row in customer_pay_rows}
@@ -197,7 +197,7 @@ def list_daily_reports_v2(
     select(CompanyTransaction.day, func.coalesce(func.sum(CompanyTransaction.paid), 0))
     .where(CompanyTransaction.day >= start_date)
     .where(CompanyTransaction.day <= end_date)
-    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    .where(CompanyTransaction.deleted_at == None)  # noqa: E711
     .group_by(CompanyTransaction.day)
   ).all()
   company_paid_by_day = {row[0]: int(row[1] or 0) for row in company_paid_rows}
@@ -207,7 +207,7 @@ def list_daily_reports_v2(
     .where(Expense.day >= start_date)
     .where(Expense.day <= end_date)
     .where(Expense.kind == "expense")
-    .where(Expense.is_reversed == False)  # noqa: E712
+    .where(Expense.deleted_at == None)  # noqa: E711
     .group_by(Expense.day)
   ).all()
   expenses_by_day = {row[0]: int(row[1] or 0) for row in expense_rows}
@@ -216,7 +216,7 @@ def list_daily_reports_v2(
     select(CashAdjustment.day, func.coalesce(func.sum(CashAdjustment.delta_cash), 0))
     .where(CashAdjustment.day >= start_date)
     .where(CashAdjustment.day <= end_date)
-    .where(CashAdjustment.is_reversed == False)  # noqa: E712
+    .where(CashAdjustment.deleted_at == None)  # noqa: E711
     .group_by(CashAdjustment.day)
   ).all()
   adjustments_by_day = {row[0]: int(row[1] or 0) for row in adjustment_rows}
@@ -357,31 +357,31 @@ def get_daily_report_v2(
   customer_txns = session.exec(
     select(CustomerTransaction)
     .where(CustomerTransaction.day == report_day)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   ).all()
 
   company_txns = session.exec(
     select(CompanyTransaction)
     .where(CompanyTransaction.day == report_day)
-    .where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    .where(CompanyTransaction.deleted_at == None)  # noqa: E711
   ).all()
 
   expenses = session.exec(
     select(Expense)
     .where(Expense.day == report_day)
-    .where(Expense.is_reversed == False)  # noqa: E712
+    .where(Expense.deleted_at == None)  # noqa: E711
   ).all()
 
   cash_adjustments = session.exec(
     select(CashAdjustment)
     .where(CashAdjustment.day == report_day)
-    .where(CashAdjustment.is_reversed == False)  # noqa: E712
+    .where(CashAdjustment.deleted_at == None)  # noqa: E711
   ).all()
 
   inventory_adjustments = session.exec(
     select(InventoryAdjustment)
     .where(InventoryAdjustment.day == report_day)
-    .where(InventoryAdjustment.is_reversed == False)  # noqa: E712
+    .where(InventoryAdjustment.deleted_at == None)  # noqa: E711
   ).all()
 
   # Get customer and system lookups

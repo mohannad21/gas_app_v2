@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import CashAdjustment, Expense
 from app.services.ledger import sum_cash
@@ -33,7 +34,7 @@ def list_cash_adjustments(
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(CashAdjustment.day == day)
   if not include_deleted:
-    stmt = stmt.where(CashAdjustment.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(CashAdjustment.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -49,7 +50,7 @@ def list_cash_adjustments(
       reason=row.note,
       effective_at=row.happened_at,
       created_at=row.created_at,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
     )
     for row in rows
   ]
@@ -70,16 +71,16 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
         reason=existing.note,
         effective_at=existing.happened_at,
         created_at=existing.created_at,
-        is_deleted=existing.is_reversed,
+        is_deleted=existing.deleted_at is not None,
       )
   happened_at = normalize_happened_at(payload.happened_at)
   adjustment = CashAdjustment(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
     delta_cash=payload.delta_cash,
     note=payload.reason,
-    is_reversed=False,
   )
   session.add(adjustment)
   post_cash_adjustment(session, adjustment)
@@ -102,19 +103,20 @@ def update_cash_adjustment(
   session: Session = Depends(get_session),
 ) -> CashAdjustmentRow:
   existing = session.get(CashAdjustment, adjust_id)
-  if not existing or existing.is_reversed:
+  if not existing or existing.deleted_at is not None:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = CashAdjustment(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
     delta_cash=existing.delta_cash,
     note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
+    deleted_at=datetime.now(timezone.utc),
+    reversal_source_id=existing.id,
   )
   session.add(reversal)
   reverse_source(
@@ -127,18 +129,18 @@ def update_cash_adjustment(
     day=reversal.day,
     note=reversal.note,
   )
-  existing.is_reversed = True
+  existing.deleted_at = datetime.now(timezone.utc)
   session.add(existing)
 
   new_amount = payload.delta_cash if payload.delta_cash is not None else existing.delta_cash
   new_note = payload.reason if payload.reason is not None else existing.note
   new_adjustment = CashAdjustment(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
     delta_cash=new_amount,
     note=new_note,
-    is_reversed=False,
   )
   session.add(new_adjustment)
   post_cash_adjustment(session, new_adjustment)
@@ -157,18 +159,19 @@ def update_cash_adjustment(
 @router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
   existing = session.get(CashAdjustment, adjust_id)
-  if not existing or existing.is_reversed:
+  if not existing or existing.deleted_at is not None:
     return
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = CashAdjustment(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
     delta_cash=existing.delta_cash,
     note=f"Reversal of {existing.id}",
-    reversed_id=existing.id,
-    is_reversed=True,
+    deleted_at=datetime.now(timezone.utc),
+    reversal_source_id=existing.id,
   )
   session.add(reversal)
   reverse_source(
@@ -181,7 +184,7 @@ def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_sessio
     day=reversal.day,
     note=reversal.note,
   )
-  existing.is_reversed = True
+  existing.deleted_at = datetime.now(timezone.utc)
   session.add(existing)
   session.commit()
 
@@ -199,7 +202,7 @@ def list_bank_deposits(
     .where(Expense.kind == "deposit")
   )
   if not include_deleted:
-    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(Expense.deleted_at == None)  # noqa: E711
   if date:
     try:
       day = datetime.fromisoformat(date).date()
@@ -221,7 +224,7 @@ def list_bank_deposits(
       amount=row.amount,
       direction=_transfer_direction(row),
       note=row.note,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
     )
     for row in rows
   ]
@@ -254,6 +257,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
         },
       )
   expense = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
@@ -263,7 +267,6 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
     paid_from="bank" if payload.direction == "bank_to_wallet" else "cash",
     note=payload.note,
     vendor=None,
-    is_reversed=False,
   )
   session.add(expense)
   post_expense(session, expense)
@@ -281,11 +284,12 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
 @router.delete("/bank_deposit/{deposit_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)) -> None:
   existing = session.get(Expense, deposit_id)
-  if not existing or existing.is_reversed:
+  if not existing or existing.deleted_at is not None:
     return
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -295,8 +299,8 @@ def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)
     paid_from=existing.paid_from,
     note=f"Reversal of {existing.id}",
     vendor=None,
-    reversed_id=existing.id,
-    is_reversed=True,
+    deleted_at=datetime.now(timezone.utc),
+    reversal_source_id=existing.id,
   )
   session.add(reversal)
   reverse_source(
@@ -309,7 +313,7 @@ def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)
     day=reversal.day,
     note=reversal.note,
   )
-  existing.is_reversed = True
+  existing.deleted_at = datetime.now(timezone.utc)
   session.add(existing)
   session.commit()
 

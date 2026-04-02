@@ -3,6 +3,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
@@ -48,7 +49,7 @@ def list_adjustments(customer_id: str, session: Session = Depends(get_session)) 
     select(CustomerTransaction)
     .where(CustomerTransaction.customer_id == customer_id)
     .where(CustomerTransaction.kind == "adjust")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .order_by(CustomerTransaction.happened_at.desc())
   ).all()
   groups: dict[str, list[CustomerTransaction]] = {}
@@ -73,7 +74,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
       txns = session.exec(
         select(CustomerTransaction)
         .where(CustomerTransaction.group_id == group_id)
-        .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+        .where(CustomerTransaction.deleted_at == None)  # noqa: E711
       ).all()
       return _adjustment_out(txns or [existing])
 
@@ -84,6 +85,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   money = payload.amount_money or 0
   if money:
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,
@@ -97,7 +99,6 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -106,6 +107,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   count_12 = payload.count_12kg or 0
   if count_12:
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,
@@ -119,7 +121,6 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -128,6 +129,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   count_48 = payload.count_48kg or 0
   if count_48:
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,
@@ -141,7 +143,6 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)

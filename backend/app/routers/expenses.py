@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Expense, ExpenseCategory
 from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
@@ -47,7 +48,7 @@ def list_expenses(
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(Expense.day == day)
   if not include_deleted:
-    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(Expense.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -71,7 +72,7 @@ def list_expenses(
       note=row.note,
       created_at=row.created_at,
       created_by=None,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
     )
     for row in rows
   ]
@@ -89,6 +90,7 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
   base = business_date_start_utc(day) + timedelta(hours=12)
   happened_at = normalize_happened_at(payload.happened_at or base.replace(tzinfo=timezone.utc))
   expense = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
@@ -98,7 +100,6 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
     paid_from="cash",
     note=payload.note,
     vendor=None,
-    is_reversed=False,
   )
   session.add(expense)
   post_expense(session, expense)
@@ -126,11 +127,12 @@ def delete_expense(
     raise HTTPException(status_code=404, detail="expense_not_found")
   if expense.kind != "expense":
     raise HTTPException(status_code=404, detail="expense_not_found")
-  if expense.is_reversed:
+  if expense.deleted_at is not None:
     return
   reversal_happened_at = expense.happened_at
   reversal_day = expense.day
   reversal = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -140,8 +142,8 @@ def delete_expense(
     paid_from=expense.paid_from,
     note=f"Reversal of {expense.id}",
     vendor=None,
-    reversed_id=expense.id,
-    is_reversed=True,
+    deleted_at=datetime.now(timezone.utc),
+    reversal_source_id=expense.id,
   )
   session.add(reversal)
   reverse_source(
@@ -154,7 +156,7 @@ def delete_expense(
     day=reversal.day,
     note=reversal.note,
   )
-  expense.is_reversed = True
+  expense.deleted_at = datetime.now(timezone.utc)
   session.add(expense)
   session.commit()
 
@@ -166,7 +168,7 @@ def update_expense(
   session: Session = Depends(get_session),
 ) -> ExpenseOutLegacy:
   expense = session.get(Expense, expense_id)
-  if not expense or expense.kind != "expense" or expense.is_reversed:
+  if not expense or expense.kind != "expense" or expense.deleted_at is not None:
     raise HTTPException(status_code=404, detail="expense_not_found")
 
   new_date_str = payload.date or expense.day.isoformat()
@@ -184,6 +186,7 @@ def update_expense(
     raise HTTPException(status_code=400, detail="Invalid date format") from exc
 
   reversal = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=expense.happened_at,
     day=expense.day,
@@ -193,8 +196,8 @@ def update_expense(
     paid_from=expense.paid_from,
     note=f"Reversal of {expense.id}",
     vendor=None,
-    reversed_id=expense.id,
-    is_reversed=True,
+    deleted_at=datetime.now(timezone.utc),
+    reversal_source_id=expense.id,
   )
   session.add(reversal)
   reverse_source(
@@ -207,7 +210,7 @@ def update_expense(
     day=reversal.day,
     note=reversal.note,
   )
-  expense.is_reversed = True
+  expense.deleted_at = datetime.now(timezone.utc)
   session.add(expense)
 
   new_category = _get_category(session, new_expense_type)
@@ -218,6 +221,7 @@ def update_expense(
     replacement_local = datetime.combine(new_day, existing_local.timetz().replace(tzinfo=None))
     normalized_happened_at = normalize_happened_at(replacement_local)
   new_expense = Expense(
+    tenant_id=DEFAULT_TENANT_ID,
     request_id=None,
     happened_at=normalized_happened_at,
     day=derive_day(normalized_happened_at),
@@ -227,7 +231,6 @@ def update_expense(
     paid_from="cash",
     note=new_note,
     vendor=None,
-    is_reversed=False,
   )
   session.add(new_expense)
   post_expense(session, new_expense)

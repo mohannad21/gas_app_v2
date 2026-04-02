@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import SystemCreate, SystemOut, SystemUpdate
@@ -60,6 +61,7 @@ def create_system(payload: SystemCreate, session: Session = Depends(get_session)
   if not customer:
     raise HTTPException(status_code=400, detail="Customer not found")
   system = System(
+    tenant_id=DEFAULT_TENANT_ID,
     customer_id=payload.customer_id,
     name=payload.name,
     gas_type=payload.gas_type,
@@ -143,7 +145,7 @@ def delete_system(system_id: str, session: Session = Depends(get_session)) -> No
     select(CustomerTransaction.id)
     .where(CustomerTransaction.system_id == system_id)
     .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .limit(1)
   ).first()
   if has_orders:
