@@ -100,7 +100,8 @@ const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
 
 const formatOrderMetric = (event: DailyReportV2Event) => {
   const lines: string[] = [];
-  if (event.system_name) lines.push(`System: ${event.system_name}`);
+  const isSystemAttached = event.order_mode === "replacement" || event.order_mode === "sell_iron";
+  if (event.system_name && isSystemAttached) lines.push(`System: ${event.system_name}`);
   const gas = event.gas_type ? `${event.gas_type}` : "";
   const installed = Number(event.order_installed ?? 0);
   const received = Number(event.order_received ?? 0);
