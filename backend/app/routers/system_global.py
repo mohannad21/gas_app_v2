@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.db import get_session

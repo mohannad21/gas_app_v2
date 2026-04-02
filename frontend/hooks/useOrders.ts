@@ -1,4 +1,4 @@
-import { createOrder, deleteOrder, listOrders, listOrdersByDate, updateOrder } from "@/lib/api";
+import { createOrder, deleteOrder, listOrders, updateOrder } from "@/lib/api";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { customerBalanceQueryKey } from "@/hooks/useCustomers";
 import { showToast } from "@/lib/toast";
@@ -16,24 +16,16 @@ function invalidateCustomerBalance(
   queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
-export function useOrders() {
+export function useOrders(includeDeleted?: boolean) {
   return useQuery<Order[]>({
-    queryKey: ["orders"],
+    queryKey: ["orders", includeDeleted ?? false],
     queryFn: async () => {
-      const data = await listOrders();
+      const data = await listOrders(includeDeleted);
       const deduped = Array.from(new Map(data.map((o) => [o.id, o])).values());
       return deduped.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        (a, b) => new Date(b.delivered_at).getTime() - new Date(a.delivered_at).getTime()
       );
     },
-  });
-}
-
-export function useOrdersByDay(date?: string) {
-  return useQuery<Order[]>({
-    queryKey: ["orders", "day", date],
-    queryFn: () => listOrdersByDate(date || ""),
-    enabled: Boolean(date),
   });
 }
 

@@ -5,6 +5,8 @@ import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Mo
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
+import CollectionEditModal from "@/components/add/CollectionEditModal";
+import ActivityListSection from "@/components/add/ActivityListSection";
 import {
   CustomerListSubFilter,
   CustomerListTopFilter,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/activityAdapter";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
+import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
 import { useCompanyPayments } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import {
@@ -45,6 +48,10 @@ import {
 import { InventoryActivityItem } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
+import { useActivityFilters } from "@/hooks/useActivityFilters";
+import { useCollectionEdit } from "@/hooks/useCollectionEdit";
+import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
+import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeLocale, toDateKey } from "@/lib/date";
 import {
@@ -171,23 +178,32 @@ const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
 
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
-  const [mode, setMode] = useState<AddMode>("customer_activities");
+  // Extract activity filters state into custom hook
+  const {
+    mode,
+    setMode,
+    customerActivityFilter,
+    setCustomerActivityFilter,
+    companyActivityFilter,
+    setCompanyActivityFilter,
+    expensePrimaryFilter,
+    setExpensePrimaryFilter,
+    expenseCategoryFilter,
+    setExpenseCategoryFilter,
+    ledgerActivityFilter,
+    setLedgerActivityFilter,
+  } = useActivityFilters();
+
   const [customerSearch, setCustomerSearch] = useState("");
-  const [customerActivityFilter, setCustomerActivityFilter] = useState<CustomerActivityFilter>("all");
-  const [companyActivityFilter, setCompanyActivityFilter] = useState<CompanyActivityFilter>("all");
-  const [expensePrimaryFilter, setExpensePrimaryFilter] = useState<ExpensePrimaryFilter>("all");
-  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategoryFilter>("all_categories");
-  const [ledgerActivityFilter, setLedgerActivityFilter] = useState<LedgerActivityFilter>("all");
   const isCustomerActivities = mode === "customer_activities";
   const isCompanyActivities = mode === "company_activities";
   const isExpenses = mode === "expenses";
   const isLedgerAdjustments = mode === "ledger_adjustments";
-  const [confirm, setConfirm] = useState<{ type: "order" | "collection"; id: string; name?: string } | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
-  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-  const ordersQuery = useOrders();
-  const collectionsQuery = useCollections();
+
+  // Extract delete confirm state into custom hook
+  const { confirm, setConfirm, deletingIds, setDeletingIds, markDeleting, unmarkDeleting } = useDeleteConfirm();
+  const ordersQuery = useOrders(true);
+  const collectionsQuery = useCollections(true);
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
@@ -199,13 +215,22 @@ export default function AddChooserScreen() {
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
   const { companySummary, companyBalancesQuery } = useBalancesSummary();
-  const [priceModalOpen, setPriceModalOpen] = useState(false);
-  const [collectionEditOpen, setCollectionEditOpen] = useState(false);
-  const [collectionEditTarget, setCollectionEditTarget] = useState<any | null>(null);
-  const [collectionAmount, setCollectionAmount] = useState("");
-  const [collectionQty12, setCollectionQty12] = useState("");
-  const [collectionQty48, setCollectionQty48] = useState("");
-  const [collectionNote, setCollectionNote] = useState("");
+  // Extract collection edit state into custom hook
+  const {
+    collectionEditOpen,
+    setCollectionEditOpen,
+    collectionEditTarget,
+    setCollectionEditTarget,
+    collectionAmount,
+    setCollectionAmount,
+    collectionQty12,
+    setCollectionQty12,
+    collectionQty48,
+    setCollectionQty48,
+    collectionNote,
+    setCollectionNote,
+    resetCollectionForm,
+  } = useCollectionEdit();
   const accessoryId = Platform.OS === "ios" ? "addAccessory" : undefined;
   const deleteRefill = useDeleteRefill();
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
@@ -227,9 +252,9 @@ const formatDateTime = (value?: string) => {
   const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, true);
   const allCashAdjustmentsQuery = useCashAdjustments(undefined, true);
   const companyRefillsQuery = useInventoryRefills(true);
-  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities });
-  const expensesQuery = useExpenses(undefined, { enabled: isExpenses });
-  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses });
+  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities, includeDeleted: true });
+  const expensesQuery = useExpenses(undefined, { enabled: isExpenses, includeDeleted: true });
+  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses, includeDeleted: true });
   const deleteBankDeposit = useDeleteBankDeposit();
 
 
@@ -356,8 +381,8 @@ const formatDateTime = (value?: string) => {
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
     return [...rows].sort((a, b) => {
-      const aTime = new Date(a.created_at ?? a.date).getTime();
-      const bTime = new Date(b.created_at ?? b.date).getTime();
+      const aTime = new Date(a.created_at ?? a.happened_at ?? a.date).getTime();
+      const bTime = new Date(b.created_at ?? b.happened_at ?? b.date).getTime();
       return bTime - aTime;
     });
   }, [expensesQuery.data]);
@@ -418,7 +443,7 @@ const formatDateTime = (value?: string) => {
     const expenseItems = expenses.map<ExpenseListItem>((item) => ({
       id: `expense-${item.id}`,
       kind: "expense" as const,
-      sortAt: item.created_at ?? item.date,
+      sortAt: item.created_at ?? item.happened_at ?? item.date,
       data: item,
     }));
     const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
@@ -468,95 +493,22 @@ const formatDateTime = (value?: string) => {
   );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
-  const [priceInputs, setPriceInputs] = useState<PriceInputs>(() => createDefaultPriceInputs());
-  const [lastSavedPrices, setLastSavedPrices] = useState<PriceInputs>(() => createDefaultPriceInputs());
-  const dirtyPriceCombosRef = useRef<Set<string>>(new Set());
-  const [savingPrices, setSavingPrices] = useState(false);
-  const [priceSaveStatus, setPriceSaveStatus] = useState<{
-    tone: PriceSaveStatusTone;
-    message: string;
-  } | null>(null);
 
-  useEffect(() => {
-    if (!priceModalOpen || !priceSettingsQuery.data) {
-      return;
-    }
-    const latestByGas = priceSettingsQuery.data.reduce<Record<GasType, PriceSetting>>(
-      (acc, entry) => {
-        const existing = acc[entry.gas_type];
-        if (
-          !existing ||
-          new Date(entry.effective_from).getTime() > new Date(existing.effective_from).getTime()
-        ) {
-          acc[entry.gas_type] = entry;
-        }
-        return acc;
-      },
-      {} as Record<GasType, PriceSetting>
-    );
-    setLastSavedPrices((prev) => {
-      const nextSaved = createDefaultPriceInputs();
-      gasTypes.forEach((gas) => {
-        const combo = latestByGas[gas];
-        if (combo) {
-          nextSaved[gas] = {
-            selling: combo.selling_price.toString(),
-            buying: combo.buying_price?.toString() ?? "",
-            selling_iron: combo.selling_iron_price?.toString() ?? "",
-            buying_iron: combo.buying_iron_price?.toString() ?? "",
-          };
-        } else {
-          nextSaved[gas] = prev[gas] ?? {
-            selling: "",
-            buying: "",
-            selling_iron: "",
-            buying_iron: "",
-          };
-        }
-      });
-      return nextSaved;
-    });
-    setPriceInputs((prev) => {
-      const dirtyCombos = dirtyPriceCombosRef.current;
-      const next = createDefaultPriceInputs();
-      gasTypes.forEach((gas) => {
-        const combo = latestByGas[gas];
-        const comboKey = gas;
-        const previousValue = prev[gas] ?? {
-          selling: "",
-          buying: "",
-          selling_iron: "",
-          buying_iron: "",
-        };
-        if (dirtyCombos.has(comboKey)) {
-          next[gas] = { ...previousValue };
-        } else if (combo) {
-          next[gas] = {
-            selling: combo.selling_price.toString(),
-            buying: combo.buying_price?.toString() ?? "",
-            selling_iron: combo.selling_iron_price?.toString() ?? "",
-            buying_iron: combo.buying_iron_price?.toString() ?? "",
-          };
-        } else {
-          next[gas] = { ...previousValue };
-        }
-      });
-      return next;
-    });
-  }, [priceModalOpen, priceSettingsQuery.data]);
+  // Extract price modal state into custom hook
+  const {
+    priceModalOpen,
+    setPriceModalOpen,
+    priceInputs,
+    setPriceInputs,
+    lastSavedPrices,
+    setLastSavedPrices,
+    savingPrices,
+    setSavingPrices,
+    priceSaveStatus,
+    setPriceSaveStatus,
+    dirtyPriceCombosRef,
+  } = usePriceModal(priceSettingsQuery.data);
 
-  useEffect(() => {
-    if (!priceModalOpen) {
-      dirtyPriceCombosRef.current.clear();
-      setPriceSaveStatus(null);
-    }
-  }, [priceModalOpen]);
-
-  useEffect(() => {
-    if (expensePrimaryFilter !== "expense" && expenseCategoryFilter !== "all_categories") {
-      setExpenseCategoryFilter("all_categories");
-    }
-  }, [expenseCategoryFilter, expensePrimaryFilter]);
 
   useEffect(() => {
     const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
@@ -806,116 +758,22 @@ const formatDateTime = (value?: string) => {
   };
   const canSavePrices = dirtyPriceCombosRef.current.size > 0;
 
-  const handleRemoveRefill = (refillId: string) => {
-    Alert.alert("Remove refill?", "This will delete the refill entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(refillId);
-          try {
-            await deleteRefill.mutateAsync(refillId);
-            await companyRefillsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete refill failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(refillId);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteInventoryAdjustment = (entry: InventoryAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the adjustment entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteInventoryAdjust.mutateAsync(entry.id);
-            await allInventoryAdjustmentsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete inventory adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteCashAdjustment = (entry: CashAdjustment) => {
-    Alert.alert("Remove adjustment?", "This will delete the wallet adjustment.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteCashAdjust.mutateAsync(entry.id);
-            allCashAdjustmentsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete cash adjustment failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteExpense = (entry: Expense) => {
-    Alert.alert("Remove expense?", "This will delete the expense entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteExpense.mutateAsync({ id: entry.id, date: entry.date });
-            expensesQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete expense failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteBankTransfer = (entry: BankDeposit) => {
-    const date = (entry.happened_at ?? "").slice(0, 10) || todayDate;
-    Alert.alert("Remove transfer?", "This will delete the wallet/bank transfer entry.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          markDeleting(entry.id);
-          try {
-            await deleteBankDeposit.mutateAsync({ id: entry.id, date });
-            bankDepositsQuery.refetch();
-          } catch (error) {
-            console.error("[add] delete bank transfer failed", error);
-            Alert.alert("Failed to delete", "Try again later.");
-          } finally {
-            unmarkDeleting(entry.id);
-          }
-        },
-      },
-    ]);
-  };
+  const {
+    handleRemoveRefill,
+    handleDeleteInventoryAdjustment,
+    handleDeleteCashAdjustment,
+    handleDeleteExpense,
+    handleDeleteBankTransfer,
+  } = useAddEntryDeleteHandlers({
+    deleteRefill,
+    deleteInventoryAdjust,
+    deleteCashAdjust,
+    deleteExpense,
+    deleteBankDeposit,
+    markDeleting,
+    unmarkDeleting,
+    todayDate,
+  });
 
   const handleRetryCustomerActivities = () => {
     ordersQuery.refetch();
@@ -1082,21 +940,31 @@ const formatDateTime = (value?: string) => {
               if (item.kind === "adjustment") {
                 return (
                   <SlimActivityRow
-                    event={customerAdjustmentToEvent(item.data, { customerName: item.customerName })}
+                    event={customerAdjustmentToEvent(item.data, {
+                      customerName: item.customerName,
+                      customerDescription: customersById.get(item.data.customer_id)?.note ?? null,
+                    })}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                   />
                 );
               }
               if (item.kind === "collection") {
                 const collection = item.data;
                 return (
-                  <SlimActivityRow
-                    event={collectionToEvent(collection, { customerName: item.customerName })}
-                    formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(collection.id)}
-                    onEdit={() => openCollectionEdit(collection)}
-                    onDelete={() => confirmDeleteCollection(collection.id)}
-                  />
+                    <SlimActivityRow
+                      event={collectionToEvent(collection, {
+                        customerName: item.customerName,
+                        customerDescription: customersById.get(collection.customer_id)?.note ?? null,
+                      })}
+                      formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
+                      isDeleted={collection.is_deleted || deletingIds.has(collection.id)}
+                      onEdit={() => openCollectionEdit(collection)}
+                      onDelete={() => confirmDeleteCollection(collection.id)}
+                    />
                 );
               }
               const order = item.data;
@@ -1104,9 +972,15 @@ const formatDateTime = (value?: string) => {
               return (
                 <Pressable onPress={() => router.push(`/orders/${order.id}`)}>
                   <SlimActivityRow
-                    event={orderToEvent(order, { customerName: item.customerName, systemName })}
+                    event={orderToEvent(order, {
+                      customerName: item.customerName,
+                      customerDescription: customersById.get(order.customer_id)?.note ?? null,
+                      systemName,
+                    })}
                     formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(order.id)}
+                    showCreatedAt
+                    showEffectiveAtBottom
+                    isDeleted={order.is_deleted || deletingIds.has(order.id)}
                     onEdit={() => router.push(`/orders/${order.id}/edit`)}
                     onDelete={() => confirmDeleteOrder(order.id)}
                   />
@@ -1141,7 +1015,9 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={bankDepositToEvent(item.data)}
                       formatMoney={fmtMoney}
-                      isDeleted={deletingIds.has(item.data.id)}
+                      showCreatedAt
+                      showEffectiveAtBottom
+                      isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
                   );
@@ -1150,7 +1026,15 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={expenseToEvent(item.data)}
                     formatMoney={fmtMoney}
-                    isDeleted={deletingIds.has(item.data.id)}
+                    showCreatedAt
+                    showEffectiveAtBottom
+                    isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
+                    onEdit={() =>
+                      router.push({
+                        pathname: "/expenses/new",
+                        params: { expenseId: item.data.id },
+                      })
+                    }
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
                 );
@@ -1175,6 +1059,8 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={companyPaymentToEvent(entry.data)}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                     />
                   );
                 }
@@ -1183,6 +1069,8 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={refillSummaryToEvent(refill)}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
                     onEdit={() =>
                       router.push({
@@ -1215,6 +1103,8 @@ const formatDateTime = (value?: string) => {
                     <SlimActivityRow
                       event={inventoryAdjustmentToEvent(adjustment)}
                       formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
                       isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                       onEdit={() =>
                         router.push({
@@ -1231,6 +1121,8 @@ const formatDateTime = (value?: string) => {
                   <SlimActivityRow
                     event={cashAdjustmentToEvent(adjustment)}
                     formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                     onEdit={() =>
                       router.push({
@@ -1257,70 +1149,20 @@ const formatDateTime = (value?: string) => {
         </InputAccessoryView>
       )}
 
-      <Modal
-        transparent
-        visible={collectionEditOpen}
-        animationType="fade"
-        onRequestClose={() => setCollectionEditOpen(false)}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit collection</Text>
-            {collectionEditTarget?.action_type !== "return" ? (
-              <>
-                <Text style={styles.modalLabel}>Amount</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionAmount}
-                  onChangeText={setCollectionAmount}
-                  placeholder="0"
-                />
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalLabel}>12kg</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionQty12}
-                  onChangeText={setCollectionQty12}
-                  placeholder="0"
-                />
-                <Text style={styles.modalLabel}>48kg</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  value={collectionQty48}
-                  onChangeText={setCollectionQty48}
-                  placeholder="0"
-                />
-              </>
-            )}
-            <Text style={styles.modalLabel}>Note</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={collectionNote}
-              onChangeText={setCollectionNote}
-              placeholder="Optional note"
-            />
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalBtn} onPress={() => setCollectionEditOpen(false)}>
-                <Text style={styles.modalBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={handleSaveCollectionEdit}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <CollectionEditModal
+        isOpen={collectionEditOpen}
+        target={collectionEditTarget}
+        amount={collectionAmount}
+        qty12={collectionQty12}
+        qty48={collectionQty48}
+        note={collectionNote}
+        onAmountChange={setCollectionAmount}
+        onQty12Change={setCollectionQty12}
+        onQty48Change={setCollectionQty48}
+        onNoteChange={setCollectionNote}
+        onClose={() => setCollectionEditOpen(false)}
+        onSave={handleSaveCollectionEdit}
+      />
 
       {/* Confirm modal */}
       <Modal transparent visible={!!confirm} animationType="fade" onRequestClose={() => setConfirm(null)}>

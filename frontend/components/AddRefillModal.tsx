@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { AxiosError } from "axios";
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   InputAccessoryView,
@@ -23,7 +23,7 @@ import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
-import { formatDateLocale, formatTimeHM } from "@/lib/date";
+import { formatDateLocale } from "@/lib/date";
 import {
   calcCompanyCylinderLedgerDelta,
   calcMoneyUiResult,
@@ -38,6 +38,7 @@ import {
 } from "@/hooks/useInventory";
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
+import { useRefillFormState, type EditRefillEntry } from "@/hooks/useRefillFormState";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 type SavedRefillEntry = {
@@ -50,17 +51,6 @@ type SavedRefillEntry = {
   return48: number;
   total_cost: number;
   paid_now: number;
-};
-
-type EditRefillEntry = {
-  refill_id: string;
-  date: string;
-  time_of_day?: "morning" | "evening";
-  effective_at?: string;
-  buy12: number;
-  return12: number;
-  buy48: number;
-  return48: number;
 };
 
 type AddRefillModalProps = {
@@ -82,21 +72,6 @@ type InventoryNegativeDetail = {
   available?: number;
   attempt?: number;
 };
-
-function getNowDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getNowTime() {
-  const now = new Date();
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
-}
 
 function normalizeIso(value: string) {
   const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
@@ -175,134 +150,18 @@ export function RefillForm({
   const refillDetailsQuery = useInventoryRefillDetails(editEntry?.refill_id);
   const refillDetails = refillDetailsQuery.data;
   const pricesQuery = usePriceSettings();
-  const [date, setDate] = useState(getNowDate());
-  const [time, setTime] = useState(getNowTime());
   const companyBalancesQuery = useCompanyBalances();
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeOpen, setTimeOpen] = useState(false);
-  const [buy12, setBuy12] = useState("");
-  const [ret12, setRet12] = useState("");
-  const [buy48, setBuy48] = useState("");
-  const [ret48, setRet48] = useState("");
-  const [, setRet12Touched] = useState(false);
-  const [, setRet48Touched] = useState(false);
-  const [paidNow, setPaidNow] = useState("");
-  const [paidTouched, setPaidTouched] = useState(false);
-  const [initOpen, setInitOpen] = useState(false);
-  const [initCounts, setInitCounts] = useState({ full12: "", empty12: "", full48: "", empty48: "" });
-  const [price12Input, setPrice12Input] = useState("");
-  const [price48Input, setPrice48Input] = useState("");
-  const [price12Dirty, setPrice12Dirty] = useState(false);
-  const [price48Dirty, setPrice48Dirty] = useState(false);
-  const [ironPrice12Input, setIronPrice12Input] = useState("");
-  const [ironPrice48Input, setIronPrice48Input] = useState("");
-  const [notes, setNotes] = useState(""); // New state for notes
   const accessoryViewId = accessoryId;
   const paidAccessoryViewId = Platform.OS === "ios" ? "refillPaidAccessory" : undefined;
-  const isBuyMode = mode === "buy";
-  const isReturnMode = mode === "return";
 
-  const prevVisible = useRef(visible);
-  useEffect(() => {
-    if (!prevVisible.current && visible) {
-      if (editEntry) {
-        setDate(editEntry.date);
-        if (editEntry.effective_at) {
-          const parsed = new Date(editEntry.effective_at);
-          if (!Number.isNaN(parsed.getTime())) {
-            setTime(formatTimeHM(parsed, { hour12: false }));
-          }
-        } else if (editEntry.time_of_day) {
-          setTime(editEntry.time_of_day === "morning" ? "09:00" : "18:00");
-        }
-        setBuy12(String(editEntry.buy12));
-        setRet12(String(editEntry.return12));
-        setBuy48(String(editEntry.buy48));
-        setRet48(String(editEntry.return48));
-        setRet12Touched(true);
-        setRet48Touched(true);
-        setPaidTouched(false);
-        setNotes(refillDetails?.notes ?? ""); // Initialize notes
-        setPrice12Dirty(false);
-        setPrice48Dirty(false);
-        setIronPrice12Input("0");
-        setIronPrice48Input("0");
-      } else {
-        setDate(getNowDate());
-        setTime(getNowTime());
-        setBuy12("");
-        setRet12("");
-        setBuy48("");
-        setRet48("");
-        setRet12Touched(false);
-        setRet48Touched(false);
-        setPaidNow("");
-        setPaidTouched(false);
-        setNotes(""); // Clear notes for new entry
-        setPrice12Dirty(false);
-        setPrice48Dirty(false);
-        setIronPrice12Input("0");
-        setIronPrice48Input("0");
-      }
-      if (isBuyMode) {
-        setRet12("0");
-        setRet48("0");
-        setRet12Touched(true);
-        setRet48Touched(true);
-      }
-      if (isReturnMode) {
-        setBuy12("0");
-        setBuy48("0");
-      }
-    }
-    prevVisible.current = visible;
-  }, [visible, editEntry, refillDetails, isBuyMode, isReturnMode]); // Added refillDetails to dependencies
-
-  useEffect(() => {
-    if (!visible || !editEntry?.effective_at) return;
-    const parsed = new Date(editEntry.effective_at);
-    if (Number.isNaN(parsed.getTime())) return;
-    setTime(formatTimeHM(parsed, { hour12: false }));
-  }, [visible, editEntry?.effective_at]);
-
-  useEffect(() => {
-    if (!visible || !isBuyMode) return;
-    setRet12("0");
-    setRet48("0");
-    setRet12Touched(true);
-    setRet48Touched(true);
-  }, [isBuyMode, visible]);
-
-  const resetFormForCurrentMode = () => {
-    setDate(getNowDate());
-    setTime(getNowTime());
-    setBuy12(isReturnMode ? "0" : "");
-    setRet12(isBuyMode ? "0" : "");
-    setBuy48(isReturnMode ? "0" : "");
-    setRet48(isBuyMode ? "0" : "");
-    setRet12Touched(isBuyMode);
-    setRet48Touched(isBuyMode);
-    setPaidNow("");
-    setPaidTouched(false);
-    setNotes("");
-    setPrice12Dirty(false);
-    setPrice48Dirty(false);
-    setIronPrice12Input("0");
-    setIronPrice48Input("0");
-  };
-
-  useEffect(() => {
-    if (!visible || !isReturnMode) return;
-    setBuy12("0");
-    setBuy48("0");
-  }, [isReturnMode, visible]);
+  const formState = useRefillFormState(visible, mode, editEntry, refillDetails?.notes ?? undefined);
 
   const snapshotAt = useMemo(() => {
     if (!editEntry?.effective_at) return null;
     return subtractSeconds(editEntry.effective_at, 1);
   }, [editEntry?.effective_at]);
   const snapshotQuery = useInventorySnapshot(
-    visible ? (snapshotAt ? { at: snapshotAt } : { date, time }) : undefined
+    visible ? (snapshotAt ? { at: snapshotAt } : { date: formState.date, time: formState.time }) : undefined
   );
   const base = useMemo(() => {
     if (editEntry?.refill_id) {
@@ -340,35 +199,35 @@ export function RefillForm({
       const parsed = new Date(normalizeIso(editEntry.effective_at));
       if (!Number.isNaN(parsed.getTime())) return parsed;
     }
-    const fallback = new Date(`${date}T${time}:00`);
+    const fallback = new Date(`${formState.date}T${formState.time}:00`);
     if (!Number.isNaN(fallback.getTime())) return fallback;
-    return new Date(date);
-  }, [editEntry?.effective_at, date, time]);
+    return new Date(formState.date);
+  }, [editEntry?.effective_at, formState.date, formState.time]);
 
   const buy12Price = resolveBuyingPrice("12kg", priceTarget);
   const buy48Price = resolveBuyingPrice("48kg", priceTarget);
   useEffect(() => {
-    if (price12Dirty) return;
+    if (formState.price12Dirty) return;
     if (buy12Price > 0) {
-      setPrice12Input(buy12Price.toString());
+      formState.setPrice12Input(buy12Price.toString());
     }
-  }, [buy12Price, price12Dirty]);
+  }, [buy12Price, formState.price12Dirty, formState.setPrice12Input]);
   useEffect(() => {
-    if (price48Dirty) return;
+    if (formState.price48Dirty) return;
     if (buy48Price > 0) {
-      setPrice48Input(buy48Price.toString());
+      formState.setPrice48Input(buy48Price.toString());
     }
-  }, [buy48Price, price48Dirty]);
+  }, [buy48Price, formState.price48Dirty, formState.setPrice48Input]);
 
-  const price12Value = Number(price12Input) || 0;
-  const price48Value = Number(price48Input) || 0;
-  const ironPrice12Value = Number(ironPrice12Input) || 0;
-  const ironPrice48Value = Number(ironPrice48Input) || 0;
+  const price12Value = Number(formState.price12Input) || 0;
+  const price48Value = Number(formState.price48Input) || 0;
+  const ironPrice12Value = Number(formState.ironPrice12Input) || 0;
+  const ironPrice48Value = Number(formState.ironPrice48Input) || 0;
 
-  const buy12Value = Number(buy12) || 0;
-  const buy48Value = Number(buy48) || 0;
-  const ret12Value = Number(ret12) || 0;
-  const ret48Value = Number(ret48) || 0;
+  const buy12Value = Number(formState.buy12) || 0;
+  const buy48Value = Number(formState.buy48) || 0;
+  const ret12Value = Number(formState.ret12) || 0;
+  const ret48Value = Number(formState.ret48) || 0;
   const totalBuy12 = buy12Value;
   const totalBuy48 = buy48Value;
 
@@ -380,15 +239,15 @@ export function RefillForm({
   const baseMoneyNet = Number(companyBalances?.company_money ?? 0) - originalMoneyResult;
   const line12Cost = totalBuy12 * price12Value;
   const line48Cost = totalBuy48 * price48Value;
-  const ironLine12Cost = isBuyMode ? totalBuy12 * ironPrice12Value : 0;
-  const ironLine48Cost = isBuyMode ? totalBuy48 * ironPrice48Value : 0;
+  const ironLine12Cost = formState.isBuyMode ? totalBuy12 * ironPrice12Value : 0;
+  const ironLine48Cost = formState.isBuyMode ? totalBuy48 * ironPrice48Value : 0;
   const totalCost = line12Cost + line48Cost + ironLine12Cost + ironLine48Cost;
   useEffect(() => {
-    if (paidTouched) return;
-    setPaidNow(totalCost ? totalCost.toString() : "");
-  }, [totalCost, paidTouched]);
+    if (formState.paidTouched) return;
+    formState.setPaidNow(totalCost ? totalCost.toString() : "");
+  }, [totalCost, formState.paidTouched, formState.setPaidNow]);
 
-  const paidNowValue = Number(paidNow) || 0;
+  const paidNowValue = Number(formState.paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
 
   const availableEmpty12 = base?.empty12 ?? 0;
@@ -400,8 +259,8 @@ export function RefillForm({
   const originalDelta12 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy12, editEntry.return12) : 0;
   const originalDelta48 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy48, editEntry.return48) : 0;
   // Only actual swaps affect company cylinders (new shells do not).
-  const delta12 = isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy12Value, ret12Value);
-  const delta48 = isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy48Value, ret48Value);
+  const delta12 = formState.isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy12Value, ret12Value);
+  const delta48 = formState.isBuyMode ? 0 : calcCompanyCylinderLedgerDelta(buy48Value, ret48Value);
 
   // Recalculate net company balance for display purposes, excluding new shells from the 'buy' side that affect company debt
   const baseCompanyNet12 = Number(companyBalances?.company_cyl_12 ?? 0);
@@ -410,8 +269,8 @@ export function RefillForm({
   const adjustedBase48 = baseCompanyNet48 - originalDelta48;
   const owedReturn12 = Math.max(-adjustedBase12, 0);
   const owedReturn48 = Math.max(-adjustedBase48, 0);
-  const disableReturn12 = isReturnMode && owedReturn12 <= 0;
-  const disableReturn48 = isReturnMode && owedReturn48 <= 0;
+  const disableReturn12 = formState.isReturnMode && owedReturn12 <= 0;
+  const disableReturn48 = formState.isReturnMode && owedReturn48 <= 0;
   const liveCompanyNet12 = adjustedBase12 + delta12;
   const liveCompanyNet48 = adjustedBase48 + delta48;
   const companyMoneyTransitionLines = formatBalanceTransitions(
@@ -419,7 +278,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -428,7 +287,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -437,7 +296,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: isBuyMode ? "company_buy_iron" : isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -471,17 +330,17 @@ export function RefillForm({
 
   useEffect(() => {
     if (disableReturn12 && ret12Value !== 0) {
-      setRet12Touched(true);
-      setRet12("0");
+      formState.setRet12Touched(true);
+      formState.setRet12("0");
     }
-  }, [disableReturn12, ret12Value]);
+  }, [disableReturn12, ret12Value, formState.setRet12Touched, formState.setRet12]);
 
   useEffect(() => {
     if (disableReturn48 && ret48Value !== 0) {
-      setRet48Touched(true);
-      setRet48("0");
+      formState.setRet48Touched(true);
+      formState.setRet48("0");
     }
-  }, [disableReturn48, ret48Value]);
+  }, [disableReturn48, ret48Value, formState.setRet48Touched, formState.setRet48]);
 
   const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
   const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
@@ -502,10 +361,10 @@ export function RefillForm({
     updateRefill.isPending ||
     initInventory.isPending;
 
-  const payloadBuy12 = isReturnMode ? 0 : buy12Value;
-  const payloadBuy48 = isReturnMode ? 0 : buy48Value;
-  const payloadReturn12 = isBuyMode ? 0 : ret12Value;
-  const payloadReturn48 = isBuyMode ? 0 : ret48Value;
+  const payloadBuy12 = formState.isReturnMode ? 0 : buy12Value;
+  const payloadBuy48 = formState.isReturnMode ? 0 : buy48Value;
+  const payloadReturn12 = formState.isBuyMode ? 0 : ret12Value;
+  const payloadReturn48 = formState.isBuyMode ? 0 : ret48Value;
 
   const handleSave = async (resetAfter = false) => {
     if (!base || inventoryNotInitialized) {
@@ -515,14 +374,14 @@ export function RefillForm({
     if (return12Invalid) {
       Alert.alert(
         "Invalid return",
-              {/* -- 12kg Cylinders -- */}
+        `You only have ${availableEmpty12} empty 12kg cylinders. Entered ${ret12Value}.`
       );
       return;
     }
     if (return48Invalid) {
       Alert.alert(
         "Invalid return",
-              {/* -- 48kg Cylinders -- */}
+        `You only have ${availableEmpty48} empty 48kg cylinders. Entered ${ret48Value}.`
       );
       return;
     }
@@ -535,32 +394,32 @@ export function RefillForm({
           return12: payloadReturn12,
           buy48: payloadBuy48,
           return48: payloadReturn48,
-          notes: notes.trim() ? notes.trim() : undefined,
+          notes: formState.notes.trim() ? formState.notes.trim() : undefined,
           total_cost: totalCost,
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
           debt_cylinders_48: liveCompanyNet48,
         });
-      } else if (isBuyMode) {
+      } else if (formState.isBuyMode) {
         await createCompanyBuyIron.mutateAsync({
-          date,
-          time,
+          date: formState.date,
+          time: formState.time,
           new12: payloadBuy12,
           new48: payloadBuy48,
           total_cost: totalCost,
           paid_now: paidNowValue,
-          note: notes.trim() ? notes.trim() : undefined,
+          note: formState.notes.trim() ? formState.notes.trim() : undefined,
         });
       } else {
         await createRefill.mutateAsync({
-          date,
-          time,
+          date: formState.date,
+          time: formState.time,
           buy12: payloadBuy12,
           return12: payloadReturn12,
           buy48: payloadBuy48,
           return48: payloadReturn48,
           paid_now: paidNowValue,
-          notes: notes.trim() ? notes.trim() : undefined,
+          notes: formState.notes.trim() ? formState.notes.trim() : undefined,
           total_cost: totalCost,
           debt_cash: liveMoneyGive,
           debt_cylinders_12: liveCompanyNet12,
@@ -570,8 +429,8 @@ export function RefillForm({
       Keyboard.dismiss();
       const savedEntry = {
         id: editEntry?.refill_id ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        date,
-        time,
+        date: formState.date,
+        time: formState.time,
         buy12: buy12Value,
         return12: ret12Value,
         buy48: buy48Value,
@@ -580,7 +439,7 @@ export function RefillForm({
         paid_now: paidNowValue,
       };
       if (resetAfter && !editEntry?.refill_id) {
-        resetFormForCurrentMode();
+        formState.resetFormForCurrentMode();
       } else {
         onSaved(savedEntry);
         onClose();
@@ -598,27 +457,27 @@ export function RefillForm({
     }
   };
   const handleBuy12Change = (value: string) => {
-    if (isReturnMode) return;
-    const next = sanitizeBuyCountInput(value, availableEmpty12, isBuyMode);
+    if (formState.isReturnMode) return;
+    const next = sanitizeBuyCountInput(value, availableEmpty12, formState.isBuyMode);
     const delta = Number(next || 0) - buy12Value;
-    setBuy12(next);
-    if (!isBuyMode && delta > 0) {
-      setRet12(String(ret12Value + delta));
+    formState.setBuy12(next);
+    if (!formState.isBuyMode && delta > 0) {
+      formState.setRet12(String(ret12Value + delta));
     }
   };
   const handleBuy48Change = (value: string) => {
-    if (isReturnMode) return;
-    const next = sanitizeBuyCountInput(value, availableEmpty48, isBuyMode);
+    if (formState.isReturnMode) return;
+    const next = sanitizeBuyCountInput(value, availableEmpty48, formState.isBuyMode);
     const delta = Number(next || 0) - buy48Value;
-    setBuy48(next);
-    if (!isBuyMode && delta > 0) {
-      setRet48(String(ret48Value + delta));
+    formState.setBuy48(next);
+    if (!formState.isBuyMode && delta > 0) {
+      formState.setRet48(String(ret48Value + delta));
     }
   };
 
-  const canEditBuy = !isReturnMode;
-  const canEditReturn = !isBuyMode;
-  const canEditMoney = !isReturnMode;
+  const canEditBuy = !formState.isReturnMode;
+  const canEditReturn = !formState.isBuyMode;
+  const canEditMoney = !formState.isReturnMode;
   const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
 
   const adjustBuy12 = (delta: number) => {
@@ -632,33 +491,33 @@ export function RefillForm({
   const adjustReturn12 = (delta: number) => {
     if (!canEditReturn) return;
     const next = Math.max(ret12Value + delta, 0);
-    setRet12Touched(true);
-    setRet12(String(next));
+    formState.setRet12Touched(true);
+    formState.setRet12(String(next));
   };
   const adjustReturn48 = (delta: number) => {
     if (!canEditReturn) return;
     const next = Math.max(ret48Value + delta, 0);
-    setRet48Touched(true);
-    setRet48(String(next));
+    formState.setRet48Touched(true);
+    formState.setRet48(String(next));
   };
   const adjustPaid = (delta: number) => {
     if (!canEditMoney) return;
-    const current = Number(paidNow) || 0;
+    const current = Number(formState.paidNow) || 0;
     const next = Math.max(current + delta, 0);
-    setPaidTouched(true);
-    setPaidNow(String(next));
+    formState.setPaidTouched(true);
+    formState.setPaidNow(String(next));
   };
   const adjustIronPrice12 = (delta: number) => {
-    if (!canEditMoney || !isBuyMode) return;
-    const current = Number(ironPrice12Input) || 0;
+    if (!canEditMoney || !formState.isBuyMode) return;
+    const current = Number(formState.ironPrice12Input) || 0;
     const next = Math.max(current + delta, 0);
-    setIronPrice12Input(String(next));
+    formState.setIronPrice12Input(String(next));
   };
   const adjustIronPrice48 = (delta: number) => {
-    if (!canEditMoney || !isBuyMode) return;
-    const current = Number(ironPrice48Input) || 0;
+    if (!canEditMoney || !formState.isBuyMode) return;
+    const current = Number(formState.ironPrice48Input) || 0;
     const next = Math.max(current + delta, 0);
-    setIronPrice48Input(String(next));
+    formState.setIronPrice48Input(String(next));
   };
 
   const footerActions = (
@@ -666,7 +525,7 @@ export function RefillForm({
       onSave={() => handleSave(false)}
       onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
       saveDisabled={disableSave}
-      saving={isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
+      saving={formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
     />
   );
 
@@ -698,16 +557,16 @@ export function RefillForm({
                 <View style={styles.row}>
                   <Pressable
                     style={[styles.dateField, editEntry && styles.dateFieldDisabled]}
-                    onPress={editEntry ? undefined : () => setCalendarOpen(true)}
+                    onPress={editEntry ? undefined : () => formState.setCalendarOpen(true)}
                   >
-                    <Text style={styles.dateText}>{date}</Text>
+                    <Text style={styles.dateText}>{formState.date}</Text>
                     <Ionicons name="calendar-outline" size={16} color="#0a7ea4" />
                   </Pressable>
                   <Pressable
                     style={[styles.dateField, editEntry && styles.dateFieldDisabled]}
-                    onPress={editEntry ? undefined : () => setTimeOpen(true)}
+                    onPress={editEntry ? undefined : () => formState.setTimeOpen(true)}
                   >
-                    <Text style={styles.dateText}>{time}</Text>
+                    <Text style={styles.dateText}>{formState.time}</Text>
                     <Ionicons name="time-outline" size={16} color="#0a7ea4" />
                   </Pressable>
                   <Pressable
@@ -719,8 +578,8 @@ export function RefillForm({
                       const day = String(now.getDate()).padStart(2, "0");
                       const hours = String(now.getHours()).padStart(2, "0");
                       const minutes = String(now.getMinutes()).padStart(2, "0");
-                      setDate(`${year}-${month}-${day}`);
-                      setTime(`${hours}:${minutes}`);
+                      formState.setDate(`${year}-${month}-${day}`);
+                      formState.setTime(`${hours}:${minutes}`);
                     }}
                   >
                     <Text style={styles.nowButtonText}>Now</Text>
@@ -737,7 +596,7 @@ export function RefillForm({
                   - Buy:     ONE BigBox with [Buy 12kg left] [Buy 48kg right]
               Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
 
-              {isBuyMode ? (
+              {formState.isBuyMode ? (
                 /* BUY Ã¢â‚¬â€ one Cylinders BigBox, 12kg left / 48kg right */
                 <BigBox
                   title={CUSTOMER_WORDING.cylinders}
@@ -766,7 +625,7 @@ export function RefillForm({
                     />
                   </View>
                 </BigBox>
-              ) : isReturnMode ? (
+              ) : formState.isReturnMode ? (
                 /* RETURN Ã¢â‚¬â€ separate BigBox per gas type */
                 <>
                   <BigBox
@@ -782,7 +641,7 @@ export function RefillForm({
                         value={ret12Value}
                         onIncrement={() => adjustReturn12(1)}
                         onDecrement={() => adjustReturn12(-1)}
-                        onChangeText={(text) => { setRet12Touched(true); setRet12(sanitizeCountInput(text)); }}
+                        onChangeText={(text) => { formState.setRet12Touched(true); formState.setRet12(sanitizeCountInput(text)); }}
                         editable={!disableReturn12}
                         error={return12Invalid}
                         steppers={FIELD_QTY_STEPPERS}
@@ -798,8 +657,8 @@ export function RefillForm({
                               ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
                             ]}
                             onPress={() => {
-                              setRet12Touched(true);
-                              setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
+                              formState.setRet12Touched(true);
+                              formState.setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
                             }}
                           >
                             <Text style={styles.inlineActionText}>
@@ -829,7 +688,7 @@ export function RefillForm({
                         value={ret48Value}
                         onIncrement={() => adjustReturn48(1)}
                         onDecrement={() => adjustReturn48(-1)}
-                        onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
+                        onChangeText={(text) => { formState.setRet48Touched(true); formState.setRet48(sanitizeCountInput(text)); }}
                         editable={!disableReturn48}
                         error={return48Invalid}
                         steppers={FIELD_QTY_STEPPERS}
@@ -845,8 +704,8 @@ export function RefillForm({
                               ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
                             ]}
                             onPress={() => {
-                              setRet48Touched(true);
-                              setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
+                              formState.setRet48Touched(true);
+                              formState.setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
                             }}
                           >
                             <Text style={styles.inlineActionText}>
@@ -888,7 +747,7 @@ export function RefillForm({
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
-                      onChangeText={(text) => { setRet12Touched(true); setRet12(sanitizeCountInput(text)); }}
+                      onChangeText={(text) => { formState.setRet12Touched(true); formState.setRet12(sanitizeCountInput(text)); }}
                       error={return12Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
@@ -905,8 +764,8 @@ export function RefillForm({
                         ]}
                         onPress={() => {
                           if (buy12Value <= 0) return;
-                          setRet12Touched(true);
-                          setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
+                          formState.setRet12Touched(true);
+                          formState.setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
                         }}
                       >
                         <Text style={styles.inlineActionText}>
@@ -938,7 +797,7 @@ export function RefillForm({
                       value={ret48Value}
                       onIncrement={() => adjustReturn48(1)}
                       onDecrement={() => adjustReturn48(-1)}
-                      onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
+                      onChangeText={(text) => { formState.setRet48Touched(true); formState.setRet48(sanitizeCountInput(text)); }}
                       error={return48Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
@@ -955,8 +814,8 @@ export function RefillForm({
                         ]}
                         onPress={() => {
                           if (buy48Value <= 0) return;
-                          setRet48Touched(true);
-                          setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                          formState.setRet48Touched(true);
+                          formState.setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
                         }}
                       >
                         <Text style={styles.inlineActionText}>
@@ -978,7 +837,7 @@ export function RefillForm({
                   GAS PRICE + IRON PRICE + MONEY
                   Only shown on Refill and Buy tabs (not Return)
               Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
-              {!isReturnMode ? (
+              {!formState.isReturnMode ? (
                 <>
                   {/* Gas Price 12kg
                       QTY and TOTAL are plain text (tradeStatCell style).
@@ -1092,7 +951,7 @@ export function RefillForm({
                   {/* Iron Price Ã¢â‚¬â€ Buy tab only.
                       QTY and TOTAL are plain text at the same vertical level as
                       the Iron Price FieldCell buttons (alignItems: "center"). */}
-                  {isBuyMode ? (
+                  {formState.isBuyMode ? (
                     <>
                       <BigBox title="Iron Buying Price 12kg">
                         <View style={styles.tradeEquationRow}>
@@ -1113,7 +972,7 @@ export function RefillForm({
                             value={ironPrice12Value}
                             onIncrement={() => adjustIronPrice12(5)}
                             onDecrement={() => adjustIronPrice12(-5)}
-                            onChangeText={(t) => setIronPrice12Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice12Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -1150,7 +1009,7 @@ export function RefillForm({
                             value={ironPrice48Value}
                             onIncrement={() => adjustIronPrice48(5)}
                             onDecrement={() => adjustIronPrice48(-5)}
-                            onChangeText={(t) => setIronPrice48Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice48Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -1178,8 +1037,8 @@ export function RefillForm({
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
-                    statusLine={isBuyMode ? undefined : moneyStatusLine}
-                    statusIsAlert={!isBuyMode && liveMoneyNet > 0}
+                    statusLine={formState.isBuyMode ? undefined : moneyStatusLine}
+                    statusIsAlert={!formState.isBuyMode && liveMoneyNet > 0}
                     defaultExpanded
                   >
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1199,8 +1058,8 @@ export function RefillForm({
                         onDecrement={() => adjustPaid(-5)}
                         onChangeText={(text) => {
                           if (!canEditMoney) return;
-                          setPaidTouched(true);
-                          setPaidNow(sanitizeCountInput(text));
+                          formState.setPaidTouched(true);
+                          formState.setPaidNow(sanitizeCountInput(text));
                         }}
                         editable={canEditMoney}
                         steppers={FIELD_MONEY_STEPPERS}
@@ -1217,8 +1076,8 @@ export function RefillForm({
                             paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
                           ]}
                           onPress={() => {
-                            setPaidTouched(true);
-                            setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
+                            formState.setPaidTouched(true);
+                            formState.setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
                           }}
                         >
                           <Text style={styles.inlineActionText}>
@@ -1253,8 +1112,8 @@ export function RefillForm({
                 <TextInput
                   style={styles.input}
                   placeholder="Optional notes for this refill"
-                  value={notes}
-                  onChangeText={setNotes}
+                  value={formState.notes}
+                  onChangeText={formState.setNotes}
                   inputAccessoryViewID={accessoryViewId}
                   multiline
                   numberOfLines={3}
@@ -1276,42 +1135,42 @@ export function RefillForm({
       ) : null}
 
       <CalendarModal
-        visible={calendarOpen}
-        value={date}
+        visible={formState.calendarOpen}
+        value={formState.date}
         onSelect={(next) => {
-          setDate(next);
-          setCalendarOpen(false);
+          formState.setDate(next);
+          formState.setCalendarOpen(false);
         }}
-        onClose={() => setCalendarOpen(false)}
+        onClose={() => formState.setCalendarOpen(false)}
       />
       <TimePickerModal
-        visible={timeOpen}
-        value={time}
+        visible={formState.timeOpen}
+        value={formState.time}
         onSelect={(next) => {
-          setTime(next);
-          setTimeOpen(false);
+          formState.setTime(next);
+          formState.setTimeOpen(false);
         }}
-        onClose={() => setTimeOpen(false)}
+        onClose={() => formState.setTimeOpen(false)}
       />
       <InitInventoryModal
-        visible={initOpen}
-        date={date}
-        counts={initCounts}
-        onChangeCounts={setInitCounts}
-        onClose={() => setInitOpen(false)}
+        visible={formState.initOpen}
+        date={formState.date}
+        counts={formState.initCounts}
+        onChangeCounts={formState.setInitCounts}
+        onClose={() => formState.setInitOpen(false)}
         saveDisabled={initInventory.isPending}
         saving={initInventory.isPending}
         onSave={async () => {
           await initInventory.mutateAsync({
-            date,
-            full12: Number(initCounts.full12) || 0,
-            empty12: Number(initCounts.empty12) || 0,
-            full48: Number(initCounts.full48) || 0,
-            empty48: Number(initCounts.empty48) || 0,
+            date: formState.date,
+            full12: Number(formState.initCounts.full12) || 0,
+            empty12: Number(formState.initCounts.empty12) || 0,
+            full48: Number(formState.initCounts.full48) || 0,
+            empty48: Number(formState.initCounts.empty48) || 0,
             reason: "initial",
           });
           Keyboard.dismiss();
-          setInitOpen(false);
+          formState.setInitOpen(false);
         }}
         accessoryId={accessoryViewId}
       />

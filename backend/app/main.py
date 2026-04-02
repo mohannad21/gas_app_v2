@@ -16,8 +16,8 @@ from .routers import (
   orders,
   prices,
   reports,
-  system,
-  system_types,
+  system_global,
+  system_type_options,
   systems,
 )
 
@@ -39,8 +39,8 @@ app.include_router(auth.router)
 app.include_router(customers.router, dependencies=protected_route_dependencies)
 app.include_router(customer_adjustments.router, dependencies=protected_route_dependencies)
 app.include_router(systems.router, dependencies=protected_route_dependencies)
-app.include_router(system.router, dependencies=protected_route_dependencies)
-app.include_router(system_types.router, dependencies=protected_route_dependencies)
+app.include_router(system_global.router, dependencies=protected_route_dependencies)
+app.include_router(system_type_options.router, dependencies=protected_route_dependencies)
 app.include_router(prices.router, dependencies=protected_route_dependencies)
 app.include_router(orders.router, dependencies=protected_route_dependencies)
 app.include_router(collections.router, dependencies=protected_route_dependencies)

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"effective_business_tz_name\\\\|business_date_end_utc\\\\|boundary_for_source\" c:/Users/Mohannad/gas_app_v2/backend/app/routers/*.py c:/Users/Mohannad/gas_app_v2/frontend/lib/api.ts)",
+      "Bash(grep -rn \"DATABASE_URL\\\\|sqlalchemy.url\\\\|db_url\" c:/Users/Mohannad/gas_app_v2/backend --include=*.py --include=*.env --include=.env*)",
+      "Bash(grep -rn bActivityb c:/Users/Mohannad/gas_app_v2/frontend --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn \"onEdit\\\\|onUpdate\\\\|editMode\\\\|updateMode\\\\|EditModal\\\\|UpdateModal\\\\|editActivity\\\\|updateActivity\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
+      "Bash(grep -rn \"is_deleted\\\\|isDeleted\\\\|blurred\\\\|blur.*deleted\\\\|deleted.*blur\\\\|opacity.*deleted\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
+      "Bash(grep -rn \"before_state\\\\|after_state\\\\|beforeState\\\\|afterState\\\\|money_before\\\\|money_after\\\\|ledger_before\\\\|ledger_after\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)"
+    ]
+  }
+}

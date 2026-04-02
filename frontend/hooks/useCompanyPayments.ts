@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createCompanyPayment, listCompanyPayments } from "@/lib/api";
 import { CompanyPayment } from "@/types/domain";
 
-export function useCompanyPayments(options?: { enabled?: boolean }) {
+export function useCompanyPayments(options?: { enabled?: boolean; includeDeleted?: boolean }) {
   const enabled = options?.enabled ?? true;
   return useQuery<CompanyPayment[]>({
-    queryKey: ["company", "payments"],
+    queryKey: ["company", "payments", options?.includeDeleted ?? false],
     enabled,
-    queryFn: listCompanyPayments,
+    queryFn: () => listCompanyPayments(options?.includeDeleted),
   });
 }
 

@@ -8,7 +8,7 @@ from app.db import get_session
 from app.models import Expense, ExpenseCategory
 from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
 from app.services.posting import derive_day, normalize_happened_at, post_expense, reverse_source
-from app.utils.time import business_date_start_utc
+from app.utils.time import business_date_start_utc, business_tz
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -36,6 +36,7 @@ def list_expenses(
   date: str | None = Query(default=None),
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[ExpenseOutLegacy]:
   stmt = select(Expense).where(Expense.kind == "expense")
@@ -45,7 +46,8 @@ def list_expenses(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(Expense.day == day)
-  stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
+  if not include_deleted:
+    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -63,11 +65,13 @@ def list_expenses(
     ExpenseOutLegacy(
       id=row.id,
       date=row.day.isoformat(),
+      happened_at=row.happened_at,
       expense_type=cats.get(row.category_id, "Other"),
       amount=row.amount,
       note=row.note,
       created_at=row.created_at,
       created_by=None,
+      is_deleted=row.is_reversed,
     )
     for row in rows
   ]
@@ -103,6 +107,7 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
   return ExpenseOutLegacy(
     id=expense.id,
     date=expense.day.isoformat(),
+    happened_at=expense.happened_at,
     expense_type=payload.expense_type,
     amount=expense.amount,
     note=expense.note,
@@ -206,7 +211,12 @@ def update_expense(
   session.add(expense)
 
   new_category = _get_category(session, new_expense_type)
-  normalized_happened_at = normalize_happened_at(new_happened_at)
+  if payload.happened_at is not None:
+    normalized_happened_at = normalize_happened_at(new_happened_at)
+  else:
+    existing_local = normalize_happened_at(expense.happened_at).astimezone(business_tz())
+    replacement_local = datetime.combine(new_day, existing_local.timetz().replace(tzinfo=None))
+    normalized_happened_at = normalize_happened_at(replacement_local)
   new_expense = Expense(
     request_id=None,
     happened_at=normalized_happened_at,
@@ -228,6 +238,7 @@ def update_expense(
   return ExpenseOutLegacy(
     id=new_expense.id,
     date=new_expense.day.isoformat(),
+    happened_at=new_expense.happened_at,
     expense_type=cats.get(new_expense.category_id, "Other"),
     amount=new_expense.amount,
     note=new_expense.note,

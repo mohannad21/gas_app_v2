@@ -37,10 +37,10 @@ export function useCreateCollection() {
   });
 }
 
-export function useCollections() {
+export function useCollections(includeDeleted?: boolean) {
   return useQuery({
-    queryKey: ["collections"],
-    queryFn: listCollections,
+    queryKey: ["collections", includeDeleted ?? false],
+    queryFn: () => listCollections(includeDeleted),
   });
 }
 

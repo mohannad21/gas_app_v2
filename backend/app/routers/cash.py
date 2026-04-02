@@ -191,13 +191,15 @@ def list_bank_deposits(
   date: str | None = None,
   before: Optional[str] = Query(default=None),
   limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
 ) -> list[BankDepositOut]:
   stmt = (
     select(Expense)
     .where(Expense.kind == "deposit")
-    .where(Expense.is_reversed == False)  # noqa: E712
   )
+  if not include_deleted:
+    stmt = stmt.where(Expense.is_reversed == False)  # noqa: E712
   if date:
     try:
       day = datetime.fromisoformat(date).date()
@@ -219,6 +221,7 @@ def list_bank_deposits(
       amount=row.amount,
       direction=_transfer_direction(row),
       note=row.note,
+      is_deleted=row.is_reversed,
     )
     for row in rows
   ]
