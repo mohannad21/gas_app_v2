@@ -462,7 +462,7 @@ def get_daily_report_v2(
     # Get customer state after this event
     customer_after = None
     if event.customer_id and event.customer_id in running_customer_states:
-      entries_for_customer = [e for e in entries if e.customer_id == event.customer_id and e.happened_at <= event.happened_at]
+      entries_for_customer = [e for e in entries if e.customer_id == event.customer_id and e.happened_at <= event.effective_at]
       if entries_for_customer:
         delta = _customer_state_delta_from_entries(entries_for_customer)
         before = customer_before_states.get(event.customer_id, (0, 0, 0))
