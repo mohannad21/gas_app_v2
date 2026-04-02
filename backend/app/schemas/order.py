@@ -11,7 +11,7 @@ from .common import GasType, OrderMode, _non_negative
 
 class OrderCreate(SQLModel):
   customer_id: str
-  system_id: str
+  system_id: Optional[str] = None
   happened_at: Optional[datetime] = None
   order_mode: OrderMode = "replacement"
   gas_type: GasType
@@ -55,7 +55,7 @@ class OrderUpdate(SQLModel):
 class OrderOut(SQLModel):
   id: str
   customer_id: str
-  system_id: str
+  system_id: Optional[str] = None
   delivered_at: datetime
   created_at: datetime
   updated_at: Optional[datetime] = None

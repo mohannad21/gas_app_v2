@@ -851,7 +851,7 @@ export default function NewOrderScreen() {
       Alert.alert("Missing gas type", "Please select a gas type.");
       return;
     }
-    if (!values.system_id) {
+    if ((orderMode === "replacement" || orderMode === "sell_iron") && !values.system_id) {
       Alert.alert("Missing system", "Please add a system for this customer.");
       return;
     }
@@ -924,7 +924,7 @@ export default function NewOrderScreen() {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const orderPayload: OrderCreateInput = {
       customer_id: values.customer_id,
-      system_id: values.system_id,
+      ...(orderMode === "replacement" || orderMode === "sell_iron" ? { system_id: values.system_id } : {}),
       delivered_at: values.delivered_at,
       gas_type: gasType,
       cylinders_installed: Number(values.cylinders_installed) || 0,

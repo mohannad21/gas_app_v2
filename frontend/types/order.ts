@@ -31,7 +31,7 @@ export type Order = z.infer<typeof OrderSchema>;
 
 export const OrderCreateInputSchema = z.object({
   customer_id: z.string(),
-  system_id: z.string(),
+  system_id: z.string().optional(),
   delivered_at: z.string().optional(),
   order_mode: OrderModeSchema.optional(),
   gas_type: GasTypeSchema,

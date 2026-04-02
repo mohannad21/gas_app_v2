@@ -19,7 +19,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 @router.get("/validate_order_impact")
 def validate_order_impact(
   customer_id: str = Query(...),
-  system_id: str = Query(...),
+  system_id: Optional[str] = Query(default=None),
   order_mode: str = Query("replacement"),
   gas_type: str = Query(...),
   cylinders_installed: int = Query(...),
@@ -32,11 +32,15 @@ def validate_order_impact(
   customer = session.get(Customer, customer_id)
   if not customer:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
-  system = session.get(System, system_id)
-  if not system:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
-  if not system.is_active:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System is inactive")
+
+  if order_mode in {"replacement", "sell_iron"}:
+    if not system_id:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System required for this order type")
+    system = session.get(System, system_id)
+    if not system:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+    if not system.is_active:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System is inactive")
 
   payload = OrderCreate(
     customer_id=customer_id,
@@ -143,16 +147,21 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
         return order_out(existing)
 
     customer = session.get(Customer, payload.customer_id)
-    system = session.get(System, payload.system_id)
     if not customer:
       raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
-    if not system:
-      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
-    if not system.is_active:
-      raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="System is inactive, orders cannot be created against it",
-      )
+
+    system = None
+    if payload.order_mode in {"replacement", "sell_iron"}:
+      if not payload.system_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System required for this order type")
+      system = session.get(System, payload.system_id)
+      if not system:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+      if not system.is_active:
+        raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST,
+          detail="System is inactive, orders cannot be created against it",
+        )
 
     paid_amount = payload.paid_amount or 0
     money_delta = money_delta_for_mode(payload.order_mode, payload.price_total, paid_amount)
