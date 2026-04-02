@@ -1491,7 +1491,7 @@ ${cylLine}
         />
         <FieldError message={errors.customer_id?.message} />
       </View>
-      {currentAction === "replacement" && hasCustomer ? dateTimeSection : null}
+      {(currentAction === "replacement" || currentAction === "sell_iron") && hasCustomer ? dateTimeSection : null}
 
       {showSystemSection ? (
         <View style={styles.sectionCard}>
