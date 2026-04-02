@@ -326,7 +326,7 @@ export default function NewOrderScreen() {
     : null;
   const hasCustomer = Boolean(selectedCustomerEntry);
   const showOrderTabs = hasCustomer;
-  const showSystemSection = hasCustomer && currentAction === "replacement";
+  const showSystemSection = hasCustomer && (currentAction === "replacement" || currentAction === "sell_iron");
   const showOrderDetails =
     hasCustomer && (currentAction !== "replacement" || Boolean(selectedSystemId));
   const balanceBefore = customerBalance?.money_balance ?? 0;
