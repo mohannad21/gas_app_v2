@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
-import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
@@ -10,11 +9,10 @@ from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
-from app.services.order_helpers import resolve_value, normalize_system_id, resolve_update_order_context, validate_order_context_on_update, money_delta_for_mode, order_gas_types, resolve_active_order, order_out, compute_impact
+from app.services.order_helpers import resolve_value, resolve_update_order_context, validate_order_context_on_update, money_delta_for_mode, order_gas_types, resolve_active_order, order_out, compute_impact
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
 from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 
@@ -338,4 +336,3 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
     )
     existing.is_reversed = True
     session.add(existing)
-

@@ -3,6 +3,7 @@ import { buildHappenedAt } from "@/lib/date";
 import {
   Expense,
   ExpenseCreateInput,
+  ExpenseUpdateInput,
   ExpenseSchema,
   BankDeposit,
   BankDepositSchema,
@@ -25,6 +26,15 @@ export async function createExpense(payload: ExpenseCreateInput): Promise<Expens
     ...payload,
     amount: toMinorUnits(payload.amount),
     happened_at,
+  });
+  const parsed = parse(ExpenseSchema, data);
+  return { ...parsed, amount: fromMinorUnits(parsed.amount) };
+}
+
+export async function updateExpense(expenseId: string, payload: ExpenseUpdateInput): Promise<Expense> {
+  const { data } = await api.patch(`/expenses/${expenseId}`, {
+    ...payload,
+    amount: payload.amount != null ? toMinorUnits(payload.amount) : payload.amount,
   });
   const parsed = parse(ExpenseSchema, data);
   return { ...parsed, amount: fromMinorUnits(parsed.amount) };

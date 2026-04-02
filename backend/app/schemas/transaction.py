@@ -86,6 +86,7 @@ class ExpenseUpdate(SQLModel):
 class ExpenseOutLegacy(SQLModel):
   id: str
   date: str
+  happened_at: Optional[datetime] = None
   expense_type: str
   amount: int
   note: Optional[str] = None

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,7 +20,6 @@ from app.schemas import (
 from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.services.inventory_helpers import parse_datetime, snapshot_at, time_of_day, reject_new_shells_for_refill, validate_inventory_adjustment_reason
-from app.utils.time import business_date_start_utc
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -516,4 +515,3 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
     )
     existing.is_reversed = True
     session.add(existing)
-

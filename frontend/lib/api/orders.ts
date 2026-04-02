@@ -25,19 +25,6 @@ export async function listOrders(includeDeleted?: boolean): Promise<Order[]> {
   }));
 }
 
-export async function listOrdersByDate(date: string): Promise<Order[]> {
-  const { data } = await api.get("/orders", { params: { date } });
-  return parseArray(OrderSchema, data).map((o) => ({
-    ...o,
-    price_total: fromMinorUnits(o.price_total),
-    paid_amount: fromMinorUnits(o.paid_amount ?? 0),
-    debt_cash: o.debt_cash != null ? fromMinorUnits(o.debt_cash) : o.debt_cash,
-    applied_credit: o.applied_credit != null ? fromMinorUnits(o.applied_credit) : o.applied_credit,
-    money_balance_before: o.money_balance_before != null ? fromMinorUnits(o.money_balance_before) : o.money_balance_before,
-    money_balance_after: o.money_balance_after != null ? fromMinorUnits(o.money_balance_after) : o.money_balance_after,
-  }));
-}
-
 export async function createOrder(payload: OrderCreateInput): Promise<Order> {
   const { data } = await api.post("/orders", {
     ...payload,
@@ -89,6 +76,7 @@ export async function deleteOrder(id: string): Promise<void> {
 export async function validateOrderImpact(params: {
   customer_id: string;
   system_id: string;
+  order_mode?: "replacement" | "buy_iron" | "sell_iron";
   gas_type: "12kg" | "48kg";
   cylinders_installed: number;
   cylinders_received: number;
@@ -99,6 +87,7 @@ export async function validateOrderImpact(params: {
   const { data } = await api.get("/orders/validate_order_impact", {
     params: {
       ...params,
+      order_mode: params.order_mode ?? "replacement",
       happened_at: params.delivered_at,
       price_total: toMinorUnits(params.price_total),
       paid_amount: toMinorUnits(params.paid_amount),

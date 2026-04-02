@@ -12,7 +12,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 
 import CashExpensesView from "@/components/CashExpensesView";
-import { useCreateExpense } from "@/hooks/useExpenses";
+import { useCreateExpense, useExpenses, useUpdateExpense } from "@/hooks/useExpenses";
 import { useCreateBankDeposit } from "@/hooks/useBankDeposits";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { formatDateLocale } from "@/lib/date";
@@ -29,6 +29,15 @@ function getNowTime(): string {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function getTimeFromIso(value?: string | null): string {
+  if (!value) return getNowTime();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return getNowTime();
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
   return `${hours}:${minutes}`;
 }
 
@@ -189,9 +198,10 @@ function TimePickerModal({
 }
 
 export default function NewExpenseScreen() {
-  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[] }>();
+  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[]; expenseId?: string | string[] }>();
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const amountParam = Array.isArray(params.amount) ? params.amount[0] : params.amount;
+  const expenseIdParam = Array.isArray(params.expenseId) ? params.expenseId[0] : params.expenseId;
   const [expenseMode, setExpenseMode] = useState<"expense" | "wallet_to_bank" | "bank_to_wallet">(
     tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet" ? tabParam : "expense"
   );
@@ -207,16 +217,25 @@ export default function NewExpenseScreen() {
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
 
   const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
   const createBankDeposit = useCreateBankDeposit();
   const todayDate = getTodayDate();
   const dailyReportQuery = useDailyReportsV2(todayDate, todayDate);
+  const expensesQuery = useExpenses(undefined, { enabled: Boolean(expenseIdParam) });
   const expenseTypes = ["fuel", "food", "insurance", "car", "other"];
+  const editingExpense = expenseIdParam
+    ? (expensesQuery.data ?? []).find((expense) => expense.id === expenseIdParam)
+    : undefined;
 
   useEffect(() => {
+    if (expenseIdParam) {
+      setExpenseMode("expense");
+      return;
+    }
     if (tabParam === "expense" || tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet") {
       setExpenseMode(tabParam);
     }
-  }, [tabParam]);
+  }, [expenseIdParam, tabParam]);
 
   useEffect(() => {
     if (amountParam) {
@@ -224,9 +243,43 @@ export default function NewExpenseScreen() {
     }
   }, [amountParam]);
 
+  useEffect(() => {
+    if (!editingExpense) return;
+    setExpenseMode("expense");
+    setExpenseType(editingExpense.expense_type);
+    setExpenseAmount(String(editingExpense.amount));
+    setExpenseNote(editingExpense.note ?? "");
+    setExpenseDate(editingExpense.date);
+    setExpenseTime(getTimeFromIso(editingExpense.happened_at));
+  }, [editingExpense]);
+
+  const saveExpenseMutation = expenseIdParam
+    ? {
+        mutateAsync: (payload: {
+          date: string;
+          expense_type: string;
+          amount: number;
+          note?: string | null;
+          created_by?: string | null;
+          happened_at?: string;
+        }) =>
+          updateExpense.mutateAsync({
+            id: expenseIdParam,
+            payload: {
+              date: payload.date,
+              expense_type: payload.expense_type,
+              amount: payload.amount,
+              note: payload.note,
+            },
+          }),
+        isPending: updateExpense.isPending,
+      }
+    : createExpense;
+
   return (
     <View style={styles.screen}>
       <CashExpensesView
+        title={expenseIdParam ? "Edit Expense" : "Add Expense"}
         cashBalance={dailyReportQuery.data?.[0]?.cash_end ?? null}
         onRefreshCash={() => dailyReportQuery.refetch()}
         onClose={() => router.back()}
@@ -255,8 +308,11 @@ export default function NewExpenseScreen() {
         setTransferAmount={setTransferAmount}
         transferNote={transferNote}
         setTransferNote={setTransferNote}
+        availableModes={expenseIdParam ? ["expense"] : undefined}
+        allowSaveAndAdd={!expenseIdParam}
+        saveLabel={expenseIdParam ? "Save Changes" : "Save"}
         accessoryId={accessoryId}
-        createExpense={createExpense}
+        createExpense={saveExpenseMutation}
         createBankDeposit={createBankDeposit}
         CalendarModal={(props) => (
           <CalendarModal {...props} maxDate={new Date()} />

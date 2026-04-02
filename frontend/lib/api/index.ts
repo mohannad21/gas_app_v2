@@ -12,7 +12,7 @@ export { api } from "./client";
 export { listCustomers, getCustomerBalance, createCustomer, createCustomerAdjustment, listCustomerAdjustments, updateCustomer, deleteCustomer } from "./customers";
 
 // Orders
-export { listOrders, listOrdersByDate, createOrder, updateOrder, deleteOrder, validateOrderImpact, getOrderWhatsappLink } from "./orders";
+export { listOrders, createOrder, updateOrder, deleteOrder, validateOrderImpact, getOrderWhatsappLink } from "./orders";
 
 // Collections
 export { createCollection, listCollections, updateCollection, deleteCollection } from "./collections";
@@ -30,7 +30,7 @@ export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, 
 export { listSystems, createSystem, updateSystem, deleteSystem, listSystemTypes, createSystemType, updateSystemType } from "./systems";
 
 // Expenses
-export { listExpenses, createExpense, deleteExpense, listBankDeposits, createBankDeposit, deleteBankDeposit } from "./expenses";
+export { listExpenses, createExpense, updateExpense, deleteExpense, listBankDeposits, createBankDeposit, deleteBankDeposit } from "./expenses";
 
 // Prices
 export { listPriceSettings, savePriceSetting } from "./prices";

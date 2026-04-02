@@ -37,6 +37,7 @@ type CalendarModalProps = {
 };
 
 type CashExpensesViewProps = {
+  title?: string;
   cashBalance?: number | null;
   onRefreshCash?: () => void;
   onClose?: () => void;
@@ -62,6 +63,9 @@ type CashExpensesViewProps = {
   setTransferAmount: (next: string) => void;
   transferNote: string;
   setTransferNote: (next: string) => void;
+  availableModes?: ExpenseMode[];
+  allowSaveAndAdd?: boolean;
+  saveLabel?: string;
   accessoryId?: string;
   createExpense: { mutateAsync: (payload: ExpenseCreateInput) => Promise<unknown>; isPending?: boolean };
   createBankDeposit: {
@@ -122,6 +126,7 @@ function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet:
 }
 
 export default function CashExpensesView({
+  title = "Add Expense",
   cashBalance,
   onRefreshCash,
   onClose,
@@ -147,6 +152,9 @@ export default function CashExpensesView({
   setTransferAmount,
   transferNote,
   setTransferNote,
+  availableModes = Object.keys(MODE_LABELS) as ExpenseMode[],
+  allowSaveAndAdd = true,
+  saveLabel = "Save",
   accessoryId,
   createExpense,
   createBankDeposit,
@@ -246,10 +254,10 @@ export default function CashExpensesView({
   return (
     <View style={styles.expenseScreen}>
       <View style={styles.expensePageHeader}>
-        <Text style={styles.expenseTitle}>Add Expense</Text>
+        <Text style={styles.expenseTitle}>{title}</Text>
       </View>
       <View style={styles.modeRow}>
-        {(Object.keys(MODE_LABELS) as ExpenseMode[]).map((key) => (
+        {availableModes.map((key) => (
           <Pressable
             key={key}
             style={[styles.modeButton, expenseMode === key && styles.modeButtonActive]}
@@ -382,7 +390,8 @@ export default function CashExpensesView({
       </ScrollView>
       <FooterActions
         onSave={() => handleSave(false)}
-        onSaveAndAdd={() => handleSave(true)}
+        onSaveAndAdd={allowSaveAndAdd ? () => handleSave(true) : undefined}
+        saveLabel={saveLabel}
         saveDisabled={!canSaveExpense || isSaving}
         saving={isSaving}
       />

@@ -154,7 +154,7 @@ export function RefillForm({
   const accessoryViewId = accessoryId;
   const paidAccessoryViewId = Platform.OS === "ios" ? "refillPaidAccessory" : undefined;
 
-  const formState = useRefillFormState(visible, mode, editEntry, refillDetails?.notes);
+  const formState = useRefillFormState(visible, mode, editEntry, refillDetails?.notes ?? undefined);
 
   const snapshotAt = useMemo(() => {
     if (!editEntry?.effective_at) return null;
@@ -239,8 +239,8 @@ export function RefillForm({
   const baseMoneyNet = Number(companyBalances?.company_money ?? 0) - originalMoneyResult;
   const line12Cost = totalBuy12 * price12Value;
   const line48Cost = totalBuy48 * price48Value;
-  const ironLine12Cost = isBuyMode ? totalBuy12 * ironPrice12Value : 0;
-  const ironLine48Cost = isBuyMode ? totalBuy48 * ironPrice48Value : 0;
+  const ironLine12Cost = formState.isBuyMode ? totalBuy12 * ironPrice12Value : 0;
+  const ironLine48Cost = formState.isBuyMode ? totalBuy48 * ironPrice48Value : 0;
   const totalCost = line12Cost + line48Cost + ironLine12Cost + ironLine48Cost;
   useEffect(() => {
     if (formState.paidTouched) return;
@@ -374,14 +374,14 @@ export function RefillForm({
     if (return12Invalid) {
       Alert.alert(
         "Invalid return",
-              {/* -- 12kg Cylinders -- */}
+        `You only have ${availableEmpty12} empty 12kg cylinders. Entered ${ret12Value}.`
       );
       return;
     }
     if (return48Invalid) {
       Alert.alert(
         "Invalid return",
-              {/* -- 48kg Cylinders -- */}
+        `You only have ${availableEmpty48} empty 48kg cylinders. Entered ${ret48Value}.`
       );
       return;
     }
@@ -747,7 +747,7 @@ export function RefillForm({
                       value={ret12Value}
                       onIncrement={() => adjustReturn12(1)}
                       onDecrement={() => adjustReturn12(-1)}
-                      onChangeText={(text) => { setRet12Touched(true); setRet12(sanitizeCountInput(text)); }}
+                      onChangeText={(text) => { formState.setRet12Touched(true); formState.setRet12(sanitizeCountInput(text)); }}
                       error={return12Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
@@ -764,8 +764,8 @@ export function RefillForm({
                         ]}
                         onPress={() => {
                           if (buy12Value <= 0) return;
-                          setRet12Touched(true);
-                          setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
+                          formState.setRet12Touched(true);
+                          formState.setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
                         }}
                       >
                         <Text style={styles.inlineActionText}>
@@ -797,7 +797,7 @@ export function RefillForm({
                       value={ret48Value}
                       onIncrement={() => adjustReturn48(1)}
                       onDecrement={() => adjustReturn48(-1)}
-                      onChangeText={(text) => { setRet48Touched(true); setRet48(sanitizeCountInput(text)); }}
+                      onChangeText={(text) => { formState.setRet48Touched(true); formState.setRet48(sanitizeCountInput(text)); }}
                       error={return48Invalid}
                       steppers={FIELD_QTY_STEPPERS}
                     />
@@ -814,8 +814,8 @@ export function RefillForm({
                         ]}
                         onPress={() => {
                           if (buy48Value <= 0) return;
-                          setRet48Touched(true);
-                          setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                          formState.setRet48Touched(true);
+                          formState.setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
                         }}
                       >
                         <Text style={styles.inlineActionText}>
@@ -837,7 +837,7 @@ export function RefillForm({
                   GAS PRICE + IRON PRICE + MONEY
                   Only shown on Refill and Buy tabs (not Return)
               Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
-              {!isReturnMode ? (
+              {!formState.isReturnMode ? (
                 <>
                   {/* Gas Price 12kg
                       QTY and TOTAL are plain text (tradeStatCell style).
@@ -972,7 +972,7 @@ export function RefillForm({
                             value={ironPrice12Value}
                             onIncrement={() => adjustIronPrice12(5)}
                             onDecrement={() => adjustIronPrice12(-5)}
-                            onChangeText={(t) => setIronPrice12Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice12Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -1009,7 +1009,7 @@ export function RefillForm({
                             value={ironPrice48Value}
                             onIncrement={() => adjustIronPrice48(5)}
                             onDecrement={() => adjustIronPrice48(-5)}
-                            onChangeText={(t) => setIronPrice48Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice48Input(sanitizeCountInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -1037,8 +1037,8 @@ export function RefillForm({
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
                     title={CUSTOMER_WORDING.money}
-                    statusLine={isBuyMode ? undefined : moneyStatusLine}
-                    statusIsAlert={!isBuyMode && liveMoneyNet > 0}
+                    statusLine={formState.isBuyMode ? undefined : moneyStatusLine}
+                    statusIsAlert={!formState.isBuyMode && liveMoneyNet > 0}
                     defaultExpanded
                   >
                     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -1058,8 +1058,8 @@ export function RefillForm({
                         onDecrement={() => adjustPaid(-5)}
                         onChangeText={(text) => {
                           if (!canEditMoney) return;
-                          setPaidTouched(true);
-                          setPaidNow(sanitizeCountInput(text));
+                          formState.setPaidTouched(true);
+                          formState.setPaidNow(sanitizeCountInput(text));
                         }}
                         editable={canEditMoney}
                         steppers={FIELD_MONEY_STEPPERS}
@@ -1076,8 +1076,8 @@ export function RefillForm({
                             paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
                           ]}
                           onPress={() => {
-                            setPaidTouched(true);
-                            setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
+                            formState.setPaidTouched(true);
+                            formState.setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
                           }}
                         >
                           <Text style={styles.inlineActionText}>
@@ -1112,8 +1112,8 @@ export function RefillForm({
                 <TextInput
                   style={styles.input}
                   placeholder="Optional notes for this refill"
-                  value={notes}
-                  onChangeText={setNotes}
+                  value={formState.notes}
+                  onChangeText={formState.setNotes}
                   inputAccessoryViewID={accessoryViewId}
                   multiline
                   numberOfLines={3}
@@ -1135,42 +1135,42 @@ export function RefillForm({
       ) : null}
 
       <CalendarModal
-        visible={calendarOpen}
-        value={date}
+        visible={formState.calendarOpen}
+        value={formState.date}
         onSelect={(next) => {
-          setDate(next);
-          setCalendarOpen(false);
+          formState.setDate(next);
+          formState.setCalendarOpen(false);
         }}
-        onClose={() => setCalendarOpen(false)}
+        onClose={() => formState.setCalendarOpen(false)}
       />
       <TimePickerModal
-        visible={timeOpen}
-        value={time}
+        visible={formState.timeOpen}
+        value={formState.time}
         onSelect={(next) => {
-          setTime(next);
-          setTimeOpen(false);
+          formState.setTime(next);
+          formState.setTimeOpen(false);
         }}
-        onClose={() => setTimeOpen(false)}
+        onClose={() => formState.setTimeOpen(false)}
       />
       <InitInventoryModal
-        visible={initOpen}
-        date={date}
-        counts={initCounts}
-        onChangeCounts={setInitCounts}
-        onClose={() => setInitOpen(false)}
+        visible={formState.initOpen}
+        date={formState.date}
+        counts={formState.initCounts}
+        onChangeCounts={formState.setInitCounts}
+        onClose={() => formState.setInitOpen(false)}
         saveDisabled={initInventory.isPending}
         saving={initInventory.isPending}
         onSave={async () => {
           await initInventory.mutateAsync({
-            date,
-            full12: Number(initCounts.full12) || 0,
-            empty12: Number(initCounts.empty12) || 0,
-            full48: Number(initCounts.full48) || 0,
-            empty48: Number(initCounts.empty48) || 0,
+            date: formState.date,
+            full12: Number(formState.initCounts.full12) || 0,
+            empty12: Number(formState.initCounts.empty12) || 0,
+            full48: Number(formState.initCounts.full48) || 0,
+            empty48: Number(formState.initCounts.empty48) || 0,
             reason: "initial",
           });
           Keyboard.dismiss();
-          setInitOpen(false);
+          formState.setInitOpen(false);
         }}
         accessoryId={accessoryViewId}
       />

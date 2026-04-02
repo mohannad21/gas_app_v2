@@ -103,6 +103,7 @@ export const ExpenseSchema = z
   .object({
     id: z.string(),
     date: z.string(),
+    happened_at: z.string().nullish(),
     expense_type: z.string(),
     amount: z.number(),
     note: z.string().nullish(),
@@ -122,6 +123,9 @@ export const ExpenseCreateInputSchema = z.object({
   happened_at: z.string().optional(),
 });
 export type ExpenseCreateInput = z.infer<typeof ExpenseCreateInputSchema>;
+
+export const ExpenseUpdateInputSchema = ExpenseCreateInputSchema.partial();
+export type ExpenseUpdateInput = z.infer<typeof ExpenseUpdateInputSchema>;
 
 export const BankDepositSchema = z.object({
   id: z.string(),

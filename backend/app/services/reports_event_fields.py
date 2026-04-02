@@ -1144,16 +1144,86 @@ def _note(
   *,
   kind: str,
   direction: str,
-  money_amount: Optional[int] = None,
-  qty_12: Optional[int] = None,
-  qty_48: Optional[int] = None,
+  remaining_after: int,
+  remaining_before: Optional[int] = None,
 ) -> ActivityNote:
   return ActivityNote(
     kind=kind,
     direction=direction,
-    money_amount=money_amount,
-    qty_12=qty_12,
-    qty_48=qty_48,
+    remaining_after=remaining_after,
+    remaining_before=remaining_before,
+  )
+
+
+def _remaining_before_value(before: Optional[int], after: int) -> Optional[int]:
+  if before is None or before == 0:
+    return None
+  if before > 0 and after > 0:
+    return before
+  if before < 0 and after < 0:
+    return abs(before)
+  return None
+
+
+def _append_money_note(
+  notes: list[ActivityNote],
+  *,
+  before: Optional[int],
+  after: Optional[int],
+  positive_direction: str,
+  negative_direction: str,
+) -> None:
+  if after is None or after == 0:
+    return
+  if after > 0:
+    notes.append(
+      _note(
+        kind="money",
+        direction=positive_direction,
+        remaining_after=after,
+        remaining_before=_remaining_before_value(before, after),
+      )
+    )
+    return
+  notes.append(
+    _note(
+      kind="money",
+      direction=negative_direction,
+      remaining_after=abs(after),
+      remaining_before=_remaining_before_value(before, after),
+    )
+  )
+
+
+def _append_cylinder_note(
+  notes: list[ActivityNote],
+  *,
+  before: Optional[int],
+  after: Optional[int],
+  empty_kind: str,
+  full_kind: str,
+  empty_direction: str,
+  full_direction: str,
+) -> None:
+  if after is None or after == 0:
+    return
+  if after > 0:
+    notes.append(
+      _note(
+        kind=empty_kind,
+        direction=empty_direction,
+        remaining_after=after,
+        remaining_before=_remaining_before_value(before, after),
+      )
+    )
+    return
+  notes.append(
+    _note(
+      kind=full_kind,
+      direction=full_direction,
+      remaining_after=abs(after),
+      remaining_before=_remaining_before_value(before, after),
+    )
   )
 
 
@@ -1161,98 +1231,60 @@ def _notes_for_event(event: DailyReportV2Event) -> list[ActivityNote]:
   """Generates activity notes for various event types."""
   notes: list[ActivityNote] = []
 
-  if event.event_type == "order" and event.order_mode == "replacement":
-    installed = _safe_int(event.order_installed)
-    received = _safe_int(event.order_received)
-    total = _safe_int(event.order_total)
-    paid = _safe_int(event.order_paid)
-
-    if installed > received:
-      notes.append(
-        _note(
-          kind="pending_return",
-          direction="customer_to_distributor",
-          qty_12=installed - received if event.gas_type == "12kg" else None,
-          qty_48=installed - received if event.gas_type == "48kg" else None,
-        )
-      )
-
-    if total > paid:
-      notes.append(
-        _note(
-          kind="pending_payment",
-          direction="customer_to_distributor",
-          money_amount=total - paid,
-        )
-      )
-
+  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout", "customer_adjust"}:
+    _append_money_note(
+      notes,
+      before=event.customer_money_before,
+      after=event.customer_money_after,
+      positive_direction="customer_pays_you",
+      negative_direction="you_pay_customer",
+    )
+    _append_cylinder_note(
+      notes,
+      before=event.customer_12kg_before,
+      after=event.customer_12kg_after,
+      empty_kind="cyl_12",
+      full_kind="cyl_full_12",
+      empty_direction="customer_returns_you",
+      full_direction="you_deliver_customer",
+    )
+    _append_cylinder_note(
+      notes,
+      before=event.customer_48kg_before,
+      after=event.customer_48kg_after,
+      empty_kind="cyl_48",
+      full_kind="cyl_full_48",
+      empty_direction="customer_returns_you",
+      full_direction="you_deliver_customer",
+    )
     return notes
 
-  if event.event_type == "refill":
-    buy12 = _safe_int(event.buy12)
-    return12 = _safe_int(event.return12)
-    buy48 = _safe_int(event.buy48)
-    return48 = _safe_int(event.return48)
-    total_cost = _safe_int(event.total_cost)
-    paid_now = _safe_int(event.paid_now)
-
-    if buy12 > return12:
-      notes.append(
-        _note(
-          kind="pending_return",
-          direction="distributor_to_company",
-          qty_12=buy12 - return12,
-        )
-      )
-
-    if buy48 > return48:
-      notes.append(
-        _note(
-          kind="pending_return",
-          direction="distributor_to_company",
-          qty_48=buy48 - return48,
-        )
-      )
-
-    if total_cost > paid_now:
-      notes.append(
-        _note(
-          kind="pending_payment",
-          direction="distributor_to_company",
-          money_amount=total_cost - paid_now,
-        )
-      )
-
-    return notes
-
-  if event.event_type == "company_buy_iron":
-    total_cost = _safe_int(event.total_cost)
-    paid_now = _safe_int(event.paid_now)
-
-    if total_cost > paid_now:
-      notes.append(
-        _note(
-          kind="pending_payment",
-          direction="distributor_to_company",
-          money_amount=total_cost - paid_now,
-        )
-      )
-
-    return notes
-
-  if event.event_type == "collection_money":
-    total = _safe_int(event.order_total) if event.order_total else 0
-    paid = _safe_int(event.order_paid) if event.order_paid else 0
-
-    if total > paid:
-      notes.append(
-        _note(
-          kind="pending_payment",
-          direction="customer_to_distributor",
-          money_amount=total - paid,
-        )
-      )
-
+  if event.event_type in {"refill", "company_buy_iron", "company_payment"}:
+    _append_money_note(
+      notes,
+      before=event.company_before,
+      after=event.company_after,
+      positive_direction="you_pay_company",
+      negative_direction="company_pays_you",
+    )
+    _append_cylinder_note(
+      notes,
+      before=event.company_12kg_before,
+      after=event.company_12kg_after,
+      empty_kind="cyl_12",
+      full_kind="cyl_full_12",
+      empty_direction="you_return_company",
+      full_direction="company_delivers_you",
+    )
+    _append_cylinder_note(
+      notes,
+      before=event.company_48kg_before,
+      after=event.company_48kg_after,
+      empty_kind="cyl_48",
+      full_kind="cyl_full_48",
+      empty_direction="you_return_company",
+      full_direction="company_delivers_you",
+    )
     return notes
 
   return notes

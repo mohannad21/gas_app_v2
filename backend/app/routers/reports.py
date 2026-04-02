@@ -28,10 +28,8 @@ from app.models import (
 from app.schemas import (
   DailyReportV2Card,
   DailyReportV2CashMath,
-  DailyReportV2Math,
   DailyReportV2Day,
   DailyReportV2Event,
-  ActivityNote,
   ReportInventoryTotals,
 )
 from app.services.reports_aggregates import (
@@ -46,14 +44,11 @@ from app.services.reports_aggregates import (
   _sum_company_cyl_at_day_end,
   _sum_company_cyl_before_day,
   _seed_customer_states_before_day,
-  _customer_state_delta_from_entries,
-  _add_customer_state,
   _customer_balance_transitions,
   _company_balance_transitions,
   _event_order_key,
   _daily_deltas,
   _sold_full_by_day,
-  _cash_math_by_day,
   _customer_day_state_bounds,
   _company_day_state_bounds,
   _snapshot_transitions_for_customer,
@@ -72,7 +67,6 @@ from app.services.reports_event_fields import (
   _apply_status_fields,
   _remaining_actions_for_event,
   _notes_for_event,
-  _status_mode,
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -156,8 +150,6 @@ def list_daily_reports_v2(
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
   customers = {c.id: c for c in session.exec(select(Customer)).all()}
-
-  cash_math_by_day = _cash_math_by_day(session, date_start=start_date, date_end=end_date)
 
   # Load activity data for problem identification
   customer_activity_rows = session.exec(
@@ -524,7 +516,7 @@ def get_daily_report_v2(
 
   events.sort(key=lambda e: _event_order_key(e, event_sort_ids=event_sort_ids))
 
-  # Apply fields in order: ticket -> level3 -> UI -> status
+  # Apply fields in order: ticket -> level3 -> status -> remaining actions -> UI
   for event in events:
     customer_before = running_customer_states.get(event.customer_id, (0, 0, 0)) if event.customer_id else None
     company_before = (running_company_money, running_company_12, running_company_48)
@@ -594,15 +586,15 @@ def get_daily_report_v2(
     # Level3 fields
     _apply_level3_fields(event, customer_after=customer_after)
 
-    # UI fields
-    notes = []
-    _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
-
     # Status fields
     _apply_status_fields(event)
 
     # Remaining actions
     event.action_pills = _remaining_actions_for_event(event, customer_after=customer_after)
+
+    # UI fields
+    notes = _notes_for_event(event)
+    _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
 
   # Get audit summary
   audit_summary = get_daily_audit_summary(session, day=report_day)
