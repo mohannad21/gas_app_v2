@@ -32,6 +32,7 @@ from app.schemas import (
   DailyReportV2Day,
   DailyReportV2Event,
   ActivityNote,
+  ReportInventoryTotals,
 )
 from app.services.reports_aggregates import (
   _date_range,
@@ -268,52 +269,36 @@ def list_daily_reports_v2(
       )
 
     card = DailyReportV2Card(
-      day=current,
+      date=current.isoformat(),
+      cash_start=cash_start,
+      cash_end=running_cash,
       cash_math=DailyReportV2CashMath(
-        before=cash_start,
-        delta=cash_deltas.get(current, 0),
-        after=running_cash,
         sales=customer_sales_by_day.get(current, 0),
-        late_collections=customer_pay_by_day.get(current, 0),
+        late=customer_pay_by_day.get(current, 0),
         expenses=expenses_by_day.get(current, 0),
-        company_payments=company_paid_by_day.get(current, 0),
-        adjustments=adjustments_by_day.get(current, 0),
-        category_breakdown=cash_math_by_day.get(current, {}),
+        company=company_paid_by_day.get(current, 0),
+        adjust=adjustments_by_day.get(current, 0),
       ),
-      company_math=DailyReportV2Math(
-        before=company_start,
-        delta=company_deltas.get(current, 0),
-        after=running_company,
-        cyl_12=DailyReportV2Math(
-          before=company_12_start,
-          delta=company_cyl_12.get(current, 0),
-          after=running_company_12,
-        ),
-        cyl_48=DailyReportV2Math(
-          before=company_48_start,
-          delta=company_cyl_48.get(current, 0),
-          after=running_company_48,
-        ),
+      company_start=company_start,
+      company_end=running_company,
+      company_12kg_start=company_12_start,
+      company_12kg_end=running_company_12,
+      company_48kg_start=company_48_start,
+      company_48kg_end=running_company_48,
+      inventory_start=ReportInventoryTotals(
+        full12=inv_12_full_start,
+        empty12=inv_12_empty_start,
+        full48=inv_48_full_start,
+        empty48=inv_48_empty_start,
       ),
-      inventory_math=DailyReportV2Math(
-        before=None,
-        delta=None,
-        after=None,
-        cyl_12=DailyReportV2Math(
-          before=inv_12_full_start,
-          delta=inv_full_12.get(current, 0),
-          after=running_full12,
-        ),
-        cyl_48=DailyReportV2Math(
-          before=inv_48_full_start,
-          delta=inv_full_48.get(current, 0),
-          after=running_full48,
-        ),
+      inventory_end=ReportInventoryTotals(
+        full12=running_full12,
+        empty12=running_empty12,
+        full48=running_full48,
+        empty48=running_empty48,
       ),
-      has_company_activity=current in company_activity_days,
-      has_refill_activity=current in refill_days,
-      has_customer_activity=len(active_customers) > 0,
-      problem_lines=problem_lines,
+      has_refill=current in refill_days,
+      problems=[f"{line[0]}-{line[1]}: {line[2]}" if isinstance(line, tuple) else line for line in problem_lines],
     )
     response.append(card)
 
