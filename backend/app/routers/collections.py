@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
@@ -73,6 +74,7 @@ def _build_collection_transactions(
     is_payout = action_type == "payout"
     next_money = current_money + amount if is_payout else current_money - amount
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -89,7 +91,6 @@ def _build_collection_transactions(
       note=note,
       group_id=group_id,
       request_id=request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -104,6 +105,7 @@ def _build_collection_transactions(
   if qty_12 > 0:
     next_cyl_12 = current_cyl_12 - qty_12
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -120,7 +122,6 @@ def _build_collection_transactions(
       note=note,
       group_id=group_id,
       request_id=request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -131,6 +132,7 @@ def _build_collection_transactions(
   if qty_48 > 0:
     next_cyl_48 = current_cyl_48 - qty_48
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -147,7 +149,6 @@ def _build_collection_transactions(
       note=note,
       group_id=group_id,
       request_id=request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -182,7 +183,7 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
     created_at=base.created_at,
     effective_at=base.happened_at,
     note=base.note,
-    is_deleted=txns[0].is_reversed,
+    is_deleted=txns[0].deleted_at is not None,
   )
 
 
@@ -199,7 +200,7 @@ def list_collections(
     .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
   )
   if not include_deleted:
-    stmt = stmt.where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(CustomerTransaction.deleted_at == None)  # noqa: E711
   if customer_id:
     stmt = stmt.where(CustomerTransaction.customer_id == customer_id)
   if before:
@@ -247,7 +248,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
         txns = session.exec(
           select(CustomerTransaction)
           .where(CustomerTransaction.group_id == group_id)
-          .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+          .where(CustomerTransaction.deleted_at == None)  # noqa: E711
         ).all()
         return _as_event(txns or [existing])
 
@@ -280,7 +281,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         (CustomerTransaction.id == collection_id)
         | (CustomerTransaction.group_id == collection_id)
       )
-      .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+      .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     ).all()
     if not txns:
       raise HTTPException(status_code=404, detail="Collection not found")
@@ -319,6 +320,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
       reversal_happened_at = txn.happened_at
       reversal_day = txn.day
       reversal = CustomerTransaction(
+        tenant_id=DEFAULT_TENANT_ID,
         customer_id=txn.customer_id,
         system_id=txn.system_id,
         happened_at=reversal_happened_at,
@@ -333,8 +335,8 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         debt_cylinders_12=txn.debt_cylinders_12,
         debt_cylinders_48=txn.debt_cylinders_48,
         note=f"Reversal of {txn.id}",
-        reversed_id=txn.id,
-        is_reversed=True,
+        deleted_at=datetime.now(timezone.utc),
+        reversal_source_id=txn.id,
         group_id=collection_id,
       )
       session.add(reversal)
@@ -348,7 +350,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         day=reversal.day,
         note=reversal.note,
       )
-      txn.is_reversed = True
+      txn.deleted_at = datetime.now(timezone.utc)
       session.add(txn)
 
     session.flush()
@@ -379,7 +381,7 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
         (CustomerTransaction.id == collection_id)
         | (CustomerTransaction.group_id == collection_id)
       )
-      .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+      .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     ).all()
     if not txns:
       return
@@ -392,6 +394,7 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
       reversal_happened_at = txn.happened_at
       reversal_day = txn.day
       reversal = CustomerTransaction(
+        tenant_id=DEFAULT_TENANT_ID,
         customer_id=txn.customer_id,
         system_id=txn.system_id,
         happened_at=reversal_happened_at,
@@ -406,8 +409,8 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
         debt_cylinders_12=txn.debt_cylinders_12,
         debt_cylinders_48=txn.debt_cylinders_48,
         note=f"Reversal of {txn.id}",
-        reversed_id=txn.id,
-        is_reversed=True,
+        deleted_at=datetime.now(timezone.utc),
+        reversal_source_id=txn.id,
         group_id=collection_id,
       )
       session.add(reversal)
@@ -421,6 +424,6 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
         day=reversal.day,
         note=reversal.note,
       )
-      txn.is_reversed = True
+      txn.deleted_at = datetime.now(timezone.utc)
       session.add(txn)
 

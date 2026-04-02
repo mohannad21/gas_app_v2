@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import CompanyTransaction, InventoryAdjustment
 from app.schemas import (
@@ -72,13 +73,13 @@ def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_
       if delta_full == 0 and delta_empty == 0:
         continue
       adj = InventoryAdjustment(
+        tenant_id=DEFAULT_TENANT_ID,
         gas_type=gas,
         delta_full=delta_full,
         delta_empty=delta_empty,
         note=reason,
         happened_at=happened_at,
         day=derive_day(happened_at),
-        is_reversed=False,
       )
       session.add(adj)
       post_inventory_adjustment(session, adj)
@@ -100,6 +101,7 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
         return snapshot_at(session, existing.happened_at, existing.note)
 
     adj = InventoryAdjustment(
+      tenant_id=DEFAULT_TENANT_ID,
       group_id=payload.group_id,
       gas_type=payload.gas_type,
       delta_full=payload.delta_full,
@@ -108,7 +110,6 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
       happened_at=happened_at,
       day=derive_day(happened_at),
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(adj)
     post_inventory_adjustment(session, adj)
@@ -131,7 +132,7 @@ def list_inventory_adjustments(
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
     stmt = stmt.where(InventoryAdjustment.day == day)
   if not include_deleted:
-    stmt = stmt.where(InventoryAdjustment.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(InventoryAdjustment.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -150,7 +151,7 @@ def list_inventory_adjustments(
       reason=row.note,
       effective_at=row.happened_at,
       created_at=row.created_at,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
     )
     for row in rows
   ]
@@ -164,7 +165,7 @@ def update_inventory_adjustment(
 ) -> InventoryAdjustmentRow:
   with session.begin():
     existing = session.get(InventoryAdjustment, adjust_id)
-    if not existing or existing.is_reversed:
+    if not existing or existing.deleted_at is not None:
       raise HTTPException(status_code=404, detail="Adjustment not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, [existing.gas_type])
@@ -172,6 +173,7 @@ def update_inventory_adjustment(
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = InventoryAdjustment(
+      tenant_id=DEFAULT_TENANT_ID,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=existing.delta_full,
@@ -179,8 +181,8 @@ def update_inventory_adjustment(
       note=f"Reversal of {existing.id}",
       happened_at=reversal_happened_at,
       day=reversal_day,
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -193,7 +195,7 @@ def update_inventory_adjustment(
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)
 
     data = payload.model_dump(exclude_unset=True)
@@ -205,6 +207,7 @@ def update_inventory_adjustment(
     if new_note is None:
       new_note = next_reason
     new_adj = InventoryAdjustment(
+      tenant_id=DEFAULT_TENANT_ID,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=new_full,
@@ -213,7 +216,6 @@ def update_inventory_adjustment(
       happened_at=reversal_happened_at,
       day=reversal_day,
       reversed_id=existing.id,
-      is_reversed=False,
     )
     session.add(new_adj)
     post_inventory_adjustment(session, new_adj)
@@ -227,7 +229,7 @@ def update_inventory_adjustment(
     reason=new_adj.note,
     effective_at=new_adj.happened_at,
     created_at=new_adj.created_at,
-    is_deleted=False,
+    is_deleted=new_adj.deleted_at is not None,
   )
 
 
@@ -235,13 +237,14 @@ def update_inventory_adjustment(
 def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
   with session.begin():
     existing = session.get(InventoryAdjustment, adjust_id)
-    if not existing or existing.is_reversed:
+    if not existing or existing.deleted_at is not None:
       return
     acquire_company_lock(session)
     acquire_inventory_locks(session, [existing.gas_type])
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = InventoryAdjustment(
+      tenant_id=DEFAULT_TENANT_ID,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=existing.delta_full,
@@ -249,8 +252,8 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
       note=f"Reversal of {existing.id}",
       happened_at=reversal_happened_at,
       day=reversal_day,
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -263,7 +266,7 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)
 
 
@@ -284,6 +287,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
         return snapshot_at(session, existing.happened_at, existing.note)
 
     txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="refill",
@@ -300,7 +304,6 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
       debt_cylinders_48=0,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     entries = post_company_transaction(session, txn)
@@ -321,7 +324,7 @@ def list_refills(
 ) -> list[InventoryRefillSummary]:
   stmt = select(CompanyTransaction).where(CompanyTransaction.kind == "refill")
   if not include_deleted:
-    stmt = stmt.where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(CompanyTransaction.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -345,7 +348,7 @@ def list_refills(
       debt_cash=row.debt_cash,
       debt_cylinders_12=row.debt_cylinders_12,
       debt_cylinders_48=row.debt_cylinders_48,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
       deleted_at=None,
     )
     for row in rows
@@ -355,7 +358,7 @@ def list_refills(
 @router.get("/refills/{refill_id}", response_model=InventoryRefillDetails)
 def get_refill_details(refill_id: str, session: Session = Depends(get_session)) -> InventoryRefillDetails:
   row = session.get(CompanyTransaction, refill_id)
-  if not row or row.is_reversed or row.kind != "refill":
+  if not row or row.deleted_at is not None or row.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
   return InventoryRefillDetails(
     refill_id=row.id,
@@ -374,7 +377,7 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
     debt_cylinders_12=row.debt_cylinders_12,
     debt_cylinders_48=row.debt_cylinders_48,
     notes=row.note,
-    is_deleted=row.is_reversed,
+    is_deleted=row.deleted_at is not None,
     deleted_at=None,
   )
 
@@ -384,7 +387,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   reject_new_shells_for_refill(payload.new12, payload.new48)
   with session.begin():
     existing = session.get(CompanyTransaction, refill_id)
-    if not existing or existing.is_reversed or existing.kind != "refill":
+    if not existing or existing.deleted_at is not None or existing.kind != "refill":
       raise HTTPException(status_code=404, detail="Refill not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
@@ -392,6 +395,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind=existing.kind,
@@ -407,8 +411,8 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
       debt_cylinders_12=existing.debt_cylinders_12,
       debt_cylinders_48=existing.debt_cylinders_48,
       note=f"Reversal of {existing.id}",
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -421,10 +425,11 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)
 
     new_txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind="refill",
@@ -441,7 +446,6 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
       debt_cylinders_48=0,
       note=payload.note,
       reversed_id=existing.id,
-      is_reversed=False,
     )
     session.add(new_txn)
     entries = post_company_transaction(session, new_txn)
@@ -468,7 +472,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     debt_cylinders_12=new_txn.debt_cylinders_12,
     debt_cylinders_48=new_txn.debt_cylinders_48,
     notes=new_txn.note,
-    is_deleted=False,
+    is_deleted=new_txn.deleted_at is not None,
     deleted_at=None,
   )
 
@@ -477,13 +481,14 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
 def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> None:
   with session.begin():
     existing = session.get(CompanyTransaction, refill_id)
-    if not existing or existing.is_reversed or existing.kind != "refill":
+    if not existing or existing.deleted_at is not None or existing.kind != "refill":
       return
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind=existing.kind,
@@ -499,8 +504,8 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
       debt_cylinders_12=existing.debt_cylinders_12,
       debt_cylinders_48=existing.debt_cylinders_48,
       note=f"Reversal of {existing.id}",
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -513,5 +518,5 @@ def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> No
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)

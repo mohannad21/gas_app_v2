@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
@@ -66,7 +67,7 @@ def validate_order_impact(
 @router.get("/whatsapp_link/{order_id}")
 def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dict:
   order = session.get(CustomerTransaction, order_id)
-  if not order or order.kind != "order" or order.is_reversed:
+  if not order or order.kind != "order" or order.deleted_at is not None:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
   customer = session.get(Customer, order.customer_id)
   if not customer:
@@ -121,7 +122,7 @@ def list_orders(
     .where(CustomerTransaction.kind == "order")
   )
   if not include_deleted:
-    stmt = stmt.where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(CustomerTransaction.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -176,6 +177,7 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
 
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       happened_at=happened_at,
@@ -192,7 +194,6 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
       debt_cylinders_48=next_cyl_48,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -205,7 +206,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
   payload_data = payload.model_dump(exclude_unset=True)
   with session.begin():
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.kind != "order" or existing.is_reversed:
+    if not existing or existing.kind != "order" or existing.deleted_at is not None:
       raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     customer_id, system_id, mode, gas_type = resolve_update_order_context(
@@ -226,6 +227,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
@@ -241,8 +243,8 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
       debt_cylinders_12=existing.debt_cylinders_12,
       debt_cylinders_48=existing.debt_cylinders_48,
       note=f"Reversal of {existing.id}",
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -255,7 +257,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)
     session.flush()
 
@@ -279,6 +281,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
 
     txn = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -295,7 +298,6 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
       debt_cylinders_48=next_cyl_48,
       note=note,
       reversed_id=existing.id,
-      is_reversed=False,
     )
     session.add(txn)
     post_customer_transaction(session, txn)
@@ -307,13 +309,14 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
 def delete_order(order_id: str, session: Session = Depends(get_session)) -> None:
   with session.begin():
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.kind != "order" or existing.is_reversed:
+    if not existing or existing.kind != "order" or existing.deleted_at is not None:
       return
     acquire_customer_locks(session, [existing.customer_id])
     acquire_inventory_locks(session, order_gas_types(existing.gas_type))
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CustomerTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
@@ -329,8 +332,8 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
       debt_cylinders_12=existing.debt_cylinders_12,
       debt_cylinders_48=existing.debt_cylinders_48,
       note=f"Reversal of {existing.id}",
-      reversed_id=existing.id,
-      is_reversed=True,
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
     session.add(reversal)
     reverse_source(
@@ -343,5 +346,5 @@ def delete_order(order_id: str, session: Session = Depends(get_session)) -> None
       day=reversal.day,
       note=reversal.note,
     )
-    existing.is_reversed = True
+    existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)

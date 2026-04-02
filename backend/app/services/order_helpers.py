@@ -135,7 +135,7 @@ def resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTr
     return current
 
   visited: set[str] = set()
-  while current.is_reversed and current.id not in visited:
+  while current.deleted_at is not None and current.id not in visited:
     visited.add(current.id)
     next_txn = session.exec(
       select(CustomerTransaction)
@@ -172,7 +172,7 @@ def order_out(txn: CustomerTransaction) -> OrderOut:
     money_balance_after=None,
     cyl_balance_before=None,
     cyl_balance_after=None,
-    is_deleted=txn.is_reversed,
+    is_deleted=txn.deleted_at is not None,
   )
 
 

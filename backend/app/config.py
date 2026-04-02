@@ -11,6 +11,7 @@ _DEFAULT_CORS_ORIGINS = [
   "http://localhost:19006",
   "http://127.0.0.1:19006",
 ]
+_DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class Settings(BaseSettings):
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
   # Inventory
   business_tz: str = "Europe/Berlin"
   allow_negative_admin_ids: str = ""
+  DEFAULT_TENANT_ID: str = _DEFAULT_TENANT_ID
 
   # CORS
   cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: list(_DEFAULT_CORS_ORIGINS))
@@ -79,4 +81,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
   return Settings()
+
+
+DEFAULT_TENANT_ID = _DEFAULT_TENANT_ID
 

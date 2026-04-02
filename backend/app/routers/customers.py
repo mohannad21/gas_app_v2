@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, LedgerEntry
 from app.schemas import CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
@@ -48,7 +49,7 @@ def _replacement_order_count_query(customer_id: str | None = None):
     .where(CustomerTransaction.kind == "order")
     .where(CustomerTransaction.mode == "replacement")
     .where(CustomerTransaction.received > 0)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   )
   if customer_id is not None:
     return query.where(CustomerTransaction.customer_id == customer_id)
@@ -61,7 +62,7 @@ def _replacement_order_count_grouped_query():
     .where(CustomerTransaction.kind == "order")
     .where(CustomerTransaction.mode == "replacement")
     .where(CustomerTransaction.received > 0)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.customer_id)
   )
 
@@ -137,6 +138,7 @@ def get_customer_balances(customer_id: str, session: Session = Depends(get_sessi
 @router.post("", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, session: Session = Depends(get_session)) -> CustomerOut:
   customer = Customer(
+    tenant_id=DEFAULT_TENANT_ID,
     name=payload.name,
     phone=payload.phone,
     address=payload.address,
@@ -197,7 +199,7 @@ def delete_customer(customer_id: str, session: Session = Depends(get_session)) -
   has_txn = session.exec(
     select(func.count(CustomerTransaction.id))
     .where(CustomerTransaction.customer_id == customer.id)
-    .where(CustomerTransaction.is_reversed == False)  # noqa: E712
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   ).first()
   if has_txn and has_txn > 0:
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="customer_has_transactions")

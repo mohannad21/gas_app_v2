@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import CompanyTransaction
 from app.schemas import (
@@ -106,6 +107,7 @@ def settle_company_cylinders(
         )
 
     txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="refill",
@@ -117,7 +119,6 @@ def settle_company_cylinders(
       paid=0,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     entries = post_company_transaction(session, txn)
@@ -171,6 +172,7 @@ def create_company_payment(
         )
 
     txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="payment",
@@ -178,7 +180,6 @@ def create_company_payment(
       paid=payload.amount,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_company_transaction(session, txn)
@@ -204,7 +205,7 @@ def list_company_payments(
     .where(CompanyTransaction.kind == "payment")
   )
   if not include_deleted:
-    stmt = stmt.where(CompanyTransaction.is_reversed == False)  # noqa: E712
+    stmt = stmt.where(CompanyTransaction.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
@@ -219,7 +220,7 @@ def list_company_payments(
       happened_at=row.happened_at,
       amount=row.paid,
       note=row.note,
-      is_deleted=row.is_reversed,
+      is_deleted=row.deleted_at is not None,
     )
     for row in rows
   ]
@@ -265,6 +266,7 @@ def create_company_buy_iron(
         )
 
     txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="buy_iron",
@@ -274,7 +276,6 @@ def create_company_buy_iron(
       paid=payload.paid_now,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_company_transaction(session, txn)
@@ -334,6 +335,7 @@ def adjust_company_balances(
       raise HTTPException(status_code=400, detail="adjustment_required")
 
     txn = CompanyTransaction(
+      tenant_id=DEFAULT_TENANT_ID,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="adjust",
@@ -343,7 +345,6 @@ def adjust_company_balances(
       paid=0,
       note=payload.note,
       request_id=payload.request_id,
-      is_reversed=False,
     )
     session.add(txn)
     post_company_transaction(session, txn)
