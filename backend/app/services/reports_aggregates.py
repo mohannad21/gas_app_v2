@@ -505,12 +505,12 @@ def get_daily_audit_summary(
   company_after = _sum_company_at_day_end(session, day)
   company_delta = company_after - company_before
 
+  inv_delta_12 = (inv_after.full12 - inv_before.full12) + (inv_after.empty12 - inv_before.empty12)
+  inv_delta_48 = (inv_after.full48 - inv_before.full48) + (inv_after.empty48 - inv_before.empty48)
+
   return DailyAuditSummary(
-    day=day,
-    cash_delta=cash_delta,
-    company_debt_delta=company_delta,
-    inventory_delta_full_12=inv_after.full12 - inv_before.full12,
-    inventory_delta_empty_12=inv_after.empty12 - inv_before.empty12,
-    inventory_delta_full_48=inv_after.full48 - inv_before.full48,
-    inventory_delta_empty_48=inv_after.empty48 - inv_before.empty48,
+    cash_in=cash_delta,
+    new_debt=company_delta,
+    inv_delta_12=inv_delta_12,
+    inv_delta_48=inv_delta_48,
   )
