@@ -19,83 +19,17 @@ from app.schemas import (
 )
 from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
+from app.services.inventory_helpers import parse_datetime, snapshot_at, time_of_day, reject_new_shells_for_refill, validate_inventory_adjustment_reason
 from app.utils.time import business_date_start_utc
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
-def _parse_datetime(
-  *,
-  date_str: Optional[str],
-  time_str: Optional[str] = None,
-  time_of_day: Optional[str] = None,
-  at: Optional[str] = None,
-) -> Optional[datetime]:
-  if at:
-    try:
-      value = datetime.fromisoformat(at)
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
-    if value.tzinfo is None:
-      return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-  if not date_str:
-    return None
-  try:
-    day = datetime.fromisoformat(date_str).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  base = business_date_start_utc(day)
-  if time_str:
-    try:
-      parsed = datetime.strptime(time_str, "%H:%M").time()
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid time format") from exc
-    base = base + timedelta(hours=parsed.hour, minutes=parsed.minute)
-  elif time_of_day == "morning":
-    base = base + timedelta(hours=9)
-  elif time_of_day == "evening":
-    base = base + timedelta(hours=18)
-  else:
-    base = base + timedelta(hours=12)
-  return base.replace(tzinfo=timezone.utc)
-
-
-def _snapshot_at(session: Session, at: datetime, reason: Optional[str] = None) -> InventorySnapshot:
-  totals = sum_inventory(session, up_to=at)
-  return InventorySnapshot(
-    as_of=at,
-    full12=totals["full12"],
-    empty12=totals["empty12"],
-    total12=totals["full12"] + totals["empty12"],
-    full48=totals["full48"],
-    empty48=totals["empty48"],
-    total48=totals["full48"] + totals["empty48"],
-    reason=reason,
-  )
-
-
-def _time_of_day(value: datetime) -> str:
-  return "morning" if value.hour < 12 else "evening"
-
-
-def _reject_new_shells_for_refill(new12: int, new48: int) -> None:
-  if new12 != 0 or new48 != 0:
-    raise HTTPException(status_code=422, detail="new_shells_not_allowed_for_refill")
-
-
-def _validate_inventory_adjustment_reason(reason: Optional[str], *, delta_full: int, delta_empty: int) -> None:
-  if not reason:
-    return
-  if reason in {"shrinkage", "damage"} and (delta_full > 0 or delta_empty > 0):
-    raise HTTPException(status_code=422, detail="adjustment_reason_disallows_positive_delta")
-
-
 @router.get("/latest", response_model=InventorySnapshot)
 def get_latest_inventory(session: Session = Depends(get_session)) -> InventorySnapshot:
   now = datetime.now(timezone.utc)
-  return _snapshot_at(session, now)
+  return snapshot_at(session, now)
 
 
 @router.get("/snapshot", response_model=InventorySnapshot | None)
@@ -106,10 +40,10 @@ def get_inventory_snapshot(
   at: Optional[str] = None,
   session: Session = Depends(get_session),
 ) -> InventorySnapshot | None:
-  parsed = _parse_datetime(date_str=date, time_str=time, time_of_day=time_of_day, at=at)
+  parsed = parse_datetime(date_str=date, time_str=time, time_of_day=time_of_day, at=at)
   if parsed is None:
     return None
-  return _snapshot_at(session, parsed)
+  return snapshot_at(session, parsed)
 
 
 @router.post("/init", response_model=InventorySnapshot)
@@ -120,7 +54,7 @@ def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_
   full48 = payload.full48
   empty48 = payload.empty48
   reason = payload.reason
-  happened_at = _parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
+  happened_at = parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
 
   with session.begin():
     acquire_company_lock(session)
@@ -149,12 +83,12 @@ def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_
       )
       session.add(adj)
       post_inventory_adjustment(session, adj)
-  return _snapshot_at(session, happened_at, reason)
+  return snapshot_at(session, happened_at, reason)
 
 
 @router.post("/adjust", response_model=InventorySnapshot)
 def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
-  _validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
+  validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
     acquire_company_lock(session)
@@ -164,7 +98,7 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
         select(InventoryAdjustment).where(InventoryAdjustment.request_id == payload.request_id)
       ).first()
       if existing:
-        return _snapshot_at(session, existing.happened_at, existing.note)
+        return snapshot_at(session, existing.happened_at, existing.note)
 
     adj = InventoryAdjustment(
       group_id=payload.group_id,
@@ -179,7 +113,7 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
     )
     session.add(adj)
     post_inventory_adjustment(session, adj)
-  return _snapshot_at(session, happened_at, adj.note)
+  return snapshot_at(session, happened_at, adj.note)
 
 
 @router.get("/adjustments", response_model=list[InventoryAdjustmentRow])
@@ -267,7 +201,7 @@ def update_inventory_adjustment(
     new_full = data.get("delta_full", existing.delta_full)
     new_empty = data.get("delta_empty", existing.delta_empty)
     next_reason = data.get("reason") if "reason" in data else existing.note
-    _validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
+    validate_inventory_adjustment_reason(next_reason, delta_full=new_full, delta_empty=new_empty)
     new_note = data.get("note")
     if new_note is None:
       new_note = next_reason
@@ -336,7 +270,7 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
 
 @router.post("/refill", response_model=InventorySnapshot)
 def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
-  _reject_new_shells_for_refill(payload.new12, payload.new48)
+  reject_new_shells_for_refill(payload.new12, payload.new48)
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
     acquire_company_lock(session)
@@ -348,7 +282,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
         .where(CompanyTransaction.kind == "refill")
       ).first()
       if existing:
-        return _snapshot_at(session, existing.happened_at, existing.note)
+        return snapshot_at(session, existing.happened_at, existing.note)
 
     txn = CompanyTransaction(
       happened_at=happened_at,
@@ -376,7 +310,7 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
     txn.debt_cash = snapshot["debt_cash"]
     txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
     txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
-  return _snapshot_at(session, happened_at, payload.note)
+  return snapshot_at(session, happened_at, payload.note)
 
 
 @router.get("/refills", response_model=list[InventoryRefillSummary])
@@ -401,7 +335,7 @@ def list_refills(
     InventoryRefillSummary(
       refill_id=row.id,
       date=row.day.isoformat(),
-      time_of_day=_time_of_day(row.happened_at),
+      time_of_day=time_of_day(row.happened_at),
       effective_at=row.happened_at,
       buy12=row.buy12,
       return12=row.return12,
@@ -427,7 +361,7 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
   return InventoryRefillDetails(
     refill_id=row.id,
     business_date=row.day.isoformat(),
-    time_of_day=_time_of_day(row.happened_at),
+    time_of_day=time_of_day(row.happened_at),
     effective_at=row.happened_at,
     buy12=row.buy12,
     return12=row.return12,
@@ -448,7 +382,7 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
 
 @router.put("/refills/{refill_id}", response_model=InventoryRefillDetails)
 def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Session = Depends(get_session)) -> InventoryRefillDetails:
-  _reject_new_shells_for_refill(payload.new12, payload.new48)
+  reject_new_shells_for_refill(payload.new12, payload.new48)
   with session.begin():
     existing = session.get(CompanyTransaction, refill_id)
     if not existing or existing.is_reversed or existing.kind != "refill":
@@ -521,7 +455,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
   return InventoryRefillDetails(
     refill_id=new_txn.id,
     business_date=new_txn.day.isoformat(),
-    time_of_day=_time_of_day(new_txn.happened_at),
+    time_of_day=time_of_day(new_txn.happened_at),
     effective_at=new_txn.happened_at,
     buy12=new_txn.buy12,
     return12=new_txn.return12,
