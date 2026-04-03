@@ -24,6 +24,7 @@ export function useCreateExpense() {
       showToast("Expense saved");
       queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
       queryClient.invalidateQueries({ queryKey: ["expenses", variables.date] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -50,6 +51,7 @@ export function useUpdateExpense() {
       if (variables.payload.date) {
         queryClient.invalidateQueries({ queryKey: ["expenses", variables.payload.date] });
       }
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -67,6 +69,7 @@ export function useDeleteExpense() {
       showToast("Expense removed");
       queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
       queryClient.invalidateQueries({ queryKey: ["expenses", variables.date] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },

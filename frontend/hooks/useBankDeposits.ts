@@ -26,8 +26,9 @@ export function useCreateBankDeposit() {
       showToast(directionLabel);
       queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
-      queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
-      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
   });
 }
@@ -43,8 +44,9 @@ export function useDeleteBankDeposit() {
       showToast("Transfer removed");
       queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
-      queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
-      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
   });
 }

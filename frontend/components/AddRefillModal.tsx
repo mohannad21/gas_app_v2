@@ -33,6 +33,7 @@ import {
   useCreateCompanyBuyIron,
   useCreateRefill,
   useInitInventory,
+  useInventoryLatest,
   useInventoryRefillDetails,
   useInventorySnapshot,
   useUpdateRefill,
@@ -110,8 +111,11 @@ function sanitizeCountInputMax(value: string, max: number) {
   return String(Math.min(Math.max(0, parsed), Math.max(0, max)));
 }
 
-export function sanitizeBuyCountInput(value: string, max: number, isBuyMode: boolean) {
-  return isBuyMode ? sanitizeCountInput(value) : sanitizeCountInputMax(value, max);
+export function sanitizeBuyCountInput(value: string, max: number | null | undefined, isBuyMode: boolean) {
+  if (isBuyMode || typeof max !== "number") {
+    return sanitizeCountInput(value);
+  }
+  return sanitizeCountInputMax(value, max);
 }
 
 export function RefillForm({
@@ -148,6 +152,7 @@ export function RefillForm({
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
   const initInventory = useInitInventory();
+  const inventoryLatestQuery = useInventoryLatest();
   const refillDetailsQuery = useInventoryRefillDetails(editEntry?.refill_id);
   const refillDetails = refillDetailsQuery.data;
   const pricesQuery = usePriceSettings();
@@ -178,8 +183,8 @@ export function RefillForm({
         reason: null,
       };
     }
-    return snapshotQuery.data ?? null;
-  }, [editEntry?.refill_id, refillDetails, snapshotQuery.data]);
+    return snapshotQuery.data ?? inventoryLatestQuery.data ?? null;
+  }, [editEntry?.refill_id, refillDetails, snapshotQuery.data, inventoryLatestQuery.data]);
   const errorDetail = (snapshotQuery.error as AxiosError<{ detail?: InventoryNotInitializedDetail }>)?.response?.data
     ?.detail;
   const inventoryNotInitialized = !base && errorDetail?.code === "inventory_not_initialized";
@@ -252,10 +257,10 @@ export function RefillForm({
   const paidNowValue = Number(formState.paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
 
-  const availableEmpty12 = base?.empty12 ?? 0;
-  const availableEmpty48 = base?.empty48 ?? 0;
-  const return12Invalid = ret12Value > availableEmpty12;
-  const return48Invalid = ret48Value > availableEmpty48;
+  const availableEmpty12 = typeof base?.empty12 === "number" ? base.empty12 : null;
+  const availableEmpty48 = typeof base?.empty48 === "number" ? base.empty48 : null;
+  const return12Invalid = availableEmpty12 !== null && ret12Value > availableEmpty12;
+  const return48Invalid = availableEmpty48 !== null && ret48Value > availableEmpty48;
   const liveMoneyNet = baseMoneyNet + moneyResult;
   const liveMoneyGive = Math.max(liveMoneyNet, 0);
   const originalDelta12 = editEntry ? calcCompanyCylinderLedgerDelta(editEntry.buy12, editEntry.return12) : 0;
@@ -346,10 +351,10 @@ export function RefillForm({
 
   const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
   const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
-  const refillBuyEmpty12 = Math.max(availableEmpty12 - buy12Value, 0);
-  const refillBuyEmpty48 = Math.max(availableEmpty48 - buy48Value, 0);
-  const afterEmpty12 = Math.max(availableEmpty12 - ret12Value, 0);
-  const afterEmpty48 = Math.max(availableEmpty48 - ret48Value, 0);
+  const refillBuyEmpty12 = availableEmpty12 === null ? null : Math.max(availableEmpty12 - buy12Value, 0);
+  const refillBuyEmpty48 = availableEmpty48 === null ? null : Math.max(availableEmpty48 - buy48Value, 0);
+  const afterEmpty12 = availableEmpty12 === null ? null : Math.max(availableEmpty12 - ret12Value, 0);
+  const afterEmpty48 = availableEmpty48 === null ? null : Math.max(availableEmpty48 - ret48Value, 0);
   const walletAfterPaid = walletBalance - paidNowValue;
 
   const disableSave =

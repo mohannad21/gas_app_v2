@@ -9,6 +9,7 @@ export function useCreateCashAdjustment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash"] });
       queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -30,6 +31,7 @@ export function useUpdateCashAdjustment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash"] });
       queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -43,6 +45,7 @@ export function useDeleteCashAdjustment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash"] });
       queryClient.invalidateQueries({ queryKey: ["cash", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
