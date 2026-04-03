@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Annotated
 
 import logging
 
@@ -6,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, LedgerEntry
 from app.schemas import CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
@@ -68,8 +69,15 @@ def _replacement_order_count_grouped_query():
 
 
 @router.get("", response_model=list[CustomerOut])
-def list_customers(session: Session = Depends(get_session)) -> list[CustomerOut]:
-  customers = session.exec(select(Customer).order_by(Customer.created_at.desc())).all()
+def list_customers(
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> list[CustomerOut]:
+  customers = session.exec(
+    select(Customer)
+    .where(Customer.tenant_id == tenant_id)
+    .order_by(Customer.created_at.desc())
+  ).all()
   money_map, cyl12_map, cyl48_map = _customer_balances(session)
   order_counts = session.exec(_replacement_order_count_grouped_query()).all()
   count_map = {row[0]: int(row[1] or 0) for row in order_counts}
@@ -95,10 +103,16 @@ def list_customers(session: Session = Depends(get_session)) -> list[CustomerOut]
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)
-def get_customer(customer_id: str, session: Session = Depends(get_session)) -> CustomerOut:
+def get_customer(
+  customer_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CustomerOut:
   customer = session.get(Customer, customer_id)
   if not customer:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+  if customer.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="not_found")
   money = sum_customer_money(session, customer_id=customer.id)
   cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
   cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
@@ -118,10 +132,16 @@ def get_customer(customer_id: str, session: Session = Depends(get_session)) -> C
 
 
 @router.get("/{customer_id}/balances", response_model=CustomerBalanceOut)
-def get_customer_balances(customer_id: str, session: Session = Depends(get_session)) -> CustomerBalanceOut:
+def get_customer_balances(
+  customer_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CustomerBalanceOut:
   customer = session.get(Customer, customer_id)
   if not customer:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+  if customer.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="not_found")
   money = sum_customer_money(session, customer_id=customer.id)
   cyl12 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="12kg")
   cyl48 = sum_customer_cylinders(session, customer_id=customer.id, gas_type="48kg")
@@ -136,9 +156,13 @@ def get_customer_balances(customer_id: str, session: Session = Depends(get_sessi
 
 
 @router.post("", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
-def create_customer(payload: CustomerCreate, session: Session = Depends(get_session)) -> CustomerOut:
+def create_customer(
+  payload: CustomerCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CustomerOut:
   customer = Customer(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     name=payload.name,
     phone=payload.phone,
     address=payload.address,
@@ -163,10 +187,17 @@ def create_customer(payload: CustomerCreate, session: Session = Depends(get_sess
 
 
 @router.put("/{customer_id}", response_model=CustomerOut)
-def update_customer(customer_id: str, payload: CustomerUpdate, session: Session = Depends(get_session)) -> CustomerOut:
+def update_customer(
+  customer_id: str,
+  payload: CustomerUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CustomerOut:
   customer = session.get(Customer, customer_id)
   if not customer:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+  if customer.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="not_found")
   payload_data = payload.model_dump(exclude_unset=True)
   for field, value in payload_data.items():
     setattr(customer, field, value)
@@ -192,10 +223,16 @@ def update_customer(customer_id: str, payload: CustomerUpdate, session: Session 
 
 
 @router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_customer(customer_id: str, session: Session = Depends(get_session)) -> None:
+def delete_customer(
+  customer_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   customer = session.get(Customer, customer_id)
   if not customer:
     return
+  if customer.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="not_found")
   has_txn = session.exec(
     select(func.count(CustomerTransaction.id))
     .where(CustomerTransaction.customer_id == customer.id)

@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import CompanyTransaction, InventoryAdjustment
 from app.schemas import (
@@ -47,7 +47,11 @@ def get_inventory_snapshot(
 
 
 @router.post("/init", response_model=InventorySnapshot)
-def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
+def init_inventory(
+  payload: InventoryInitCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> InventorySnapshot:
   date_str = payload.date
   full12 = payload.full12
   empty12 = payload.empty12
@@ -73,7 +77,7 @@ def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_
       if delta_full == 0 and delta_empty == 0:
         continue
       adj = InventoryAdjustment(
-        tenant_id=DEFAULT_TENANT_ID,
+        tenant_id=tenant_id,
         gas_type=gas,
         delta_full=delta_full,
         delta_empty=delta_empty,
@@ -87,7 +91,11 @@ def init_inventory(payload: InventoryInitCreate, session: Session = Depends(get_
 
 
 @router.post("/adjust", response_model=InventorySnapshot)
-def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
+def create_inventory_adjust(
+  payload: InventoryAdjustCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> InventorySnapshot:
   validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
@@ -95,13 +103,15 @@ def create_inventory_adjust(payload: InventoryAdjustCreate, session: Session = D
     acquire_inventory_locks(session, [payload.gas_type])
     if payload.request_id:
       existing = session.exec(
-        select(InventoryAdjustment).where(InventoryAdjustment.request_id == payload.request_id)
+        select(InventoryAdjustment)
+        .where(InventoryAdjustment.request_id == payload.request_id)
+        .where(InventoryAdjustment.tenant_id == tenant_id)
       ).first()
       if existing:
         return snapshot_at(session, existing.happened_at, existing.note)
 
     adj = InventoryAdjustment(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       group_id=payload.group_id,
       gas_type=payload.gas_type,
       delta_full=payload.delta_full,
@@ -123,8 +133,9 @@ def list_inventory_adjustments(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[InventoryAdjustmentRow]:
-  stmt = select(InventoryAdjustment)
+  stmt = select(InventoryAdjustment).where(InventoryAdjustment.tenant_id == tenant_id)
   if date:
     try:
       day = datetime.fromisoformat(date).date()
@@ -166,10 +177,11 @@ def update_inventory_adjustment(
   adjust_id: str,
   payload: InventoryAdjustUpdate,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> InventoryAdjustmentRow:
   with session.begin():
     existing = session.get(InventoryAdjustment, adjust_id)
-    if not existing or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
       raise HTTPException(status_code=404, detail="Adjustment not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, [existing.gas_type])
@@ -177,7 +189,7 @@ def update_inventory_adjustment(
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = InventoryAdjustment(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=existing.delta_full,
@@ -211,7 +223,7 @@ def update_inventory_adjustment(
     if new_note is None:
       new_note = next_reason
     new_adj = InventoryAdjustment(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=new_full,
@@ -238,17 +250,21 @@ def update_inventory_adjustment(
 
 
 @router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
+def delete_inventory_adjustment(
+  adjust_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   with session.begin():
     existing = session.get(InventoryAdjustment, adjust_id)
-    if not existing or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
       return
     acquire_company_lock(session)
     acquire_inventory_locks(session, [existing.gas_type])
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = InventoryAdjustment(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       group_id=existing.group_id,
       gas_type=existing.gas_type,
       delta_full=existing.delta_full,
@@ -275,7 +291,11 @@ def delete_inventory_adjustment(adjust_id: str, session: Session = Depends(get_s
 
 
 @router.post("/refill", response_model=InventorySnapshot)
-def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get_session)) -> InventorySnapshot:
+def create_refill(
+  payload: InventoryRefillCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> InventorySnapshot:
   reject_new_shells_for_refill(payload.new12, payload.new48)
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
@@ -286,12 +306,13 @@ def create_refill(payload: InventoryRefillCreate, session: Session = Depends(get
         select(CompanyTransaction)
         .where(CompanyTransaction.request_id == payload.request_id)
         .where(CompanyTransaction.kind == "refill")
+        .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         return snapshot_at(session, existing.happened_at, existing.note)
 
     txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="refill",
@@ -325,8 +346,13 @@ def list_refills(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[InventoryRefillSummary]:
-  stmt = select(CompanyTransaction).where(CompanyTransaction.kind == "refill")
+  stmt = (
+    select(CompanyTransaction)
+    .where(CompanyTransaction.kind == "refill")
+    .where(CompanyTransaction.tenant_id == tenant_id)
+  )
   if not include_deleted:
     stmt = stmt.where(CompanyTransaction.deleted_at == None)  # noqa: E711
   if before:
@@ -364,9 +390,13 @@ def list_refills(
 
 
 @router.get("/refills/{refill_id}", response_model=InventoryRefillDetails)
-def get_refill_details(refill_id: str, session: Session = Depends(get_session)) -> InventoryRefillDetails:
+def get_refill_details(
+  refill_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> InventoryRefillDetails:
   row = session.get(CompanyTransaction, refill_id)
-  if not row or row.deleted_at is not None or row.kind != "refill":
+  if not row or row.tenant_id != tenant_id or row.deleted_at is not None or row.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
   return InventoryRefillDetails(
     refill_id=row.id,
@@ -391,11 +421,16 @@ def get_refill_details(refill_id: str, session: Session = Depends(get_session)) 
 
 
 @router.put("/refills/{refill_id}", response_model=InventoryRefillDetails)
-def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Session = Depends(get_session)) -> InventoryRefillDetails:
+def update_refill(
+  refill_id: str,
+  payload: InventoryRefillUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> InventoryRefillDetails:
   reject_new_shells_for_refill(payload.new12, payload.new48)
   with session.begin():
     existing = session.get(CompanyTransaction, refill_id)
-    if not existing or existing.deleted_at is not None or existing.kind != "refill":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
       raise HTTPException(status_code=404, detail="Refill not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
@@ -403,7 +438,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind=existing.kind,
@@ -437,7 +472,7 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
     session.add(existing)
 
     new_txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind="refill",
@@ -486,17 +521,21 @@ def update_refill(refill_id: str, payload: InventoryRefillUpdate, session: Sessi
 
 
 @router.delete("/refills/{refill_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_refill(refill_id: str, session: Session = Depends(get_session)) -> None:
+def delete_refill(
+  refill_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   with session.begin():
     existing = session.get(CompanyTransaction, refill_id)
-    if not existing or existing.deleted_at is not None or existing.kind != "refill":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
       return
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
       kind=existing.kind,

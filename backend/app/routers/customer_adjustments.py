@@ -1,9 +1,10 @@
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
@@ -44,10 +45,15 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
 
 
 @router.get("/{customer_id}", response_model=list[CustomerAdjustmentOut])
-def list_adjustments(customer_id: str, session: Session = Depends(get_session)) -> list[CustomerAdjustmentOut]:
+def list_adjustments(
+  customer_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> list[CustomerAdjustmentOut]:
   rows = session.exec(
     select(CustomerTransaction)
     .where(CustomerTransaction.customer_id == customer_id)
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.kind == "adjust")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .order_by(
@@ -64,20 +70,27 @@ def list_adjustments(customer_id: str, session: Session = Depends(get_session)) 
 
 
 @router.post("", response_model=CustomerAdjustmentOut, status_code=status.HTTP_201_CREATED)
-def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depends(get_session)) -> CustomerAdjustmentOut:
+def create_adjustment(
+  payload: CustomerAdjustmentCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CustomerAdjustmentOut:
   customer = session.get(Customer, payload.customer_id)
-  if not customer:
+  if not customer or customer.tenant_id != tenant_id:
     raise HTTPException(status_code=400, detail="Customer not found")
 
   if payload.request_id:
     existing = session.exec(
-      select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
+      select(CustomerTransaction)
+      .where(CustomerTransaction.request_id == payload.request_id)
+      .where(CustomerTransaction.tenant_id == tenant_id)
     ).first()
     if existing:
       group_id = existing.group_id or existing.id
       txns = session.exec(
         select(CustomerTransaction)
         .where(CustomerTransaction.group_id == group_id)
+        .where(CustomerTransaction.tenant_id == tenant_id)
         .where(CustomerTransaction.deleted_at == None)  # noqa: E711
       ).all()
       return _adjustment_out(txns or [existing])
@@ -89,7 +102,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   money = payload.amount_money or 0
   if money:
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,
@@ -111,7 +124,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   count_12 = payload.count_12kg or 0
   if count_12:
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,
@@ -133,7 +146,7 @@ def create_adjustment(payload: CustomerAdjustmentCreate, session: Session = Depe
   count_48 = payload.count_48kg or 0
   if count_48:
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=payload.customer_id,
       system_id=None,
       happened_at=happened_at,

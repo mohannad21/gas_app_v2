@@ -6,12 +6,13 @@ All helper logic delegated to reports_aggregates and reports_event_fields servic
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import (
   CashAdjustment,
@@ -77,6 +78,7 @@ def list_daily_reports_v2(
   from_: Optional[str] = Query(default=None, alias="from"),
   to: Optional[str] = Query(default=None),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[DailyReportV2Card]:
   """List daily report cards for a date range (default 14 days)."""
   today = datetime.now(timezone.utc).date()
@@ -127,6 +129,7 @@ def list_daily_reports_v2(
     row[0] if isinstance(row, tuple) else row
     for row in session.exec(
       select(CompanyTransaction.day)
+      .where(CompanyTransaction.tenant_id == tenant_id)
       .where(CompanyTransaction.day >= start_date)
       .where(CompanyTransaction.day <= end_date)
       .where(CompanyTransaction.kind.in_(["refill", "buy_iron"]))
@@ -149,11 +152,17 @@ def list_daily_reports_v2(
   # Get settings and customers
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
-  customers = {c.id: c for c in session.exec(select(Customer)).all()}
+  customers = {
+    c.id: c for c in session.exec(
+      select(Customer)
+      .where(Customer.tenant_id == tenant_id)
+    ).all()
+  }
 
   # Load activity data for problem identification
   customer_activity_rows = session.exec(
     select(CustomerTransaction.day, CustomerTransaction.customer_id, CustomerTransaction.kind)
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
@@ -167,6 +176,7 @@ def list_daily_reports_v2(
 
   company_activity_rows = session.exec(
     select(CompanyTransaction.day)
+    .where(CompanyTransaction.tenant_id == tenant_id)
     .where(CompanyTransaction.day >= start_date)
     .where(CompanyTransaction.day <= end_date)
     .where(CompanyTransaction.deleted_at == None)  # noqa: E711
@@ -175,6 +185,7 @@ def list_daily_reports_v2(
 
   customer_sales_rows = session.exec(
     select(CustomerTransaction.day, func.coalesce(func.sum(CustomerTransaction.paid), 0))
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
     .where(CustomerTransaction.kind == "order")
@@ -185,6 +196,7 @@ def list_daily_reports_v2(
 
   customer_pay_rows = session.exec(
     select(CustomerTransaction.day, func.coalesce(func.sum(CustomerTransaction.paid), 0))
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
     .where(CustomerTransaction.kind == "payment")
@@ -195,6 +207,7 @@ def list_daily_reports_v2(
 
   company_paid_rows = session.exec(
     select(CompanyTransaction.day, func.coalesce(func.sum(CompanyTransaction.paid), 0))
+    .where(CompanyTransaction.tenant_id == tenant_id)
     .where(CompanyTransaction.day >= start_date)
     .where(CompanyTransaction.day <= end_date)
     .where(CompanyTransaction.deleted_at == None)  # noqa: E711
@@ -204,6 +217,7 @@ def list_daily_reports_v2(
 
   expense_rows = session.exec(
     select(Expense.day, func.coalesce(func.sum(Expense.amount), 0))
+    .where(Expense.tenant_id == tenant_id)
     .where(Expense.day >= start_date)
     .where(Expense.day <= end_date)
     .where(Expense.kind == "expense")
@@ -214,6 +228,7 @@ def list_daily_reports_v2(
 
   adjustment_rows = session.exec(
     select(CashAdjustment.day, func.coalesce(func.sum(CashAdjustment.delta_cash), 0))
+    .where(CashAdjustment.tenant_id == tenant_id)
     .where(CashAdjustment.day >= start_date)
     .where(CashAdjustment.day <= end_date)
     .where(CashAdjustment.deleted_at == None)  # noqa: E711
@@ -337,6 +352,7 @@ def list_daily_reports_v2(
 def get_daily_report_v2(
   date: Optional[str] = Query(default=None),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> DailyReportV2Day:
   """Return full event feed for a single business date."""
   if date:
@@ -350,36 +366,42 @@ def get_daily_report_v2(
   # Load events for the day
   entries = session.exec(
     select(LedgerEntry)
+    .where(LedgerEntry.tenant_id == tenant_id)
     .where(LedgerEntry.day == report_day)
     .order_by(LedgerEntry.happened_at)
   ).all()
 
   customer_txns = session.exec(
     select(CustomerTransaction)
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day == report_day)
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   ).all()
 
   company_txns = session.exec(
     select(CompanyTransaction)
+    .where(CompanyTransaction.tenant_id == tenant_id)
     .where(CompanyTransaction.day == report_day)
     .where(CompanyTransaction.deleted_at == None)  # noqa: E711
   ).all()
 
   expenses = session.exec(
     select(Expense)
+    .where(Expense.tenant_id == tenant_id)
     .where(Expense.day == report_day)
     .where(Expense.deleted_at == None)  # noqa: E711
   ).all()
 
   cash_adjustments = session.exec(
     select(CashAdjustment)
+    .where(CashAdjustment.tenant_id == tenant_id)
     .where(CashAdjustment.day == report_day)
     .where(CashAdjustment.deleted_at == None)  # noqa: E711
   ).all()
 
   inventory_adjustments = session.exec(
     select(InventoryAdjustment)
+    .where(InventoryAdjustment.tenant_id == tenant_id)
     .where(InventoryAdjustment.day == report_day)
     .where(InventoryAdjustment.deleted_at == None)  # noqa: E711
   ).all()
@@ -387,10 +409,20 @@ def get_daily_report_v2(
   # Get customer and system lookups
   customer_ids = {txn.customer_id for txn in customer_txns if txn.customer_id}
   customer_ids.update({e.customer_id for e in entries if e.customer_id})
-  customers = {c.id: c for c in session.exec(select(Customer)).all() if c.id in customer_ids}
+  customers = {
+    c.id: c for c in session.exec(
+      select(Customer)
+      .where(Customer.tenant_id == tenant_id)
+    ).all() if c.id in customer_ids
+  }
 
   system_ids = {txn.system_id for txn in customer_txns if txn.system_id}
-  systems = {s.id: s for s in session.exec(select(System)).all() if s.id in system_ids}
+  systems = {
+    s.id: s for s in session.exec(
+      select(System)
+      .where(System.tenant_id == tenant_id)
+    ).all() if s.id in system_ids
+  }
 
   expense_cat_ids = {e.category_id for e in expenses if e.category_id}
   expense_categories = {

@@ -4,8 +4,10 @@ from typing import Annotated, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
+from sqlmodel import Session
 
 from .config import get_settings
+from .db import get_session
 
 
 security = HTTPBearer(auto_error=False)
@@ -56,4 +58,15 @@ def get_optional_user(
   if not sub:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
   return sub
+
+
+def get_tenant_id(
+  user_id: Annotated[str, Depends(get_current_user)],
+  session: Annotated[Session, Depends(get_session)],
+) -> str:
+  from app.models import User
+  user = session.get(User, user_id)
+  if not user or not user.tenant_id:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_found")
+  return user.tenant_id
 

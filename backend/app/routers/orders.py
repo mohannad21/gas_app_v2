@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
@@ -116,10 +116,12 @@ def list_orders(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[OrderOut]:
   stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
     stmt = stmt.where(CustomerTransaction.deleted_at == None)  # noqa: E711
@@ -139,19 +141,29 @@ def list_orders(
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def create_order(payload: OrderCreate, session: Session = Depends(get_session)) -> OrderOut:
+def create_order(
+  payload: OrderCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> OrderOut:
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
     acquire_customer_locks(session, [payload.customer_id])
     acquire_inventory_locks(session, order_gas_types(payload.gas_type))
     if payload.request_id:
       existing = session.exec(
-        select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
+        select(CustomerTransaction)
+        .where(CustomerTransaction.request_id == payload.request_id)
+        .where(CustomerTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         return order_out(existing)
 
-    customer = session.get(Customer, payload.customer_id)
+    customer = session.exec(
+      select(Customer)
+      .where(Customer.id == payload.customer_id)
+      .where(Customer.tenant_id == tenant_id)
+    ).first()
     if not customer:
       raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
 
@@ -159,7 +171,11 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     if payload.order_mode in {"replacement", "sell_iron"}:
       if not payload.system_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System required for this order type")
-      system = session.get(System, payload.system_id)
+      system = session.exec(
+        select(System)
+        .where(System.id == payload.system_id)
+        .where(System.tenant_id == tenant_id)
+      ).first()
       if not system:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
       if not system.is_active:
@@ -181,7 +197,7 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
     next_cyl_48 = current_cyl_48 + (cyl_delta if payload.gas_type == "48kg" else 0)
 
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       happened_at=happened_at,
@@ -206,17 +222,47 @@ def create_order(payload: OrderCreate, session: Session = Depends(get_session)) 
 
 
 @router.put("/{order_id}", response_model=OrderOut)
-def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends(get_session)) -> OrderOut:
+def update_order(
+  order_id: str,
+  payload: OrderUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> OrderOut:
   payload_data = payload.model_dump(exclude_unset=True)
   with session.begin():
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.kind != "order" or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
       raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     customer_id, system_id, mode, gas_type = resolve_update_order_context(
       existing=existing,
       payload_data=payload_data,
     )
+    customer = session.exec(
+      select(Customer)
+      .where(Customer.id == customer_id)
+      .where(Customer.tenant_id == tenant_id)
+    ).first()
+    if not customer:
+      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+    if mode == "replacement":
+      if not system_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System is required for replacement orders")
+      system = session.exec(
+        select(System)
+        .where(System.id == system_id)
+        .where(System.tenant_id == tenant_id)
+      ).first()
+      if not system:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
+    elif system_id:
+      system = session.exec(
+        select(System)
+        .where(System.id == system_id)
+        .where(System.tenant_id == tenant_id)
+      ).first()
+      if not system:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="System not found")
     acquire_customer_locks(session, [existing.customer_id, customer_id])
     acquire_inventory_locks(session, order_gas_types(existing.gas_type, gas_type))
     validate_order_context_on_update(
@@ -231,7 +277,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
@@ -285,7 +331,7 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
     next_cyl_48 = current_cyl_48 + (cyl_delta if gas_type == "48kg" else 0)
 
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -310,17 +356,21 @@ def update_order(order_id: str, payload: OrderUpdate, session: Session = Depends
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_order(order_id: str, session: Session = Depends(get_session)) -> None:
+def delete_order(
+  order_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   with session.begin():
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.kind != "order" or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
       return
     acquire_customer_locks(session, [existing.customer_id])
     acquire_inventory_locks(session, order_gas_types(existing.gas_type))
     reversal_happened_at = existing.happened_at
     reversal_day = existing.day
     reversal = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,

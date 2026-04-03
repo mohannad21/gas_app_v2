@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
@@ -24,7 +24,7 @@ def _stable_txn_key(txn: CustomerTransaction) -> tuple:
   return (txn.happened_at, txn.created_at, txn.id)
 
 
-def _current_customer_state(session: Session, *, customer_id: str) -> tuple[int, int, int]:
+def _current_customer_state(session: Session, *, customer_id: str, tenant_id: str) -> tuple[int, int, int]:
   return (
     sum_customer_money(session, customer_id=customer_id),
     sum_customer_cylinders(session, customer_id=customer_id, gas_type="12kg"),
@@ -63,8 +63,13 @@ def _build_collection_transactions(
   qty_12kg: Optional[int] = None,
   qty_48kg: Optional[int] = None,
   request_id: Optional[str] = None,
+  tenant_id: str,
 ) -> list[CustomerTransaction]:
-  current_money, current_cyl_12, current_cyl_48 = _current_customer_state(session, customer_id=customer_id)
+  current_money, current_cyl_12, current_cyl_48 = _current_customer_state(
+    session,
+    customer_id=customer_id,
+    tenant_id=tenant_id,
+  )
   txns: list[CustomerTransaction] = []
 
   if action_type in ("payment", "payout"):
@@ -74,7 +79,7 @@ def _build_collection_transactions(
     is_payout = action_type == "payout"
     next_money = current_money + amount if is_payout else current_money - amount
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -105,7 +110,7 @@ def _build_collection_transactions(
   if qty_12 > 0:
     next_cyl_12 = current_cyl_12 - qty_12
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -132,7 +137,7 @@ def _build_collection_transactions(
   if qty_48 > 0:
     next_cyl_48 = current_cyl_48 - qty_48
     txn = CustomerTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -194,10 +199,12 @@ def list_collections(
   customer_id: Optional[str] = Query(default=None),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[CollectionEvent]:
   stmt = (
     select(CustomerTransaction)
     .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
+    .where(CustomerTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
     stmt = stmt.where(CustomerTransaction.deleted_at == None)  # noqa: E711
@@ -223,7 +230,11 @@ def list_collections(
 
 
 @router.post("", response_model=CollectionEvent, status_code=status.HTTP_201_CREATED)
-def create_collection(payload: CollectionCreate, session: Session = Depends(get_session)) -> CollectionEvent:
+def create_collection(
+  payload: CollectionCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CollectionEvent:
   happened_at = normalize_happened_at(payload.happened_at)
   with session.begin():
     acquire_customer_locks(session, [payload.customer_id])
@@ -236,22 +247,25 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
       ),
     )
     customer = session.get(Customer, payload.customer_id)
-    if not customer:
+    if not customer or customer.tenant_id != tenant_id:
       raise HTTPException(status_code=400, detail="Customer not found")
     if payload.system_id:
       system = session.get(System, payload.system_id)
-      if not system:
+      if not system or system.tenant_id != tenant_id:
         raise HTTPException(status_code=400, detail="System not found")
 
     if payload.request_id:
       existing = session.exec(
-        select(CustomerTransaction).where(CustomerTransaction.request_id == payload.request_id)
+        select(CustomerTransaction)
+        .where(CustomerTransaction.request_id == payload.request_id)
+        .where(CustomerTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         group_id = existing.group_id or existing.id
         txns = session.exec(
           select(CustomerTransaction)
           .where(CustomerTransaction.group_id == group_id)
+          .where(CustomerTransaction.tenant_id == tenant_id)
           .where(CustomerTransaction.deleted_at == None)  # noqa: E711
         ).all()
         return _as_event(txns or [existing])
@@ -259,6 +273,7 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
     group_id = _new_group_id()
     txns = _build_collection_transactions(
       session,
+      tenant_id=tenant_id,
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       action_type=payload.action_type,
@@ -276,7 +291,12 @@ def create_collection(payload: CollectionCreate, session: Session = Depends(get_
 
 
 @router.put("/{collection_id}", response_model=CollectionEvent)
-def update_collection(collection_id: str, payload: CollectionUpdate, session: Session = Depends(get_session)) -> CollectionEvent:
+def update_collection(
+  collection_id: str,
+  payload: CollectionUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CollectionEvent:
   payload_data = payload.model_dump(exclude_unset=True)
   with session.begin():
     txns = session.exec(
@@ -285,6 +305,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
         (CustomerTransaction.id == collection_id)
         | (CustomerTransaction.group_id == collection_id)
       )
+      .where(CustomerTransaction.tenant_id == tenant_id)
       .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     ).all()
     if not txns:
@@ -324,7 +345,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
       reversal_happened_at = txn.happened_at
       reversal_day = txn.day
       reversal = CustomerTransaction(
-        tenant_id=DEFAULT_TENANT_ID,
+        tenant_id=tenant_id,
         customer_id=txn.customer_id,
         system_id=txn.system_id,
         happened_at=reversal_happened_at,
@@ -361,6 +382,7 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
     group_id = collection_id
     new_txns = _build_collection_transactions(
       session,
+      tenant_id=tenant_id,
       customer_id=base.customer_id,
       system_id=base.system_id,
       action_type=action_type,
@@ -377,7 +399,11 @@ def update_collection(collection_id: str, payload: CollectionUpdate, session: Se
 
 
 @router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_collection(collection_id: str, session: Session = Depends(get_session)) -> None:
+def delete_collection(
+  collection_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   with session.begin():
     txns = session.exec(
       select(CustomerTransaction)
@@ -385,6 +411,7 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
         (CustomerTransaction.id == collection_id)
         | (CustomerTransaction.group_id == collection_id)
       )
+      .where(CustomerTransaction.tenant_id == tenant_id)
       .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     ).all()
     if not txns:
@@ -398,7 +425,7 @@ def delete_collection(collection_id: str, session: Session = Depends(get_session
       reversal_happened_at = txn.happened_at
       reversal_day = txn.day
       reversal = CustomerTransaction(
-        tenant_id=DEFAULT_TENANT_ID,
+        tenant_id=tenant_id,
         customer_id=txn.customer_id,
         system_id=txn.system_id,
         happened_at=reversal_happened_at,

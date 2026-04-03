@@ -1,9 +1,10 @@
 from datetime import date, datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import SystemCreate, SystemOut, SystemUpdate
@@ -32,8 +33,9 @@ def _apply_security_fields(system: System, *, requires: bool, exists: bool, last
 def list_systems(
   customer_id: str | None = Query(default=None, alias="customerId"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[SystemOut]:
-  stmt = select(System).order_by(System.created_at.desc())
+  stmt = select(System).where(System.tenant_id == tenant_id).order_by(System.created_at.desc())
   if customer_id:
     stmt = stmt.where(System.customer_id == customer_id)
   systems = session.exec(stmt).all()
@@ -56,12 +58,16 @@ def list_systems(
 
 
 @router.post("", response_model=SystemOut, status_code=status.HTTP_201_CREATED)
-def create_system(payload: SystemCreate, session: Session = Depends(get_session)) -> SystemOut:
+def create_system(
+  payload: SystemCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> SystemOut:
   customer = session.get(Customer, payload.customer_id)
-  if not customer:
+  if not customer or customer.tenant_id != tenant_id:
     raise HTTPException(status_code=400, detail="Customer not found")
   system = System(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     customer_id=payload.customer_id,
     name=payload.name,
     gas_type=payload.gas_type,
@@ -94,13 +100,20 @@ def create_system(payload: SystemCreate, session: Session = Depends(get_session)
 
 
 @router.put("/{system_id}", response_model=SystemOut)
-def update_system(system_id: str, payload: SystemUpdate, session: Session = Depends(get_session)) -> SystemOut:
+def update_system(
+  system_id: str,
+  payload: SystemUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> SystemOut:
   system = session.get(System, system_id)
   if not system:
     raise HTTPException(status_code=404, detail="System not found")
+  if system.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="System not found")
   if payload.customer_id:
     customer = session.get(Customer, payload.customer_id)
-    if not customer:
+    if not customer or customer.tenant_id != tenant_id:
       raise HTTPException(status_code=400, detail="Customer not found")
   payload_data = payload.model_dump(exclude_unset=True)
   for field, value in payload_data.items():
@@ -137,13 +150,20 @@ def update_system(system_id: str, payload: SystemUpdate, session: Session = Depe
 
 
 @router.delete("/{system_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_system(system_id: str, session: Session = Depends(get_session)) -> None:
+def delete_system(
+  system_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   system = session.get(System, system_id)
   if not system:
     return
+  if system.tenant_id != tenant_id:
+    raise HTTPException(status_code=404, detail="System not found")
   has_orders = session.exec(
     select(CustomerTransaction.id)
     .where(CustomerTransaction.system_id == system_id)
+    .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.kind == "order")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .limit(1)

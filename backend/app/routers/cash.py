@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import CashAdjustment, Expense
 from app.services.ledger import sum_cash
@@ -25,8 +25,9 @@ def list_cash_adjustments(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[CashAdjustmentRow]:
-  stmt = select(CashAdjustment)
+  stmt = select(CashAdjustment).where(CashAdjustment.tenant_id == tenant_id)
   if date:
     try:
       day = datetime.fromisoformat(date).date()
@@ -61,12 +62,18 @@ def list_cash_adjustments(
 
 
 @router.post("/adjust", response_model=CashAdjustmentRow, status_code=status.HTTP_201_CREATED)
-def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends(get_session)) -> CashAdjustmentRow:
+def create_cash_adjustment(
+  payload: CashAdjustCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CashAdjustmentRow:
   if payload.delta_cash == 0:
     raise HTTPException(status_code=400, detail="delta_cash_required")
   if payload.request_id:
     existing = session.exec(
-      select(CashAdjustment).where(CashAdjustment.request_id == payload.request_id)
+      select(CashAdjustment)
+      .where(CashAdjustment.request_id == payload.request_id)
+      .where(CashAdjustment.tenant_id == tenant_id)
     ).first()
     if existing:
       return CashAdjustmentRow(
@@ -79,7 +86,7 @@ def create_cash_adjustment(payload: CashAdjustCreate, session: Session = Depends
       )
   happened_at = normalize_happened_at(payload.happened_at)
   adjustment = CashAdjustment(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
@@ -105,15 +112,16 @@ def update_cash_adjustment(
   adjust_id: str,
   payload: CashAdjustUpdate,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CashAdjustmentRow:
   existing = session.get(CashAdjustment, adjust_id)
-  if not existing or existing.deleted_at is not None:
+  if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = CashAdjustment(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -139,7 +147,7 @@ def update_cash_adjustment(
   new_amount = payload.delta_cash if payload.delta_cash is not None else existing.delta_cash
   new_note = payload.reason if payload.reason is not None else existing.note
   new_adjustment = CashAdjustment(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -161,14 +169,18 @@ def update_cash_adjustment(
 
 
 @router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cash_adjustment(adjust_id: str, session: Session = Depends(get_session)) -> None:
+def delete_cash_adjustment(
+  adjust_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   existing = session.get(CashAdjustment, adjust_id)
-  if not existing or existing.deleted_at is not None:
+  if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     return
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = CashAdjustment(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -200,10 +212,12 @@ def list_bank_deposits(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[BankDepositOut]:
   stmt = (
     select(Expense)
     .where(Expense.kind == "deposit")
+    .where(Expense.tenant_id == tenant_id)
   )
   if not include_deleted:
     stmt = stmt.where(Expense.deleted_at == None)  # noqa: E711
@@ -239,11 +253,19 @@ def list_bank_deposits(
 
 
 @router.post("/bank_deposit", response_model=BankDepositOut, status_code=status.HTTP_201_CREATED)
-def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(get_session)) -> BankDepositOut:
+def create_bank_deposit(
+  payload: BankDepositCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> BankDepositOut:
   if payload.amount <= 0:
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
   if payload.request_id:
-    existing = session.exec(select(Expense).where(Expense.request_id == payload.request_id)).first()
+    existing = session.exec(
+      select(Expense)
+      .where(Expense.request_id == payload.request_id)
+      .where(Expense.tenant_id == tenant_id)
+    ).first()
     if existing:
       return BankDepositOut(
         id=existing.id,
@@ -265,7 +287,7 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
         },
       )
   expense = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
@@ -290,14 +312,18 @@ def create_bank_deposit(payload: BankDepositCreate, session: Session = Depends(g
 
 
 @router.delete("/bank_deposit/{deposit_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_bank_deposit(deposit_id: str, session: Session = Depends(get_session)) -> None:
+def delete_bank_deposit(
+  deposit_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
   existing = session.get(Expense, deposit_id)
-  if not existing or existing.deleted_at is not None:
+  if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     return
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
   reversal = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,

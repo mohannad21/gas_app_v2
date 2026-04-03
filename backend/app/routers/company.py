@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import CompanyTransaction
 from app.schemas import (
@@ -26,7 +26,9 @@ router = APIRouter(prefix="/company", tags=["company"])
 
 @router.post("/cylinders/settle", response_model=CompanyCylinderSettleOut, status_code=status.HTTP_201_CREATED)
 def settle_company_cylinders(
-  payload: CompanyCylinderSettleCreate, session: Session = Depends(get_session)
+  payload: CompanyCylinderSettleCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyCylinderSettleOut:
   if payload.quantity <= 0:
     raise HTTPException(status_code=400, detail="quantity_must_be_positive")
@@ -49,7 +51,9 @@ def settle_company_cylinders(
     acquire_inventory_locks(session, [payload.gas_type])
     if payload.request_id:
       existing = session.exec(
-        select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+        select(CompanyTransaction)
+        .where(CompanyTransaction.request_id == payload.request_id)
+        .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         if payload.gas_type == "12kg":
@@ -68,7 +72,7 @@ def settle_company_cylinders(
         )
 
     txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="refill",
@@ -102,7 +106,9 @@ def settle_company_cylinders(
 
 @router.post("/payments", response_model=CompanyPaymentOut, status_code=status.HTTP_201_CREATED)
 def create_company_payment(
-  payload: CompanyPaymentCreate, session: Session = Depends(get_session)
+  payload: CompanyPaymentCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyPaymentOut:
   if payload.amount == 0:
     raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
@@ -122,7 +128,9 @@ def create_company_payment(
     acquire_company_lock(session)
     if payload.request_id:
       existing = session.exec(
-        select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+        select(CompanyTransaction)
+        .where(CompanyTransaction.request_id == payload.request_id)
+        .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         return CompanyPaymentOut(
@@ -133,7 +141,7 @@ def create_company_payment(
         )
 
     txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="payment",
@@ -160,10 +168,12 @@ def list_company_payments(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[CompanyPaymentOut]:
   stmt = (
     select(CompanyTransaction)
     .where(CompanyTransaction.kind == "payment")
+    .where(CompanyTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
     stmt = stmt.where(CompanyTransaction.deleted_at == None)  # noqa: E711
@@ -193,7 +203,9 @@ def list_company_payments(
 
 @router.post("/buy_iron", response_model=CompanyBuyIronOut, status_code=status.HTTP_201_CREATED)
 def create_company_buy_iron(
-  payload: CompanyBuyIronCreate, session: Session = Depends(get_session)
+  payload: CompanyBuyIronCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyBuyIronOut:
   if payload.new12 <= 0 and payload.new48 <= 0:
     raise HTTPException(status_code=400, detail="quantity_must_be_positive")
@@ -217,7 +229,9 @@ def create_company_buy_iron(
     )
     if payload.request_id:
       existing = session.exec(
-        select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+        select(CompanyTransaction)
+        .where(CompanyTransaction.request_id == payload.request_id)
+        .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         return CompanyBuyIronOut(
@@ -231,7 +245,7 @@ def create_company_buy_iron(
         )
 
     txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="buy_iron",
@@ -259,7 +273,9 @@ def create_company_buy_iron(
 
 @router.post("/balances/adjust", response_model=CompanyBalanceAdjustmentOut, status_code=status.HTTP_201_CREATED)
 def adjust_company_balances(
-  payload: CompanyBalanceAdjustmentCreate, session: Session = Depends(get_session)
+  payload: CompanyBalanceAdjustmentCreate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyBalanceAdjustmentOut:
   happened_at = (
     normalize_happened_at(payload.happened_at)
@@ -277,7 +293,9 @@ def adjust_company_balances(
     acquire_inventory_locks(session, ["12kg", "48kg"])
     if payload.request_id:
       existing = session.exec(
-        select(CompanyTransaction).where(CompanyTransaction.request_id == payload.request_id)
+        select(CompanyTransaction)
+        .where(CompanyTransaction.request_id == payload.request_id)
+        .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
         return CompanyBalanceAdjustmentOut(
@@ -300,7 +318,7 @@ def adjust_company_balances(
       raise HTTPException(status_code=400, detail="adjustment_required")
 
     txn = CompanyTransaction(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
       kind="adjust",

@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Expense, ExpenseCategory
 from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
@@ -39,8 +39,13 @@ def list_expenses(
   limit: int = Query(default=50, le=200),
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[ExpenseOutLegacy]:
-  stmt = select(Expense).where(Expense.kind == "expense")
+  stmt = (
+    select(Expense)
+    .where(Expense.kind == "expense")
+    .where(Expense.tenant_id == tenant_id)
+  )
   if date:
     try:
       day = datetime.fromisoformat(date).date()
@@ -83,7 +88,11 @@ def list_expenses(
 
 
 @router.post("", response_model=ExpenseOutLegacy, status_code=status.HTTP_201_CREATED)
-def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_session)) -> ExpenseOutLegacy:
+def create_expense(
+  payload: ExpenseCreateLegacy,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> ExpenseOutLegacy:
   try:
     day = datetime.fromisoformat(payload.date).date()
   except ValueError as exc:
@@ -94,7 +103,7 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
   fallback_happened_at = parse_happened_at_parts(date_str=payload.date, time_str="12:00:00")
   happened_at = normalize_happened_at(payload.happened_at or fallback_happened_at)
   expense = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
@@ -125,9 +134,10 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
 def delete_expense(
   expense_id: str,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
   expense = session.get(Expense, expense_id)
-  if not expense:
+  if not expense or expense.tenant_id != tenant_id:
     raise HTTPException(status_code=404, detail="expense_not_found")
   if expense.kind != "expense":
     raise HTTPException(status_code=404, detail="expense_not_found")
@@ -136,7 +146,7 @@ def delete_expense(
   reversal_happened_at = expense.happened_at
   reversal_day = expense.day
   reversal = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
@@ -170,9 +180,10 @@ def update_expense(
   expense_id: str,
   payload: ExpenseUpdate,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> ExpenseOutLegacy:
   expense = session.get(Expense, expense_id)
-  if not expense or expense.kind != "expense" or expense.deleted_at is not None:
+  if not expense or expense.tenant_id != tenant_id or expense.kind != "expense" or expense.deleted_at is not None:
     raise HTTPException(status_code=404, detail="expense_not_found")
 
   new_date_str = payload.date or expense.day.isoformat()
@@ -190,7 +201,7 @@ def update_expense(
     raise HTTPException(status_code=400, detail="Invalid date format") from exc
 
   reversal = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=expense.happened_at,
     day=expense.day,
@@ -225,7 +236,7 @@ def update_expense(
     replacement_local = datetime.combine(new_day, existing_local.timetz().replace(tzinfo=None))
     normalized_happened_at = normalize_happened_at(replacement_local)
   new_expense = Expense(
-    tenant_id=DEFAULT_TENANT_ID,
+    tenant_id=tenant_id,
     request_id=None,
     happened_at=normalized_happened_at,
     day=derive_day(normalized_happened_at),
