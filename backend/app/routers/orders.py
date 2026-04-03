@@ -129,7 +129,11 @@ def list_orders(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(CustomerTransaction.happened_at < cursor_dt)
-  stmt = stmt.order_by(CustomerTransaction.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    CustomerTransaction.happened_at.desc(),
+    CustomerTransaction.created_at.desc(),
+    CustomerTransaction.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [order_out(row) for row in rows]
 

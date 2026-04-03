@@ -21,6 +21,7 @@ import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
@@ -38,7 +39,7 @@ import {
 } from "@/hooks/useInventory";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
-import { formatDateLocale, formatTimeHM, toDateKey } from "@/lib/date";
+import { formatDateLocale, formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime, toDateKey } from "@/lib/date";
 
 type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
 type InventorySection = "company" | "ledger";
@@ -55,18 +56,11 @@ const MONEY_STEPPERS: FieldStepper[] = [
 ];
 
 function getLocalDateString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return getCurrentLocalDate();
 }
 
 function getNowTime() {
-  const now = new Date();
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
+  return getCurrentLocalTime({ includeSeconds: true });
 }
 
 function newInventoryAdjustGroupId() {
@@ -186,45 +180,7 @@ function TimePickerModal({
   onSelect: (next: string) => void;
   onClose: () => void;
 }) {
-  const times = useMemo(() => {
-    const list: string[] = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        list.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-      }
-    }
-    return list;
-  }, []);
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.calendarOverlay}>
-        <View style={styles.calendarCard}>
-          <Text style={styles.calendarTitle}>Select time</Text>
-          <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-            {times.map((time) => {
-              const selected = time === value;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.timeItem, selected && styles.timeItemSelected]}
-                  onPress={() => {
-                    onSelect(time);
-                    onClose();
-                  }}
-                >
-                  <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{time}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.calendarClose} onPress={onClose}>
-            <Text style={styles.calendarCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
+  return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
 function InventoryAdjustForm({
@@ -279,7 +235,7 @@ function InventoryAdjustForm({
       const parsed = new Date(entry.effective_at);
       if (!Number.isNaN(parsed.getTime())) {
         setAdjustDate(toDateKey(parsed));
-        setAdjustTime(formatTimeHM(parsed, { hour12: false }));
+        setAdjustTime(formatTimeHMS(parsed, { hour12: false }));
       }
     } else {
       setAdjustDate(date);
@@ -532,7 +488,7 @@ function CashAdjustForm({
       const parsed = new Date(entry.effective_at);
       if (!Number.isNaN(parsed.getTime())) {
         setAdjustDate(toDateKey(parsed));
-        setAdjustTime(formatTimeHM(parsed, { hour12: false }));
+        setAdjustTime(formatTimeHMS(parsed, { hour12: false }));
       }
     } else {
       setAdjustDate(date);

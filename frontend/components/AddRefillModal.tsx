@@ -20,10 +20,11 @@ import {
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
-import { formatDateLocale } from "@/lib/date";
+import { buildActivityHappenedAt, formatDateLocale, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
 import {
   calcCompanyCylinderLedgerDelta,
   calcMoneyUiResult,
@@ -199,7 +200,8 @@ export function RefillForm({
       const parsed = new Date(normalizeIso(editEntry.effective_at));
       if (!Number.isNaN(parsed.getTime())) return parsed;
     }
-    const fallback = new Date(`${formState.date}T${formState.time}:00`);
+    const fallbackValue = buildActivityHappenedAt({ date: formState.date, time: formState.time });
+    const fallback = fallbackValue ? new Date(fallbackValue) : new Date(formState.date);
     if (!Number.isNaN(fallback.getTime())) return fallback;
     return new Date(formState.date);
   }, [editEntry?.effective_at, formState.date, formState.time]);
@@ -572,14 +574,8 @@ export function RefillForm({
                   <Pressable
                     style={[styles.nowButton, editEntry && styles.dateFieldDisabled]}
                     onPress={editEntry ? undefined : () => {
-                      const now = new Date();
-                      const year = now.getFullYear();
-                      const month = String(now.getMonth() + 1).padStart(2, "0");
-                      const day = String(now.getDate()).padStart(2, "0");
-                      const hours = String(now.getHours()).padStart(2, "0");
-                      const minutes = String(now.getMinutes()).padStart(2, "0");
-                      formState.setDate(`${year}-${month}-${day}`);
-                      formState.setTime(`${hours}:${minutes}`);
+                      formState.setDate(getCurrentLocalDate());
+                      formState.setTime(getCurrentLocalTime({ includeSeconds: true }));
                     }}
                   >
                     <Text style={styles.nowButtonText}>Now</Text>
@@ -1332,45 +1328,7 @@ export function TimePickerModal({
   onSelect: (next: string) => void;
   onClose: () => void;
 }) {
-  const times = useMemo(() => {
-    const list: string[] = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        list.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-      }
-    }
-    return list;
-  }, []);
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.calendarOverlay}>
-        <View style={styles.calendarCard}>
-          <Text style={styles.calendarTitle}>Select time</Text>
-          <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-            {times.map((time) => {
-              const selected = time === value;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.timeItem, selected && styles.timeItemSelected]}
-                  onPress={() => {
-                    onSelect(time);
-                    onClose();
-                  }}
-                >
-                  <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{time}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.calendarClose} onPress={onClose}>
-            <Text style={styles.calendarCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
+  return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
 function InitInventoryModal({

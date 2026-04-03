@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,8 +8,8 @@ from app.config import DEFAULT_TENANT_ID
 from app.db import get_session
 from app.models import Expense, ExpenseCategory
 from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
-from app.services.posting import derive_day, normalize_happened_at, post_expense, reverse_source
-from app.utils.time import business_date_start_utc, business_tz
+from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_expense, reverse_source
+from app.utils.time import business_tz
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -55,7 +55,11 @@ def list_expenses(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(Expense.happened_at < cursor_dt)
-  stmt = stmt.order_by(Expense.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    Expense.happened_at.desc(),
+    Expense.created_at.desc(),
+    Expense.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   # exclude cash adjustments
   cash_cat = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == "Cash Adjustment")).first()
@@ -87,8 +91,8 @@ def create_expense(payload: ExpenseCreateLegacy, session: Session = Depends(get_
   if payload.amount <= 0:
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
   category = _get_category(session, payload.expense_type)
-  base = business_date_start_utc(day) + timedelta(hours=12)
-  happened_at = normalize_happened_at(payload.happened_at or base.replace(tzinfo=timezone.utc))
+  fallback_happened_at = parse_happened_at_parts(date_str=payload.date, time_str="12:00:00")
+  happened_at = normalize_happened_at(payload.happened_at or fallback_happened_at)
   expense = Expense(
     tenant_id=DEFAULT_TENANT_ID,
     request_id=payload.request_id,

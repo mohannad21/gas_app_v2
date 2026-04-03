@@ -3,15 +3,14 @@
 Date/time parsing, snapshot computation, and validation helpers for inventory routes.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlmodel import Session
 
 from app.schemas import InventorySnapshot
 from app.services.ledger import sum_inventory
-from app.utils.time import business_date_start_utc
+from app.services.posting import parse_happened_at_parts
 
 
 def parse_datetime(
@@ -22,34 +21,7 @@ def parse_datetime(
   at: Optional[str] = None,
 ) -> Optional[datetime]:
   """Parse datetime from component parts or ISO string."""
-  if at:
-    try:
-      value = datetime.fromisoformat(at)
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
-    if value.tzinfo is None:
-      return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-  if not date_str:
-    return None
-  try:
-    day = datetime.fromisoformat(date_str).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  base = business_date_start_utc(day)
-  if time_str:
-    try:
-      parsed = datetime.strptime(time_str, "%H:%M").time()
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid time format") from exc
-    base = base + timedelta(hours=parsed.hour, minutes=parsed.minute)
-  elif time_of_day == "morning":
-    base = base + timedelta(hours=9)
-  elif time_of_day == "evening":
-    base = base + timedelta(hours=18)
-  else:
-    base = base + timedelta(hours=12)
-  return base.replace(tzinfo=timezone.utc)
+  return parse_happened_at_parts(date_str=date_str, time_str=time_str, time_of_day=time_of_day, at=at)
 
 
 def snapshot_at(session: Session, at: datetime, reason: Optional[str] = None) -> InventorySnapshot:

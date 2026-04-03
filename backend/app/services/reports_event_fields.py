@@ -435,7 +435,7 @@ def _event_kind(event: DailyReportV2Event) -> str:
 
 
 def _time_display(value) -> str:
-  return business_local_datetime_from_utc(value).strftime("%H:%M")
+  return business_local_datetime_from_utc(value).strftime("%H:%M:%S")
 
 
 def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:

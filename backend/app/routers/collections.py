@@ -209,7 +209,11 @@ def list_collections(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(CustomerTransaction.happened_at < cursor_dt)
-  stmt = stmt.order_by(CustomerTransaction.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    CustomerTransaction.happened_at.desc(),
+    CustomerTransaction.created_at.desc(),
+    CustomerTransaction.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   groups: dict[str, list[CustomerTransaction]] = {}
   for row in rows:

@@ -1,5 +1,5 @@
 import { fromMinorUnits, toMinorUnits } from "@/lib/money";
-import { buildHappenedAt } from "@/lib/date";
+import { buildActivityHappenedAt } from "@/lib/date";
 import {
   InventoryAdjustment,
   InventoryAdjustmentSchema,
@@ -50,7 +50,7 @@ export async function listCashAdjustments(
 
 export async function createCashAdjustment(payload: CashAdjustmentCreate): Promise<CashAdjustment> {
   const happened_at =
-    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
+    payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/adjust", {
     ...payload,
     delta_cash: toMinorUnits(payload.delta_cash),

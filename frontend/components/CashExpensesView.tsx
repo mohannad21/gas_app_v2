@@ -18,7 +18,7 @@ import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { ExpenseCreateInput } from "@/types/domain";
-import { buildHappenedAt } from "@/lib/date";
+import { buildActivityHappenedAt } from "@/lib/date";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 const MODE_LABELS = {
@@ -198,7 +198,7 @@ export default function CashExpensesView({
   };
 
   const handleSave = async (resetAfter: boolean) => {
-    const happened_at = buildHappenedAt({ date: expenseDate, time: expenseTime });
+    const happened_at = buildActivityHappenedAt({ date: expenseDate, time: expenseTime });
     if (isExpense) {
       const amount = expenseAmountValue;
       if (!amount || amount <= 0 || !expenseType.trim()) {
