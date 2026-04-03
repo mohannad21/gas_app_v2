@@ -1,5 +1,5 @@
 import { fromMinorUnits, toMinorUnits } from "@/lib/money";
-import { buildHappenedAt } from "@/lib/date";
+import { buildActivityHappenedAt } from "@/lib/date";
 import {
   Expense,
   ExpenseCreateInput,
@@ -21,7 +21,7 @@ export async function listExpenses(date?: string, includeDeleted?: boolean): Pro
 }
 
 export async function createExpense(payload: ExpenseCreateInput): Promise<Expense> {
-  const happened_at = payload.happened_at ?? buildHappenedAt({ date: payload.date });
+  const happened_at = payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/expenses", {
     ...payload,
     amount: toMinorUnits(payload.amount),
@@ -62,7 +62,7 @@ export async function createBankDeposit(payload: {
   happened_at?: string;
 }): Promise<BankDeposit> {
   const happened_at =
-    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
+    payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/cash/bank_deposit", {
     amount: toMinorUnits(payload.amount),
     direction: payload.direction ?? "wallet_to_bank",

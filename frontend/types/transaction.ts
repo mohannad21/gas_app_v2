@@ -116,6 +116,7 @@ export type Expense = z.infer<typeof ExpenseSchema>;
 
 export const ExpenseCreateInputSchema = z.object({
   date: z.string(),
+  time: z.string().optional(),
   expense_type: z.string(),
   amount: z.number(),
   note: z.string().nullish().optional(),

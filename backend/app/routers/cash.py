@@ -41,7 +41,11 @@ def list_cash_adjustments(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(CashAdjustment.happened_at < cursor_dt)
-  stmt = stmt.order_by(CashAdjustment.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    CashAdjustment.happened_at.desc(),
+    CashAdjustment.created_at.desc(),
+    CashAdjustment.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [
     CashAdjustmentRow(
@@ -215,7 +219,11 @@ def list_bank_deposits(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(Expense.happened_at < cursor_dt)
-  stmt = stmt.order_by(Expense.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    Expense.happened_at.desc(),
+    Expense.created_at.desc(),
+    Expense.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [
     BankDepositOut(

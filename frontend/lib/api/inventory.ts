@@ -1,5 +1,5 @@
 import { fromMinorUnits, toMinorUnits } from "@/lib/money";
-import { buildHappenedAt } from "@/lib/date";
+import { buildActivityHappenedAt } from "@/lib/date";
 import {
   InventorySnapshot,
   InventorySnapshotSchema,
@@ -55,7 +55,7 @@ export async function createInventoryRefill(payload: {
   notes?: string;
 }): Promise<InventorySnapshot> {
   const happened_at =
-    payload.effective_at ?? buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
+    payload.effective_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/inventory/refill", {
     happened_at,
     buy12: payload.buy12,
@@ -165,7 +165,7 @@ export async function createInventoryAdjust(payload: {
   note?: string;
   group_id?: string;
 }): Promise<InventorySnapshot> {
-  const happened_at = buildHappenedAt({ date: payload.date, time: payload.time });
+  const happened_at = buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/inventory/adjust", {
     happened_at,
     gas_type: payload.gas_type,

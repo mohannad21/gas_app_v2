@@ -15,18 +15,82 @@ def _uuid() -> str:
   return str(uuid4())
 
 
+class User(SQLModel, table=True):
+  __tablename__ = "users"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", nullable=True, index=True)
+  phone: Optional[str] = Field(default=None, nullable=True, index=True)
+  password_hash: Optional[str] = Field(default=None, nullable=True)
+  is_active: bool = Field(default=False)
+  must_change_password: bool = Field(default=False)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+
+
 class Tenant(SQLModel, table=True):
   __tablename__ = "tenants"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   name: str
   status: str = Field(default="active", index=True)  # "active" | "suspended" | "disabled"
-  owner_user_id: Optional[str] = Field(default=None, nullable=True)
+  owner_user_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(
+      sa.String(),
+      sa.ForeignKey("users.id", name="fk_tenants_owner_user_id", use_alter=True),
+      nullable=True,
+    ),
+  )
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+
+
+class Session(SQLModel, table=True):
+  __tablename__ = "sessions"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  user_id: str = Field(foreign_key="users.id", index=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  expires_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  revoked_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  user_agent: Optional[str] = Field(default=None, nullable=True)
+
+
+class ActivationChallenge(SQLModel, table=True):
+  __tablename__ = "activation_challenges"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  user_id: str = Field(foreign_key="users.id", index=True)
+  code_hash: str
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  expires_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  used_at: Optional[datetime] = Field(
     default=None,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
@@ -373,6 +437,7 @@ class CashAdjustment(SQLModel, table=True):
   reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
+
 
 class SystemSettings(SQLModel, table=True):
   __tablename__ = "system_settings"

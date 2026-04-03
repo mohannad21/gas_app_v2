@@ -36,11 +36,12 @@ import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
-import { buildHappenedAt, formatDateLocale } from "@/lib/date";
+import { buildActivityHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
@@ -1024,7 +1025,7 @@ ${cylLine}
       return;
     }
     try {
-      const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const effectiveAt = buildActivityHappenedAt({ date: collectionDate, time: collectionTime });
       const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
@@ -1077,7 +1078,7 @@ ${cylLine}
       return;
     }
     try {
-      const effectiveAt = buildHappenedAt({ date: collectionDate, time: collectionTime });
+      const effectiveAt = buildActivityHappenedAt({ date: collectionDate, time: collectionTime });
       const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await createCollection.mutateAsync({
         customer_id: selectedCustomer,
@@ -2814,45 +2815,7 @@ function TimePickerModal({
   onSelect: (next: string) => void;
   onClose: () => void;
 }) {
-  const times = useMemo(() => {
-    const list: string[] = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        list.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-      }
-    }
-    return list;
-  }, []);
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.calendarOverlay}>
-        <View style={styles.calendarCard}>
-          <Text style={styles.calendarTitle}>Select time</Text>
-          <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-            {times.map((time) => {
-              const selected = time === value;
-              return (
-                <Pressable
-                  key={time}
-                  style={[styles.timeItem, selected && styles.timeItemSelected]}
-                  onPress={() => {
-                    onSelect(time);
-                    onClose();
-                  }}
-                >
-                  <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{time}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.calendarClose} onPress={onClose}>
-            <Text style={styles.calendarCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
+  return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
 const styles = StyleSheet.create({

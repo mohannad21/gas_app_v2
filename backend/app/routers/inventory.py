@@ -139,7 +139,11 @@ def list_inventory_adjustments(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(InventoryAdjustment.happened_at < cursor_dt)
-  stmt = stmt.order_by(InventoryAdjustment.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    InventoryAdjustment.happened_at.desc(),
+    InventoryAdjustment.created_at.desc(),
+    InventoryAdjustment.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [
     InventoryAdjustmentRow(
@@ -331,7 +335,11 @@ def list_refills(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(CompanyTransaction.happened_at < cursor_dt)
-  stmt = stmt.order_by(CompanyTransaction.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    CompanyTransaction.happened_at.desc(),
+    CompanyTransaction.created_at.desc(),
+    CompanyTransaction.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [
     InventoryRefillSummary(

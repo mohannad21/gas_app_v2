@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
+from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from app.config import DEFAULT_TENANT_ID
@@ -15,7 +16,7 @@ from app.models import (
   InventoryAdjustment,
   LedgerEntry,
 )
-from app.utils.time import business_date_from_utc, business_tz, to_utc_naive
+from app.utils.time import business_date_from_utc, business_date_start_utc, business_tz, to_utc_naive
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,45 @@ def normalize_happened_at(value: Optional[datetime]) -> datetime:
     local = value.replace(tzinfo=business_tz())
     return local.astimezone(timezone.utc)
   return value.astimezone(timezone.utc)
+
+
+def parse_happened_at_parts(
+  *,
+  date_str: Optional[str],
+  time_str: Optional[str] = None,
+  time_of_day: Optional[str] = None,
+  at: Optional[str] = None,
+) -> Optional[datetime]:
+  if at:
+    try:
+      return normalize_happened_at(datetime.fromisoformat(at))
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
+  if not date_str:
+    return None
+  try:
+    day = datetime.fromisoformat(date_str).date()
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail="Invalid date format") from exc
+  base = business_date_start_utc(day)
+  if time_str:
+    parsed = None
+    for time_format in ("%H:%M:%S", "%H:%M"):
+      try:
+        parsed = datetime.strptime(time_str, time_format).time()
+        break
+      except ValueError:
+        continue
+    if parsed is None:
+      raise HTTPException(status_code=400, detail="Invalid time format")
+    base = base + timedelta(hours=parsed.hour, minutes=parsed.minute, seconds=parsed.second)
+  elif time_of_day == "morning":
+    base = base + timedelta(hours=9)
+  elif time_of_day == "evening":
+    base = base + timedelta(hours=18)
+  else:
+    base = base + timedelta(hours=12)
+  return base.replace(tzinfo=timezone.utc)
 
 
 def derive_day(happened_at: datetime) -> datetime.date:

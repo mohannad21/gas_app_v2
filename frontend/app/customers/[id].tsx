@@ -392,9 +392,9 @@ export default function CustomerDetailsScreen() {
     ];
 
     return items.sort((left, right) => {
-      const effectiveGap = toTimeValue(right.effectiveAt) - toTimeValue(left.effectiveAt);
-      if (effectiveGap !== 0) return effectiveGap;
-      return toTimeValue(right.createdAt) - toTimeValue(left.createdAt);
+      const createdGap = toTimeValue(right.createdAt) - toTimeValue(left.createdAt);
+      if (createdGap !== 0) return createdGap;
+      return toTimeValue(right.effectiveAt) - toTimeValue(left.effectiveAt);
     });
   }, [adjustments, collections, orders, systemsById]);
 

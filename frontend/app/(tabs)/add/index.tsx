@@ -53,7 +53,7 @@ import { useCollectionEdit } from "@/hooks/useCollectionEdit";
 import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
 import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
-import { formatDateTimeLocale, toDateKey } from "@/lib/date";
+import { formatDateTimeYMDHM, toDateKey } from "@/lib/date";
 import {
   PriceInputs,
   createDefaultPriceInputs,
@@ -90,6 +90,7 @@ type CustomerActivityListItem =
       kind: "order";
       filterId: Exclude<CustomerActivityFilter, "all" | "late_payment" | "return_empties" | "payout" | "adjustment">;
       sortAt: string;
+      createdAt: string;
       customerName: string;
       data: Order;
     }
@@ -98,6 +99,7 @@ type CustomerActivityListItem =
       kind: "collection";
       filterId: Exclude<CustomerActivityFilter, "all" | "replacement" | "sell_full" | "buy_empty" | "adjustment">;
       sortAt: string;
+      createdAt: string;
       customerName: string;
       data: CollectionEvent;
     }
@@ -106,6 +108,7 @@ type CustomerActivityListItem =
       kind: "adjustment";
       filterId: "adjustment";
       sortAt: string;
+      createdAt: string;
       customerName: string;
       data: CustomerAdjustment;
     };
@@ -115,6 +118,7 @@ type ExpenseListItem =
       id: string;
       kind: "expense";
       sortAt: string;
+      createdAt: string;
       data: Expense;
     }
   | {
@@ -122,6 +126,7 @@ type ExpenseListItem =
       kind: "bank_transfer";
       direction: Exclude<ExpensePrimaryFilter, "all" | "expense">;
       sortAt: string;
+      createdAt: string;
       data: BankDeposit;
     };
 
@@ -130,6 +135,7 @@ type CompanyActivityListItem =
       id: string;
       kind: "refill";
       sortAt: string;
+      createdAt: string;
       is_deleted: boolean;
       data: Extract<InventoryActivityItem, { kind: "refill" }>["data"];
     }
@@ -137,6 +143,7 @@ type CompanyActivityListItem =
       id: string;
       kind: "company_payment";
       sortAt: string;
+      createdAt: string;
       is_deleted: false;
       data: CompanyPayment;
     };
@@ -239,7 +246,7 @@ export default function AddChooserScreen() {
 
 const formatDateTime = (value?: string) => {
   if (!value) return "—";
-  return formatDateTimeLocale(value, undefined, undefined, value);
+  return formatDateTimeYMDHM(value);
 };
   const getLocalDateString = () => {
     const now = new Date();
@@ -286,6 +293,19 @@ const formatDateTime = (value?: string) => {
     },
     [normalizeIso]
   );
+  const compareChronology = useCallback(
+    (
+      left: { id?: string; sortAt?: string; createdAt?: string },
+      right: { id?: string; sortAt?: string; createdAt?: string }
+    ) => {
+      const effectiveDiff = toSafeTime(right.sortAt) - toSafeTime(left.sortAt);
+      if (effectiveDiff !== 0) return effectiveDiff;
+      const createdDiff = toSafeTime(right.createdAt) - toSafeTime(left.createdAt);
+      if (createdDiff !== 0) return createdDiff;
+      return String(right.id ?? "").localeCompare(String(left.id ?? ""));
+    },
+    [toSafeTime]
+  );
 
   const customerActivityItems = useMemo<CustomerActivityListItem[]>(() => {
     const orderItems = orders.map<CustomerActivityListItem>((order) => ({
@@ -298,6 +318,7 @@ const formatDateTime = (value?: string) => {
             ? ("buy_empty" as const)
             : ("replacement" as const),
       sortAt: order.created_at || order.delivered_at || new Date().toISOString(),
+      createdAt: order.created_at || order.delivered_at || "",
       customerName: customersById.get(order.customer_id)?.name ?? order.customer_id,
       data: order,
     }));
@@ -311,6 +332,7 @@ const formatDateTime = (value?: string) => {
             ? ("payout" as const)
             : ("return_empties" as const),
       sortAt: collection.created_at || collection.effective_at || new Date().toISOString(),
+      createdAt: collection.created_at || collection.effective_at || "",
       customerName: customersById.get(collection.customer_id)?.name ?? collection.customer_id,
       data: collection,
     }));
@@ -319,14 +341,13 @@ const formatDateTime = (value?: string) => {
       kind: "adjustment" as const,
       filterId: "adjustment" as const,
       sortAt: adjustment.created_at || adjustment.effective_at || new Date().toISOString(),
+      createdAt: adjustment.created_at || adjustment.effective_at || "",
       customerName: customersById.get(adjustment.customer_id)?.name ?? adjustment.customer_id,
       data: adjustment,
     }));
 
-    return [...orderItems, ...collectionItems, ...adjustmentItems].sort(
-      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
-    );
-  }, [collections, customerAdjustmentsQuery.data, customersById, orders, toSafeTime]);
+    return [...orderItems, ...collectionItems, ...adjustmentItems].sort(compareChronology);
+  }, [collections, compareChronology, customerAdjustmentsQuery.data, customersById, orders]);
   const companyActivityItems = useMemo<CompanyActivityListItem[]>(() => {
     const refillItems = (companyRefillsQuery.data ?? [])
       .filter((refill) => {
@@ -342,6 +363,7 @@ const formatDateTime = (value?: string) => {
         id: `refill-${refill.refill_id}`,
         kind: "refill" as const,
         sortAt: refill.effective_at,
+        createdAt: refill.effective_at,
         is_deleted: Boolean(refill.is_deleted),
         data: refill,
       }));
@@ -349,43 +371,46 @@ const formatDateTime = (value?: string) => {
         id: `company-payment-${payment.id}`,
         kind: "company_payment" as const,
         sortAt: payment.happened_at,
+        createdAt: payment.happened_at,
         is_deleted: false as const,
         data: payment,
       }));
 
-    return [...refillItems, ...companyPaymentItems].sort(
-      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
-    );
-  }, [companyPaymentsQuery.data, companyRefillsQuery.data, toSafeTime]);
+    return [...refillItems, ...companyPaymentItems].sort(compareChronology);
+  }, [compareChronology, companyPaymentsQuery.data, companyRefillsQuery.data]);
   const ledgerAdjustmentItems = useMemo(
     () => {
       const inventoryItems = (allInventoryAdjustmentsQuery.data ?? []).map((adjustment) => ({
+        id: `inventory-adjustment-${adjustment.id}`,
         kind: "inventory_adjustment" as const,
-        created_at: adjustment.effective_at,
+        sortAt: adjustment.effective_at,
+        createdAt: adjustment.created_at ?? adjustment.effective_at,
         is_deleted: Boolean(adjustment.is_deleted),
         data: adjustment,
       }));
       const cashItems = (allCashAdjustmentsQuery.data ?? []).map((adjustment) => ({
+        id: `cash-adjustment-${adjustment.id}`,
         kind: "cash_adjustment" as const,
-        created_at: adjustment.effective_at,
+        sortAt: adjustment.effective_at,
+        createdAt: adjustment.created_at ?? adjustment.effective_at,
         is_deleted: Boolean(adjustment.is_deleted),
         data: adjustment,
       }));
 
-      return [...inventoryItems, ...cashItems].sort(
-        (left, right) => toSafeTime(right.created_at) - toSafeTime(left.created_at)
-      );
+      return [...inventoryItems, ...cashItems].sort(compareChronology);
     },
-    [allCashAdjustmentsQuery.data, allInventoryAdjustmentsQuery.data, toSafeTime]
+    [allCashAdjustmentsQuery.data, allInventoryAdjustmentsQuery.data, compareChronology]
   );
   const expenses = useMemo(() => {
     const rows = expensesQuery.data ?? [];
     return [...rows].sort((a, b) => {
-      const aTime = new Date(a.created_at ?? a.happened_at ?? a.date).getTime();
-      const bTime = new Date(b.created_at ?? b.happened_at ?? b.date).getTime();
-      return bTime - aTime;
+      const effectiveDiff = toSafeTime(b.happened_at ?? b.date) - toSafeTime(a.happened_at ?? a.date);
+      if (effectiveDiff !== 0) return effectiveDiff;
+      const createdDiff = toSafeTime(b.created_at) - toSafeTime(a.created_at);
+      if (createdDiff !== 0) return createdDiff;
+      return String(b.id ?? "").localeCompare(String(a.id ?? ""));
     });
-  }, [expensesQuery.data]);
+  }, [expensesQuery.data, toSafeTime]);
   const bankDeposits = useMemo(() => {
     const rows = bankDepositsQuery.data ?? [];
     return [...rows].sort((a, b) => toSafeTime(b.happened_at) - toSafeTime(a.happened_at));
@@ -443,7 +468,8 @@ const formatDateTime = (value?: string) => {
     const expenseItems = expenses.map<ExpenseListItem>((item) => ({
       id: `expense-${item.id}`,
       kind: "expense" as const,
-      sortAt: item.created_at ?? item.happened_at ?? item.date,
+      sortAt: item.happened_at ?? item.created_at ?? item.date,
+      createdAt: item.created_at ?? item.happened_at ?? item.date,
       data: item,
     }));
     const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
@@ -451,13 +477,12 @@ const formatDateTime = (value?: string) => {
       kind: "bank_transfer" as const,
       direction: item.direction,
       sortAt: item.happened_at,
+      createdAt: item.happened_at,
       data: item,
     }));
 
-    return [...expenseItems, ...bankTransferItems].sort(
-      (left, right) => toSafeTime(right.sortAt) - toSafeTime(left.sortAt)
-    );
-  }, [bankDeposits, expenses, toSafeTime]);
+    return [...expenseItems, ...bankTransferItems].sort(compareChronology);
+  }, [bankDeposits, compareChronology, expenses]);
   const filteredExpenseItems = useMemo(
     () =>
       expenseListItems.filter((item) => {
@@ -1493,7 +1518,7 @@ export function AddCustomersSection({
                   </View>
                 </View>
                 <View style={styles.headerRight}>
-                  <Text style={styles.time}>{formatDateTimeLocale(item.created_at)}</Text>
+                  <Text style={styles.time}>{formatDateTimeYMDHM(item.created_at)}</Text>
                   <View style={styles.actionsCompact}>
                     <Pressable
                       accessibilityLabel="Edit customer"

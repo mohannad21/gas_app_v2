@@ -50,7 +50,11 @@ def list_adjustments(customer_id: str, session: Session = Depends(get_session)) 
     .where(CustomerTransaction.customer_id == customer_id)
     .where(CustomerTransaction.kind == "adjust")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
-    .order_by(CustomerTransaction.happened_at.desc())
+    .order_by(
+      CustomerTransaction.happened_at.desc(),
+      CustomerTransaction.created_at.desc(),
+      CustomerTransaction.id.desc(),
+    )
   ).all()
   groups: dict[str, list[CustomerTransaction]] = {}
   for row in rows:

@@ -20,9 +20,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { useCompanyBalances, useCreateCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
+import { getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
 
 const MONEY_STEPPERS: FieldStepper[] = [
   { delta: 20, label: "+20", position: "top" },
@@ -37,18 +39,11 @@ const QTY_STEPPERS: FieldStepper[] = [
 ];
 
 function getTodayDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return getCurrentLocalDate();
 }
 
 function getNowTime() {
-  const now = new Date();
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
+  return getCurrentLocalTime({ includeSeconds: true });
 }
 
 function CalendarModal({
@@ -150,38 +145,7 @@ function TimePickerModal({
   onSelect: (next: string) => void;
   onClose: () => void;
 }) {
-  const times = Array.from({ length: 96 }, (_, index) => {
-    const hour = Math.floor(index / 4);
-    const minute = (index % 4) * 15;
-    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  });
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.pickerCard}>
-          <Text style={styles.pickerTitle}>Select time</Text>
-          <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-            {times.map((time) => (
-              <Pressable
-                key={time}
-                style={[styles.timeItem, time === value && styles.selectedCell]}
-                onPress={() => {
-                  onSelect(time);
-                  onClose();
-                }}
-              >
-                <Text style={styles.timeText}>{time}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          <Pressable style={styles.closeBtn} onPress={onClose}>
-            <Text style={styles.closeBtnText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
+  return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
 export default function CompanyBalanceAdjustScreen() {

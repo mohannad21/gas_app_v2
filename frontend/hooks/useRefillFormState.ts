@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatTimeHM } from "@/lib/date";
+import { formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
 
 export type EditRefillEntry = {
   refill_id: string;
@@ -12,21 +12,6 @@ export type EditRefillEntry = {
   return48: number;
 };
 
-function getNowDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getNowTime() {
-  const now = new Date();
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
 export function useRefillFormState(
   visible: boolean,
   mode: "refill" | "buy" | "return",
@@ -34,8 +19,8 @@ export function useRefillFormState(
   refillNotes?: string
 ) {
   // Date & time
-  const [date, setDate] = useState(getNowDate());
-  const [time, setTime] = useState(getNowTime());
+  const [date, setDate] = useState(getCurrentLocalDate());
+  const [time, setTime] = useState(getCurrentLocalTime({ includeSeconds: true }));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
 
@@ -81,10 +66,10 @@ export function useRefillFormState(
         if (editEntry.effective_at) {
           const parsed = new Date(editEntry.effective_at);
           if (!Number.isNaN(parsed.getTime())) {
-            setTime(formatTimeHM(parsed, { hour12: false }));
+            setTime(formatTimeHMS(parsed, { hour12: false }));
           }
         } else if (editEntry.time_of_day) {
-          setTime(editEntry.time_of_day === "morning" ? "09:00" : "18:00");
+          setTime(editEntry.time_of_day === "morning" ? "09:00:00" : "18:00:00");
         }
         setBuy12(String(editEntry.buy12));
         setRet12(String(editEntry.return12));
@@ -99,8 +84,8 @@ export function useRefillFormState(
         setIronPrice12Input("0");
         setIronPrice48Input("0");
       } else {
-        setDate(getNowDate());
-        setTime(getNowTime());
+        setDate(getCurrentLocalDate());
+        setTime(getCurrentLocalTime({ includeSeconds: true }));
         setBuy12("");
         setRet12("");
         setBuy48("");
@@ -134,7 +119,7 @@ export function useRefillFormState(
     if (!visible || !editEntry?.effective_at) return;
     const parsed = new Date(editEntry.effective_at);
     if (Number.isNaN(parsed.getTime())) return;
-    setTime(formatTimeHM(parsed, { hour12: false }));
+    setTime(formatTimeHMS(parsed, { hour12: false }));
   }, [visible, editEntry?.effective_at]);
 
   // Handle buy mode initialization
@@ -154,8 +139,8 @@ export function useRefillFormState(
   }, [isReturnMode, visible]);
 
   const resetFormForCurrentMode = () => {
-    setDate(getNowDate());
-    setTime(getNowTime());
+    setDate(getCurrentLocalDate());
+    setTime(getCurrentLocalTime({ includeSeconds: true }));
     setBuy12(isReturnMode ? "0" : "");
     setRet12(isBuyMode ? "0" : "");
     setBuy48(isReturnMode ? "0" : "");

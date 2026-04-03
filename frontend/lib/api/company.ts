@@ -1,5 +1,5 @@
 import { fromMinorUnits, toMinorUnits, setCurrencyCode, setMoneyDecimals } from "@/lib/money";
-import { buildHappenedAt } from "@/lib/date";
+import { buildActivityHappenedAt } from "@/lib/date";
 import {
   SystemSettings,
   SystemSettingsSchema,
@@ -44,7 +44,7 @@ export async function createCompanyBalanceAdjustment(
 ): Promise<CompanyBalanceAdjustment> {
   const happened_at =
     payload.happened_at ??
-    buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
+    buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/company/balances/adjust", {
     happened_at,
     money_balance: toMinorUnits(payload.money_balance),
@@ -62,7 +62,7 @@ export async function createCompanyBalanceAdjustment(
 
 export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {
   const happened_at =
-    payload.happened_at ?? buildHappenedAt({ date: payload.date, time: payload.time });
+    payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/company/payments", {
     amount: toMinorUnits(payload.amount),
     note: payload.note,
@@ -84,7 +84,7 @@ export async function listCompanyPayments(includeDeleted?: boolean): Promise<Com
 export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): Promise<CompanyBuyIron> {
   const happened_at =
     payload.happened_at ??
-    buildHappenedAt({ date: payload.date, time: payload.time, time_of_day: payload.time_of_day });
+    buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/company/buy_iron", {
     happened_at,
     new12: payload.new12,

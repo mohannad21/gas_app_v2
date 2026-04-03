@@ -1,7 +1,7 @@
 type Listener = (message: string | null) => void;
 
 const listeners = new Set<Listener>();
-let hideTimer: NodeJS.Timeout | null = null;
+let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function showToast(message: string, durationMs = 2500) {
   // Notify listeners with the new message
@@ -15,6 +15,8 @@ export function showToast(message: string, durationMs = 2500) {
 
 export function subscribeToast(listener: Listener) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 

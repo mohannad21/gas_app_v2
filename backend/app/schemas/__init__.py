@@ -1,6 +1,16 @@
 # Re-export all schemas for backward compatibility
 # This allows imports like: from app.schemas import CustomerOut
 
+from .auth import (
+    ActivateRequest,
+    ChangePasswordRequest,
+    DeveloperCreateUserRequest,
+    DeveloperCreateUserResponse,
+    LoginRequest,
+    LoginResponse,
+    RefreshRequest,
+    RefreshResponse,
+)
 from .common import GasType, InventoryAdjustReason, MAX_LEDGER_INT, OrderMode, TransferDirection, new_id
 from .customer import CustomerAdjustmentCreate, CustomerAdjustmentOut, CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
 from .inventory import InventoryAdjustCreate, InventoryAdjustUpdate, InventoryAdjustmentRow, InventoryInitCreate, InventoryRefillCreate, InventoryRefillDetails, InventoryRefillSummary, InventoryRefillUpdate, InventorySnapshot
@@ -11,6 +21,15 @@ from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, Sys
 from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCategoryCreate, ExpenseCategoryOut, ExpenseCreate, ExpenseCreateLegacy, ExpenseOut, ExpenseOutLegacy, ExpenseUpdate
 
 __all__ = [
+    # Auth
+    "DeveloperCreateUserRequest",
+    "DeveloperCreateUserResponse",
+    "ActivateRequest",
+    "LoginRequest",
+    "LoginResponse",
+    "RefreshRequest",
+    "RefreshResponse",
+    "ChangePasswordRequest",
     # Common
     "GasType",
     "OrderMode",

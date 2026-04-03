@@ -26,7 +26,9 @@ export function Toast() {
         }).start();
       }
     });
-    return () => unsub();
+    return () => {
+      unsub();
+    };
   }, [opacity, useNativeDriver]);
 
   if (!message) return null;

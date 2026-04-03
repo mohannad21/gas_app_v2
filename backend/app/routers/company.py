@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,49 +19,10 @@ from app.schemas import (
   CompanyPaymentOut,
 )
 from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
-from app.services.posting import derive_day, normalize_happened_at, post_company_transaction
-from app.utils.time import business_date_start_utc
+from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_company_transaction
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/company", tags=["company"])
-
-
-def _parse_datetime(
-  *,
-  date_str: Optional[str],
-  time_str: Optional[str] = None,
-  time_of_day: Optional[str] = None,
-  at: Optional[str] = None,
-) -> Optional[datetime]:
-  if at:
-    try:
-      value = datetime.fromisoformat(at)
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid datetime format") from exc
-    if value.tzinfo is None:
-      return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-  if not date_str:
-    return None
-  try:
-    day = datetime.fromisoformat(date_str).date()
-  except ValueError as exc:
-    raise HTTPException(status_code=400, detail="Invalid date format") from exc
-  base = business_date_start_utc(day)
-  if time_str:
-    try:
-      parsed = datetime.strptime(time_str, "%H:%M").time()
-    except ValueError as exc:
-      raise HTTPException(status_code=400, detail="Invalid time format") from exc
-    base = base + timedelta(hours=parsed.hour, minutes=parsed.minute)
-  elif time_of_day == "morning":
-    base = base + timedelta(hours=9)
-  elif time_of_day == "evening":
-    base = base + timedelta(hours=18)
-  else:
-    base = base + timedelta(hours=12)
-  return base.replace(tzinfo=timezone.utc)
-
 
 @router.post("/cylinders/settle", response_model=CompanyCylinderSettleOut, status_code=status.HTTP_201_CREATED)
 def settle_company_cylinders(
@@ -149,7 +110,7 @@ def create_company_payment(
   happened_at = (
     normalize_happened_at(payload.happened_at)
     if payload.happened_at
-    else _parse_datetime(
+    else parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,
@@ -212,7 +173,11 @@ def list_company_payments(
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
     stmt = stmt.where(CompanyTransaction.happened_at < cursor_dt)
-  stmt = stmt.order_by(CompanyTransaction.happened_at.desc()).limit(limit)
+  stmt = stmt.order_by(
+    CompanyTransaction.happened_at.desc(),
+    CompanyTransaction.created_at.desc(),
+    CompanyTransaction.id.desc(),
+  ).limit(limit)
   rows = session.exec(stmt).all()
   return [
     CompanyPaymentOut(
@@ -236,7 +201,7 @@ def create_company_buy_iron(
   happened_at = (
     normalize_happened_at(payload.happened_at)
     if payload.happened_at
-    else _parse_datetime(
+    else parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,
@@ -299,7 +264,7 @@ def adjust_company_balances(
   happened_at = (
     normalize_happened_at(payload.happened_at)
     if payload.happened_at
-    else _parse_datetime(
+    else parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,

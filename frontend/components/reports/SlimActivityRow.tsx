@@ -203,7 +203,7 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
 export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted, showCreatedAt, showEffectiveAtBottom }: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const eventType = String(event?.event_type ?? "event");
-  const label = event?.event_type === "order" ? "Replacement" : event?.label ?? eventType;
+  const label = event?.event_type === "order" ? (event?.label ?? "Replacement") : event?.label ?? eventType;
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
@@ -265,7 +265,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
     ? (
         event.context_line
           ? event.context_line
-              .replace(/^Order\b/, "Replacement")
+              .replace(/^Order\b/, label)
               .split("System:")[0]
               .replace(/[·•\s]+$/, "")
           : label

@@ -12,33 +12,22 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 
 import CashExpensesView from "@/components/CashExpensesView";
+import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import { useCreateExpense, useExpenses, useUpdateExpense } from "@/hooks/useExpenses";
 import { useCreateBankDeposit } from "@/hooks/useBankDeposits";
 import { useDailyReportsV2 } from "@/hooks/useReports";
-import { formatDateLocale } from "@/lib/date";
+import { formatDateLocale, getCurrentLocalDate, getCurrentLocalTime, getTimeHMSFromIso } from "@/lib/date";
 
 function getTodayDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return getCurrentLocalDate();
 }
 
 function getNowTime(): string {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
+  return getCurrentLocalTime({ includeSeconds: true });
 }
 
 function getTimeFromIso(value?: string | null): string {
-  if (!value) return getNowTime();
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return getNowTime();
-  const hours = String(parsed.getHours()).padStart(2, "0");
-  const minutes = String(parsed.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
+  return getTimeHMSFromIso(value);
 }
 
 function CalendarModal({
@@ -162,39 +151,7 @@ function TimePickerModal({
   onSelect: (next: string) => void;
   onClose: () => void;
 }) {
-  const times = Array.from({ length: 96 }, (_, index) => {
-    const hour = Math.floor(index / 4);
-    const minute = (index % 4) * 15;
-    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  });
-
-  return (
-    <View style={[styles.calendarOverlay, !visible && styles.hidden]}>
-      <View style={styles.calendarCard}>
-        <Text style={styles.calendarTitle}>Select time</Text>
-        <ScrollView style={styles.timeList} contentContainerStyle={styles.timeListContent}>
-          {times.map((time) => {
-            const selected = time === value;
-            return (
-              <Pressable
-                key={time}
-                style={[styles.timeItem, selected && styles.timeItemSelected]}
-                onPress={() => {
-                  onSelect(time);
-                  onClose();
-                }}
-              >
-                <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{time}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <Pressable style={styles.calendarClose} onPress={onClose}>
-          <Text style={styles.calendarCloseText}>Close</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+  return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
 export default function NewExpenseScreen() {
