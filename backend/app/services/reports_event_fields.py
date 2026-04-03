@@ -614,6 +614,15 @@ def _apply_ui_fields(
   event.hero_primary = event.hero_text
   event.context_line = _context_line(event)
 
+  # Some event builders leave list-shaped UI fields as None for unsupported
+  # event types. Normalize them here so report rendering never crashes.
+  if not isinstance(event.action_pills, list):
+    event.action_pills = []
+  if not isinstance(event.remaining_actions, list):
+    event.remaining_actions = []
+  if not isinstance(event.open_actions, list):
+    event.open_actions = []
+
   event.notes = notes
 
   if event.status_mode == "settlement":
@@ -1138,6 +1147,8 @@ def _remaining_actions_for_event(
           )
         )
     return actions
+
+  return []
 
 
 def _note(

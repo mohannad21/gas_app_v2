@@ -6,6 +6,8 @@
 
 import axios from "axios";
 import { z } from "zod";
+
+import { clearTokens, getStoredAccessToken, getStoredRefreshToken, storeTokens } from "@/lib/auth-storage";
 import { fromMinorUnits } from "@/lib/money";
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
@@ -68,16 +70,61 @@ async function getAccessToken(): Promise<string | null> {
   return devAccessTokenPromise;
 }
 
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string | null) => void> = [];
+
+function subscribeToRefresh(cb: (token: string | null) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function notifyRefreshSubscribers(token: string | null) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function isPublicAuthPath(url: string): boolean {
+  return (
+    url.startsWith("/auth/login") ||
+    url.startsWith("/auth/refresh") ||
+    url.startsWith("/auth/activate") ||
+    url.startsWith("/auth/dev-token") ||
+    url.startsWith("/auth/developer/")
+  );
+}
+
+async function attemptTokenRefresh(): Promise<string | null> {
+  const refreshToken = await getStoredRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const response = await authClient.post("/auth/refresh", { refresh_token: refreshToken });
+    const { access_token } = response.data as { access_token?: string };
+    if (typeof access_token !== "string" || !access_token) {
+      await clearTokens();
+      return null;
+    }
+    await storeTokens(access_token, refreshToken);
+    return access_token;
+  } catch {
+    await clearTokens();
+    return null;
+  }
+}
+
 api.interceptors.request.use(async (config) => {
   (config as any).metadata = { start: Date.now() };
   void ensureBackendHealthy();
   const url = config.url ?? "";
-  if (!url.startsWith("/health") && !url.startsWith("/auth/")) {
-    const token = await getAccessToken();
+  const needsAuthHeader = !url.startsWith("/health") && (!url.startsWith("/auth/") || !isPublicAuthPath(url));
+
+  if (needsAuthHeader) {
+    let token = await getStoredAccessToken();
+    if (!token && process.env.EXPO_PUBLIC_API_DEBUG_AUTH !== "false") {
+      token = await getAccessToken();
+    }
     if (token) {
-      const headers = (config.headers ?? {}) as Record<string, string>;
+      const headers = axios.AxiosHeaders.from(config.headers);
       if (!headers.Authorization) {
-        headers.Authorization = `Bearer ${token}`;
+        headers.set("Authorization", `Bearer ${token}`);
       }
       config.headers = headers;
     }
@@ -87,7 +134,50 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(error)
+  async (error) => {
+    const originalRequest = error.config as
+      | (typeof error.config & { _retry?: boolean; headers?: unknown })
+      | undefined;
+
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isPublicAuthPath(originalRequest.url ?? "")
+    ) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeToRefresh((token) => {
+            if (!token) {
+              reject(error);
+              return;
+            }
+            const headers = axios.AxiosHeaders.from(originalRequest.headers);
+            headers.set("Authorization", `Bearer ${token}`);
+            originalRequest.headers = headers;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+      const newToken = await attemptTokenRefresh();
+      isRefreshing = false;
+
+      if (newToken) {
+        notifyRefreshSubscribers(newToken);
+        const headers = axios.AxiosHeaders.from(originalRequest.headers);
+        headers.set("Authorization", `Bearer ${newToken}`);
+        originalRequest.headers = headers;
+        return api(originalRequest);
+      }
+
+      notifyRefreshSubscribers(null);
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 export function parse<T>(schema: z.ZodType<T>, data: unknown): T {
