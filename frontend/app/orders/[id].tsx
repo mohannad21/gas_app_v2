@@ -42,8 +42,8 @@ export default function OrderDetailsScreen() {
   }
 
   const netPaid = order.paid_amount ?? 0;
-  const remaining = calcMoneyUiResult(order.price_total, netPaid);
-  const formatBalance = (value?: number) => {
+  const remaining = calcMoneyUiResult(order.price_total ?? 0, netPaid);
+  const formatBalance = (value?: number | null) => {
     const amount = value ?? 0;
     if (amount < 0) return `Credit ${Math.abs(amount).toFixed(0)}`;
     if (amount > 0) return `Debt ${amount.toFixed(0)}`;

@@ -539,7 +539,6 @@ export default function CustomerDetailsScreen() {
 
   const handleFilterPress = (nextFilter: ActivityFilter) => {
     setSelectedFilter(nextFilter);
-    setExpandedActivityId(null);
     if (nextFilter !== "replacement") {
       setSelectedSystemId("all");
     }
@@ -712,7 +711,6 @@ export default function CustomerDetailsScreen() {
                 key={option.id}
                 onPress={() => {
                   setSelectedSystemId(option.id);
-                  setExpandedActivityId(null);
                 }}
                 style={[styles.secondaryFilterChip, active && styles.secondaryFilterChipActive]}
               >
@@ -768,6 +766,9 @@ export default function CustomerDetailsScreen() {
                     amount_money: 0,
                     count_12kg: 0,
                     count_48kg: 0,
+                    debt_cash: activity.moneyAfter,
+                    debt_cylinders_12: activity.cyl12After,
+                    debt_cylinders_48: activity.cyl48After,
                     reason: activity.note ?? null,
                     effective_at: activity.effectiveAt,
                     created_at: activity.createdAt ?? activity.effectiveAt,

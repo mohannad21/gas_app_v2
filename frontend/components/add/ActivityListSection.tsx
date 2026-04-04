@@ -1,5 +1,5 @@
 import { FlatList, Text, View, Pressable, StyleSheet } from "react-native";
-import { ReactNode } from "react";
+import { ReactElement, ReactNode } from "react";
 
 interface ActivityListSectionProps {
   data: any[];
@@ -7,7 +7,7 @@ interface ActivityListSectionProps {
   error: any;
   emptyMessage: string;
   onRetry: () => void;
-  renderItem: (item: any) => ReactNode;
+  renderItem: (item: any) => ReactElement | null;
   keyExtractor?: (item: any) => string;
 }
 

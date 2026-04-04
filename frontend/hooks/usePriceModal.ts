@@ -6,7 +6,7 @@ import {
 } from "@/components/PriceMatrix";
 import { GasType, PriceSetting } from "@/types/domain";
 
-export type PriceSaveStatusTone = "success" | "error";
+export type PriceSaveStatusTone = "success" | "warning" | "error";
 
 export function usePriceModal(priceSettingsData?: PriceSetting[]) {
   const [priceModalOpen, setPriceModalOpen] = useState(false);

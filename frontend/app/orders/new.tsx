@@ -670,7 +670,7 @@ export default function NewOrderScreen() {
     }
   }, [customersQuery.isLoading, inventoryLatest.isLoading, inventoryInitBlocked]);
 
-  const previousSystemRef = useRef<string | undefined>();
+  const previousSystemRef = useRef<string | undefined>(undefined);
   // System selection sets defaults ONCE
   useEffect(() => {
     if (currentAction !== "replacement") return;
@@ -1427,7 +1427,7 @@ ${cylLine}
           control={control}
           name="customer_id"
           rules={{ required: "Select a customer" }}
-          render={({ field: { onChange, value } }) => (
+          render={({ field: { onChange, value } }) =>
             isCustomerSearchOpen ? (
               <View style={styles.customerList}>
                 {customerSearchTerm && !hasExactCustomerMatch ? (
@@ -1487,8 +1487,10 @@ ${cylLine}
                   );
                 })}
               </View>
-            ) : null
-          )}
+            ) : (
+              <></>
+            )
+          }
         />
         <FieldError message={errors.customer_id?.message} />
       </View>
@@ -3309,6 +3311,15 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     color: "#444",
+    marginBottom: 12,
+  },
+  orderMeta: {
+    fontSize: 14,
+    color: "#475569",
+    marginBottom: 12,
+  },
+  fieldBlock: {
+    gap: 8,
     marginBottom: 12,
   },
   secondaryButton: {

@@ -30,7 +30,7 @@ export const buildCollapsedLines = (ctx: any, fmt: SmartTicketFormatters): Smart
     return `${sign}${formatMoney(value)}`;
   };
   const appendActions = () => {
-    actionLines.forEach((line) => {
+    actionLines.forEach((line: unknown) => {
       const text = String(line ?? "").trim();
       if (text) pushLine(text, "alert");
     });
