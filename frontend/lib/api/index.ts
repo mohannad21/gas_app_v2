@@ -26,6 +26,9 @@ export { listInventoryAdjustments, updateInventoryAdjustment, deleteInventoryAdj
 // Company & System
 export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, createCompanyPayment, listCompanyPayments, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
 
+// Billing
+export { getPlanBillingStatus } from "./billing";
+
 // Systems
 export { listSystems, createSystem, updateSystem, deleteSystem, listSystemTypes, createSystemType, updateSystemType } from "./systems";
 

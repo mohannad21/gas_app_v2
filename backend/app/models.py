@@ -96,6 +96,105 @@ class ActivationChallenge(SQLModel, table=True):
   )
 
 
+class Plan(SQLModel, table=True):
+  __tablename__ = "plans"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  name: str = Field(index=True)
+  description: Optional[str] = Field(default=None, nullable=True)
+  is_active: bool = Field(default=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+
+
+class PlanEntitlement(SQLModel, table=True):
+  __tablename__ = "plan_entitlements"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  plan_id: str = Field(foreign_key="plans.id", index=True)
+  key: str = Field(index=True)
+  value: str
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
+class TenantPlanSubscription(SQLModel, table=True):
+  __tablename__ = "tenant_plan_subscriptions"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  plan_id: str = Field(foreign_key="plans.id", index=True)
+  status: str = Field(default="active", index=True)
+  started_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  current_period_start: Optional[date] = Field(
+    default=None,
+    sa_column=sa.Column(sa.Date, nullable=True),
+  )
+  current_period_end: Optional[date] = Field(
+    default=None,
+    sa_column=sa.Column(sa.Date, nullable=True),
+  )
+  grace_period_end: Optional[date] = Field(
+    default=None,
+    sa_column=sa.Column(sa.Date, nullable=True),
+  )
+  cancelled_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+
+
+class TenantPlanOverride(SQLModel, table=True):
+  __tablename__ = "tenant_plan_overrides"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  key: str = Field(index=True)
+  value: str
+  note: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+
+
+class BillingEvent(SQLModel, table=True):
+  __tablename__ = "billing_events"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  kind: str = Field(index=True)
+  amount: int
+  note: Optional[str] = Field(default=None, nullable=True)
+  effective_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+
+
 class Customer(SQLModel, table=True):
   __tablename__ = "customers"
 

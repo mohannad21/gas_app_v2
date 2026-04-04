@@ -60,6 +60,18 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="account/change-password"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="account/plan-billing"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

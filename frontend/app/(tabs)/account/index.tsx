@@ -26,6 +26,14 @@ export default function AccountScreen() {
       <Text style={styles.title}>Account</Text>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Subscription</Text>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/plan-billing")}>
+          <Text style={styles.rowText}>Plan & Billing</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Security</Text>
         <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/change-password")}>
           <Text style={styles.rowText}>Change Password</Text>

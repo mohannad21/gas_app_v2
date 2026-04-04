@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import get_current_user
 from .config import get_settings
+from .services.plan_access import require_write_access
 from .routers import (
   auth,
   cash,
@@ -10,19 +11,21 @@ from .routers import (
   company,
   customer_adjustments,
   customers,
+  developer,
   expenses,
   health,
   inventory,
   orders,
   prices,
   reports,
+  tenant,
   system_global,
   system_type_options,
   systems,
 )
 
 settings = get_settings()
-protected_route_dependencies = [Depends(get_current_user)]
+protected_route_dependencies = [Depends(get_current_user), Depends(require_write_access)]
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
@@ -36,6 +39,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(developer.router)
 app.include_router(customers.router, dependencies=protected_route_dependencies)
 app.include_router(customer_adjustments.router, dependencies=protected_route_dependencies)
 app.include_router(systems.router, dependencies=protected_route_dependencies)
@@ -48,5 +52,6 @@ app.include_router(inventory.router, dependencies=protected_route_dependencies)
 app.include_router(company.router, dependencies=protected_route_dependencies)
 app.include_router(cash.router, dependencies=protected_route_dependencies)
 app.include_router(expenses.router, dependencies=protected_route_dependencies)
+app.include_router(tenant.router, dependencies=protected_route_dependencies)
 app.include_router(reports.router, dependencies=protected_route_dependencies)
 
