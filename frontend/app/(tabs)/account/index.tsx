@@ -26,6 +26,14 @@ export default function AccountScreen() {
       <Text style={styles.title}>Account</Text>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Business</Text>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/business-profile")}>
+          <Text style={styles.rowText}>Business Profile</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Subscription</Text>
         <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/plan-billing")}>
           <Text style={styles.rowText}>Plan & Billing</Text>
@@ -37,6 +45,22 @@ export default function AccountScreen() {
         <Text style={styles.sectionTitle}>Team</Text>
         <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/workers")}>
           <Text style={styles.rowText}>Workers</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Configuration</Text>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/configuration/prices")}>
+          <Text style={styles.rowText}>Prices</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/configuration/system-types")}>
+          <Text style={styles.rowText}>System Types</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/configuration/expense-categories")}>
+          <Text style={styles.rowText}>Expense Categories</Text>
           <Text style={styles.rowChevron}>{">"}</Text>
         </Pressable>
       </View>

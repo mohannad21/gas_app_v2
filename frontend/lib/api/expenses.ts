@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { fromMinorUnits, toMinorUnits } from "@/lib/money";
 import { buildActivityHappenedAt } from "@/lib/date";
 import {
@@ -75,4 +77,29 @@ export async function createBankDeposit(payload: {
 
 export async function deleteBankDeposit(depositId: string): Promise<void> {
   await api.delete(`/cash/bank_deposit/${depositId}`);
+}
+
+
+export const ExpenseCategorySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+});
+
+export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
+
+export async function listExpenseCategories(): Promise<ExpenseCategory[]> {
+  const { data } = await api.get("/expenses/categories");
+  return parseArray(ExpenseCategorySchema, data);
+}
+
+export async function createExpenseCategory(name: string): Promise<ExpenseCategory> {
+  const { data } = await api.post("/expenses/categories", { name });
+  return parse(ExpenseCategorySchema, data);
+}
+
+export async function toggleExpenseCategory(id: string, is_active: boolean): Promise<ExpenseCategory> {
+  const { data } = await api.patch(`/expenses/categories/${id}`, { is_active });
+  return parse(ExpenseCategorySchema, data);
 }

@@ -13,12 +13,14 @@ from .auth import (
 )
 from .common import GasType, InventoryAdjustReason, MAX_LEDGER_INT, OrderMode, TransferDirection, new_id
 from .customer import CustomerAdjustmentCreate, CustomerAdjustmentOut, CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
+from .expense_categories import ExpenseCategoryCreate, ExpenseCategoryOut, ExpenseCategoryToggle
 from .inventory import InventoryAdjustCreate, InventoryAdjustUpdate, InventoryAdjustmentRow, InventoryInitCreate, InventoryRefillCreate, InventoryRefillDetails, InventoryRefillSummary, InventoryRefillUpdate, InventorySnapshot
 from .order import CollectionCreate, CollectionEvent, CollectionUpdate, OrderCreate, OrderOut, OrderUpdate
 from .price import PriceCreate, PriceOut
+from .profile import TenantProfileOut, TenantProfileUpdate
 from .report import ActivityNote, BalanceTransition, DailyAuditSummary, DailyReportV2Card, DailyReportV2CashMath, DailyReportV2Day, DailyReportV2Event, DailyReportV2Math, DailyReportV2MathCompany, DailyReportV2MathCustomers, DailyReportV2MathResult, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System, ReportInventoryState, ReportInventoryTotals
 from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, SystemHealthCheckOut, SystemInitialize, SystemOut, SystemSettingsOut, SystemTypeOptionCreate, SystemTypeOptionOut, SystemTypeOptionUpdate, SystemUpdate
-from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCategoryCreate, ExpenseCategoryOut, ExpenseCreate, ExpenseCreateLegacy, ExpenseOut, ExpenseOutLegacy, ExpenseUpdate
+from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCreate, ExpenseCreateLegacy, ExpenseOut, ExpenseOutLegacy, ExpenseUpdate
 from .workers import InviteActivateRequest, PendingInviteOut, WorkerInviteCreate, WorkerInviteOut, WorkerMemberOut
 
 __all__ = [
@@ -46,6 +48,9 @@ __all__ = [
     "CustomerAdjustmentCreate",
     "CustomerAdjustmentOut",
     "CustomerBalanceOut",
+    "ExpenseCategoryCreate",
+    "ExpenseCategoryOut",
+    "ExpenseCategoryToggle",
     # Order
     "OrderCreate",
     "OrderUpdate",
@@ -65,6 +70,8 @@ __all__ = [
     # Price
     "PriceCreate",
     "PriceOut",
+    "TenantProfileOut",
+    "TenantProfileUpdate",
     # System
     "SystemCreate",
     "SystemUpdate",
@@ -81,8 +88,6 @@ __all__ = [
     "CashAdjustCreate",
     "CashAdjustUpdate",
     "CashAdjustmentRow",
-    "ExpenseCategoryCreate",
-    "ExpenseCategoryOut",
     "ExpenseCreate",
     "ExpenseOut",
     "ExpenseCreateLegacy",

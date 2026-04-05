@@ -18,6 +18,7 @@ from .routers import (
   invites,
   orders,
   prices,
+  profile,
   reports,
   tenant,
   system_global,
@@ -48,6 +49,7 @@ app.include_router(systems.router, dependencies=protected_route_dependencies)
 app.include_router(system_global.router, dependencies=protected_route_dependencies)
 app.include_router(system_type_options.router, dependencies=protected_route_dependencies)
 app.include_router(prices.router, dependencies=protected_route_dependencies)
+app.include_router(profile.router, dependencies=protected_route_dependencies)
 app.include_router(orders.router, dependencies=protected_route_dependencies)
 app.include_router(collections.router, dependencies=protected_route_dependencies)
 app.include_router(inventory.router, dependencies=protected_route_dependencies)

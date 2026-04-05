@@ -56,6 +56,10 @@ class Tenant(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
+  business_name: Optional[str] = Field(default=None, nullable=True)
+  owner_name: Optional[str] = Field(default=None, nullable=True)
+  phone: Optional[str] = Field(default=None, nullable=True)
+  address: Optional[str] = Field(default=None, nullable=True)
 
 
 class Session(SQLModel, table=True):

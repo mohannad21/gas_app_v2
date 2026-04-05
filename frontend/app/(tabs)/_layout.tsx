@@ -67,6 +67,30 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="account/business-profile"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="account/configuration/prices"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="account/configuration/system-types"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="account/configuration/expense-categories"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="account/plan-billing"
         options={{
           href: null,

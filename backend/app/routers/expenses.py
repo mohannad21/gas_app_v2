@@ -7,7 +7,14 @@ from sqlmodel import Session, select
 from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Expense, ExpenseCategory
-from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
+from app.schemas import (
+  ExpenseCategoryCreate,
+  ExpenseCategoryOut,
+  ExpenseCategoryToggle,
+  ExpenseCreateLegacy,
+  ExpenseOutLegacy,
+  ExpenseUpdate,
+)
 from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_expense, reverse_source
 from app.utils.time import business_tz
 
@@ -276,4 +283,56 @@ def update_expense(
     created_at=new_expense.created_at,
     created_by=None,
   )
+
+
+@router.get("/categories", response_model=list[ExpenseCategoryOut])
+def list_expense_categories(session: Session = Depends(get_session)) -> list[ExpenseCategoryOut]:
+  rows = session.exec(select(ExpenseCategory).order_by(ExpenseCategory.name)).all()
+  return [
+    ExpenseCategoryOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
+    for row in rows
+  ]
+
+
+@router.post(
+  "/categories",
+  response_model=ExpenseCategoryOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("settings:write"))],
+)
+def create_expense_category(
+  payload: ExpenseCategoryCreate,
+  session: Session = Depends(get_session),
+) -> ExpenseCategoryOut:
+  name = payload.name.strip()
+  if not name:
+    raise HTTPException(status_code=400, detail="name_required")
+  existing = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == name)).first()
+  if existing:
+    raise HTTPException(status_code=409, detail="category_exists")
+  row = ExpenseCategory(name=name)
+  session.add(row)
+  session.commit()
+  session.refresh(row)
+  return ExpenseCategoryOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
+
+
+@router.patch(
+  "/categories/{category_id}",
+  response_model=ExpenseCategoryOut,
+  dependencies=[Depends(require_permission("settings:write"))],
+)
+def toggle_expense_category(
+  category_id: str,
+  payload: ExpenseCategoryToggle,
+  session: Session = Depends(get_session),
+) -> ExpenseCategoryOut:
+  row = session.get(ExpenseCategory, category_id)
+  if not row:
+    raise HTTPException(status_code=404, detail="category_not_found")
+  row.is_active = payload.is_active
+  session.add(row)
+  session.commit()
+  session.refresh(row)
+  return ExpenseCategoryOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
 

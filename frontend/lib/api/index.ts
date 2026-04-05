@@ -28,6 +28,7 @@ export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, 
 
 // Billing
 export { getPlanBillingStatus } from "./billing";
+export { getProfile, updateProfile, type TenantProfile } from "./profile";
 
 // Systems
 export { listSystems, createSystem, updateSystem, deleteSystem, listSystemTypes, createSystemType, updateSystemType } from "./systems";
@@ -36,7 +37,18 @@ export { listSystems, createSystem, updateSystem, deleteSystem, listSystemTypes,
 export { listWorkers, listPendingInvites, createWorkerInvite, revokeInvite, revokeWorker } from "./workers";
 
 // Expenses
-export { listExpenses, createExpense, updateExpense, deleteExpense, listBankDeposits, createBankDeposit, deleteBankDeposit } from "./expenses";
+export {
+  listExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  listBankDeposits,
+  createBankDeposit,
+  deleteBankDeposit,
+  listExpenseCategories,
+  createExpenseCategory,
+  toggleExpenseCategory,
+} from "./expenses";
 
 // Prices
 export { listPriceSettings, savePriceSetting } from "./prices";
