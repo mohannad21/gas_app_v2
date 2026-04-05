@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import CompanyTransaction, InventoryAdjustment
 from app.schemas import (
@@ -90,7 +90,11 @@ def init_inventory(
   return snapshot_at(session, happened_at, reason)
 
 
-@router.post("/adjust", response_model=InventorySnapshot)
+@router.post(
+  "/adjust",
+  response_model=InventorySnapshot,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def create_inventory_adjust(
   payload: InventoryAdjustCreate,
   session: Session = Depends(get_session),
@@ -172,7 +176,11 @@ def list_inventory_adjustments(
   ]
 
 
-@router.put("/adjust/{adjust_id}", response_model=InventoryAdjustmentRow)
+@router.put(
+  "/adjust/{adjust_id}",
+  response_model=InventoryAdjustmentRow,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def update_inventory_adjustment(
   adjust_id: str,
   payload: InventoryAdjustUpdate,
@@ -249,7 +257,11 @@ def update_inventory_adjustment(
   )
 
 
-@router.delete("/adjust/{adjust_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/adjust/{adjust_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def delete_inventory_adjustment(
   adjust_id: str,
   session: Session = Depends(get_session),
@@ -290,7 +302,11 @@ def delete_inventory_adjustment(
     session.add(existing)
 
 
-@router.post("/refill", response_model=InventorySnapshot)
+@router.post(
+  "/refill",
+  response_model=InventorySnapshot,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def create_refill(
   payload: InventoryRefillCreate,
   session: Session = Depends(get_session),
@@ -420,7 +436,11 @@ def get_refill_details(
   )
 
 
-@router.put("/refills/{refill_id}", response_model=InventoryRefillDetails)
+@router.put(
+  "/refills/{refill_id}",
+  response_model=InventoryRefillDetails,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def update_refill(
   refill_id: str,
   payload: InventoryRefillUpdate,
@@ -520,7 +540,11 @@ def update_refill(
   )
 
 
-@router.delete("/refills/{refill_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/refills/{refill_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("inventory:write"))],
+)
 def delete_refill(
   refill_id: str,
   session: Session = Depends(get_session),

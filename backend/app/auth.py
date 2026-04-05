@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from .config import get_settings
 from .db import get_session
@@ -69,4 +69,45 @@ def get_tenant_id(
   if not user or not user.tenant_id:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_found")
   return user.tenant_id
+
+
+def get_user_permissions(
+  user_id: Annotated[str, Depends(get_current_user)],
+  session: Annotated[Session, Depends(get_session)],
+) -> set[str]:
+  """
+  Returns the set of permission codes for the current user.
+  If the user has no membership (e.g. developer test user), returns an empty set.
+  """
+  from app.models import TenantMembership, RolePermission
+  membership = session.exec(
+    select(TenantMembership)
+    .where(TenantMembership.user_id == user_id)
+    .where(TenantMembership.is_active == True)  # noqa: E712
+  ).first()
+  if not membership:
+    return set()
+  perms = session.exec(
+    select(RolePermission.permission_code)
+    .where(RolePermission.role_id == membership.role_id)
+  ).all()
+  return set(perms)
+
+
+def require_permission(code: str):
+  """
+  Returns a FastAPI dependency that raises 403 if the user lacks the given permission.
+
+  Usage:
+      @router.delete("/{id}", dependencies=[Depends(require_permission("orders:write"))])
+      def delete_order(...):
+          ...
+  """
+  def _check(perms: Annotated[set[str], Depends(get_user_permissions)]) -> None:
+    if code not in perms:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="permission_denied",
+      )
+  return _check
 

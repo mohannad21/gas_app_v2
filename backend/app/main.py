@@ -15,6 +15,7 @@ from .routers import (
   expenses,
   health,
   inventory,
+  invites,
   orders,
   prices,
   reports,
@@ -22,6 +23,7 @@ from .routers import (
   system_global,
   system_type_options,
   systems,
+  workers,
 )
 
 settings = get_settings()
@@ -54,4 +56,6 @@ app.include_router(cash.router, dependencies=protected_route_dependencies)
 app.include_router(expenses.router, dependencies=protected_route_dependencies)
 app.include_router(tenant.router, dependencies=protected_route_dependencies)
 app.include_router(reports.router, dependencies=protected_route_dependencies)
+app.include_router(workers.router, dependencies=protected_route_dependencies)
+app.include_router(invites.router)
 

@@ -19,6 +19,7 @@ from .price import PriceCreate, PriceOut
 from .report import ActivityNote, BalanceTransition, DailyAuditSummary, DailyReportV2Card, DailyReportV2CashMath, DailyReportV2Day, DailyReportV2Event, DailyReportV2Math, DailyReportV2MathCompany, DailyReportV2MathCustomers, DailyReportV2MathResult, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System, ReportInventoryState, ReportInventoryTotals
 from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, SystemHealthCheckOut, SystemInitialize, SystemOut, SystemSettingsOut, SystemTypeOptionCreate, SystemTypeOptionOut, SystemTypeOptionUpdate, SystemUpdate
 from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCategoryCreate, ExpenseCategoryOut, ExpenseCreate, ExpenseCreateLegacy, ExpenseOut, ExpenseOutLegacy, ExpenseUpdate
+from .workers import InviteActivateRequest, PendingInviteOut, WorkerInviteCreate, WorkerInviteOut, WorkerMemberOut
 
 __all__ = [
     # Auth
@@ -30,6 +31,7 @@ __all__ = [
     "RefreshRequest",
     "RefreshResponse",
     "ChangePasswordRequest",
+    "InviteActivateRequest",
     # Common
     "GasType",
     "OrderMode",
@@ -97,6 +99,11 @@ __all__ = [
     "CompanyBalancesOut",
     "BankDepositCreate",
     "BankDepositOut",
+    # Workers
+    "WorkerMemberOut",
+    "WorkerInviteCreate",
+    "WorkerInviteOut",
+    "PendingInviteOut",
     # Report
     "ReportInventoryTotals",
     "ReportInventoryState",

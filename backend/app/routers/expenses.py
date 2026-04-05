@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Expense, ExpenseCategory
 from app.schemas import ExpenseCreateLegacy, ExpenseOutLegacy, ExpenseUpdate
@@ -87,7 +87,12 @@ def list_expenses(
   ]
 
 
-@router.post("", response_model=ExpenseOutLegacy, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "",
+  response_model=ExpenseOutLegacy,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("expenses:write"))],
+)
 def create_expense(
   payload: ExpenseCreateLegacy,
   session: Session = Depends(get_session),
@@ -130,7 +135,11 @@ def create_expense(
   )
 
 
-@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/{expense_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("expenses:write"))],
+)
 def delete_expense(
   expense_id: str,
   session: Session = Depends(get_session),
@@ -175,7 +184,11 @@ def delete_expense(
   session.commit()
 
 
-@router.patch("/{expense_id}", response_model=ExpenseOutLegacy)
+@router.patch(
+  "/{expense_id}",
+  response_model=ExpenseOutLegacy,
+  dependencies=[Depends(require_permission("expenses:write"))],
+)
 def update_expense(
   expense_id: str,
   payload: ExpenseUpdate,

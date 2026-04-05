@@ -32,6 +32,9 @@ export { getPlanBillingStatus } from "./billing";
 // Systems
 export { listSystems, createSystem, updateSystem, deleteSystem, listSystemTypes, createSystemType, updateSystemType } from "./systems";
 
+// Workers
+export { listWorkers, listPendingInvites, createWorkerInvite, revokeInvite, revokeWorker } from "./workers";
+
 // Expenses
 export { listExpenses, createExpense, updateExpense, deleteExpense, listBankDeposits, createBankDeposit, deleteBankDeposit } from "./expenses";
 

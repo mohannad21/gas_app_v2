@@ -5,7 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
@@ -140,7 +140,12 @@ def list_orders(
   return [order_out(row) for row in rows]
 
 
-@router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "",
+  response_model=OrderOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("orders:write"))],
+)
 def create_order(
   payload: OrderCreate,
   session: Session = Depends(get_session),
@@ -221,7 +226,11 @@ def create_order(
   return order_out(txn)
 
 
-@router.put("/{order_id}", response_model=OrderOut)
+@router.put(
+  "/{order_id}",
+  response_model=OrderOut,
+  dependencies=[Depends(require_permission("orders:write"))],
+)
 def update_order(
   order_id: str,
   payload: OrderUpdate,
@@ -355,7 +364,11 @@ def update_order(
   return order_out(txn)
 
 
-@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/{order_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("orders:write"))],
+)
 def delete_order(
   order_id: str,
   session: Session = Depends(get_session),
