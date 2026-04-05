@@ -195,6 +195,88 @@ class BillingEvent(SQLModel, table=True):
   created_by: Optional[str] = Field(default=None, nullable=True)
 
 
+class Role(SQLModel, table=True):
+  __tablename__ = "roles"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  name: str = Field(index=True)
+  is_system: bool = Field(default=False)
+  description: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
+class Permission(SQLModel, table=True):
+  __tablename__ = "permissions"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  code: str = Field(index=True, unique=True)
+  description: Optional[str] = Field(default=None, nullable=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
+class RolePermission(SQLModel, table=True):
+  __tablename__ = "role_permissions"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  role_id: str = Field(foreign_key="roles.id", index=True)
+  permission_code: str = Field(index=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
+class TenantMembership(SQLModel, table=True):
+  __tablename__ = "tenant_memberships"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  user_id: str = Field(foreign_key="users.id", index=True)
+  role_id: str = Field(foreign_key="roles.id", index=True)
+  is_active: bool = Field(default=True, index=True)
+  joined_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  revoked_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
+class Invite(SQLModel, table=True):
+  __tablename__ = "invites"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  phone: str = Field(index=True)
+  role_id: str = Field(foreign_key="roles.id", index=True)
+  code_hash: str
+  status: str = Field(default="pending", index=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  expires_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  accepted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  created_by: Optional[str] = Field(default=None, foreign_key="users.id", nullable=True)
+
+
 class Customer(SQLModel, table=True):
   __tablename__ = "customers"
 

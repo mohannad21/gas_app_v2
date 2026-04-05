@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session, select
 
+from app.auth import require_permission
 from app.db import get_session
 from app.models import PriceCatalog
 from app.schemas import PriceCreate, PriceOut
@@ -28,7 +29,12 @@ def list_prices(session: Session = Depends(get_session)) -> list[PriceOut]:
   ]
 
 
-@router.post("", response_model=PriceOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "",
+  response_model=PriceOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("prices:write"))],
+)
 def create_price(payload: PriceCreate, session: Session = Depends(get_session)) -> PriceOut:
   effective_from = payload.effective_from or datetime.now(timezone.utc)
   row = PriceCatalog(

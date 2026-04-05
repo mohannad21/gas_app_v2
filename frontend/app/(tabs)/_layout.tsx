@@ -72,6 +72,12 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="account/workers"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

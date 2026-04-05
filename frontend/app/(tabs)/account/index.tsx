@@ -34,6 +34,14 @@ export default function AccountScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Team</Text>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/workers")}>
+          <Text style={styles.rowText}>Workers</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Security</Text>
         <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/change-password")}>
           <Text style={styles.rowText}>Change Password</Text>

@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
@@ -229,7 +229,12 @@ def list_collections(
   return [_as_event(txns) for txns in groups.values()]
 
 
-@router.post("", response_model=CollectionEvent, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "",
+  response_model=CollectionEvent,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("collections:write"))],
+)
 def create_collection(
   payload: CollectionCreate,
   session: Session = Depends(get_session),
@@ -290,7 +295,11 @@ def create_collection(
   return _as_event(txns)
 
 
-@router.put("/{collection_id}", response_model=CollectionEvent)
+@router.put(
+  "/{collection_id}",
+  response_model=CollectionEvent,
+  dependencies=[Depends(require_permission("collections:write"))],
+)
 def update_collection(
   collection_id: str,
   payload: CollectionUpdate,
@@ -398,7 +407,11 @@ def update_collection(
   return _as_event(new_txns)
 
 
-@router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/{collection_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("collections:write"))],
+)
 def delete_collection(
   collection_id: str,
   session: Session = Depends(get_session),

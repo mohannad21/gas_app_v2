@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import CompanyTransaction
 from app.schemas import (
@@ -104,7 +104,12 @@ def settle_company_cylinders(
   )
 
 
-@router.post("/payments", response_model=CompanyPaymentOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "/payments",
+  response_model=CompanyPaymentOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("company:write"))],
+)
 def create_company_payment(
   payload: CompanyPaymentCreate,
   session: Session = Depends(get_session),
@@ -201,7 +206,12 @@ def list_company_payments(
   ]
 
 
-@router.post("/buy_iron", response_model=CompanyBuyIronOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "/buy_iron",
+  response_model=CompanyBuyIronOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("company:write"))],
+)
 def create_company_buy_iron(
   payload: CompanyBuyIronCreate,
   session: Session = Depends(get_session),

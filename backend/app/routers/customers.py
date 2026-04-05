@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, LedgerEntry
 from app.schemas import CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
@@ -155,7 +155,12 @@ def get_customer_balances(
   )
 
 
-@router.post("", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+  "",
+  response_model=CustomerOut,
+  status_code=status.HTTP_201_CREATED,
+  dependencies=[Depends(require_permission("customers:write"))],
+)
 def create_customer(
   payload: CustomerCreate,
   session: Session = Depends(get_session),
@@ -186,7 +191,11 @@ def create_customer(
   )
 
 
-@router.put("/{customer_id}", response_model=CustomerOut)
+@router.put(
+  "/{customer_id}",
+  response_model=CustomerOut,
+  dependencies=[Depends(require_permission("customers:write"))],
+)
 def update_customer(
   customer_id: str,
   payload: CustomerUpdate,
@@ -222,7 +231,11 @@ def update_customer(
   )
 
 
-@router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+  "/{customer_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("customers:write"))],
+)
 def delete_customer(
   customer_id: str,
   session: Session = Depends(get_session),
