@@ -885,8 +885,7 @@ export function RefillForm({
                         <Pressable
                           style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
                           onPress={() => {
-                            // TODO: navigate to price config page when implemented
-                            // router.push({ pathname: "/prices/config" });
+                            router.push("/(tabs)/account/configuration/prices");
                           }}
                         >
                           <Text style={styles.inlineActionText}>Set price</Text>
@@ -938,7 +937,7 @@ export function RefillForm({
                         <Pressable
                           style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
                           onPress={() => {
-                            // TODO: navigate to price config page when implemented
+                            router.push("/(tabs)/account/configuration/prices");
                           }}
                         >
                           <Text style={styles.inlineActionText}>Set price</Text>

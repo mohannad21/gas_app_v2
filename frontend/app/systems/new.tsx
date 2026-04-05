@@ -110,7 +110,7 @@ export default function NewSystemScreen() {
           <TextInput style={styles.input} placeholder="Custom system type" value={value} onChangeText={onChange} />
         )}
       />
-      <Pressable onPress={() => router.push("/system-types")} style={styles.linkBtn}>
+      <Pressable onPress={() => router.push("/(tabs)/account/configuration/system-types")} style={styles.linkBtn}>
         <Text style={styles.linkText}>Manage system types</Text>
       </Pressable>
 

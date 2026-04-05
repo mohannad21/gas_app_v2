@@ -423,7 +423,7 @@ export default function NewCustomerScreen() {
                   setSystems((prev) => prev.map((row) => (row.id === sys.id ? { ...row, name: text } : row)))
                 }
               />
-              <Pressable onPress={() => router.push("/system-types")} style={styles.linkBtn}>
+              <Pressable onPress={() => router.push("/(tabs)/account/configuration/system-types")} style={styles.linkBtn}>
                 <Text style={styles.linkText}>Manage system types</Text>
               </Pressable>
 

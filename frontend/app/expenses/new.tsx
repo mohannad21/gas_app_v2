@@ -16,6 +16,7 @@ import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import { useCreateExpense, useExpenses, useUpdateExpense } from "@/hooks/useExpenses";
 import { useCreateBankDeposit } from "@/hooks/useBankDeposits";
 import { useDailyReportsV2 } from "@/hooks/useReports";
+import { useExpenseCategories } from "@/hooks/useExpenseCategories";
 import { formatDateLocale, getCurrentLocalDate, getCurrentLocalTime, getTimeHMSFromIso } from "@/lib/date";
 
 function getTodayDate(): string {
@@ -179,7 +180,11 @@ export default function NewExpenseScreen() {
   const todayDate = getTodayDate();
   const dailyReportQuery = useDailyReportsV2(todayDate, todayDate);
   const expensesQuery = useExpenses(undefined, { enabled: Boolean(expenseIdParam) });
-  const expenseTypes = ["fuel", "food", "insurance", "car", "other"];
+  const { data: expenseCategoryData } = useExpenseCategories();
+  const expenseTypes =
+    expenseCategoryData && expenseCategoryData.length > 0
+      ? expenseCategoryData.filter((c) => c.is_active).map((c) => c.name)
+      : ["fuel", "food", "insurance", "car", "other"];
   const editingExpense = expenseIdParam
     ? (expensesQuery.data ?? []).find((expense) => expense.id === expenseIdParam)
     : undefined;
