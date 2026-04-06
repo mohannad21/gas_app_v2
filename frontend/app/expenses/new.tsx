@@ -281,6 +281,7 @@ export default function NewExpenseScreen() {
         )}
         TimePickerModal={TimePickerModal}
         styles={styles}
+        onManageCategories={() => router.push("/(tabs)/account/configuration/expense-categories")}
       />
       {Platform.OS === "ios" && accessoryId ? (
         <InputAccessoryView nativeID={accessoryId}>

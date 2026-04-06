@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -86,6 +87,7 @@ type CashExpensesViewProps = {
     onClose: () => void;
   }>;
   styles: Record<string, any>;
+  onManageCategories?: () => void;
 };
 
 const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -161,6 +163,7 @@ export default function CashExpensesView({
   CalendarModal,
   TimePickerModal,
   styles,
+  onManageCategories,
 }: CashExpensesViewProps) {
   const walletValue = typeof cashBalance === "number" ? cashBalance : 0;
   const expenseAmountValue = Number(expenseAmount) || 0;
@@ -328,6 +331,11 @@ export default function CashExpensesView({
                     );
                   })}
                 </View>
+                {onManageCategories ? (
+                  <Pressable onPress={onManageCategories} style={linkStyles.manageCategoriesBtn}>
+                    <Text style={linkStyles.manageCategoriesText}>Manage expense categories</Text>
+                  </Pressable>
+                ) : null}
                 <BigBox
                   title="Amount"
                   statusLine={`Wallet ${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
@@ -398,3 +406,15 @@ export default function CashExpensesView({
     </View>
   );
 }
+
+const linkStyles = StyleSheet.create({
+  manageCategoriesBtn: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  manageCategoriesText: {
+    color: "#0a7ea4",
+    fontSize: 13,
+    fontFamily: "NunitoSans-SemiBold",
+  },
+});

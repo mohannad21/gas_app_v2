@@ -84,6 +84,8 @@ class SystemInitialize(SQLModel):
   sell_iron_price_48: int = 0
   buy_iron_price_12: int = 0
   buy_iron_price_48: int = 0
+  company_iron_price_12: int = 0
+  company_iron_price_48: int = 0
   full_12: int
   empty_12: int
   full_48: int

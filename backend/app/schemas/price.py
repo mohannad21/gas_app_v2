@@ -14,6 +14,7 @@ class PriceCreate(SQLModel):
   buying_price: int = 0
   selling_iron_price: int = 0
   buying_iron_price: int = 0
+  company_iron_price: int = 0
   effective_from: Optional[datetime] = None
 
 
@@ -24,5 +25,6 @@ class PriceOut(SQLModel):
   buying_price: int
   selling_iron_price: int
   buying_iron_price: int
+  company_iron_price: int
   effective_from: datetime
   created_at: datetime

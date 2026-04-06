@@ -9,6 +9,7 @@ export const PriceSettingSchema = z
     buying_price: z.number().optional().nullable(),
     selling_iron_price: z.number().optional().nullable(),
     buying_iron_price: z.number().optional().nullable(),
+    company_iron_price: z.number().optional().nullable(),
     effective_from: z.string(),
     created_at: z.string().optional(),
   })

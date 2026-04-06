@@ -20,6 +20,9 @@ import {
   useExpenseCategories,
   useToggleExpenseCategory,
 } from "@/hooks/useExpenseCategories";
+import { useExpenses } from "@/hooks/useExpenses";
+import { formatDateMedium } from "@/lib/date";
+import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
 
 function statusTone(isActive: boolean) {
   return isActive
@@ -32,6 +35,12 @@ export default function ExpenseCategoriesConfigurationScreen() {
   const categoriesQuery = useExpenseCategories();
   const createCategoryMutation = useCreateExpenseCategory();
   const toggleCategoryMutation = useToggleExpenseCategory();
+  const expensesQuery = useExpenses();
+  const recentExpenses = (expensesQuery.data ?? []).slice(0, 15);
+
+  function formatMoney(value: number) {
+    return `${value.toFixed(getMoneyDecimals())} ${getCurrencyCode()}`;
+  }
 
   const [modalVisible, setModalVisible] = useState(false);
   const [name, setName] = useState("");
@@ -125,6 +134,27 @@ export default function ExpenseCategoriesConfigurationScreen() {
             )}
           </View>
         ) : null}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Expenses</Text>
+          {expensesQuery.isLoading ? (
+            <Text style={styles.emptyText}>Loading...</Text>
+          ) : recentExpenses.length === 0 ? (
+            <Text style={styles.emptyText}>No expenses recorded yet.</Text>
+          ) : (
+            recentExpenses.map((expense) => (
+              <View key={expense.id} style={styles.itemRow}>
+                <View style={styles.itemMain}>
+                  <Text style={styles.itemTitle}>
+                    {expense.expense_type.charAt(0).toUpperCase() + expense.expense_type.slice(1)}
+                  </Text>
+                  <Text style={styles.itemMeta}>{formatDateMedium(expense.date, undefined, "-")}</Text>
+                </View>
+                <Text style={styles.expenseAmount}>{formatMoney(expense.amount)}</Text>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
 
       <View style={styles.footer}>
@@ -186,7 +216,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 112,
+    paddingBottom: 160,
     gap: 16,
   },
   headerRow: {
@@ -274,6 +304,11 @@ const styles = StyleSheet.create({
     color: "#111",
     fontFamily: "NunitoSans-SemiBold",
   },
+  itemMeta: {
+    fontSize: 12,
+    color: "#64748b",
+    fontFamily: "NunitoSans-Regular",
+  },
   itemMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -298,6 +333,11 @@ const styles = StyleSheet.create({
     color: "#0369a1",
     fontSize: 13,
     fontFamily: "NunitoSans-Bold",
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontFamily: "NunitoSans-SemiBold",
+    color: "#111",
   },
   footer: {
     position: "absolute",

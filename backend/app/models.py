@@ -357,6 +357,7 @@ class PriceCatalog(SQLModel, table=True):
   buy_price: int
   sell_iron_price: int = Field(default=0)
   buy_iron_price: int = Field(default=0)
+  company_iron_price: int = Field(default=0)
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),

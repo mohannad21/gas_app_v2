@@ -17,6 +17,8 @@ export async function listPriceSettings(): Promise<PriceSetting[]> {
       p.selling_iron_price != null ? fromMinorUnits(p.selling_iron_price) : p.selling_iron_price,
     buying_iron_price:
       p.buying_iron_price != null ? fromMinorUnits(p.buying_iron_price) : p.buying_iron_price,
+    company_iron_price:
+      p.company_iron_price != null ? fromMinorUnits(p.company_iron_price) : p.company_iron_price,
   }));
 }
 
@@ -26,6 +28,7 @@ export async function savePriceSetting(payload: {
   buying_price?: number;
   selling_iron_price?: number;
   buying_iron_price?: number;
+  company_iron_price?: number;
   effective_from?: string;
 }): Promise<PriceSetting> {
   const { data } = await api.post("/prices", {
@@ -34,6 +37,7 @@ export async function savePriceSetting(payload: {
     buying_price: toMinorUnits(payload.buying_price ?? 0),
     selling_iron_price: toMinorUnits(payload.selling_iron_price ?? 0),
     buying_iron_price: toMinorUnits(payload.buying_iron_price ?? 0),
+    company_iron_price: toMinorUnits(payload.company_iron_price ?? 0),
   });
   const parsed = parse(PriceSettingSchema, data);
   return {
@@ -48,5 +52,9 @@ export async function savePriceSetting(payload: {
       parsed.buying_iron_price != null
         ? fromMinorUnits(parsed.buying_iron_price)
         : parsed.buying_iron_price,
+    company_iron_price:
+      parsed.company_iron_price != null
+        ? fromMinorUnits(parsed.company_iron_price)
+        : parsed.company_iron_price,
   };
 }

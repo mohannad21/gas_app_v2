@@ -4,6 +4,7 @@ import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 import { router } from "expo-router";
 
 import { useInitializeSystem, useSystemSettings } from "@/hooks/useSystemSettings";
+import PriceInputForm, { PriceFormValues } from "@/components/PriceInputForm";
 
 type CompanyBalance = {
   direction: "owes_me" | "i_owe" | "balanced";
@@ -24,6 +25,8 @@ type WizardState = {
   sellIron48: string;
   buyIron12: string;
   buyIron48: string;
+  companyIron12: string;
+  companyIron48: string;
   cashStart: string;
   companyPayMoney: string;
   inventoryFull12: string;
@@ -67,6 +70,8 @@ const initialState: WizardState = {
   sellIron48: "",
   buyIron12: "",
   buyIron48: "",
+  companyIron12: "",
+  companyIron48: "",
   cashStart: "",
   companyPayMoney: "",
   inventoryFull12: "",
@@ -410,6 +415,8 @@ export default function WelcomeScreen() {
         sell_iron_price_48: toNumber(state.sellIron48),
         buy_iron_price_12: toNumber(state.buyIron12),
         buy_iron_price_48: toNumber(state.buyIron48),
+        company_iron_price_12: toNumber(state.companyIron12),
+        company_iron_price_48: toNumber(state.companyIron48),
         full_12: toNumber(state.inventoryFull12),
         empty_12: toNumber(state.inventoryEmpty12),
         full_48: toNumber(state.inventoryFull48),
@@ -491,7 +498,29 @@ export default function WelcomeScreen() {
           </>
         ) : null}
 
-        {step.type === "inputs" ? renderFields(step.fields) : null}
+        {step.type === "inputs" ? (
+          step.id === "prices" ? (
+            <PriceInputForm
+              values={{
+                sell12: toNumber(state.sell12),
+                sell48: toNumber(state.sell48),
+                buy12: toNumber(state.buy12),
+                buy48: toNumber(state.buy48),
+                buyIron12: toNumber(state.buyIron12),
+                buyIron48: toNumber(state.buyIron48),
+                companyIron12: toNumber(state.companyIron12),
+                companyIron48: toNumber(state.companyIron48),
+                sellIron12: toNumber(state.sellIron12),
+                sellIron48: toNumber(state.sellIron48),
+              }}
+              onChange={(key: keyof PriceFormValues, value: number) =>
+                updateField(key as keyof WizardState, String(value))
+              }
+            />
+          ) : (
+            renderFields(step.fields)
+          )
+        ) : null}
         {step.type === "netBalance" ? renderNetBalance() : null}
 
         {step.type === "review" ? (
