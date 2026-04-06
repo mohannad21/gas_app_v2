@@ -20,6 +20,7 @@ import {
   companyPaymentToEvent,
   customerAdjustmentToEvent,
   expenseToEvent,
+  getCompanyInventoryEditTab,
   inventoryAdjustmentToEvent,
   orderToEvent,
   refillSummaryToEvent,
@@ -1100,7 +1101,7 @@ const formatDateTime = (value?: string) => {
                     onEdit={() =>
                       router.push({
                         pathname: "/inventory/new",
-                        params: { section: "company", tab: "refill", refillId: refill.refill_id },
+                        params: { section: "company", tab: getCompanyInventoryEditTab(refill), refillId: refill.refill_id },
                       })
                     }
                     onDelete={() => handleRemoveRefill(refill.refill_id)}

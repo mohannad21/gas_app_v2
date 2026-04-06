@@ -27,7 +27,7 @@ export function useAddEntryDeleteHandlers(args: DeleteHandlersArgs) {
   } = args;
 
   const handleRemoveRefill = (refillId: string) => {
-    Alert.alert("Remove refill?", "This will delete the refill entry.", [
+    Alert.alert("Remove company activity?", "This will delete the company activity entry.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",

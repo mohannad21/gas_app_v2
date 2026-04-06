@@ -17,6 +17,32 @@ const BASE: Pick<DailyReportV2Event, "cash_before" | "cash_after"> = {
   cash_after: 0,
 };
 
+export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
+  return {
+    buy12: Number(refill.buy12 ?? 0) + Number(refill.new12 ?? 0),
+    buy48: Number(refill.buy48 ?? 0) + Number(refill.new48 ?? 0),
+    return12: Number(refill.return12 ?? 0),
+    return48: Number(refill.return48 ?? 0),
+  };
+}
+
+export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
+  const totals = getCompanyInventoryTotals(refill);
+  const totalBuys = totals.buy12 + totals.buy48;
+  const totalReturns = totals.return12 + totals.return48;
+
+  if (totalBuys > 0 && totalReturns === 0) return "company_buy_iron" as const;
+  if (totalBuys === 0 && totalReturns > 0) return "collection_empty" as const;
+  return "refill" as const;
+}
+
+export function getCompanyInventoryEditTab(refill: InventoryRefillSummary) {
+  const eventType = getCompanyInventoryEventType(refill);
+  if (eventType === "company_buy_iron") return "buy" as const;
+  if (eventType === "collection_empty") return "return" as const;
+  return "refill" as const;
+}
+
 export function orderToEvent(
   order: Order,
   opts?: { customerName?: string; customerDescription?: string | null; systemName?: string }
@@ -208,25 +234,34 @@ export function customerAdjustmentToEvent(
 }
 
 export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportV2Event {
+  const totals = getCompanyInventoryTotals(refill);
+  const eventType = getCompanyInventoryEventType(refill);
   const parts: string[] = [];
-  if ((refill.buy12 ?? 0) > 0) parts.push(`Buy ${refill.buy12}x12kg`);
-  if ((refill.buy48 ?? 0) > 0) parts.push(`Buy ${refill.buy48}x48kg`);
-  if ((refill.return12 ?? 0) > 0) parts.push(`Return ${refill.return12}x12kg`);
-  if ((refill.return48 ?? 0) > 0) parts.push(`Return ${refill.return48}x48kg`);
+  if (totals.buy12 > 0) parts.push(`Buy ${totals.buy12}x12kg`);
+  if (totals.buy48 > 0) parts.push(`Buy ${totals.buy48}x48kg`);
+  if (totals.return12 > 0) parts.push(`Return ${totals.return12}x12kg`);
+  if (totals.return48 > 0) parts.push(`Return ${totals.return48}x48kg`);
+
+  const contextLine =
+    eventType === "company_buy_iron"
+      ? "Buy full"
+      : eventType === "collection_empty"
+        ? "Return empties"
+        : "Refill";
 
   return {
     ...BASE,
-    event_type: "refill",
+    event_type: eventType,
     id: refill.refill_id,
     effective_at: refill.effective_at,
     created_at: refill.effective_at,
-    context_line: "Refill",
-    label: "Refill",
+    context_line: contextLine,
+    label: contextLine,
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
-    buy12: refill.buy12 ?? 0,
-    return12: refill.return12 ?? 0,
-    buy48: refill.buy48 ?? 0,
-    return48: refill.return48 ?? 0,
+    buy12: totals.buy12,
+    return12: totals.return12,
+    buy48: totals.buy48,
+    return48: totals.return48,
     counterparty: { type: "company", display_name: "Company", description: null, display: null },
   };
 }
