@@ -1,9 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 
 import { useInitializeSystem, useSystemSettings } from "@/hooks/useSystemSettings";
+import FieldPair, { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import PriceInputForm, { PriceFormValues } from "@/components/PriceInputForm";
 
 type CompanyBalance = {
@@ -48,7 +48,7 @@ type StepConfig = {
   title: string;
   question: string;
   explanation: string;
-  type: "inputs" | "yesno" | "review" | "netBalance";
+  type: "inputs" | "review" | "netBalance" | "moneyBalance";
   arrow?: "up" | "down";
   fields?: StepField[];
   autoAdvance?: boolean;
@@ -85,12 +85,47 @@ const initialCompanyBalance: CompanyBalanceState = {
   "48kg": { direction: "balanced", quantity: "" },
 };
 
+const COMPANY_BALANCE_STEPPERS: FieldStepper[] = [
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+];
+
+const COMPANY_MONEY_STEPPERS: FieldStepper[] = [
+  { delta: -10, label: "-10", position: "top-left" },
+  { delta: 10, label: "+10", position: "top-right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+  { delta: -0.01, label: "-0.01", position: "bottom-left" },
+  { delta: 0.01, label: "+0.01", position: "bottom-right" },
+];
+
+const INVENTORY_STEPPERS: FieldStepper[] = [
+  { delta: -5, label: "-5", position: "top-left" },
+  { delta: 5, label: "+5", position: "top-right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+];
+
+const WALLET_STEPPERS: FieldStepper[] = [
+  { delta: -50, label: "-50", position: "extra-top-left" },
+  { delta: 50, label: "+50", position: "extra-top-right" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
+  { delta: -10, label: "-10", position: "bottom-left" },
+  { delta: 10, label: "+10", position: "bottom-right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+];
+
 export default function WelcomeScreen() {
   const settingsQuery = useSystemSettings();
   const [stepIndex, setStepIndex] = useState(0);
   const [state, setState] = useState<WizardState>(initialState);
-  const [yesNo, setYesNo] = useState<Record<string, boolean | null>>({});
   const [companyBalance, setCompanyBalance] = useState<CompanyBalanceState>(initialCompanyBalance);
+  const [companyMoneyBalance, setCompanyMoneyBalance] = useState<CompanyBalance>({
+    direction: "balanced",
+    quantity: "",
+  });
   const initSystem = useInitializeSystem({ showToast: true });
 
   useEffect(() => {
@@ -121,17 +156,15 @@ export default function WelcomeScreen() {
       {
         id: "company_pay_money",
         title: "Company",
-        question: "Do you have to pay the company money?",
-        explanation: "Money you collected from orders but have not handed over to the plant yet.",
-        type: "yesno",
-        arrow: "down",
-        fields: [{ key: "companyPayMoney", label: "Amount to pay (₪)", placeholder: "0", unit: "money" }],
+        question: "What is your current money balance with the company?",
+        explanation: "Record whether you owe the company money or the company owes you money.",
+        type: "moneyBalance",
       },
       {
         id: "company_cylinder_balance",
         title: "Company Cylinders",
         question: "What is your current cylinder balance with the company?",
-        explanation: "Record who owes who cylinders. For example, if the company owes you 5 fulls, select 'Company Owes Me' and enter 5.",
+        explanation: "Record the current credit or debt position for each gas type. You can adjust it later if needed.",
         type: "netBalance",
       },
       {
@@ -231,18 +264,15 @@ export default function WelcomeScreen() {
   const goNext = () => setStepIndex((prev) => Math.min(totalSteps - 1, prev + 1));
   const goBack = () => setStepIndex((prev) => Math.max(0, prev - 1));
 
-  const handleYes = () => {
-    setYesNo((prev) => ({ ...prev, [step.id]: true }));
-  };
-
-  const handleNo = () => {
-    setYesNo((prev) => ({ ...prev, [step.id]: false }));
-    // If the user says no to owing money, clear the field.
-    if (step.id === "company_pay_money") {
-      setState((prev) => ({ ...prev, companyPayMoney: "" }));
+  const companyPayMoneyValue = useMemo(() => {
+    if (companyMoneyBalance.direction === "i_owe") {
+      return toNumber(companyMoneyBalance.quantity);
     }
-    goNext();
-  };
+    if (companyMoneyBalance.direction === "owes_me") {
+      return -toNumber(companyMoneyBalance.quantity);
+    }
+    return 0;
+  }, [companyMoneyBalance]);
 
   const companyBalances = useMemo(() => {
     const full12 = companyBalance["12kg"].direction === "owes_me" ? toNumber(companyBalance["12kg"].quantity) : 0;
@@ -257,12 +287,13 @@ export default function WelcomeScreen() {
     const money = (value: string) => toNumber(value);
     const count = (value: string) => toNumber(value);
 
-    if (money(state.companyPayMoney) > 0) lines.push(`Pay Company: ${money(state.companyPayMoney)}₪`);
+    if (companyPayMoneyValue > 0) lines.push(`Debts on distributor: ${companyPayMoneyValue}₪`);
+    if (companyPayMoneyValue < 0) lines.push(`Credit for distributor: ${Math.abs(companyPayMoneyValue)}₪`);
 
-    if (companyBalances.full12 > 0) lines.push(`Company owes you: ${companyBalances.full12}x 12kg full`);
-    if (companyBalances.full48 > 0) lines.push(`Company owes you: ${companyBalances.full48}x 48kg full`);
-    if (companyBalances.empty12 > 0) lines.push(`You owe company: ${companyBalances.empty12}x 12kg empty`);
-    if (companyBalances.empty48 > 0) lines.push(`You owe company: ${companyBalances.empty48}x 48kg empty`);
+    if (companyBalances.empty12 > 0) lines.push(`Debts on distributor: ${companyBalances.empty12}x 12kg`);
+    if (companyBalances.empty48 > 0) lines.push(`Debts on distributor: ${companyBalances.empty48}x 48kg`);
+    if (companyBalances.full12 > 0) lines.push(`Credit for distributor: ${companyBalances.full12}x 12kg`);
+    if (companyBalances.full48 > 0) lines.push(`Credit for distributor: ${companyBalances.full48}x 48kg`);
 
     if (count(state.inventoryFull12) || count(state.inventoryFull48)) {
       lines.push(
@@ -277,7 +308,7 @@ export default function WelcomeScreen() {
     if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}₪`);
 
     return lines.length > 0 ? lines : ["No opening balances provided."];
-  }, [state, companyBalances]);
+  }, [state, companyBalances, companyPayMoneyValue]);
 
   const renderNetBalance = () => {
     const updateBalance = (gas: "12kg" | "48kg", field: keyof CompanyBalance, value: any) => {
@@ -292,52 +323,127 @@ export default function WelcomeScreen() {
       });
     };
 
+    const renderDirectionChoices = (
+      selectedDirection: CompanyBalance["direction"],
+      onSelect: (direction: CompanyBalance["direction"]) => void
+    ) => (
+      <View style={styles.netBalanceRow}>
+        {(["i_owe", "balanced", "owes_me"] as const).map((dir) => (
+          <Pressable
+            key={dir}
+            style={[styles.netBalanceButton, selectedDirection === dir && styles.netBalanceActive]}
+            onPress={() => onSelect(dir)}
+          >
+            <Text
+              style={[
+                styles.netBalanceButtonText,
+                selectedDirection === dir && styles.netBalanceActiveText,
+              ]}
+              numberOfLines={2}
+            >
+              {
+                {
+                  i_owe: "Debts on distributor",
+                  balanced: "Balanced",
+                  owes_me: "Credit for distributor",
+                }[dir]
+              }
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+
     return (
       <View style={styles.fieldGroup}>
         {(["12kg", "48kg"] as const).map((gas) => (
           <View key={gas} style={styles.netBalanceCard}>
             <Text style={styles.netBalanceTitle}>{gas}</Text>
-            <View style={styles.netBalanceRow}>
-              {(["owes_me", "balanced", "i_owe"] as const).map((dir) => (
-                <Pressable
-                  key={dir}
-                  style={[
-                    styles.netBalanceButton,
-                    companyBalance[gas].direction === dir && styles.netBalanceActive,
-                  ]}
-                  onPress={() => updateBalance(gas, "direction", dir)}
-                >
-                  <Text
-                    style={[
-                      styles.netBalanceButtonText,
-                      companyBalance[gas].direction === dir && styles.netBalanceActiveText,
-                    ]}
-                  >
-                    {
-                      { owes_me: "Company Owes Me", balanced: "Balanced", i_owe: "I Owe Company" }[
-                        dir
-                      ]
-                    }
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            {renderDirectionChoices(companyBalance[gas].direction, (dir) => updateBalance(gas, "direction", dir))}
             {companyBalance[gas].direction !== "balanced" && (
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Quantity</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  value={companyBalance[gas].quantity}
+              <View style={styles.netBalanceFieldWrap}>
+                <FieldCell
+                  title="Amount"
+                  value={toNumber(companyBalance[gas].quantity)}
+                  valueMode="integer"
+                  onIncrement={() =>
+                    updateBalance(gas, "quantity", String(toNumber(companyBalance[gas].quantity) + 1))
+                  }
+                  onDecrement={() =>
+                    updateBalance(
+                      gas,
+                      "quantity",
+                      String(Math.max(0, toNumber(companyBalance[gas].quantity) - 1))
+                    )
+                  }
                   onChangeText={(text) => updateBalance(gas, "quantity", text)}
-                  returnKeyType="done"
-                  onSubmitEditing={() => Keyboard.dismiss()}
+                  steppers={COMPANY_BALANCE_STEPPERS}
                 />
               </View>
             )}
           </View>
         ))}
+      </View>
+    );
+  };
+
+  const renderMoneyBalance = () => {
+    const updateBalance = (field: keyof CompanyBalance, value: CompanyBalance[keyof CompanyBalance]) => {
+      setCompanyMoneyBalance((prev) => {
+        const next = { ...prev, [field]: value };
+        if (field === "direction" && value === "balanced") {
+          next.quantity = "";
+        }
+        return next;
+      });
+    };
+
+    return (
+      <View style={styles.fieldGroup}>
+        <View style={styles.netBalanceCard}>
+          <View style={styles.netBalanceRow}>
+            {(["i_owe", "balanced", "owes_me"] as const).map((dir) => (
+              <Pressable
+                key={dir}
+                style={[styles.netBalanceButton, companyMoneyBalance.direction === dir && styles.netBalanceActive]}
+                onPress={() => updateBalance("direction", dir)}
+              >
+                <Text
+                  style={[
+                    styles.netBalanceButtonText,
+                    companyMoneyBalance.direction === dir && styles.netBalanceActiveText,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {
+                    {
+                      i_owe: "Debts on distributor",
+                      balanced: "Balanced",
+                      owes_me: "Credit for distributor",
+                    }[dir]
+                  }
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {companyMoneyBalance.direction !== "balanced" && (
+            <View style={styles.netBalanceFieldWrap}>
+              <FieldCell
+                title="Amount"
+                value={toNumber(companyMoneyBalance.quantity)}
+                valueMode="decimal"
+                onIncrement={() =>
+                  updateBalance("quantity", String(toNumber(companyMoneyBalance.quantity) + 1))
+                }
+                onDecrement={() =>
+                  updateBalance("quantity", String(Math.max(0, toNumber(companyMoneyBalance.quantity) - 1)))
+                }
+                onChangeText={(text) => updateBalance("quantity", text)}
+                steppers={COMPANY_MONEY_STEPPERS}
+              />
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -400,6 +506,47 @@ export default function WelcomeScreen() {
     );
   };
 
+  const renderInventoryFields = (leftKey: keyof WizardState, rightKey: keyof WizardState) => (
+    <View style={styles.fieldGroup}>
+      <FieldPair
+        left={{
+          title: "12kg",
+          value: toNumber(state[leftKey]),
+          valueMode: "integer",
+          onIncrement: () => updateField(leftKey, String(toNumber(state[leftKey]) + 1)),
+          onDecrement: () => updateField(leftKey, String(Math.max(0, toNumber(state[leftKey]) - 1))),
+          onChangeText: (text) => updateField(leftKey, text),
+          steppers: INVENTORY_STEPPERS,
+        }}
+        right={{
+          title: "48kg",
+          value: toNumber(state[rightKey]),
+          valueMode: "integer",
+          onIncrement: () => updateField(rightKey, String(toNumber(state[rightKey]) + 1)),
+          onDecrement: () => updateField(rightKey, String(Math.max(0, toNumber(state[rightKey]) - 1))),
+          onChangeText: (text) => updateField(rightKey, text),
+          steppers: INVENTORY_STEPPERS,
+        }}
+      />
+    </View>
+  );
+
+  const renderWalletField = () => (
+    <View style={styles.fieldGroup}>
+      <View style={styles.netBalanceFieldWrap}>
+        <FieldCell
+          title="Wallet"
+          value={toNumber(state.cashStart)}
+          valueMode="decimal"
+          onIncrement={() => updateField("cashStart", String(toNumber(state.cashStart) + 1))}
+          onDecrement={() => updateField("cashStart", String(Math.max(0, toNumber(state.cashStart) - 1)))}
+          onChangeText={(text) => updateField("cashStart", text)}
+          steppers={WALLET_STEPPERS}
+        />
+      </View>
+    </View>
+  );
+
   const handleFinish = async () => {
     if (settingsQuery.data?.is_setup_completed) {
       router.replace("/(tabs)/reports");
@@ -422,7 +569,7 @@ export default function WelcomeScreen() {
         full_48: toNumber(state.inventoryFull48),
         empty_48: toNumber(state.inventoryEmpty48),
         cash_start: toNumber(state.cashStart),
-        company_payable_money: toNumber(state.companyPayMoney),
+        company_payable_money: companyPayMoneyValue,
         company_full_12kg: companyBalances.full12,
         company_empty_12kg: companyBalances.empty12,
         company_full_48kg: companyBalances.full48,
@@ -441,8 +588,6 @@ export default function WelcomeScreen() {
     }
   };
 
-  const showInputs = step.type === "inputs" || (step.type === "yesno" && yesNo[step.id] === true);
-
   return (
     <View style={styles.screen}>
       <View style={styles.progressTrack}>
@@ -458,45 +603,6 @@ export default function WelcomeScreen() {
           <Text style={styles.question}>{step.question}</Text>
           <Text style={styles.explanation}>{step.explanation}</Text>
         </View>
-
-        {step.type === "yesno" ? (
-          <>
-            {(() => {
-              const yesIsDown = step.arrow === "down";
-              const yesStyle = yesIsDown ? styles.choiceNo : styles.choiceYes;
-              const yesIcon = yesIsDown ? "arrow-down" : "arrow-up";
-              return (
-                <View style={styles.choiceRow}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.choiceButton,
-                      yesStyle,
-                      yesNo[step.id] === true && styles.choiceActive,
-                      pressed && styles.choicePressed,
-                    ]}
-                    onPress={handleYes}
-                  >
-                    <Ionicons name={yesIcon} size={22} color="#fff" />
-                    <Text style={styles.choiceText}>Yes</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.choiceButton,
-                      styles.choiceNeutral,
-                      yesNo[step.id] === false && styles.choiceActive,
-                      pressed && styles.choicePressed,
-                    ]}
-                    onPress={handleNo}
-                  >
-                    <Ionicons name="close" size={22} color="#fff" />
-                    <Text style={styles.choiceText}>No</Text>
-                  </Pressable>
-                </View>
-              );
-            })()}
-            {showInputs ? renderFields(step.fields) : null}
-          </>
-        ) : null}
 
         {step.type === "inputs" ? (
           step.id === "prices" ? (
@@ -517,10 +623,17 @@ export default function WelcomeScreen() {
                 updateField(key as keyof WizardState, String(value))
               }
             />
+          ) : step.id === "inventory_full" ? (
+            renderInventoryFields("inventoryFull12", "inventoryFull48")
+          ) : step.id === "inventory_empty" ? (
+            renderInventoryFields("inventoryEmpty12", "inventoryEmpty48")
+          ) : step.id === "cash_start" ? (
+            renderWalletField()
           ) : (
             renderFields(step.fields)
           )
         ) : null}
+        {step.type === "moneyBalance" ? renderMoneyBalance() : null}
         {step.type === "netBalance" ? renderNetBalance() : null}
 
         {step.type === "review" ? (
@@ -755,15 +868,19 @@ const styles = StyleSheet.create({
   },
   netBalanceRow: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
-    borderRadius: 10,
-    padding: 4,
+    justifyContent: "center",
+    alignItems: "stretch",
+    gap: 8,
   },
   netBalanceButton: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: 48,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
   },
   netBalanceActive: {
     backgroundColor: "#fff",
@@ -775,9 +892,16 @@ const styles = StyleSheet.create({
   netBalanceButtonText: {
     fontWeight: "700",
     color: "#475569",
+    fontSize: 12,
+    textAlign: "center",
   },
   netBalanceActiveText: {
     color: "#0a7ea4",
+  },
+  netBalanceFieldWrap: {
+    width: "100%",
+    maxWidth: 260,
+    alignSelf: "center",
   },
 });
 

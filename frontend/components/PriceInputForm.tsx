@@ -22,13 +22,19 @@ type Props = {
 };
 
 const SELL_STEPPERS: FieldStepper[] = [
-  { delta: -5, label: "-5", position: "bottom" },
-  { delta: 5, label: "+5", position: "top" },
+  { delta: -10, label: "-10", position: "top-left" },
+  { delta: 10, label: "+10", position: "top-right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
 ];
 
 const BUY_STEPPERS: FieldStepper[] = [
-  { delta: -0.01, label: "-0.01", position: "bottom" },
-  { delta: 0.01, label: "+0.01", position: "top" },
+  { delta: -10, label: "-10", position: "top-left" },
+  { delta: 10, label: "+10", position: "top-right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+  { delta: -0.01, label: "-0.01", position: "bottom-left" },
+  { delta: 0.01, label: "+0.01", position: "bottom-right" },
 ];
 
 function makeCell(
@@ -43,6 +49,7 @@ function makeCell(
   return {
     title,
     value,
+    valueMode: "decimal" as const,
     onIncrement: () => onChange(key, value + 1),
     onDecrement: () => onChange(key, Math.max(0, value - 1)),
     onChangeText: (text: string) => {

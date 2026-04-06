@@ -10,11 +10,11 @@ import { useSystemTypes } from "@/hooks/useSystemTypes";
 
 type FormValues = {
   name: string;
-  gas_type: "12kg" | "48kg";
+  gas_type: "12kg" | "48kg" | "";
   note?: string;
   is_active: boolean;
-  requires_security_check: boolean;
-  security_check_exists: boolean;
+  requires_security_check: boolean | null;
+  security_check_exists: boolean | null;
   last_security_check_at?: string;
 };
 
@@ -38,11 +38,11 @@ export default function NewSystemScreen() {
   const { control, handleSubmit, setValue, watch } = useForm<FormValues>({
     defaultValues: {
       name: "",
-      gas_type: "12kg",
+      gas_type: "",
       note: "",
       is_active: true,
-      requires_security_check: false,
-      security_check_exists: false,
+      requires_security_check: null,
+      security_check_exists: null,
       last_security_check_at: "",
     },
   });
@@ -50,6 +50,36 @@ export default function NewSystemScreen() {
   const requiresCheck = watch("requires_security_check");
   const checkExists = watch("security_check_exists");
   const lastCheck = watch("last_security_check_at");
+  const selectedType = watch("name");
+  const selectedGasType = watch("gas_type");
+  const canSubmit =
+    !!selectedType &&
+    !!selectedGasType &&
+    requiresCheck !== null &&
+    (!requiresCheck || checkExists !== null);
+
+  const renderBinaryChoice = (value: boolean | null, onChange: (next: boolean) => void) => (
+    <View style={styles.binaryRow}>
+      {[
+        { value: true, label: "Yes" },
+        { value: false, label: "No" },
+      ].map((option) => (
+        <Pressable
+          key={option.label}
+          onPress={() => onChange(option.value)}
+          style={({ pressed }) => [
+            styles.binaryChoice,
+            pressed && styles.pressed,
+            value === option.value && styles.binaryChoiceActive,
+          ]}
+        >
+          <Text style={[styles.binaryChoiceText, value === option.value && styles.binaryChoiceTextActive]}>
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     if (!customerId) {
@@ -61,11 +91,11 @@ export default function NewSystemScreen() {
       await createSystem.mutateAsync({
         customer_id: customerId,
         name: values.name.trim(),
-        gas_type: values.gas_type,
+        gas_type: values.gas_type as "12kg" | "48kg",
         note: values.note?.trim() ? values.note.trim() : undefined,
         is_active: values.is_active,
-        requires_security_check: values.requires_security_check,
-        security_check_exists: values.security_check_exists,
+        requires_security_check: values.requires_security_check ?? false,
+        security_check_exists: values.requires_security_check ? values.security_check_exists ?? false : false,
         last_security_check_at:
           values.requires_security_check && values.security_check_exists && values.last_security_check_at
             ? values.last_security_check_at
@@ -84,7 +114,15 @@ export default function NewSystemScreen() {
       <Text style={styles.title}>Add System</Text>
       {customer ? <Text style={styles.meta}>Customer: {customer.name}</Text> : null}
 
-      <Text style={styles.label}>System type</Text>
+      <View style={styles.labelActionRow}>
+        <Text style={styles.label}>System type</Text>
+        <Pressable
+          onPress={() => router.push("/(tabs)/account/configuration/system-types")}
+          style={({ pressed }) => [styles.manageTypesButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.manageTypesText}>Manage system{"\n"}types</Text>
+        </Pressable>
+      </View>
       <View style={styles.chipRow}>
         {typeOptions.map((opt) => (
           <Pressable
@@ -93,26 +131,15 @@ export default function NewSystemScreen() {
             style={({ pressed }) => [
               styles.chip,
               pressed && styles.pressed,
-              watch("name") === opt.name && styles.chipActive,
+              selectedType === opt.name && styles.chipActive,
             ]}
           >
-            <Text style={[styles.chipText, watch("name") === opt.name && styles.chipTextActive]}>
+            <Text style={[styles.chipText, selectedType === opt.name && styles.chipTextActive]}>
               {opt.name}
             </Text>
           </Pressable>
         ))}
       </View>
-      <Controller
-        control={control}
-        name="name"
-        rules={{ required: true }}
-        render={({ field: { onChange, value } }) => (
-          <TextInput style={styles.input} placeholder="Custom system type" value={value} onChangeText={onChange} />
-        )}
-      />
-      <Pressable onPress={() => router.push("/(tabs)/account/configuration/system-types")} style={styles.linkBtn}>
-        <Text style={styles.linkText}>Manage system types</Text>
-      </Pressable>
 
       <Text style={styles.label}>Gas type</Text>
       <Controller
@@ -163,43 +190,35 @@ export default function NewSystemScreen() {
         />
       </View>
 
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Requires security check</Text>
-        <Controller
-          control={control}
-          name="requires_security_check"
-          render={({ field: { onChange, value } }) => (
-            <Switch
-              value={!!value}
-              onValueChange={(next) => {
-                onChange(next);
-                if (!next) {
-                  setValue("security_check_exists", false);
-                  setValue("last_security_check_at", "");
-                }
-              }}
-            />
-          )}
-        />
-      </View>
+      <Text style={styles.label}>Requires security check</Text>
+      <Controller
+        control={control}
+        name="requires_security_check"
+        render={({ field: { onChange, value } }) =>
+          renderBinaryChoice(value, (next) => {
+            onChange(next);
+            if (!next) {
+              setValue("security_check_exists", null);
+              setValue("last_security_check_at", "");
+            }
+          })
+        }
+      />
 
       {requiresCheck ? (
-        <View style={styles.switchRow}>
+        <>
           <Text style={styles.label}>Security check exists</Text>
           <Controller
             control={control}
             name="security_check_exists"
-            render={({ field: { onChange, value } }) => (
-              <Switch
-                value={!!value}
-                onValueChange={(next) => {
-                  onChange(next);
-                  if (!next) setValue("last_security_check_at", "");
-                }}
-              />
-            )}
+            render={({ field: { onChange, value } }) =>
+              renderBinaryChoice(value, (next) => {
+                onChange(next);
+                if (!next) setValue("last_security_check_at", "");
+              })
+            }
           />
-        </View>
+        </>
       ) : null}
 
       {requiresCheck && checkExists ? (
@@ -211,7 +230,11 @@ export default function NewSystemScreen() {
         </>
       ) : null}
 
-      <Pressable onPress={onSubmit} style={({ pressed }) => [styles.primary, pressed && styles.pressed]} disabled={submitting}>
+      <Pressable
+        onPress={onSubmit}
+        style={({ pressed }) => [styles.primary, pressed && styles.pressed, (!canSubmit || submitting) && styles.disabledButton]}
+        disabled={submitting || !canSubmit}
+      >
         <Text style={styles.primaryText}>{submitting ? "Saving..." : "Create System"}</Text>
       </Pressable>
 
@@ -241,6 +264,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontWeight: "700",
+    marginTop: 12,
+  },
+  labelActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
     marginTop: 12,
   },
   input: {
@@ -273,18 +303,53 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: "#fff",
   },
-  linkBtn: {
-    marginTop: 6,
+  manageTypesButton: {
+    minHeight: 40,
+    minWidth: 92,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  linkText: {
-    color: "#0a7ea4",
+  manageTypesText: {
+    color: "#334155",
     fontWeight: "700",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  binaryRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
   },
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 10,
+  },
+  binaryChoice: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    backgroundColor: "#e8eef1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  binaryChoiceActive: {
+    backgroundColor: "#0a7ea4",
+  },
+  binaryChoiceText: {
+    color: "#0a7ea4",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  binaryChoiceTextActive: {
+    color: "#fff",
   },
   dateField: {
     backgroundColor: "#f8fafc",
@@ -300,9 +365,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   primary: {
-    backgroundColor: "#0a7ea4",
+    backgroundColor: "#16a34a",
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 16,
   },
@@ -310,6 +375,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   pressed: {
     opacity: 0.9,

@@ -4,6 +4,7 @@ import { ScrollView, View, Text, TextInput, Pressable, StyleSheet, Alert, Keyboa
 import { router } from "expo-router";
 
 import { CalendarModal } from "@/components/AddRefillModal";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { useCreateCustomer, useCreateCustomerAdjustment } from "@/hooks/useCustomers";
 import { useCreateSystem } from "@/hooks/useSystems";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
@@ -28,11 +29,40 @@ type CustomerFormValues = {
 type NewSystemForm = {
   id: string;
   name: string;
-  gas_type: "12kg" | "48kg";
-  requires_security_check: boolean;
-  security_check_exists: boolean;
+  gas_type: "12kg" | "48kg" | null;
+  requires_security_check: boolean | null;
+  security_check_exists: boolean | null;
   last_security_check_at?: string;
 };
+
+const CUSTOMER_MONEY_STEPPERS: FieldStepper[] = [
+  { delta: -5, label: "-5", position: "left" },
+  { delta: 5, label: "+5", position: "right" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
+];
+
+const CUSTOMER_CYLINDER_STEPPERS: FieldStepper[] = [
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+];
+
+function systemRowHasData(system: NewSystemForm) {
+  return Boolean(
+    system.name ||
+      system.gas_type ||
+      system.requires_security_check !== null ||
+      system.security_check_exists !== null ||
+      system.last_security_check_at
+  );
+}
+
+function systemRowIsComplete(system: NewSystemForm) {
+  if (!systemRowHasData(system)) return true;
+  if (!system.name || !system.gas_type || system.requires_security_check === null) return false;
+  if (system.requires_security_check && system.security_check_exists === null) return false;
+  return true;
+}
 
 export default function NewCustomerScreen() {
   const {
@@ -69,9 +99,9 @@ export default function NewCustomerScreen() {
     {
       id: `sys_${Date.now()}`,
       name: "",
-      gas_type: "12kg",
-      requires_security_check: false,
-      security_check_exists: false,
+      gas_type: null,
+      requires_security_check: null,
+      security_check_exists: null,
       last_security_check_at: "",
     },
   ]);
@@ -87,9 +117,9 @@ export default function NewCustomerScreen() {
   const cyl48State = watch("initial_48kg_state");
 
   const balanceOptions: Array<{ id: BalanceState; label: string }> = [
+    { id: "customer_owes", label: "Debts on customer" },
     { id: "balanced", label: "Balanced" },
-    { id: "customer_owes", label: "Customer owes you" },
-    { id: "you_owe", label: "You owe customer" },
+    { id: "you_owe", label: "Credit for customer" },
   ];
   const toPositiveNumber = (value: string) => {
     const trimmed = value.trim();
@@ -117,9 +147,61 @@ export default function NewCustomerScreen() {
     setStep((prev) => Math.min(3, prev + 1));
   };
   const goBack = () => setStep((prev) => Math.max(1, prev - 1));
+  const hasIncompleteSystem = systems.some((system) => !systemRowIsComplete(system));
+
+  const renderBalanceAmountField = (
+    fieldName: "initial_money_amount" | "initial_12kg_amount" | "initial_48kg_amount",
+    steppers: FieldStepper[]
+  ) => (
+    <>
+      <Controller
+        control={control}
+        name={fieldName}
+        render={({ field: { onChange, value } }) => (
+          <View style={styles.balanceFieldWrap}>
+            <FieldCell
+              title="Amount"
+              value={Number(value ?? 0)}
+              onIncrement={() => onChange(Math.max(0, Number(value ?? 0) + 1))}
+              onDecrement={() => onChange(Math.max(0, Number(value ?? 0) - 1))}
+              onChangeText={(text) => onChange(toPositiveNumber(text))}
+              steppers={steppers}
+            />
+          </View>
+        )}
+      />
+    </>
+  );
+
+  const renderBinaryChoice = (value: boolean | null, onChange: (next: boolean) => void) => (
+    <View style={styles.binaryRow}>
+      {[
+        { value: true, label: "Yes" },
+        { value: false, label: "No" },
+      ].map((option) => (
+        <Pressable
+          key={option.label}
+          onPress={() => onChange(option.value)}
+          style={({ pressed }) => [
+            styles.binaryChoice,
+            pressed && styles.chipPressed,
+            value === option.value && styles.binaryChoiceActive,
+          ]}
+        >
+          <Text style={[styles.binaryChoiceText, value === option.value && styles.binaryChoiceTextActive]}>
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     try {
+      if (hasIncompleteSystem) {
+        Alert.alert("Incomplete system", "Finish the system details or leave the row blank before saving.");
+        return;
+      }
       setSubmitting(true);
       const created = await createCustomer.mutateAsync({
         name: values.name,
@@ -141,14 +223,14 @@ export default function NewCustomerScreen() {
         });
       }
       for (const sys of systems) {
+        if (!systemRowHasData(sys)) continue;
         const name = sys.name.trim();
-        if (!name) continue;
         await createSystem.mutateAsync({
           customer_id: created.id,
           name,
-          gas_type: sys.gas_type,
-          requires_security_check: sys.requires_security_check,
-          security_check_exists: sys.security_check_exists,
+          gas_type: sys.gas_type!,
+          requires_security_check: sys.requires_security_check!,
+          security_check_exists: sys.requires_security_check ? sys.security_check_exists ?? false : false,
           last_security_check_at:
             sys.requires_security_check && sys.security_check_exists && sys.last_security_check_at
               ? sys.last_security_check_at
@@ -245,7 +327,7 @@ export default function NewCustomerScreen() {
             control={control}
             name="initial_money_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -256,12 +338,12 @@ export default function NewCustomerScreen() {
                       }
                     }}
                     style={({ pressed }) => [
-                      styles.chip,
+                      styles.balanceChoiceButton,
                       pressed && styles.chipPressed,
                       value === option.id && styles.chipActive,
                     ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -269,31 +351,14 @@ export default function NewCustomerScreen() {
               </View>
             )}
           />
-          {moneyState !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (money units)</FieldLabel>
-              <Controller
-                control={control}
-                name="initial_money_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {moneyState !== "balanced" ? renderBalanceAmountField("initial_money_amount", CUSTOMER_MONEY_STEPPERS) : null}
 
           <FieldLabel>12kg cylinders</FieldLabel>
           <Controller
             control={control}
             name="initial_12kg_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -304,12 +369,12 @@ export default function NewCustomerScreen() {
                       }
                     }}
                     style={({ pressed }) => [
-                      styles.chip,
+                      styles.balanceChoiceButton,
                       pressed && styles.chipPressed,
                       value === option.id && styles.chipActive,
                     ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -317,31 +382,14 @@ export default function NewCustomerScreen() {
               </View>
             )}
           />
-          {cyl12State !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (12kg)</FieldLabel>
-              <Controller
-                control={control}
-                name="initial_12kg_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {cyl12State !== "balanced" ? renderBalanceAmountField("initial_12kg_amount", CUSTOMER_CYLINDER_STEPPERS) : null}
 
           <FieldLabel>48kg cylinders</FieldLabel>
           <Controller
             control={control}
             name="initial_48kg_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -352,12 +400,12 @@ export default function NewCustomerScreen() {
                       }
                     }}
                     style={({ pressed }) => [
-                      styles.chip,
+                      styles.balanceChoiceButton,
                       pressed && styles.chipPressed,
                       value === option.id && styles.chipActive,
                     ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -365,24 +413,7 @@ export default function NewCustomerScreen() {
               </View>
             )}
           />
-          {cyl48State !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (48kg)</FieldLabel>
-              <Controller
-                control={control}
-                name="initial_48kg_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {cyl48State !== "balanced" ? renderBalanceAmountField("initial_48kg_amount", CUSTOMER_CYLINDER_STEPPERS) : null}
         </>
       ) : null}
 
@@ -393,7 +424,15 @@ export default function NewCustomerScreen() {
           {systems.map((sys, index) => (
             <View key={sys.id} style={styles.systemCard}>
               <Text style={styles.systemTitle}>System {index + 1}</Text>
-              <Text style={styles.label}>System type</Text>
+              <View style={styles.labelActionRow}>
+                <Text style={styles.label}>System type</Text>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/account/configuration/system-types")}
+                  style={({ pressed }) => [styles.manageTypesButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.manageTypesText}>Manage system{"\n"}types</Text>
+                </Pressable>
+              </View>
               <View style={styles.chipRow}>
                 {typeOptions.map((opt) => (
                   <Pressable
@@ -415,17 +454,6 @@ export default function NewCustomerScreen() {
                   </Pressable>
                 ))}
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Custom system type"
-                value={sys.name}
-                onChangeText={(text) =>
-                  setSystems((prev) => prev.map((row) => (row.id === sys.id ? { ...row, name: text } : row)))
-                }
-              />
-              <Pressable onPress={() => router.push("/(tabs)/account/configuration/system-types")} style={styles.linkBtn}>
-                <Text style={styles.linkText}>Manage system types</Text>
-              </Pressable>
 
               <Text style={styles.label}>Gas type</Text>
               <View style={styles.chipRow}>
@@ -446,56 +474,38 @@ export default function NewCustomerScreen() {
                 ))}
               </View>
 
-              <View style={styles.switchRow}>
-                <Text style={styles.label}>Requires security check</Text>
-                <Pressable
-                  onPress={() =>
+              <Text style={styles.label}>Requires security check</Text>
+              {renderBinaryChoice(sys.requires_security_check, (next) =>
+                setSystems((prev) =>
+                  prev.map((row) =>
+                    row.id === sys.id
+                      ? {
+                          ...row,
+                          requires_security_check: next,
+                          security_check_exists: next ? row.security_check_exists : null,
+                          last_security_check_at: next ? row.last_security_check_at : "",
+                        }
+                      : row
+                  )
+                )
+              )}
+
+              {sys.requires_security_check ? (
+                <>
+                  <Text style={styles.label}>Security check exists</Text>
+                  {renderBinaryChoice(sys.security_check_exists, (next) =>
                     setSystems((prev) =>
                       prev.map((row) =>
                         row.id === sys.id
                           ? {
                               ...row,
-                              requires_security_check: !row.requires_security_check,
-                              security_check_exists: row.requires_security_check ? false : row.security_check_exists,
-                              last_security_check_at: row.requires_security_check ? "" : row.last_security_check_at,
+                              security_check_exists: next,
+                              last_security_check_at: next ? row.last_security_check_at : "",
                             }
                           : row
                       )
                     )
-                  }
-                  style={[styles.toggle, sys.requires_security_check && styles.toggleActive]}
-                >
-                  <Text style={[styles.toggleText, sys.requires_security_check && styles.toggleTextActive]}>
-                    {sys.requires_security_check ? "Yes" : "No"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {sys.requires_security_check ? (
-                <>
-                  <View style={styles.switchRow}>
-                    <Text style={styles.label}>Security check exists</Text>
-                    <Pressable
-                      onPress={() =>
-                        setSystems((prev) =>
-                          prev.map((row) =>
-                            row.id === sys.id
-                              ? {
-                                  ...row,
-                                  security_check_exists: !row.security_check_exists,
-                                  last_security_check_at: row.security_check_exists ? "" : row.last_security_check_at,
-                                }
-                              : row
-                          )
-                        )
-                      }
-                      style={[styles.toggle, sys.security_check_exists && styles.toggleActive]}
-                    >
-                      <Text style={[styles.toggleText, sys.security_check_exists && styles.toggleTextActive]}>
-                        {sys.security_check_exists ? "Yes" : "No"}
-                      </Text>
-                    </Pressable>
-                  </View>
+                  )}
                   {sys.security_check_exists ? (
                     <>
                       <Text style={styles.label}>Last security check date</Text>
@@ -524,9 +534,9 @@ export default function NewCustomerScreen() {
                 {
                   id: `sys_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   name: "",
-                  gas_type: "12kg",
-                  requires_security_check: false,
-                  security_check_exists: false,
+                  gas_type: null,
+                  requires_security_check: null,
+                  security_check_exists: null,
                   last_security_check_at: "",
                 },
               ])
@@ -544,7 +554,7 @@ export default function NewCustomerScreen() {
             <Text style={styles.secondaryText}>Back</Text>
           </Pressable>
         ) : (
-          <View />
+          <View style={styles.navSpacer} />
         )}
         {step < 3 ? (
           <Pressable
@@ -555,7 +565,15 @@ export default function NewCustomerScreen() {
             <Text style={styles.primaryText}>Next</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onSubmit} style={({ pressed }) => [styles.primary, pressed && styles.pressed]} disabled={submitting}>
+          <Pressable
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.primary,
+              pressed && styles.pressed,
+              (submitting || hasIncompleteSystem) && styles.disabledButton,
+            ]}
+            disabled={submitting || hasIncompleteSystem}
+          >
             <Text style={styles.primaryText}>{submitting ? "Saving..." : "Save Customer"}</Text>
           </Pressable>
         )}
@@ -628,6 +646,30 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  balanceChoiceRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  balanceChoiceButton: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#e8eef1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  balanceChoiceText: {
+    color: "#444",
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  balanceFieldWrap: {
+    marginTop: 6,
+  },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -647,13 +689,6 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: "#fff",
   },
-  linkBtn: {
-    marginTop: 6,
-  },
-  linkText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
-  },
   systemCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -666,28 +701,54 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
   },
-  switchRow: {
+  labelActionRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 12,
+  },
+  binaryRow: {
+    flexDirection: "row",
+    gap: 8,
     marginTop: 10,
   },
-  toggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  binaryChoice: {
+    flex: 1,
+    minHeight: 42,
     borderRadius: 10,
     backgroundColor: "#e8eef1",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  toggleActive: {
+  binaryChoiceActive: {
     backgroundColor: "#0a7ea4",
   },
-  toggleText: {
+  binaryChoiceText: {
     color: "#0a7ea4",
     fontWeight: "700",
     fontSize: 12,
   },
-  toggleTextActive: {
+  binaryChoiceTextActive: {
     color: "#fff",
+  },
+  manageTypesButton: {
+    minHeight: 40,
+    minWidth: 92,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manageTypesText: {
+    color: "#334155",
+    fontWeight: "700",
+    fontSize: 11,
+    textAlign: "center",
   },
   dateField: {
     backgroundColor: "#f8fafc",
@@ -715,16 +776,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   primary: {
-    backgroundColor: "#0a7ea4",
+    flex: 1,
+    minHeight: 52,
+    backgroundColor: "#16a34a",
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 16,
+    justifyContent: "center",
   },
   primaryText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   pressed: {
     opacity: 0.9,
@@ -737,12 +804,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   secondary: {
-    backgroundColor: "#e8eef1",
+    flex: 1,
+    minHeight: 52,
+    backgroundColor: "#fff",
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
     alignItems: "center",
     marginTop: 8,
+    justifyContent: "center",
+  },
+  navSpacer: {
+    flex: 1,
   },
   secondaryText: {
     color: "#0a7ea4",

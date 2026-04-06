@@ -1,16 +1,27 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 export type FieldStepper = {
   delta: number;
   label: string;
-  position?: "left" | "right" | "top" | "bottom";
+  position?:
+    | "extra-top-left"
+    | "extra-top-right"
+    | "left"
+    | "right"
+    | "top"
+    | "bottom"
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right";
 };
 
 export type FieldCellProps = {
   title: string;
   comment?: string;
   value: number;
+  valueMode?: "integer" | "decimal";
   onIncrement: () => void;
   onDecrement: () => void;
   onChangeText?: (text: string) => void;
@@ -28,6 +39,26 @@ type FieldPairProps = {
 };
 
 const REPEAT_INTERVAL_MS = 75;
+const DECIMAL_SCALE = 100;
+
+function normalizeValue(value: number, valueMode: "integer" | "decimal") {
+  const clamped = Math.max(0, value);
+  if (valueMode === "decimal") {
+    return Math.round(clamped * DECIMAL_SCALE) / DECIMAL_SCALE;
+  }
+  return Math.round(clamped);
+}
+
+function formatValue(value: number, valueMode: "integer" | "decimal") {
+  const normalized = normalizeValue(value, valueMode);
+  if (valueMode === "integer") {
+    return String(normalized);
+  }
+  if (Number.isInteger(normalized)) {
+    return String(normalized);
+  }
+  return normalized.toFixed(2).replace(/\.?0+$/, "");
+}
 
 function useRepeatablePress(action: () => void) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,6 +121,7 @@ export function FieldCell({
   title,
   comment,
   value,
+  valueMode = "integer",
   onIncrement,
   onDecrement,
   onChangeText,
@@ -100,18 +132,39 @@ export function FieldCell({
   onFocus,
   onBlur,
 }: FieldCellProps) {
-  const top = steppers?.find((stepper) => stepper.position === "top") ?? null;
-  const bottom = steppers?.find((stepper) => stepper.position === "bottom") ?? null;
+  const extraTopLeft = steppers?.find((stepper) => stepper.position === "extra-top-left") ?? null;
+  const extraTopRight = steppers?.find((stepper) => stepper.position === "extra-top-right") ?? null;
+  const topLeft = steppers?.find((stepper) => stepper.position === "top-left") ?? null;
+  const topRight =
+    steppers?.find((stepper) => stepper.position === "top-right") ??
+    steppers?.find((stepper) => stepper.position === "top") ??
+    null;
+  const bottomLeft = steppers?.find((stepper) => stepper.position === "bottom-left") ?? null;
+  const bottomRight =
+    steppers?.find((stepper) => stepper.position === "bottom-right") ??
+    steppers?.find((stepper) => stepper.position === "bottom") ??
+    null;
   const left = steppers?.find((stepper) => stepper.position === "left") ?? { delta: -1, label: "-" };
   const right = steppers?.find((stepper) => stepper.position === "right") ?? { delta: 1, label: "+" };
+  const displayValue = formatValue(value, valueMode);
 
   const handleLeft = () =>
-    left.delta === -1 ? onDecrement() : onChangeText?.(String(Math.max(0, value + left.delta)));
+    left.delta === -1 ? onDecrement() : onChangeText?.(formatValue(value + left.delta, valueMode));
   const handleRight = () =>
-    right.delta === 1 ? onIncrement() : onChangeText?.(String(Math.max(0, value + right.delta)));
-  const handleTop = () => onChangeText?.(String(Math.max(0, value + (top?.delta ?? 0))));
-  const handleBottom = () => onChangeText?.(String(Math.max(0, value + (bottom?.delta ?? 0))));
-  const showHighValueRow = top !== null && bottom !== null;
+    right.delta === 1 ? onIncrement() : onChangeText?.(formatValue(value + right.delta, valueMode));
+  const handleTopLeft = () => onChangeText?.(formatValue(value + (topLeft?.delta ?? 0), valueMode));
+  const handleTopRight = () => onChangeText?.(formatValue(value + (topRight?.delta ?? 0), valueMode));
+  const handleExtraTopLeft = () =>
+    onChangeText?.(formatValue(value + (extraTopLeft?.delta ?? 0), valueMode));
+  const handleExtraTopRight = () =>
+    onChangeText?.(formatValue(value + (extraTopRight?.delta ?? 0), valueMode));
+  const handleBottomLeft = () =>
+    onChangeText?.(formatValue(value + (bottomLeft?.delta ?? 0), valueMode));
+  const handleBottomRight = () =>
+    onChangeText?.(formatValue(value + (bottomRight?.delta ?? 0), valueMode));
+  const showExtraTopRow = extraTopLeft !== null || extraTopRight !== null;
+  const showTopRow = topLeft !== null || topRight !== null;
+  const showBottomRow = bottomLeft !== null || bottomRight !== null;
 
   return (
     <View style={styles.fieldCell}>
@@ -124,20 +177,38 @@ export function FieldCell({
           error ? styles.fieldCellValueError : null,
           !editable ? styles.fieldCellValueReadOnly : null,
         ]}
-        value={String(value)}
+        value={displayValue}
         onChangeText={onChangeText}
         editable={editable}
-        keyboardType="numeric"
-        inputMode="numeric"
+        keyboardType={valueMode === "decimal" ? "decimal-pad" : "number-pad"}
+        inputMode={valueMode === "decimal" ? "decimal" : "numeric"}
+        returnKeyType="done"
+        blurOnSubmit
         ref={inputRef}
         onFocus={onFocus}
         onBlur={onBlur}
+        onSubmitEditing={() => Keyboard.dismiss()}
       />
 
-      {editable && showHighValueRow ? (
+      {editable && showExtraTopRow ? (
         <View style={styles.btnRow}>
-          <StepperButton label={bottom!.label} onPress={handleBottom} />
-          <StepperButton label={top!.label} onPress={handleTop} />
+          {extraTopLeft ? (
+            <StepperButton label={extraTopLeft.label} onPress={handleExtraTopLeft} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
+          {extraTopRight ? (
+            <StepperButton label={extraTopRight.label} onPress={handleExtraTopRight} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
+        </View>
+      ) : null}
+
+      {editable && showTopRow ? (
+        <View style={styles.btnRow}>
+          {topLeft ? <StepperButton label={topLeft.label} onPress={handleTopLeft} /> : <View style={styles.btnSpacer} />}
+          {topRight ? <StepperButton label={topRight.label} onPress={handleTopRight} /> : <View style={styles.btnSpacer} />}
         </View>
       ) : null}
 
@@ -145,6 +216,21 @@ export function FieldCell({
         <View style={styles.btnRow}>
           <StepperButton label={left.label} onPress={handleLeft} />
           <StepperButton label={right.label} onPress={handleRight} />
+        </View>
+      ) : null}
+
+      {editable && showBottomRow ? (
+        <View style={styles.btnRow}>
+          {bottomLeft ? (
+            <StepperButton label={bottomLeft.label} onPress={handleBottomLeft} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
+          {bottomRight ? (
+            <StepperButton label={bottomRight.label} onPress={handleBottomRight} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
         </View>
       ) : null}
     </View>
@@ -223,5 +309,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#0a7ea4",
     fontWeight: "700",
+  },
+  btnSpacer: {
+    flex: 1,
   },
 });
