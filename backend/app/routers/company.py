@@ -46,7 +46,7 @@ def settle_company_cylinders(
     else:
       return48 = payload.quantity
 
-  with session.begin():
+  try:
     acquire_company_lock(session)
     acquire_inventory_locks(session, [payload.gas_type])
     if payload.request_id:
@@ -92,6 +92,10 @@ def settle_company_cylinders(
     txn.debt_cash = snapshot["debt_cash"]
     txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
     txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
 
   return CompanyCylinderSettleOut(
@@ -129,7 +133,7 @@ def create_company_payment(
     )
   ) or datetime.now(timezone.utc)
 
-  with session.begin():
+  try:
     acquire_company_lock(session)
     if payload.request_id:
       existing = session.exec(
@@ -157,6 +161,10 @@ def create_company_payment(
     )
     session.add(txn)
     post_company_transaction(session, txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
 
   return CompanyPaymentOut(
@@ -231,7 +239,7 @@ def create_company_buy_iron(
     )
   ) or datetime.now(timezone.utc)
 
-  with session.begin():
+  try:
     acquire_company_lock(session)
     acquire_inventory_locks(
       session,
@@ -268,6 +276,10 @@ def create_company_buy_iron(
     )
     session.add(txn)
     post_company_transaction(session, txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
 
   return CompanyBuyIronOut(
@@ -298,7 +310,7 @@ def adjust_company_balances(
     )
   ) or datetime.now(timezone.utc)
 
-  with session.begin():
+  try:
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
     if payload.request_id:
@@ -341,6 +353,10 @@ def adjust_company_balances(
     )
     session.add(txn)
     post_company_transaction(session, txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
 
   return CompanyBalanceAdjustmentOut(

@@ -241,7 +241,7 @@ def create_collection(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CollectionEvent:
   happened_at = normalize_happened_at(payload.happened_at)
-  with session.begin():
+  try:
     acquire_customer_locks(session, [payload.customer_id])
     acquire_inventory_locks(
       session,
@@ -290,6 +290,10 @@ def create_collection(
       qty_48kg=payload.qty_48kg,
       request_id=payload.request_id,
     )
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   for txn in txns:
     session.refresh(txn)
   return _as_event(txns)
@@ -307,7 +311,7 @@ def update_collection(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CollectionEvent:
   payload_data = payload.model_dump(exclude_unset=True)
-  with session.begin():
+  try:
     txns = session.exec(
       select(CustomerTransaction)
       .where(
@@ -402,6 +406,10 @@ def update_collection(
       qty_12kg=qty_12kg,
       qty_48kg=qty_48kg,
     )
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   for txn in new_txns:
     session.refresh(txn)
   return _as_event(new_txns)
@@ -417,7 +425,7 @@ def delete_collection(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
-  with session.begin():
+  try:
     txns = session.exec(
       select(CustomerTransaction)
       .where(
@@ -470,4 +478,8 @@ def delete_collection(
       )
       txn.deleted_at = datetime.now(timezone.utc)
       session.add(txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
 

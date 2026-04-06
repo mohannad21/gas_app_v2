@@ -139,7 +139,11 @@ def login(
 
     access_token = create_access_token(subject=user.id)
 
-  return LoginResponse(access_token=access_token, refresh_token=db_session.id)
+  return LoginResponse(
+    access_token=access_token,
+    refresh_token=db_session.id,
+    must_change_password=user.must_change_password,
+  )
 
 
 @router.post("/refresh", response_model=RefreshResponse)

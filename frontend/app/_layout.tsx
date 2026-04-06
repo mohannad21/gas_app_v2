@@ -83,10 +83,17 @@ function InitializationGuard() {
 function AuthenticatedInitializationGuard() {
   const router = useRouter();
   const segments = useSegments();
+  const { mustChangePassword } = useAuth();
   const { data, isLoading: settingsLoading } = useSystemSettings();
 
   useEffect(() => {
     const inAuth = segments[0] === "login";
+    if (mustChangePassword) {
+      if (segments[0] !== "force-change-password") {
+        router.replace("/force-change-password");
+      }
+      return;
+    }
     if (settingsLoading || !data) return;
 
     const inWelcome = segments[0] === "welcome";
@@ -100,7 +107,7 @@ function AuthenticatedInitializationGuard() {
     if (isSetupCompleted && (inWelcome || inAuth)) {
       router.replace("/(tabs)/dashboard");
     }
-  }, [data?.is_setup_completed, settingsLoading, router, segments]);
+  }, [mustChangePassword, data?.is_setup_completed, settingsLoading, router, segments]);
 
   return null;
 }

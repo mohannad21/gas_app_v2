@@ -152,7 +152,7 @@ def create_order(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> OrderOut:
   happened_at = normalize_happened_at(payload.happened_at)
-  with session.begin():
+  try:
     acquire_customer_locks(session, [payload.customer_id])
     acquire_inventory_locks(session, order_gas_types(payload.gas_type))
     if payload.request_id:
@@ -222,6 +222,10 @@ def create_order(
     )
     session.add(txn)
     post_customer_transaction(session, txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
   return order_out(txn)
 
@@ -238,7 +242,7 @@ def update_order(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> OrderOut:
   payload_data = payload.model_dump(exclude_unset=True)
-  with session.begin():
+  try:
     existing = resolve_active_order(session, order_id)
     if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
       raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
@@ -360,6 +364,10 @@ def update_order(
     )
     session.add(txn)
     post_customer_transaction(session, txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(txn)
   return order_out(txn)
 
@@ -374,7 +382,7 @@ def delete_order(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
-  with session.begin():
+  try:
     existing = resolve_active_order(session, order_id)
     if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
       return
@@ -415,3 +423,7 @@ def delete_order(
     )
     existing.deleted_at = datetime.now(timezone.utc)
     session.add(existing)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise

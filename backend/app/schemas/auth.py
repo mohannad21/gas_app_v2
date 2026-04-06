@@ -28,6 +28,7 @@ class LoginResponse(SQLModel):
   access_token: str
   refresh_token: str
   token_type: str = "bearer"
+  must_change_password: bool = False
 
 
 class RefreshRequest(SQLModel):

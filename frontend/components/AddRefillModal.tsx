@@ -189,15 +189,19 @@ export function RefillForm({
     ?.detail;
   const inventoryNotInitialized = !base && errorDetail?.code === "inventory_not_initialized";
 
-  const resolveBuyingPrice = (gas: "12kg" | "48kg", target: Date) => {
+  const resolvePriceValue = (
+    gas: "12kg" | "48kg",
+    target: Date,
+    field: "buying_price" | "company_iron_price"
+  ) => {
     const prices = pricesQuery.data ?? [];
     const matches = prices.filter((entry) => {
       if (entry.gas_type !== gas) return false;
-      if (entry.buying_price === null || entry.buying_price === undefined) return false;
+      if (entry[field] === null || entry[field] === undefined) return false;
       return new Date(entry.effective_from) <= target;
     });
     matches.sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1));
-    return matches[0]?.buying_price ?? 0;
+    return matches[0]?.[field] ?? 0;
   };
 
   const priceTarget = useMemo(() => {
@@ -211,8 +215,10 @@ export function RefillForm({
     return new Date(formState.date);
   }, [editEntry?.effective_at, formState.date, formState.time]);
 
-  const buy12Price = resolveBuyingPrice("12kg", priceTarget);
-  const buy48Price = resolveBuyingPrice("48kg", priceTarget);
+  const buy12Price = resolvePriceValue("12kg", priceTarget, "buying_price");
+  const buy48Price = resolvePriceValue("48kg", priceTarget, "buying_price");
+  const companyIron12Price = resolvePriceValue("12kg", priceTarget, "company_iron_price");
+  const companyIron48Price = resolvePriceValue("48kg", priceTarget, "company_iron_price");
   useEffect(() => {
     if (formState.price12Dirty) return;
     if (buy12Price > 0) {
@@ -225,6 +231,14 @@ export function RefillForm({
       formState.setPrice48Input(buy48Price.toString());
     }
   }, [buy48Price, formState.price48Dirty, formState.setPrice48Input]);
+  useEffect(() => {
+    if (!formState.isBuyMode) return;
+    formState.setIronPrice12Input(companyIron12Price.toString());
+  }, [companyIron12Price, formState.isBuyMode, formState.setIronPrice12Input]);
+  useEffect(() => {
+    if (!formState.isBuyMode) return;
+    formState.setIronPrice48Input(companyIron48Price.toString());
+  }, [companyIron48Price, formState.isBuyMode, formState.setIronPrice48Input]);
 
   const price12Value = Number(formState.price12Input) || 0;
   const price48Value = Number(formState.price48Input) || 0;
