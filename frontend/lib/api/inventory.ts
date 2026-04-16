@@ -44,8 +44,6 @@ export async function createInventoryRefill(payload: {
   return12: number;
   buy48: number;
   return48: number;
-  paid_buy12?: number;
-  paid_buy48?: number;
   total_cost?: number;
   paid_now?: number;
   debt_cash?: number;
@@ -111,8 +109,6 @@ export async function updateInventoryRefill(
     return12: number;
     buy48: number;
     return48: number;
-    paid_buy12?: number;
-    paid_buy48?: number;
     reason?: string;
     notes?: string;
     allow_negative?: boolean;

@@ -771,62 +771,32 @@ export default function CustomerDetailsScreen() {
 
           if (activity.kind === "late_payment" || activity.kind === "return_empties" || activity.kind === "payout") {
             const rawCol = collections.find((c) => `collection-${c.id}` === activity.id);
+            if (!rawCol) return null;
             return (
               <SlimActivityRow
                 key={activity.id}
-                event={rawCol
-                  ? collectionToEvent(rawCol, { customerName, customerDescription })
-                  : {
-                      cash_before: 0,
-                      cash_after: 0,
-                      event_type: activity.kind === "late_payment" ? "collection_money" : activity.kind === "payout" ? "collection_payout" : "collection_empty",
-                      id: activity.id,
-                      effective_at: activity.effectiveAt,
-                      created_at: activity.createdAt ?? activity.effectiveAt,
-                      context_line: activity.title,
-                      display_name: customerName,
-                      hero_text: activity.summary,
-                      note: activity.note ?? null,
-                      label: activity.title,
-                    }
-                }
+                event={collectionToEvent(rawCol, { customerName, customerDescription })}
                 formatMoney={fmtMoney}
                 showCreatedAt
                 showEffectiveAtBottom
-                onEdit={rawCol ? () => {
-                  /* collections edit not yet supported via dedicated screen */
-                } : undefined}
-                isDeleted={rawCol ? (rawCol.is_deleted || deletingIds.has(rawCol.id)) : false}
-                onDelete={rawCol ? () => handleDeleteCollection(rawCol.id) : undefined}
+                onEdit={undefined}
+                isDeleted={rawCol.is_deleted || deletingIds.has(rawCol.id)}
+                onDelete={() => handleDeleteCollection(rawCol.id)}
               />
             );
           }
 
           const rawOrder = activity.orderId ? ordersById.get(activity.orderId) : undefined;
+          if (!rawOrder) return null;
           return (
             <SlimActivityRow
               key={activity.id}
-              isDeleted={rawOrder ? (rawOrder.is_deleted || deletingIds.has(rawOrder.id)) : (activity.orderId ? deletingIds.has(activity.orderId) : false)}
-                event={rawOrder
-                  ? orderToEvent(rawOrder, {
-                    customerName,
-                    customerDescription,
-                    systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
-                  })
-                : {
-                    cash_before: 0,
-                    cash_after: 0,
-                    event_type: "order",
-                    id: activity.id,
-                    effective_at: activity.effectiveAt,
-                    created_at: activity.createdAt ?? activity.effectiveAt,
-                    context_line: "Order",
-                    display_name: customerName,
-                    hero_text: activity.summary,
-                    note: activity.note ?? null,
-                    label: activity.title,
-                  }
-              }
+              isDeleted={rawOrder.is_deleted || deletingIds.has(rawOrder.id)}
+              event={orderToEvent(rawOrder, {
+                customerName,
+                customerDescription,
+                systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
+              })}
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom

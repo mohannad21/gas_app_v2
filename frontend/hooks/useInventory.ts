@@ -81,6 +81,7 @@ export function useCreateCompanyBuyIron() {
     mutationFn: createCompanyBuyIron,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });

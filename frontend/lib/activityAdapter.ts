@@ -38,8 +38,8 @@ function pushTransition(
 
 export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
   return {
-    buy12: Number(refill.buy12 ?? 0) + Number(refill.new12 ?? 0),
-    buy48: Number(refill.buy48 ?? 0) + Number(refill.new48 ?? 0),
+    buy12: Number(refill.buy12 ?? 0),
+    buy48: Number(refill.buy48 ?? 0),
     return12: Number(refill.return12 ?? 0),
     return48: Number(refill.return48 ?? 0),
   };
