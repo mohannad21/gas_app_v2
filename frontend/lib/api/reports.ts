@@ -72,8 +72,20 @@ export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> 
           }
         : ev.money,
       money_amount: ev.money_amount != null ? fromMinorUnits(ev.money_amount) : ev.money_amount,
-      money_delta: ev.money_delta != null ? ev.money_delta : ev.money_delta,
+      money_delta: ev.money_delta != null ? fromMinorUnits(ev.money_delta) : ev.money_delta,
       money_received: ev.money_received != null ? fromMinorUnits(ev.money_received) : ev.money_received,
+      notes: Array.isArray(ev.notes)
+        ? ev.notes.map((note) =>
+            note?.kind === "money"
+              ? {
+                  ...note,
+                  remaining_after: fromMinorUnits(note.remaining_after),
+                  remaining_before:
+                    note.remaining_before != null ? fromMinorUnits(note.remaining_before) : note.remaining_before,
+                }
+              : note
+          )
+        : ev.notes,
       open_actions: Array.isArray(ev.open_actions)
         ? ev.open_actions.map((action) =>
             action?.category === "money" && action.amount != null

@@ -98,10 +98,10 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   other: "ellipsis-horizontal",
 };
 const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: 20, label: "+20", position: "top" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
   { delta: -5, label: "-5", position: "left" },
   { delta: 5, label: "+5", position: "right" },
-  { delta: -20, label: "-20", position: "bottom" },
 ];
 
 function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet: number, amount: number) {

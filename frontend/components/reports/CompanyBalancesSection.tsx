@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import { getCurrencyCode } from "@/lib/money";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
 
 type CompanyBalancesSectionProps = {
@@ -21,6 +22,14 @@ type CompanySummaryBox = {
   direction: string;
 };
 
+function directionForCompanyMoney(value: number) {
+  return value > 0 ? "Debts on distributor" : value < 0 ? "Credit for distributor" : "Settled";
+}
+
+function directionForCompanyCylinders(value: number) {
+  return value > 0 ? "Credit for distributor" : value < 0 ? "Debts on distributor" : "Settled";
+}
+
 function buildCompanyBoxes(
   companySummary: CompanySummary,
   formatMoney: (value: number) => string,
@@ -29,24 +38,22 @@ function buildCompanyBoxes(
   const moneyNet = companySummary.payCash > 0 ? companySummary.payCash : -companySummary.receiveCash;
   const cyl12Net = companySummary.receive12 > 0 ? companySummary.receive12 : -companySummary.give12;
   const cyl48Net = companySummary.receive48 > 0 ? companySummary.receive48 : -companySummary.give48;
-  const toDirection = (value: number) =>
-    value > 0 ? "Credit to company" : value < 0 ? "Debts to company" : "Settled";
 
   return [
     {
       label: "Money balance",
-      value: `${formatMoney(Math.abs(moneyNet))} shekels`,
-      direction: toDirection(moneyNet),
+      value: `${formatMoney(Math.abs(moneyNet))} ${getCurrencyCode()}`,
+      direction: directionForCompanyMoney(moneyNet),
     },
     {
       label: "12kg balance",
       value: `${formatCount(Math.abs(cyl12Net))} cyl`,
-      direction: toDirection(cyl12Net),
+      direction: directionForCompanyCylinders(cyl12Net),
     },
     {
       label: "48kg balance",
       value: `${formatCount(Math.abs(cyl48Net))} cyl`,
-      direction: toDirection(cyl48Net),
+      direction: directionForCompanyCylinders(cyl48Net),
     },
   ];
 }

@@ -23,6 +23,21 @@ export function getCurrencyCode() {
   return currencyCode;
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  ILS: "₪",
+  EUR: "€",
+  GBP: "£",
+  JOD: "JD",
+  EGP: "E£",
+  SAR: "﷼",
+  AED: "د.إ",
+};
+
+export function getCurrencySymbol(): string {
+  return CURRENCY_SYMBOLS[currencyCode] ?? currencyCode;
+}
+
 export function toMinorUnits(value?: number | null) {
   if (value == null || !Number.isFinite(value)) return 0;
   const factor = 10 ** moneyDecimals;

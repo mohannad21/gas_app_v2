@@ -25,6 +25,7 @@ import {
   orderToEvent,
   refillSummaryToEvent,
 } from "@/lib/activityAdapter";
+import { getCurrencyCode } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
@@ -1471,11 +1472,23 @@ export function AddCustomersSection({
           const showSecurity = topFilter === "all" || topFilter === "security_check";
 
           const moneyLabel =
-            money > 0 ? `Debt ${money.toFixed(0)}` : money < 0 ? `Credit ${Math.abs(money).toFixed(0)}` : "Money 0";
+            money > 0
+              ? `Debts on customer ${money.toFixed(0)} ${getCurrencyCode()}`
+              : money < 0
+                ? `Credit for customer ${Math.abs(money).toFixed(0)} ${getCurrencyCode()}`
+                : "Settled";
           const cyl12Label =
-            cyl12 > 0 ? `Missing ${Math.abs(cyl12)}x 12kg` : cyl12 < 0 ? `Credit ${Math.abs(cyl12)}x 12kg` : "12kg 0";
+            cyl12 > 0
+              ? `Debts on customer ${Math.abs(cyl12)}x 12kg`
+              : cyl12 < 0
+                ? `Credit for customer ${Math.abs(cyl12)}x 12kg`
+                : "12kg settled";
           const cyl48Label =
-            cyl48 > 0 ? `Missing ${Math.abs(cyl48)}x 48kg` : cyl48 < 0 ? `Credit ${Math.abs(cyl48)}x 48kg` : "48kg 0";
+            cyl48 > 0
+              ? `Debts on customer ${Math.abs(cyl48)}x 48kg`
+              : cyl48 < 0
+                ? `Credit for customer ${Math.abs(cyl48)}x 48kg`
+                : "48kg settled";
 
           return (
             <Pressable

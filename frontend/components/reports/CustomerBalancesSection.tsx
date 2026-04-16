@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { BalanceSummary } from "@/hooks/useBalancesSummary";
+import { getCurrencyCode } from "@/lib/money";
 
 type CustomerBalancesSectionProps = {
   balanceSummary: BalanceSummary;
@@ -56,7 +57,7 @@ function buildCustomerBoxes(
       value: String(balanceSummary.cyl48.payable.total),
     },
   ].map((entry) => ({
-    value: entry.label.startsWith("Money") ? `${entry.value} shekels` : `${entry.value} cyl`,
+    value: entry.label.startsWith("Money") ? `${entry.value} ${getCurrencyCode()}` : `${entry.value} cyl`,
     countLabel: formatCustomerCount(entry.count),
     label: entry.label,
   }));

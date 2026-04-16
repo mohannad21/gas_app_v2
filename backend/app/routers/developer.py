@@ -8,7 +8,8 @@ from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import BillingEvent, Plan, Tenant, TenantPlanSubscription
+from app.models import BillingEvent, CustomerTransaction, Plan, Tenant, TenantPlanSubscription
+from app.services.ledger import sum_customer_cylinders, sum_customer_money
 
 
 router = APIRouter(prefix="/developer", tags=["developer"])
@@ -306,3 +307,56 @@ def get_billing_history(
     ],
     "outstanding_balance": sum(event.amount for event in events),
   }
+
+
+@router.post("/tenants/{tenant_id}/backfill-adjustment-snapshots", dependencies=_debug_dep)
+def backfill_adjustment_snapshots(
+  tenant_id: str,
+  session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+  """
+  One-time fix: recompute and write debt_cash / debt_cylinders_12 / debt_cylinders_48
+  for all non-deleted kind='adjust' CustomerTransaction rows for this tenant.
+  Uses the ledger (always correct) to compute the after-balance at each transaction's
+  happened_at timestamp.
+  """
+  _require_tenant(session, tenant_id)
+
+  rows = session.exec(
+    select(CustomerTransaction)
+    .where(CustomerTransaction.tenant_id == tenant_id)
+    .where(CustomerTransaction.kind == "adjust")
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
+    .order_by(
+      CustomerTransaction.happened_at,
+      CustomerTransaction.created_at,
+      CustomerTransaction.id,
+    )
+  ).all()
+
+  groups: dict[str, list[CustomerTransaction]] = {}
+  for row in rows:
+    key = f"{row.customer_id}:{row.group_id or row.id}"
+    groups.setdefault(key, []).append(row)
+
+  updated = 0
+  for txns in groups.values():
+    latest = max(txns, key=lambda t: (t.happened_at, t.created_at, t.id))
+    after_money = sum_customer_money(
+      session, customer_id=latest.customer_id, up_to=latest.happened_at
+    )
+    after_12 = sum_customer_cylinders(
+      session, customer_id=latest.customer_id, gas_type="12kg", up_to=latest.happened_at
+    )
+    after_48 = sum_customer_cylinders(
+      session, customer_id=latest.customer_id, gas_type="48kg", up_to=latest.happened_at
+    )
+    for txn in txns:
+      txn.debt_cash = after_money
+      txn.debt_cylinders_12 = after_12
+      txn.debt_cylinders_48 = after_48
+      session.add(txn)
+      updated += 1
+
+  session.commit()
+  return {"tenant_id": tenant_id, "groups_processed": len(groups), "rows_updated": updated}

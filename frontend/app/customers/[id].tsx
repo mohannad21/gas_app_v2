@@ -5,6 +5,7 @@ import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
+import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
 import {
@@ -75,7 +76,7 @@ const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
 const formatCurrency = (value: number) => {
   const abs = Math.abs(value);
   const prefix = value < 0 ? "-" : "";
-  return `${prefix}$${abs.toFixed(2)}`;
+  return `${prefix}${abs.toFixed(getMoneyDecimals())} ${getCurrencyCode()}`;
 };
 
 const formatDeliveredAt = (value?: string) => {
@@ -750,31 +751,17 @@ export default function CustomerDetailsScreen() {
       {!activitiesLoading &&
         !activitiesError &&
         filteredActivities.map((activity) => {
-          const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+          const fmtMoney = (v: number) => Number(v || 0).toFixed(getMoneyDecimals());
           const customerName = customer.name;
           const customerDescription = customer.note ?? null;
 
           if (activity.kind === "adjustment") {
             const rawAdj = adjustments.find((a) => `adjustment-${a.id}` === activity.id);
+            if (!rawAdj) return null;
             return (
               <SlimActivityRow
                 key={activity.id}
-                event={customerAdjustmentToEvent(
-                  rawAdj ?? {
-                    id: activity.id.replace("adjustment-", ""),
-                    customer_id: customerId,
-                    amount_money: 0,
-                    count_12kg: 0,
-                    count_48kg: 0,
-                    debt_cash: activity.moneyAfter,
-                    debt_cylinders_12: activity.cyl12After,
-                    debt_cylinders_48: activity.cyl48After,
-                    reason: activity.note ?? null,
-                    effective_at: activity.effectiveAt,
-                    created_at: activity.createdAt ?? activity.effectiveAt,
-                  },
-                  { customerName, customerDescription }
-                )}
+                event={customerAdjustmentToEvent(rawAdj, { customerName, customerDescription })}
                 formatMoney={fmtMoney}
                 showCreatedAt
                 showEffectiveAtBottom

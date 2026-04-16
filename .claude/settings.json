@@ -6,7 +6,13 @@
       "Bash(grep -rn bActivityb c:/Users/Mohannad/gas_app_v2/frontend --include=*.ts --include=*.tsx)",
       "Bash(grep -rn \"onEdit\\\\|onUpdate\\\\|editMode\\\\|updateMode\\\\|EditModal\\\\|UpdateModal\\\\|editActivity\\\\|updateActivity\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
       "Bash(grep -rn \"is_deleted\\\\|isDeleted\\\\|blurred\\\\|blur.*deleted\\\\|deleted.*blur\\\\|opacity.*deleted\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
-      "Bash(grep -rn \"before_state\\\\|after_state\\\\|beforeState\\\\|afterState\\\\|money_before\\\\|money_after\\\\|ledger_before\\\\|ledger_after\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)"
+      "Bash(grep -rn \"before_state\\\\|after_state\\\\|beforeState\\\\|afterState\\\\|money_before\\\\|money_after\\\\|ledger_before\\\\|ledger_after\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
+      "Bash(python -m pytest tests/backend/ -q --tb=no)",
+      "Bash(python -m pytest tests/backend/test_orders.py -q --tb=short)",
+      "Bash(python -m pytest tests/backend/test_orders.py --collect-only)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(python -c \"from app.routers.customer_adjustments import router; print\\('OK'\\)\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

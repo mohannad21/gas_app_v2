@@ -3,8 +3,9 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { formatBalanceTransitions } from "@/lib/balanceTransitions";
+import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
 import { formatDateTimeYMDHM } from "@/lib/date";
+import { getCurrencySymbol } from "@/lib/money";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { DailyReportV2Event } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
@@ -19,7 +20,8 @@ type SlimActivityRowProps = {
   showEffectiveAtBottom?: boolean;
 };
 
-const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) => `₪${formatMoney(amount)}`;
+const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) =>
+  `${formatMoney(amount)} ${getCurrencySymbol()}`;
 
 // Fallback-only adapter for older payloads that still send note objects instead of balance transitions.
 const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
@@ -33,13 +35,13 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
     const amountText = formatMoneyValue(after, formatMoney);
     if (note.direction === "customer_pays_you") {
       return withBefore
-        ? `Customer still owes you ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `Customer pays you ${amountText}`;
+        ? `Debts on customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `Debts on customer ${amountText}`;
     }
     if (note.direction === "you_pay_customer") {
       return withBefore
-        ? `You still owe customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `You pay customer ${amountText}`;
+        ? `Credit for customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `Credit for customer ${amountText}`;
     }
     if (note.direction === "you_paid_customer_earlier") {
       return `Paid earlier ${amountText} to customer`;
@@ -52,28 +54,28 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
     }
     if (note.direction === "you_pay_company") {
       return withBefore
-        ? `You still owe company ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `You pay company ${amountText}`;
+        ? `Debts on distributor ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
+        : `Debts on distributor ${amountText}`;
     }
     if (note.direction === "you_paid_earlier") {
       return `Paid earlier ${amountText} to company`;
     }
     if (note.direction === "company_pays_you") {
-      return `Company owes you ${amountText}`;
+      return `Credit for distributor ${amountText}`;
     }
   }
 
   const formatCyl = (qty: number, gas: string, unit: "empty" | "full") =>
-    `${qty}x${gas} ${unit}${qty === 1 ? "" : "s"}`;
+    `${qty}x${gas} ${qty === 1 ? `${unit} cylinder` : `${unit} cylinders`}`;
 
   if (note.kind === "cyl_12" || note.kind === "cyl_48") {
     const gas = note.kind === "cyl_12" ? "12kg" : "48kg";
     const qtyText = formatCyl(after, gas, "empty");
     if (note.direction === "customer_returns_you") {
-      return withBefore ? `Customer still owes you ${qtyText} (was ${before})` : `Customer returns ${qtyText}`;
+      return withBefore ? `Debts on customer ${qtyText} (was ${formatCyl(before, gas, "empty")})` : `Debts on customer ${qtyText}`;
     }
     if (note.direction === "you_return_company") {
-      return withBefore ? `You still owe company ${qtyText} (was ${before})` : `You return company ${qtyText}`;
+      return withBefore ? `Debts on distributor ${qtyText} (was ${formatCyl(before, gas, "empty")})` : `Debts on distributor ${qtyText}`;
     }
     if (note.direction === "you_returned_earlier") {
       return `Returned earlier ${qtyText}`;
@@ -84,10 +86,10 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
     const gas = note.kind === "cyl_full_12" ? "12kg" : "48kg";
     const qtyText = formatCyl(after, gas, "full");
     if (note.direction === "you_deliver_customer") {
-      return `You deliver customer ${qtyText}`;
+      return withBefore ? `Credit for customer ${qtyText} (was ${formatCyl(before, gas, "full")})` : `Credit for customer ${qtyText}`;
     }
     if (note.direction === "company_delivers_you") {
-      return `Extra ${qtyText}`;
+      return withBefore ? `Credit for distributor ${qtyText} (was ${formatCyl(before, gas, "full")})` : `Credit for distributor ${qtyText}`;
     }
   }
 
@@ -127,6 +129,12 @@ const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => 
     if (bought) lines.push(`Bought: ${bought}`);
     lines.push(`Returned: ${returned ?? `${Number(event.return12 ?? 0)}x 12kg | ${Number(event.return48 ?? 0)}x 48kg`}`);
     return lines.length > 0 ? lines.join("\n") : null;
+  }
+  if (event.event_type === "company_buy_iron") {
+    const parts: string[] = [];
+    if (event.buy12 && event.buy12 !== 0) parts.push(`${event.buy12}x 12kg`);
+    if (event.buy48 && event.buy48 !== 0) parts.push(`${event.buy48}x 48kg`);
+    return parts.length > 0 ? `Bought: ${parts.join(" | ")}` : null;
   }
   if (event.hero_primary) return event.hero_primary;
   if (event.hero_text) return event.hero_text;
@@ -187,6 +195,7 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
   if (event.event_type === "collection_money") return "customer_payment" as const;
   if (event.event_type === "collection_payout") return "customer_payout" as const;
   if (event.event_type === "collection_empty") return "customer_return" as const;
+  if (event.event_type === "company_return_empties") return "company_settle" as const;
   if (event.event_type === "customer_adjust") return "customer_adjust" as const;
   if (event.event_type === "company_payment") return "company_payment" as const;
   if (event.event_type === "company_buy_iron") return "company_buy_iron" as const;
@@ -198,6 +207,39 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
     return isSettleOnly ? ("company_settle" as const) : ("company_refill" as const);
   }
   return "generic" as const;
+};
+
+const pushEventTransition = (
+  transitions: NonNullable<DailyReportV2Event["balance_transitions"]>,
+  scope: "customer" | "company",
+  component: "money" | "cyl_12" | "cyl_48",
+  beforeValue: number | null | undefined,
+  afterValue: number | null | undefined
+) => {
+  if (beforeValue == null || afterValue == null) return;
+  transitions.push({
+    scope,
+    component,
+    before: Number(beforeValue),
+    after: Number(afterValue),
+  });
+};
+
+const buildDisplayTransitions = (event: DailyReportV2Event) => {
+  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const intent = transitionIntentForEvent(event);
+  const isCompanyEvent = intent.startsWith("company_");
+
+  if (isCompanyEvent) {
+    pushEventTransition(transitions, "company", "money", event.company_before, event.company_after);
+    pushEventTransition(transitions, "company", "cyl_12", event.company_12kg_before, event.company_12kg_after);
+    pushEventTransition(transitions, "company", "cyl_48", event.company_48kg_before, event.company_48kg_after);
+  } else {
+    pushEventTransition(transitions, "customer", "money", event.customer_money_before, event.customer_money_after);
+    pushEventTransition(transitions, "customer", "cyl_12", event.customer_12kg_before, event.customer_12kg_after);
+    pushEventTransition(transitions, "customer", "cyl_48", event.customer_48kg_before, event.customer_48kg_after);
+  }
+  return transitions.length > 0 ? transitions : event.balance_transitions ?? [];
 };
 
 export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted, showCreatedAt, showEffectiveAtBottom }: SlimActivityRowProps) {
@@ -227,10 +269,15 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
     heroActionBase && heroActionBase.trim() && heroActionBase !== headerName && heroActionBase !== label
       ? heroActionBase
       : null;
-  const moneyAmount = typeof event?.money_delta === "number" ? event.money_delta : Number(event?.money_amount ?? 0);
+  const moneyAmount =
+    (event.event_type === "collection_money" || event.event_type === "collection_payout")
+      ? Number(event.money_amount ?? event.money_delta ?? 0)
+      : typeof event?.money_delta === "number"
+        ? event.money_delta
+        : Number(event?.money_amount ?? 0);
   const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
-    event.event_type === "refill"
+    (event.event_type === "refill" || event.event_type === "company_buy_iron")
       ? Number(event.paid_now ?? 0)
       : Number(event.money_amount ?? event.money_received ?? event.money?.amount ?? 0);
   const paymentTotal =
@@ -238,13 +285,14 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       ? Number(event.total_cost ?? 0)
       : event.event_type === "order"
         ? Number(event.order_total ?? 0)
-        : event.event_type === "company_payment"
+        : (event.event_type === "company_payment" || event.event_type === "company_buy_iron")
           ? Number(event.total_cost ?? 0)
           : 0;
   const showPaymentRatio =
     (event.event_type === "refill" ||
       event.event_type === "order" ||
-      event.event_type === "company_payment") &&
+      event.event_type === "company_payment" ||
+      event.event_type === "company_buy_iron") &&
     paymentTotal > 0;
   const moneyText =
     !showPaymentRatio && moneyDirection !== "none" && moneyAmount
@@ -258,7 +306,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       ? moneyDirection
       : event.event_type === "order"
         ? "in"
-        : event.event_type === "refill"
+        : (event.event_type === "refill" || event.event_type === "company_buy_iron")
           ? "out"
           : "none";
   const displayContextLine = event.event_type === "order"
@@ -276,14 +324,11 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
     showEffectiveAtBottom && event.effective_at ? formatDateTimeYMDHM(event.effective_at) : "";
   const topLine = createdAtLine ? `${displayContextLine} · ${createdAtLine}` : displayContextLine;
 
-  const transitionLines = formatBalanceTransitions(event?.balance_transitions, {
-    mode: "transition",
-    collapseAllSettled: true,
-    intent: transitionIntentForEvent(event),
+  const transitionPills: TransitionPill[] = formatTransitionPills(buildDisplayTransitions(event), {
     formatMoney: fmtMoney,
   });
-  const notes = transitionLines.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
-  const showNotes = transitionLines.length > 0 || notes.length > 0;
+  const notes = transitionPills.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
+  const showNotes = transitionPills.length > 0 || notes.length > 0;
   const dotColor = getEventColor(eventType);
   const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
   const heroLines = heroAction ? heroAction.split("\n") : [];
@@ -341,8 +386,8 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           <View>
             {heroLines.map((line, index) => {
               const isReplacementSystemLine = event.event_type === "order" && line.startsWith("System:");
-              const isReplacementReceivedLine = event.event_type === "order" && line.startsWith("Received:");
-              const isRefillReturnedLine = event.event_type === "refill" && line.startsWith("Returned:");
+              const isReplacementReceivedLine = event.event_type === "order" && event.order_mode === "replacement" && line.startsWith("Received:");
+              const isRefillReturnedLine = event.event_type === "refill" && !!(event.buy12 || event.buy48) && line.startsWith("Returned:");
               return (
                 <Text
                   key={`hero-${index}`}
@@ -362,7 +407,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           <View style={styles.statusRow}>
             <View style={styles.pillRow}>
               {notes.map((note, index) => {
-                if (transitionLines.length > 0) return null;
+                if (transitionPills.length > 0) return null;
                 const text = buildLegacyNoteText(note, fmtMoney);
                 if (!text) return null;
                 return (
@@ -378,15 +423,32 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
                   </View>
                 );
               })}
-              {transitionLines.map((text, index) => (
-                <View key={`transition-${index}`} style={[styles.pill, styles.pillWarning]}>
+              {transitionPills.map((pill, index) => (
+                <View
+                  key={`transition-${index}`}
+                  style={[
+                    styles.pill,
+                    pill.intent === "good"
+                      ? styles.pillGood
+                      : pill.intent === "neutral"
+                        ? styles.pillNeutral
+                        : styles.pillWarning,
+                  ]}
+                >
                   <Text
-                    style={[styles.pillText, styles.pillWarningText]}
+                    style={[
+                      styles.pillText,
+                      pill.intent === "good"
+                        ? styles.pillGoodText
+                        : pill.intent === "neutral"
+                          ? styles.pillNeutralText
+                          : styles.pillWarningText,
+                    ]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.8}
                   >
-                    {text}
+                    {pill.text}
                   </Text>
                 </View>
               ))}
@@ -555,6 +617,20 @@ const styles = StyleSheet.create({
   pillWarningText: {
     color: "#9a3412",
   },
+  pillGood: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#86efac",
+  },
+  pillGoodText: {
+    color: "#15803d",
+  },
+  pillNeutral: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+  },
+  pillNeutralText: {
+    color: "#475569",
+  },
   pillDanger: {
     backgroundColor: "#fee2e2",
     borderColor: "#fca5a5",
@@ -605,6 +681,3 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
   },
 });
-
-
-

@@ -118,10 +118,10 @@ export default function EditOrderScreen() {
     { mode: "transition", formatMoney: (value) => value.toFixed(0) }
   ).join("\n");
   const moneySteppers: FieldStepper[] = [
-    { delta: 20, label: "+20", position: "top" },
+    { delta: -20, label: "-20", position: "top-left" },
+    { delta: 20, label: "+20", position: "top-right" },
     { delta: -5, label: "-5", position: "left" },
     { delta: 5, label: "+5", position: "right" },
-    { delta: -20, label: "-20", position: "bottom" },
   ];
 
   const updateOrder = useUpdateOrder();

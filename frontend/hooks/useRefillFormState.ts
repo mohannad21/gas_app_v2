@@ -57,62 +57,72 @@ export function useRefillFormState(
   const isBuyMode = mode === "buy";
   const isReturnMode = mode === "return";
   const prevVisible = useRef(visible);
+  const lastInitKey = useRef<string | null>(null);
+
+  const initializeForm = () => {
+    if (editEntry) {
+      setDate(editEntry.date);
+      if (editEntry.effective_at) {
+        const parsed = new Date(editEntry.effective_at);
+        if (!Number.isNaN(parsed.getTime())) {
+          setTime(formatTimeHMS(parsed, { hour12: false }));
+        }
+      } else if (editEntry.time_of_day) {
+        setTime(editEntry.time_of_day === "morning" ? "09:00:00" : "18:00:00");
+      }
+      setBuy12(String(editEntry.buy12));
+      setRet12(String(editEntry.return12));
+      setBuy48(String(editEntry.buy48));
+      setRet48(String(editEntry.return48));
+      setRet12Touched(true);
+      setRet48Touched(true);
+      setPaidTouched(false);
+      setNotes(refillNotes ?? "");
+      setPrice12Dirty(false);
+      setPrice48Dirty(false);
+      setIronPrice12Input("0");
+      setIronPrice48Input("0");
+    } else {
+      setDate(getCurrentLocalDate());
+      setTime(getCurrentLocalTime({ includeSeconds: true }));
+      setBuy12("");
+      setRet12("");
+      setBuy48("");
+      setRet48("");
+      setRet12Touched(false);
+      setRet48Touched(false);
+      setPaidNow("");
+      setPaidTouched(false);
+      setNotes("");
+      setPrice12Dirty(false);
+      setPrice48Dirty(false);
+      setIronPrice12Input("0");
+      setIronPrice48Input("0");
+    }
+    if (isBuyMode) {
+      setRet12("0");
+      setRet48("0");
+      setRet12Touched(true);
+      setRet48Touched(true);
+    }
+    if (isReturnMode) {
+      setBuy12("0");
+      setBuy48("0");
+    }
+  };
 
   // Initialize form when modal opens
   useEffect(() => {
-    if (!prevVisible.current && visible) {
-      if (editEntry) {
-        setDate(editEntry.date);
-        if (editEntry.effective_at) {
-          const parsed = new Date(editEntry.effective_at);
-          if (!Number.isNaN(parsed.getTime())) {
-            setTime(formatTimeHMS(parsed, { hour12: false }));
-          }
-        } else if (editEntry.time_of_day) {
-          setTime(editEntry.time_of_day === "morning" ? "09:00:00" : "18:00:00");
-        }
-        setBuy12(String(editEntry.buy12));
-        setRet12(String(editEntry.return12));
-        setBuy48(String(editEntry.buy48));
-        setRet48(String(editEntry.return48));
-        setRet12Touched(true);
-        setRet48Touched(true);
-        setPaidTouched(false);
-        setNotes(refillNotes ?? "");
-        setPrice12Dirty(false);
-        setPrice48Dirty(false);
-        setIronPrice12Input("0");
-        setIronPrice48Input("0");
-      } else {
-        setDate(getCurrentLocalDate());
-        setTime(getCurrentLocalTime({ includeSeconds: true }));
-        setBuy12("");
-        setRet12("");
-        setBuy48("");
-        setRet48("");
-        setRet12Touched(false);
-        setRet48Touched(false);
-        setPaidNow("");
-        setPaidTouched(false);
-        setNotes("");
-        setPrice12Dirty(false);
-        setPrice48Dirty(false);
-        setIronPrice12Input("0");
-        setIronPrice48Input("0");
-      }
-      if (isBuyMode) {
-        setRet12("0");
-        setRet48("0");
-        setRet12Touched(true);
-        setRet48Touched(true);
-      }
-      if (isReturnMode) {
-        setBuy12("0");
-        setBuy48("0");
-      }
+    const initKey = `${mode}:${editEntry?.refill_id ?? "new"}`;
+    if (visible && (!prevVisible.current || lastInitKey.current !== initKey)) {
+      initializeForm();
+      lastInitKey.current = initKey;
+    }
+    if (!visible) {
+      lastInitKey.current = null;
     }
     prevVisible.current = visible;
-  }, [visible, editEntry, refillNotes, isBuyMode, isReturnMode]);
+  }, [visible, mode, editEntry, refillNotes, isBuyMode, isReturnMode]);
 
   // Handle effective_at changes
   useEffect(() => {

@@ -1,10 +1,18 @@
 ﻿import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import CustomerSystemsEditor, {
+  createEmptyCustomerSystem,
+  EditableCustomerSystem,
+  systemRowHasData,
+  systemRowIsComplete,
+} from "@/components/CustomerSystemsEditor";
+import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { useCreateCustomerAdjustment, useCustomers, useUpdateCustomer } from "@/hooks/useCustomers";
-import { useSystems } from "@/hooks/useSystems";
+import { useCreateSystem, useSystems, useUpdateSystem } from "@/hooks/useSystems";
+import { useSystemTypes } from "@/hooks/useSystemTypes";
 
 
 type BalanceState = "balanced" | "customer_owes" | "you_owe";
@@ -22,15 +30,26 @@ type CustomerFormValues = {
   balance_48kg_amount: number;
 };
 
+const CUSTOMER_MONEY_STEPPERS: FieldStepper[] = [
+  { delta: -5, label: "-5", position: "left" },
+  { delta: 5, label: "+5", position: "right" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
+];
+
+const CUSTOMER_CYLINDER_STEPPERS: FieldStepper[] = [
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
+];
+
 export default function EditCustomerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const customersQuery = useCustomers();
   const customer = useMemo(() => (customersQuery.data ?? []).find((c) => c.id === id), [customersQuery.data, id]);
   const systemsQuery = useSystems(id, { enabled: !!id });
-  const systems = systemsQuery.data
-    ? Array.from(new Map(systemsQuery.data.map((sys) => [sys.id, sys])).values())
-    : [];
+  const systemTypesQuery = useSystemTypes();
   const [activeTab, setActiveTab] = useState<"personal" | "balances" | "systems">("personal");
+  const [systems, setSystems] = useState<EditableCustomerSystem[]>([createEmptyCustomerSystem()]);
 
   const { control, handleSubmit, reset, setValue, watch } = useForm<CustomerFormValues>({
     defaultValues: {
@@ -48,15 +67,21 @@ export default function EditCustomerScreen() {
   });
   const updateCustomer = useUpdateCustomer();
   const createAdjustment = useCreateCustomerAdjustment({ showToast: false });
+  const createSystem = useCreateSystem();
+  const updateSystem = useUpdateSystem();
   const [submitting, setSubmitting] = useState(false);
   const moneyState = watch("balance_money_state");
   const cyl12State = watch("balance_12kg_state");
   const cyl48State = watch("balance_48kg_state");
+  const typeOptions = useMemo(
+    () => (systemTypesQuery.data ?? []).filter((t) => t.is_active !== false),
+    [systemTypesQuery.data]
+  );
 
   const balanceOptions: Array<{ id: BalanceState; label: string }> = [
+    { id: "customer_owes", label: "Debts on customer" },
     { id: "balanced", label: "Balanced" },
-    { id: "customer_owes", label: "Customer owes you" },
-    { id: "you_owe", label: "You owe customer" },
+    { id: "you_owe", label: "Credit for customer" },
   ];
   const toPositiveNumber = (value: string) => {
     const trimmed = value.trim();
@@ -81,6 +106,28 @@ export default function EditCustomerScreen() {
     if (state === "you_owe") return -normalized;
     return 0;
   };
+  const renderBalanceAmountField = (
+    fieldName: "balance_money_amount" | "balance_12kg_amount" | "balance_48kg_amount",
+    steppers: FieldStepper[]
+  ) => (
+    <Controller
+      control={control}
+      name={fieldName}
+      render={({ field: { onChange, value } }) => (
+        <View style={styles.balanceFieldWrap}>
+          <FieldCell
+            title="Amount"
+            value={Number(value ?? 0)}
+            onIncrement={() => onChange(Math.max(0, Number(value ?? 0) + 1))}
+            onDecrement={() => onChange(Math.max(0, Number(value ?? 0) - 1))}
+            onChangeText={(text) => onChange(toPositiveNumber(text))}
+            steppers={steppers}
+          />
+        </View>
+      )}
+    />
+  );
+  const hasIncompleteSystem = systems.some((system) => !systemRowIsComplete(system));
 
   useEffect(() => {
     if (!customer) return;
@@ -101,9 +148,36 @@ export default function EditCustomerScreen() {
     });
   }, [customer, reset]);
 
+  useEffect(() => {
+    if (tab === "personal" || tab === "balances" || tab === "systems") {
+      setActiveTab(tab);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    if (systemsQuery.isLoading) return;
+    const nextSystems =
+      systemsQuery.data && systemsQuery.data.length > 0
+        ? Array.from(new Map(systemsQuery.data.map((sys) => [sys.id, sys])).values()).map((sys) => ({
+            id: `sys_${sys.id}`,
+            persistedId: sys.id,
+            name: sys.name,
+            gas_type: sys.gas_type,
+            requires_security_check: sys.requires_security_check ?? null,
+            security_check_exists: sys.security_check_exists ?? null,
+            last_security_check_at: sys.last_security_check_at ?? "",
+          }))
+        : [createEmptyCustomerSystem()];
+    setSystems(nextSystems);
+  }, [systemsQuery.data, systemsQuery.isLoading]);
+
   const onSubmit = handleSubmit(async (values) => {
     if (!customer) return;
     try {
+      if (hasIncompleteSystem) {
+        Alert.alert("Incomplete system", "Finish the system details or leave the row blank before saving.");
+        return;
+      }
       setSubmitting(true);
       await updateCustomer.mutateAsync({
         id: customer.id,
@@ -138,6 +212,25 @@ export default function EditCustomerScreen() {
         if (cyl12Delta !== 0) payload.count_12kg = cyl12Delta;
         if (cyl48Delta !== 0) payload.count_48kg = cyl48Delta;
         await createAdjustment.mutateAsync(payload);
+      }
+      for (const sys of systems) {
+        if (!systemRowHasData(sys)) continue;
+        const payload = {
+          name: sys.name.trim(),
+          gas_type: sys.gas_type!,
+          requires_security_check: sys.requires_security_check!,
+          security_check_exists: sys.requires_security_check ? sys.security_check_exists ?? false : false,
+          last_security_check_at:
+            sys.requires_security_check && sys.security_check_exists && sys.last_security_check_at
+              ? sys.last_security_check_at
+              : undefined,
+          is_active: true,
+        };
+        if (sys.persistedId) {
+          await updateSystem.mutateAsync({ id: sys.persistedId, payload });
+        } else {
+          await createSystem.mutateAsync({ customer_id: customer.id, ...payload });
+        }
       }
       Alert.alert("Customer updated");
       router.back();
@@ -229,6 +322,9 @@ export default function EditCustomerScreen() {
                 value={value}
                 onChangeText={onChange}
                 multiline
+                blurOnSubmit
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
             )}
           />
@@ -239,7 +335,7 @@ export default function EditCustomerScreen() {
         <>
           <Text style={styles.sectionTitle}>Balances</Text>
           <Text style={styles.balanceNote}>
-            Positive = customer owes you (debt). Negative = you owe customer (credit).
+            Positive = debts on customer. Negative = credit for customer.
           </Text>
 
           <FieldLabel>Money balance</FieldLabel>
@@ -247,7 +343,7 @@ export default function EditCustomerScreen() {
             control={control}
             name="balance_money_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -257,9 +353,13 @@ export default function EditCustomerScreen() {
                         setValue("balance_money_amount", 0);
                       }
                     }}
-                    style={[styles.chip, value === option.id && styles.chipActive]}
+                    style={({ pressed }) => [
+                      styles.balanceChoiceButton,
+                      pressed && styles.chipPressed,
+                      value === option.id && styles.chipActive,
+                    ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -267,31 +367,14 @@ export default function EditCustomerScreen() {
               </View>
             )}
           />
-          {moneyState !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (money units)</FieldLabel>
-              <Controller
-                control={control}
-                name="balance_money_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {moneyState !== "balanced" ? renderBalanceAmountField("balance_money_amount", CUSTOMER_MONEY_STEPPERS) : null}
 
           <FieldLabel>12kg balance</FieldLabel>
           <Controller
             control={control}
             name="balance_12kg_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -301,9 +384,13 @@ export default function EditCustomerScreen() {
                         setValue("balance_12kg_amount", 0);
                       }
                     }}
-                    style={[styles.chip, value === option.id && styles.chipActive]}
+                    style={({ pressed }) => [
+                      styles.balanceChoiceButton,
+                      pressed && styles.chipPressed,
+                      value === option.id && styles.chipActive,
+                    ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -311,31 +398,14 @@ export default function EditCustomerScreen() {
               </View>
             )}
           />
-          {cyl12State !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (12kg)</FieldLabel>
-              <Controller
-                control={control}
-                name="balance_12kg_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {cyl12State !== "balanced" ? renderBalanceAmountField("balance_12kg_amount", CUSTOMER_CYLINDER_STEPPERS) : null}
 
           <FieldLabel>48kg balance</FieldLabel>
           <Controller
             control={control}
             name="balance_48kg_state"
             render={({ field: { value, onChange } }) => (
-              <View style={styles.chipRow}>
+              <View style={styles.balanceChoiceRow}>
                 {balanceOptions.map((option) => (
                   <Pressable
                     key={option.id}
@@ -345,9 +415,13 @@ export default function EditCustomerScreen() {
                         setValue("balance_48kg_amount", 0);
                       }
                     }}
-                    style={[styles.chip, value === option.id && styles.chipActive]}
+                    style={({ pressed }) => [
+                      styles.balanceChoiceButton,
+                      pressed && styles.chipPressed,
+                      value === option.id && styles.chipActive,
+                    ]}
                   >
-                    <Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>
+                    <Text style={[styles.balanceChoiceText, value === option.id && styles.chipTextActive]}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -355,57 +429,27 @@ export default function EditCustomerScreen() {
               </View>
             )}
           />
-          {cyl48State !== "balanced" ? (
-            <>
-              <FieldLabel>Amount (48kg)</FieldLabel>
-              <Controller
-                control={control}
-                name="balance_48kg_amount"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    value={String(value ?? 0)}
-                    onChangeText={(text) => onChange(toPositiveNumber(text))}
-                    keyboardType="numeric"
-                  />
-                )}
-              />
-            </>
-          ) : null}
+          {cyl48State !== "balanced" ? renderBalanceAmountField("balance_48kg_amount", CUSTOMER_CYLINDER_STEPPERS) : null}
         </>
       ) : null}
 
       {activeTab === "systems" ? (
         <>
           <Text style={styles.sectionTitle}>Systems</Text>
-          {systemsQuery.isLoading && <Text style={styles.meta}>Loading systems...</Text>}
-          {!systemsQuery.isLoading && systems.length === 0 ? <Text style={styles.meta}>No systems yet.</Text> : null}
-          {systems.map((sys) => (
-            <View key={sys.id} style={styles.systemCard}>
-              <Text style={styles.systemTitle}>{sys.name}</Text>
-              <Text style={styles.meta}>Gas: {sys.gas_type ?? "12kg"}</Text>
-              <Text style={styles.meta}>Active: {(sys.is_active ?? true) ? "Yes" : "No"}</Text>
-              <View style={styles.systemActions}>
-                <Pressable
-                  onPress={() => router.push(`/systems/${sys.id}`)}
-                  style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-                >
-                  <Text style={styles.secondaryText}>Edit system</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-          <Pressable
-            onPress={() => router.push(`/systems/new?customerId=${customer.id}`)}
-            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-          >
-            <Text style={styles.secondaryText}>Add system</Text>
-          </Pressable>
+          {systemsQuery.isLoading ? <Text style={styles.meta}>Loading systems...</Text> : null}
+          <CustomerSystemsEditor systems={systems} onChange={setSystems} typeOptions={typeOptions} />
         </>
       ) : null}
 
-      <Pressable onPress={onSubmit} style={({ pressed }) => [styles.primary, pressed && styles.pressed]} disabled={submitting}>
+      <Pressable
+        onPress={onSubmit}
+        style={({ pressed }) => [
+          styles.primary,
+          pressed && styles.pressed,
+          (submitting || hasIncompleteSystem) && styles.disabledButton,
+        ]}
+        disabled={submitting || hasIncompleteSystem}
+      >
         <Text style={styles.primaryText}>{submitting ? "Saving..." : "Update Customer"}</Text>
       </Pressable>
     </ScrollView>
@@ -459,11 +503,38 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  balanceChoiceRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  balanceChoiceButton: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#e8eef1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  balanceChoiceText: {
+    color: "#444",
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  balanceFieldWrap: {
+    marginTop: 6,
+  },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: "#e8eef1",
+  },
+  chipPressed: {
+    opacity: 0.8,
   },
   chipActive: {
     backgroundColor: "#0a7ea4",
@@ -498,9 +569,9 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   primary: {
-    backgroundColor: "#0a7ea4",
+    backgroundColor: "#16a34a",
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     marginTop: 16,
   },
@@ -524,25 +595,13 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.9,
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-  systemCard: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-  },
-  systemTitle: {
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  systemActions: {
-    marginTop: 8,
   },
 });
 

@@ -430,10 +430,10 @@ export default function NewOrderScreen() {
         ? CUSTOMER_WORDING.cylinderCredit(Math.abs(cylinderDebtAfterForGas), selectedGas || "12kg")
         : CUSTOMER_WORDING.cylinderSettled;
   const replacementMoneySteppers: FieldStepper[] = [
-    { delta: 20, label: "+20", position: "top" },
+    { delta: -20, label: "-20", position: "top-left" },
+    { delta: 20, label: "+20", position: "top-right" },
     { delta: -5, label: "-5", position: "left" },
     { delta: 5, label: "+5", position: "right" },
-    { delta: -20, label: "-20", position: "bottom" },
   ];
   const quantitySteppers: FieldStepper[] = [
     { delta: -1, label: "-1", position: "left" },
@@ -1504,7 +1504,7 @@ ${cylLine}
               style={styles.sectionHeaderButton}
               onPress={() => {
                 if (!selectedCustomer) return;
-                router.push(`/customers/${selectedCustomer}/edit`);
+                router.push(`/customers/${selectedCustomer}/edit?tab=systems`);
               }}
               accessibilityRole="button"
               accessibilityLabel="Update systems"

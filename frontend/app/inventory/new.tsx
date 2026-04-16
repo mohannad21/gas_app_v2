@@ -49,10 +49,10 @@ type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
 const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
 const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
 const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: 20, label: "+20", position: "top" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
   { delta: -5, label: "-5", position: "left" },
   { delta: 5, label: "+5", position: "right" },
-  { delta: -20, label: "-20", position: "bottom" },
 ];
 
 function getLocalDateString() {

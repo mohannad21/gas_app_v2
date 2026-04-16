@@ -1,14 +1,14 @@
 export const PAYMENT_DIRECTION_WORDING = {
   settled: "Settled",
   customer: {
-    owesYou: (value: string) => `Customer owes you ${value}`,
-    youOwe: (value: string) => `You owe customer ${value}`,
+    owesYou: (value: string) => `Debts on customer ${value}`,
+    youOwe: (value: string) => `Credit for customer ${value}`,
     paymentFrom: "Payment from customer",
     paymentTo: "Payment to customer",
   },
   company: {
-    youOwe: (value: string) => `You owe company ${value}`,
-    owesYou: (value: string) => `Company owes you ${value}`,
+    youOwe: (value: string) => `Debts on distributor ${value}`,
+    owesYou: (value: string) => `Credit for distributor ${value}`,
     paymentTo: "Payment to company",
     paymentFrom: "Payment from company",
   },
@@ -21,11 +21,18 @@ export const PAYMENT_DIRECTION_WORDING = {
   },
 } as const;
 
-export function getBalanceDirectionLabel(scope: "customer" | "company", amount: number) {
+export function getBalanceDirectionLabel(
+  scope: "customer" | "company",
+  amount: number,
+  component: "money" | "cyl_12" | "cyl_48" = "money"
+) {
   if (scope === "customer") {
-    return amount > 0 ? "Customer owes you" : "You owe customer";
+    return amount > 0 ? "Debts on customer" : "Credit for customer";
   }
-  return amount > 0 ? "You owe company" : "Company owes you";
+  if (component === "money") {
+    return amount > 0 ? "Debts on distributor" : "Credit for distributor";
+  }
+  return amount > 0 ? "Credit for distributor" : "Debts on distributor";
 }
 
 export const CUSTOMER_WORDING = {

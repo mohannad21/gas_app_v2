@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { usePlanBillingStatus } from "@/hooks/usePlanBilling";
 import { formatDateMedium, formatDateTimeMedium } from "@/lib/date";
@@ -28,13 +29,20 @@ function formatEventKind(kind: string) {
 }
 
 export default function PlanBillingScreen() {
+  const router = useRouter();
   const billingQuery = usePlanBillingStatus();
   const data = billingQuery.data;
   const badge = statusColors(data?.subscription_status ?? "suspended");
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Plan & Billing</Text>
+      <View style={styles.headerRow}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={styles.backButtonText}>{"<"}</Text>
+        </Pressable>
+        <Text style={styles.title}>Plan & Billing</Text>
+        <View style={styles.backButtonSpacer} />
+      </View>
 
       {billingQuery.isLoading ? (
         <View style={styles.centerCard}>
@@ -115,6 +123,27 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     gap: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: "#111",
+  },
+  backButtonSpacer: {
+    width: 36,
+    height: 36,
   },
   title: {
     fontSize: 26,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timezone
 from getpass import getpass
@@ -9,6 +10,7 @@ from uuid import uuid4
 from sqlmodel import Session, select
 
 ROOT = Path(__file__).resolve().parents[1]
+os.chdir(ROOT)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

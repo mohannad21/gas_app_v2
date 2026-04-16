@@ -8,6 +8,7 @@ from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
+from app.services.ledger import sum_customer_money, sum_customer_cylinders
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction
 
 router = APIRouter(prefix="/customer-adjustments", tags=["customer-adjustments"])
@@ -100,6 +101,19 @@ def create_adjustment(
   txns: list[CustomerTransaction] = []
 
   money = payload.amount_money or 0
+  count_12 = payload.count_12kg or 0
+  count_48 = payload.count_48kg or 0
+
+  # Compute current balances before any posting
+  current_money = sum_customer_money(session, customer_id=payload.customer_id)
+  current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
+  current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
+
+  # Compute after-snapshots (what the balance will be after all three transactions)
+  next_money = current_money + (money if money else 0)
+  next_cyl_12 = current_cyl_12 + (count_12 if count_12 else 0)
+  next_cyl_48 = current_cyl_48 + (count_48 if count_48 else 0)
+
   if money:
     txn = CustomerTransaction(
       tenant_id=tenant_id,
@@ -113,6 +127,9 @@ def create_adjustment(
       received=0,
       total=money,
       paid=0,
+      debt_cash=next_money,
+      debt_cylinders_12=next_cyl_12,
+      debt_cylinders_48=next_cyl_48,
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,
@@ -121,7 +138,6 @@ def create_adjustment(
     post_customer_transaction(session, txn)
     txns.append(txn)
 
-  count_12 = payload.count_12kg or 0
   if count_12:
     txn = CustomerTransaction(
       tenant_id=tenant_id,
@@ -135,6 +151,9 @@ def create_adjustment(
       received=max(-count_12, 0),
       total=0,
       paid=0,
+      debt_cash=next_money,
+      debt_cylinders_12=next_cyl_12,
+      debt_cylinders_48=next_cyl_48,
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,
@@ -143,7 +162,6 @@ def create_adjustment(
     post_customer_transaction(session, txn)
     txns.append(txn)
 
-  count_48 = payload.count_48kg or 0
   if count_48:
     txn = CustomerTransaction(
       tenant_id=tenant_id,
@@ -157,6 +175,9 @@ def create_adjustment(
       received=max(-count_48, 0),
       total=0,
       paid=0,
+      debt_cash=next_money,
+      debt_cylinders_12=next_cyl_12,
+      debt_cylinders_48=next_cyl_48,
       note=payload.reason,
       group_id=group_id,
       request_id=payload.request_id,

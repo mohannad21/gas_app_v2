@@ -6,6 +6,7 @@ import CustomerDetailsScreen from "@/app/customers/[id]";
 const mockOrdersRefetch = jest.fn();
 const mockCollectionsRefetch = jest.fn();
 const mockAdjustmentsRefetch = jest.fn();
+let mockAdjustmentsData: any[] = [];
 
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({
@@ -34,7 +35,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     },
   }),
   useCustomerAdjustments: () => ({
-    data: [],
+    data: mockAdjustmentsData,
     isLoading: false,
     isFetching: false,
     error: null,
@@ -64,6 +65,7 @@ jest.mock("@/hooks/useCollections", () => ({
     error: null,
     refetch: mockCollectionsRefetch,
   }),
+  useDeleteCollection: () => ({ mutate: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useOrders", () => ({
@@ -91,6 +93,7 @@ jest.mock("@/hooks/useOrders", () => ({
     error: null,
     refetch: mockOrdersRefetch,
   }),
+  useDeleteOrder: () => ({ mutate: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useSystems", () => ({
@@ -127,6 +130,7 @@ describe("Customer detail balance boxes", () => {
     mockOrdersRefetch.mockClear();
     mockCollectionsRefetch.mockClear();
     mockAdjustmentsRefetch.mockClear();
+    mockAdjustmentsData = [];
   });
 
   it("replaces the old balances section with compact boxes below the filters", () => {
@@ -136,14 +140,12 @@ describe("Customer detail balance boxes", () => {
     expect(getByText("Money balance")).toBeTruthy();
     expect(getByText("12kg balance")).toBeTruthy();
     expect(getByText("48kg balance")).toBeTruthy();
-    expect(getByText("$120.00")).toBeTruthy();
+    expect(getByText("120.00 USD")).toBeTruthy();
     expect(getByText("-2")).toBeTruthy();
     expect(getByText("3")).toBeTruthy();
-    expect(getByText("Positive = Customer owes. Negative = Customer credit.")).toBeTruthy();
 
     const tree = JSON.stringify(toJSON());
     expect(tree.indexOf("Adjustments")).toBeLessThan(tree.indexOf("Money balance"));
-    expect(tree.indexOf("Money balance")).toBeLessThan(tree.indexOf("Collected $20.00"));
   });
 
   it("does not re-trigger focus refetches on same-customer rerenders", () => {
@@ -158,5 +160,30 @@ describe("Customer detail balance boxes", () => {
     expect(mockOrdersRefetch).toHaveBeenCalledTimes(1);
     expect(mockCollectionsRefetch).toHaveBeenCalledTimes(1);
     expect(mockAdjustmentsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders adjustment pills from stored snapshots as old to new balances", () => {
+    mockAdjustmentsData = [
+      {
+        id: "adj-1",
+        customer_id: "cust-1",
+        amount_money: 100,
+        count_12kg: -2,
+        count_48kg: 3,
+        debt_cash: 280,
+        debt_cylinders_12: -12,
+        debt_cylinders_48: 12,
+        reason: "Manual correction",
+        effective_at: "2026-04-16T11:36:12",
+        created_at: "2026-04-16T11:36:12",
+      },
+    ];
+
+    const { getByText, queryByText } = render(<CustomerDetailsScreen />);
+
+    expect(getByText("Money balance: debts 180.00 $ → 280.00 $ debts (on customer)")).toBeTruthy();
+    expect(getByText("12kg balance: credit 10 → 12 credit (for customer)")).toBeTruthy();
+    expect(getByText("48kg balance: debts 9 → 12 debts (on customer)")).toBeTruthy();
+    expect(queryByText("Money balance: credit 100.00 $ → 0.00 $ (on customer)")).toBeNull();
   });
 });

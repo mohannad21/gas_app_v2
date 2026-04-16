@@ -139,10 +139,10 @@ export function RefillForm({
   walletBalance?: number;
 }) {
   const FIELD_MONEY_STEPPERS: FieldStepper[] = [
-    { delta: 20, label: "+20", position: "top" },
+    { delta: -20, label: "-20", position: "top-left" },
+    { delta: 20, label: "+20", position: "top-right" },
     { delta: -5, label: "-5", position: "left" },
     { delta: 5, label: "+5", position: "right" },
-    { delta: -20, label: "-20", position: "bottom" },
   ];
   const FIELD_QTY_STEPPERS: FieldStepper[] = [
     { delta: -1, label: "-", position: "left" },
