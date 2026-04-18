@@ -29,7 +29,7 @@ import { getCurrencyCode } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
-import { useCompanyPayments } from "@/hooks/useCompanyPayments";
+import { useCompanyPayments, useDeleteCompanyPayment } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import {
   CUSTOMER_DELETE_BLOCKED_MESSAGE,
@@ -242,6 +242,7 @@ export default function AddChooserScreen() {
   } = useCollectionEdit();
   const accessoryId = Platform.OS === "ios" ? "addAccessory" : undefined;
   const deleteRefill = useDeleteRefill();
+  const deleteCompanyPayment = useDeleteCompanyPayment();
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
   const deleteCashAdjust = useDeleteCashAdjustment();
   const deleteExpense = useDeleteExpense();
@@ -261,7 +262,7 @@ const formatDateTime = (value?: string) => {
   const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, true);
   const allCashAdjustmentsQuery = useCashAdjustments(undefined, true);
   const companyRefillsQuery = useInventoryRefills(true);
-  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities, includeDeleted: true });
+  const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities });
   const expensesQuery = useExpenses(undefined, { enabled: isExpenses, includeDeleted: true });
   const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses, includeDeleted: true });
   const deleteBankDeposit = useDeleteBankDeposit();
@@ -802,6 +803,27 @@ const formatDateTime = (value?: string) => {
     todayDate,
   });
 
+  const handleDeleteCompanyPayment = (payment: CompanyPayment) => {
+    Alert.alert("Remove company payment?", "This will delete the company payment entry.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          markDeleting(payment.id);
+          try {
+            await deleteCompanyPayment.mutateAsync(payment.id);
+          } catch (error) {
+            console.error("[add] delete company payment failed", error);
+            Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            unmarkDeleting(payment.id);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleRetryCustomerActivities = () => {
     ordersQuery.refetch();
     collectionsQuery.refetch();
@@ -1088,6 +1110,8 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      isDeleted={deletingIds.has(entry.data.id)}
+                      onDelete={() => handleDeleteCompanyPayment(entry.data)}
                     />
                   );
                 }
