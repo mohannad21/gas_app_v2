@@ -135,6 +135,7 @@ class CompanyPaymentOut(SQLModel):
   amount: int
   note: Optional[str] = None
   is_deleted: bool = False
+  live_debt_cash: Optional[int] = None
 
 
 class CompanyBuyIronCreate(SQLModel):

@@ -46,12 +46,10 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 }
 
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
+  if (refill.kind === "buy_iron") return "company_buy_iron" as const;
   const totals = getCompanyInventoryTotals(refill);
-  const totalBuys = totals.buy12 + totals.buy48;
   const totalReturns = totals.return12 + totals.return48;
-
-  if (totalBuys > 0 && totalReturns === 0) return "company_buy_iron" as const;
-  if (totalBuys === 0 && totalReturns > 0) return "company_return_empties" as const;
+  if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "company_return_empties" as const;
   return "refill" as const;
 }
 
@@ -188,9 +186,16 @@ export function collectionToEvent(
     heroText = parts.length > 0 ? `Returned ${parts.join(" | ")} empties` : "Returned empties";
   }
 
-  const moneyAfter = Number(col.debt_cash ?? 0);
-  const cyl12After = Number(col.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(col.debt_cylinders_48 ?? 0);
+  const moneyAfter =
+    col.live_debt_cash != null ? col.live_debt_cash : Number(col.debt_cash ?? 0);
+  const cyl12After =
+    col.live_debt_cylinders_12 != null
+      ? col.live_debt_cylinders_12
+      : Number(col.debt_cylinders_12 ?? 0);
+  const cyl48After =
+    col.live_debt_cylinders_48 != null
+      ? col.live_debt_cylinders_48
+      : Number(col.debt_cylinders_48 ?? 0);
   const moneyBefore =
     actionType === "payment" ? moneyAfter + amount : actionType === "payout" ? moneyAfter - amount : moneyAfter;
   const cyl12Before = actionType === "return" ? cyl12After + qty12 : cyl12After;
@@ -241,9 +246,16 @@ export function customerAdjustmentToEvent(
   const qty12 = adj.count_12kg ?? 0;
   const qty48 = adj.count_48kg ?? 0;
 
-  const moneyAfter = Number(adj.debt_cash ?? 0);
-  const cyl12After = Number(adj.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(adj.debt_cylinders_48 ?? 0);
+  const moneyAfter =
+    adj.live_debt_cash != null ? adj.live_debt_cash : Number(adj.debt_cash ?? 0);
+  const cyl12After =
+    adj.live_debt_cylinders_12 != null
+      ? adj.live_debt_cylinders_12
+      : Number(adj.debt_cylinders_12 ?? 0);
+  const cyl48After =
+    adj.live_debt_cylinders_48 != null
+      ? adj.live_debt_cylinders_48
+      : Number(adj.debt_cylinders_48 ?? 0);
   const moneyBefore = moneyAfter - money;
   const cyl12Before = cyl12After - qty12;
   const cyl48Before = cyl48After - qty48;
@@ -297,14 +309,26 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
         ? "Return empties"
         : "Refill";
 
-  const cyl12After = Number(refill.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(refill.debt_cylinders_48 ?? 0);
-  const cyl12Before = cyl12After - totals.return12 + totals.buy12;
-  const cyl48Before = cyl48After - totals.return48 + totals.buy48;
-
   const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
-  pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
-  pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+  let cyl12Before = 0;
+  let cyl12After = 0;
+  let cyl48Before = 0;
+  let cyl48After = 0;
+
+  if (eventType !== "company_buy_iron") {
+    cyl12After =
+      refill.live_debt_cylinders_12 != null
+        ? refill.live_debt_cylinders_12
+        : Number(refill.debt_cylinders_12 ?? 0);
+    cyl48After =
+      refill.live_debt_cylinders_48 != null
+        ? refill.live_debt_cylinders_48
+        : Number(refill.debt_cylinders_48 ?? 0);
+    cyl12Before = cyl12After - totals.return12 + totals.buy12;
+    cyl48Before = cyl48After - totals.return48 + totals.buy48;
+    pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
+    pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+  }
 
   return {
     ...BASE,
@@ -330,6 +354,17 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
 export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Event {
   const amount = payment.amount ?? 0;
+  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  let companyMoneyBefore: number | null = null;
+  let companyMoneyAfter: number | null = null;
+
+  if (payment.live_debt_cash != null) {
+    companyMoneyAfter = payment.live_debt_cash;
+    // A payment reduces our debt to the company (amount >= 0 means we paid them)
+    companyMoneyBefore = companyMoneyAfter + amount;
+    pushTransition(transitions, "company", "money", companyMoneyBefore, companyMoneyAfter);
+  }
+
   return {
     ...BASE,
     event_type: "company_payment",
@@ -343,7 +378,10 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Eve
     money_delta: Math.abs(amount),
     hero_text: amount !== 0 ? `Amount ${Math.abs(amount).toFixed(0)}` : null,
     note: payment.note ?? null,
+    company_before: companyMoneyBefore ?? undefined,
+    company_after: companyMoneyAfter ?? undefined,
     counterparty: { type: "company", display_name: "Company", description: null, display: null },
+    balance_transitions: transitions.length > 0 ? transitions : undefined,
   };
 }
 

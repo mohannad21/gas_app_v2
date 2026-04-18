@@ -85,6 +85,9 @@ export const CollectionEventSchema = z
     effective_at: z.string().nullish(),
     note: z.string().nullish(),
     is_deleted: z.boolean().optional(),
+    live_debt_cash: z.number().nullish(),
+    live_debt_cylinders_12: z.number().nullish(),
+    live_debt_cylinders_48: z.number().nullish(),
   })
   .passthrough();
 export type CollectionEvent = z.infer<typeof CollectionEventSchema>;

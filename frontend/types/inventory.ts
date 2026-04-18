@@ -33,6 +33,10 @@ export const InventoryRefillSummarySchema = z
     debt_cylinders_48: z.number().optional().default(0),
     is_deleted: z.boolean().optional(),
     deleted_at: z.string().nullish(),
+    kind: z.string().optional(),
+    live_debt_cash: z.number().nullish(),
+    live_debt_cylinders_12: z.number().nullish(),
+    live_debt_cylinders_48: z.number().nullish(),
   })
   .passthrough();
 export type InventoryRefillSummary = z.infer<typeof InventoryRefillSummarySchema>;

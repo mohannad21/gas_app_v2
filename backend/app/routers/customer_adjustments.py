@@ -8,7 +8,7 @@ from app.auth import get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
-from app.services.ledger import sum_customer_money, sum_customer_cylinders
+from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_money, sum_customer_cylinders
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction
 
 router = APIRouter(prefix="/customer-adjustments", tags=["customer-adjustments"])
@@ -22,7 +22,7 @@ def _stable_txn_key(txn: CustomerTransaction) -> tuple:
   return (txn.happened_at, txn.created_at, txn.id)
 
 
-def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
+def _adjustment_out(txns: list[CustomerTransaction], session: Session) -> CustomerAdjustmentOut:
   if not txns:
     raise HTTPException(status_code=404, detail="Adjustment not found")
   base = min(txns, key=_stable_txn_key)
@@ -30,6 +30,15 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
   money = sum(t.total - t.paid for t in txns if t.gas_type is None)
   count_12 = sum(t.installed - t.received for t in txns if t.gas_type == "12kg")
   count_48 = sum(t.installed - t.received for t in txns if t.gas_type == "48kg")
+  after_boundary = boundary_for_source(session, source_type="customer_txn", source_id=after.id)
+  if after_boundary is not None:
+    live = snapshot_customer_debts(session, customer_id=base.customer_id, boundary=after_boundary)
+  else:
+    live = {
+      "debt_cash": after.debt_cash,
+      "debt_cylinders_12": after.debt_cylinders_12,
+      "debt_cylinders_48": after.debt_cylinders_48,
+    }
   return CustomerAdjustmentOut(
     id=base.group_id or base.id,
     customer_id=base.customer_id,
@@ -42,6 +51,9 @@ def _adjustment_out(txns: list[CustomerTransaction]) -> CustomerAdjustmentOut:
     debt_cash=after.debt_cash,
     debt_cylinders_12=after.debt_cylinders_12,
     debt_cylinders_48=after.debt_cylinders_48,
+    live_debt_cash=live["debt_cash"],
+    live_debt_cylinders_12=live["debt_cylinders_12"],
+    live_debt_cylinders_48=live["debt_cylinders_48"],
   )
 
 
@@ -67,7 +79,7 @@ def list_adjustments(
   for row in rows:
     key = row.group_id or row.id
     groups.setdefault(key, []).append(row)
-  return [_adjustment_out(txns) for txns in groups.values()]
+  return [_adjustment_out(txns, session) for txns in groups.values()]
 
 
 @router.post("", response_model=CustomerAdjustmentOut, status_code=status.HTTP_201_CREATED)
@@ -94,7 +106,7 @@ def create_adjustment(
         .where(CustomerTransaction.tenant_id == tenant_id)
         .where(CustomerTransaction.deleted_at == None)  # noqa: E711
       ).all()
-      return _adjustment_out(txns or [existing])
+      return _adjustment_out(txns or [existing], session)
 
   happened_at = normalize_happened_at(payload.happened_at)
   group_id = _group_id()
@@ -192,5 +204,5 @@ def create_adjustment(
   session.commit()
   for txn in txns:
     session.refresh(txn)
-  return _adjustment_out(txns)
+  return _adjustment_out(txns, session)
 

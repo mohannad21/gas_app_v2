@@ -61,6 +61,9 @@ export const CustomerAdjustmentSchema = z
     debt_cash: z.number().optional().default(0),
     debt_cylinders_12: z.number().optional().default(0),
     debt_cylinders_48: z.number().optional().default(0),
+    live_debt_cash: z.number().nullish(),
+    live_debt_cylinders_12: z.number().nullish(),
+    live_debt_cylinders_48: z.number().nullish(),
   })
   .passthrough();
 export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;

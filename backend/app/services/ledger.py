@@ -153,6 +153,41 @@ def snapshot_company_debts(
   }
 
 
+def snapshot_customer_debts(
+  session: Session,
+  *,
+  customer_id: str,
+  boundary: Optional[LedgerBoundary] = None,
+) -> dict[str, int]:
+  return {
+    "debt_cash": sum_ledger(
+      session,
+      account="cust_money_debts",
+      unit="money",
+      customer_id=customer_id,
+      boundary=boundary,
+    ),
+    "debt_cylinders_12": sum_ledger(
+      session,
+      account="cust_cylinders_debts",
+      gas_type="12kg",
+      state="empty",
+      unit="count",
+      customer_id=customer_id,
+      boundary=boundary,
+    ),
+    "debt_cylinders_48": sum_ledger(
+      session,
+      account="cust_cylinders_debts",
+      gas_type="48kg",
+      state="empty",
+      unit="count",
+      customer_id=customer_id,
+      boundary=boundary,
+    ),
+  }
+
+
 def sum_customer_money(session: Session, *, customer_id: str, up_to: Optional[datetime] = None) -> int:
   return sum_ledger(
     session,

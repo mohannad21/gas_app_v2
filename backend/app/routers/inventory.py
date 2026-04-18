@@ -18,7 +18,7 @@ from app.schemas import (
   InventoryRefillUpdate,
   InventorySnapshot,
 )
-from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_inventory
+from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.services.inventory_helpers import parse_datetime, snapshot_at, time_of_day, reject_new_shells_for_refill, validate_inventory_adjustment_reason
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
@@ -403,8 +403,18 @@ def list_refills(
     CompanyTransaction.id.desc(),
   ).limit(limit)
   rows = session.exec(stmt).all()
-  return [
-    InventoryRefillSummary(
+  result = []
+  for row in rows:
+    boundary = boundary_for_source(session, source_type="company_txn", source_id=row.id)
+    if boundary is not None:
+      live = snapshot_company_debts(session, boundary=boundary)
+    else:
+      live = {
+        "debt_cash": row.debt_cash,
+        "debt_cylinders_12": row.debt_cylinders_12,
+        "debt_cylinders_48": row.debt_cylinders_48,
+      }
+    result.append(InventoryRefillSummary(
       refill_id=row.id,
       date=row.day.isoformat(),
       time_of_day=time_of_day(row.happened_at),
@@ -418,11 +428,14 @@ def list_refills(
       debt_cash=row.debt_cash,
       debt_cylinders_12=row.debt_cylinders_12,
       debt_cylinders_48=row.debt_cylinders_48,
+      live_debt_cash=live["debt_cash"],
+      live_debt_cylinders_12=live["debt_cylinders_12"],
+      live_debt_cylinders_48=live["debt_cylinders_48"],
       is_deleted=row.deleted_at is not None,
       deleted_at=None,
-    )
-    for row in rows
-  ]
+      kind=row.kind,
+    ))
+  return result
 
 
 @router.get("/refills/{refill_id}", response_model=InventoryRefillDetails)

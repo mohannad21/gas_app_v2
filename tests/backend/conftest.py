@@ -49,6 +49,35 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app_db.SQLModel.metadata.drop_all(bind=app_db.engine)
     app_db.SQLModel.metadata.create_all(bind=app_db.engine)
 
+    from app.config import DEFAULT_TENANT_ID
+    from app.models import Plan, Role, RolePermission, Tenant, TenantMembership, TenantPlanSubscription, User
+    from datetime import datetime, timezone
+    from sqlmodel import Session as _SeedSession
+
+    _TEST_PERMISSIONS = [
+        "customers:write", "collections:write", "company:write",
+        "orders:write", "inventory:write", "expenses:write",
+        "settings:write", "workers:manage", "prices:write",
+    ]
+
+    with _SeedSession(app_db.engine) as seed:
+        seed.add(Plan(id="test-plan", name="Test Plan"))
+        seed.add(Tenant(id=DEFAULT_TENANT_ID, name="Test Tenant", status="active"))
+        seed.add(User(id="test-user", tenant_id=DEFAULT_TENANT_ID))
+        seed.add(TenantPlanSubscription(
+            tenant_id=DEFAULT_TENANT_ID, plan_id="test-plan",
+            status="active", started_at=datetime.now(timezone.utc),
+        ))
+        seed.add(Role(id="test-role", name="Test Admin"))
+        seed.flush()
+        for code in _TEST_PERMISSIONS:
+            seed.add(RolePermission(role_id="test-role", permission_code=code))
+        seed.add(TenantMembership(
+            tenant_id=DEFAULT_TENANT_ID, user_id="test-user",
+            role_id="test-role", is_active=True,
+        ))
+        seed.commit()
+
     app_factory = getattr(app_main, "create_app", None)
     app = app_factory() if callable(app_factory) else app_main.app
     with TestClient(app) as test_client:
