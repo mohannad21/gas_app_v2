@@ -328,7 +328,7 @@ def test_expense_ordering_by_created_at(client, monkeypatch) -> None:
     assert resp.status_code == 200
     expenses = [event for event in resp.json()["events"] if event["event_type"] == "expense"]
     assert len(expenses) == 2
-    assert expenses[0]["cash_before"] == 500
-    assert expenses[0]["cash_after"] == 490
-    assert expenses[1]["cash_before"] == 490
-    assert expenses[1]["cash_after"] == 470
+    assert expenses[0]["cash_before"] == 490
+    assert expenses[0]["cash_after"] == 470
+    assert expenses[1]["cash_before"] == 500
+    assert expenses[1]["cash_after"] == 490

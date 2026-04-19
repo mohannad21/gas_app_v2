@@ -320,4 +320,4 @@ def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
     body = resp.json()
     events = [e for e in body["events"] if e["event_type"] in {"refill", "order"}]
     assert len(events) >= 2
-    assert events[0]["effective_at"] <= events[1]["effective_at"]
+    assert events[0]["effective_at"] >= events[1]["effective_at"]

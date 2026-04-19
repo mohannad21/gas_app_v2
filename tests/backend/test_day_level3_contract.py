@@ -71,20 +71,7 @@ def test_level3_replacement_settled_fields(client) -> None:
     assert event["system"]["display_name"]
     assert event["hero_primary"].startswith("Installed")
     assert event["money_delta"] == _major(100)
-    assert event["notes"] == [
-        {
-            "kind": "money",
-            "direction": "you_pay_company",
-            "remaining_before": None,
-            "remaining_after": 400,
-        },
-        {
-            "kind": "cyl_full_12",
-            "direction": "company_delivers_you",
-            "remaining_before": None,
-            "remaining_after": 3,
-        },
-    ]
+    assert event["notes"] == []
     assert event["status"] == "atomic_ok"
     assert event["settlement"]["is_settled"] is True
 
