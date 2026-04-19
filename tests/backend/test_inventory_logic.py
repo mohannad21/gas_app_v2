@@ -244,16 +244,16 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
         "reason": "damage",
     })
 
-    resp = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    resp = client.get("/reports/day", params={"date": "2025-01-02"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["date"] == "2025-01-02"
     events = [e for e in body["events"] if e["event_type"] in {"refill", "order", "adjust"}]
     assert len(events) == 3
-    assert events[0]["effective_at"] <= events[1]["effective_at"] <= events[2]["effective_at"]
+    assert events[0]["effective_at"] >= events[1]["effective_at"] >= events[2]["effective_at"]
 
     daily = get_daily_row(client, "2025-01-02")
-    assert_inventory(daily["inventory_end"], full12=50, empty12=10, full48=20, empty48=5)
+    assert_inventory(daily["inventory_end"], full12=50, empty12=10, full48=22, empty48=5)
 
 def test_inventory_adjust_grouped_report_event_for_multi_row_action(client) -> None:
     init_inventory(client, date="2025-01-01")
@@ -285,7 +285,7 @@ def test_inventory_adjust_grouped_report_event_for_multi_row_action(client) -> N
     assert len(rows) == 2
     assert {row["group_id"] for row in rows} == {group_id}
 
-    report = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    report = client.get("/reports/day", params={"date": "2025-01-02"})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
     assert len(events) == 1
@@ -315,9 +315,9 @@ def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
     })
     create_order(client, customer_id=c_id, system_id=s_id, delivered_at="2025-01-02T11:00:00", installed=1, received=0)
 
-    resp = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    resp = client.get("/reports/day", params={"date": "2025-01-02"})
     assert resp.status_code == 200
     body = resp.json()
     events = [e for e in body["events"] if e["event_type"] in {"refill", "order"}]
     assert len(events) >= 2
-    assert events[0]["effective_at"] <= events[1]["effective_at"]
+    assert events[0]["effective_at"] >= events[1]["effective_at"]

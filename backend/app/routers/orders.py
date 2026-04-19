@@ -203,6 +203,7 @@ def create_order(
 
     txn = CustomerTransaction(
       tenant_id=tenant_id,
+      group_id="",
       customer_id=payload.customer_id,
       system_id=payload.system_id,
       happened_at=happened_at,
@@ -220,6 +221,7 @@ def create_order(
       note=payload.note,
       request_id=payload.request_id,
     )
+    txn.group_id = txn.id
     session.add(txn)
     post_customer_transaction(session, txn)
     session.commit()
@@ -291,6 +293,7 @@ def update_order(
     reversal_day = existing.day
     reversal = CustomerTransaction(
       tenant_id=tenant_id,
+      group_id=existing.group_id or existing.id,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
@@ -345,6 +348,7 @@ def update_order(
 
     txn = CustomerTransaction(
       tenant_id=tenant_id,
+      group_id=existing.group_id or existing.id,
       customer_id=customer_id,
       system_id=system_id,
       happened_at=happened_at,
@@ -392,6 +396,7 @@ def delete_order(
     reversal_day = existing.day
     reversal = CustomerTransaction(
       tenant_id=tenant_id,
+      group_id=existing.group_id or existing.id,
       customer_id=existing.customer_id,
       system_id=existing.system_id,
       happened_at=reversal_happened_at,

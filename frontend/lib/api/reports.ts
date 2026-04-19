@@ -1,17 +1,17 @@
 import { fromMinorUnits } from "@/lib/money";
 import {
-  DailyReportV2Card,
-  DailyReportV2CardSchema,
-  DailyReportV2Day,
-  DailyReportV2DaySchema,
+  DailyReportCard,
+  DailyReportCardSchema,
+  DailyReportDay,
+  DailyReportDaySchema,
 } from "@/types/domain";
 
 import { api, parse, parseArray, mapBalanceTransitionAmounts } from "./client";
 
 // Daily reports
-export async function listDailyReportsV2(params: { from: string; to: string }): Promise<DailyReportV2Card[]> {
-  const { data } = await api.get("/reports/daily_v2", { params });
-  return parseArray(DailyReportV2CardSchema, data).map((row) => ({
+export async function listDailyReports(params: { from: string; to: string }): Promise<DailyReportCard[]> {
+  const { data } = await api.get("/reports/daily", { params });
+  return parseArray(DailyReportCardSchema, data).map((row) => ({
     ...row,
     cash_start: fromMinorUnits(row.cash_start),
     cash_end: fromMinorUnits(row.cash_end),
@@ -35,9 +35,9 @@ export async function listDailyReportsV2(params: { from: string; to: string }): 
   }));
 }
 
-export async function getDailyReportV2(date: string): Promise<DailyReportV2Day> {
-  const { data } = await api.get("/reports/day_v2", { params: { date } });
-  const parsed = parse(DailyReportV2DaySchema, data);
+export async function getDailyReport(date: string): Promise<DailyReportDay> {
+  const { data } = await api.get("/reports/day", { params: { date } });
+  const parsed = parse(DailyReportDaySchema, data);
   return {
     ...parsed,
     cash_start: fromMinorUnits(parsed.cash_start),

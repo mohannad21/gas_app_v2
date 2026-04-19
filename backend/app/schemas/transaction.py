@@ -42,31 +42,6 @@ class ExpenseCategoryOut(SQLModel):
 
 
 class ExpenseCreate(SQLModel):
-  happened_at: Optional[datetime] = None
-  kind: Literal["expense", "deposit"]
-  category_id: Optional[str] = None
-  amount: int
-  paid_from: Optional[Literal["cash", "bank"]] = None
-  note: Optional[str] = None
-  vendor: Optional[str] = None
-  request_id: Optional[str] = None
-
-
-class ExpenseOut(SQLModel):
-  id: str
-  happened_at: datetime
-  day: date
-  kind: str
-  category_id: Optional[str] = None
-  amount: int
-  paid_from: Optional[str] = None
-  note: Optional[str] = None
-  vendor: Optional[str] = None
-  is_reversed: bool
-  is_deleted: bool = False
-
-
-class ExpenseCreateLegacy(SQLModel):
   date: str
   expense_type: str
   amount: int
@@ -83,7 +58,7 @@ class ExpenseUpdate(SQLModel):
   happened_at: Optional[datetime] = None
 
 
-class ExpenseOutLegacy(SQLModel):
+class ExpenseOut(SQLModel):
   id: str
   date: str
   happened_at: Optional[datetime] = None
@@ -135,6 +110,7 @@ class CompanyPaymentOut(SQLModel):
   amount: int
   note: Optional[str] = None
   is_deleted: bool = False
+  live_debt_cash: Optional[int] = None
 
 
 class CompanyBuyIronCreate(SQLModel):

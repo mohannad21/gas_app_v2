@@ -29,7 +29,7 @@ class DailyAuditSummary(SQLModel):
   inv_delta_48: int
 
 
-class DailyReportV2CashMath(SQLModel):
+class DailyReportCashMath(SQLModel):
   sales: int = 0
   late: int = 0
   expenses: int = 0
@@ -38,27 +38,27 @@ class DailyReportV2CashMath(SQLModel):
   other: int = 0
 
 
-class DailyReportV2MathCustomers(SQLModel):
+class DailyReportMathCustomers(SQLModel):
   sales_cash: int = 0
   paid_earlier: int = 0
   extra_paid: int = 0
 
 
-class DailyReportV2MathCompany(SQLModel):
+class DailyReportMathCompany(SQLModel):
   paid_company: int = 0
   extra_company: int = 0
 
 
-class DailyReportV2MathResult(SQLModel):
+class DailyReportMathResult(SQLModel):
   expenses: int = 0
   adjustments: int = 0
   pocket_delta: int = 0
 
 
-class DailyReportV2Math(SQLModel):
-  customers: DailyReportV2MathCustomers = Field(default_factory=DailyReportV2MathCustomers)
-  company: DailyReportV2MathCompany = Field(default_factory=DailyReportV2MathCompany)
-  result: DailyReportV2MathResult = Field(default_factory=DailyReportV2MathResult)
+class DailyReportMath(SQLModel):
+  customers: DailyReportMathCustomers = Field(default_factory=DailyReportMathCustomers)
+  company: DailyReportMathCompany = Field(default_factory=DailyReportMathCompany)
+  result: DailyReportMathResult = Field(default_factory=DailyReportMathResult)
 
 
 class BalanceTransition(SQLModel):
@@ -71,7 +71,7 @@ class BalanceTransition(SQLModel):
   intent: Optional[str] = None
 
 
-class DailyReportV2Card(SQLModel):
+class DailyReportCard(SQLModel):
   date: str
   cash_start: int
   cash_end: int
@@ -79,8 +79,8 @@ class DailyReportV2Card(SQLModel):
   sold_48kg: int = 0
   net_today: int = 0
   has_refill: bool = False
-  cash_math: DailyReportV2CashMath = Field(default_factory=DailyReportV2CashMath)
-  math: Optional[DailyReportV2Math] = None
+  cash_math: DailyReportCashMath = Field(default_factory=DailyReportCashMath)
+  math: Optional[DailyReportMath] = None
   company_start: int = 0
   company_end: int = 0
   company_12kg_start: int = 0
@@ -184,7 +184,7 @@ class ActivityNote(SQLModel):
   remaining_before: Optional[int] = None
 
 
-class DailyReportV2Event(SQLModel):
+class DailyReportEvent(SQLModel):
   event_type: str
   id: Optional[str] = None
   effective_at: datetime
@@ -264,7 +264,7 @@ class DailyReportV2Event(SQLModel):
   balance_transitions: list[BalanceTransition] = Field(default_factory=list)
 
 
-class DailyReportV2Day(SQLModel):
+class DailyReportDay(SQLModel):
   date: str
   cash_start: int
   cash_end: int
@@ -289,4 +289,4 @@ class DailyReportV2Day(SQLModel):
   inventory_start: ReportInventoryTotals
   inventory_end: ReportInventoryTotals
   audit_summary: DailyAuditSummary
-  events: list[DailyReportV2Event]
+  events: list[DailyReportEvent]

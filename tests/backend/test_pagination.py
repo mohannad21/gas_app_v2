@@ -155,7 +155,7 @@ def test_cash_adjustments_default_limit(client) -> None:
     assert len(resp.json()) <= 50
 
 
-def test_daily_v2_default_window(client) -> None:
+def test_daily_default_window(client) -> None:
     today = datetime.now(timezone.utc).date()
     old_day = today - timedelta(days=30)
     recent_day = today - timedelta(days=3)
@@ -177,7 +177,7 @@ def test_daily_v2_default_window(client) -> None:
         delivered_at=f"{recent_day.isoformat()}T10:00:00",
     )
 
-    resp = client.get("/reports/daily_v2")
+    resp = client.get("/reports/daily")
     assert resp.status_code == 200
     dates = {row["date"] for row in resp.json()}
     assert old_day.isoformat() not in dates
@@ -255,7 +255,7 @@ def test_expense_patch_ledger_consistency(client) -> None:
     patch_resp = client.patch(f"/expenses/{expense_id}", json={"amount": 200})
     assert patch_resp.status_code == 200
 
-    report_resp = client.get("/reports/day_v2", params={"date": "2025-06-01"})
+    report_resp = client.get("/reports/day", params={"date": "2025-06-01"})
     assert report_resp.status_code == 200
     expenses = [event for event in report_resp.json()["events"] if event["event_type"] == "expense"]
     assert len(expenses) == 1

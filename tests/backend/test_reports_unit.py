@@ -21,7 +21,7 @@ def test_cash_replay_ordering_tiebreak(client) -> None:
     resp = client.post("/cash/adjust", json={"happened_at": second_at, "delta_cash": 20, "reason": "second"})
     assert resp.status_code == 201
 
-    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
     assert [event["reason"] for event in events] == ["second", "first"]
@@ -121,7 +121,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-a",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_a_id[0] if isinstance(entry_a_id, tuple) else entry_a_id,
+                "old_id": entry_a_id[0],
             },
         )
         session.execute(
@@ -141,12 +141,12 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-b",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_b_id[0] if isinstance(entry_b_id, tuple) else entry_b_id,
+                "old_id": entry_b_id[0],
             },
         )
         session.commit()
 
-    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
     assert [event["reason"] for event in events] == ["adjust-a", "adjust-b"]
@@ -175,7 +175,7 @@ def test_refill_grouping_by_source_id(client) -> None:
     )
     assert resp.status_code == 200
 
-    report = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    report = client.get("/reports/day", params={"date": day1.isoformat()})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "refill"]
     assert len(events) == 1
@@ -208,7 +208,7 @@ def test_daily_audit_summary_cash_in_net_zero(client) -> None:
         paid_amount=1000,
     )
 
-    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     audit = resp.json()["audit_summary"]
     assert audit["cash_in"] == 1000
@@ -233,7 +233,7 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert resp.status_code == 201
     adjustment = resp.json()
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "customer_adjust"]
     assert len(events) == 1
@@ -258,7 +258,7 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert transitions["cyl_12"]["intent"] == "customer_adjust"
 
 
-def test_day_v2_orders_feed_by_effective_then_created_then_tiebreaker(client) -> None:
+def test_day_orders_feed_by_effective_then_created_then_tiebreaker(client) -> None:
     day = date(2025, 9, 2)
     customer_id = create_customer(client, name="Lina")
 
@@ -283,7 +283,7 @@ def test_day_v2_orders_feed_by_effective_then_created_then_tiebreaker(client) ->
     )
     assert adjust_resp.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
     company_payment = next(index for index, event in enumerate(events) if event["event_type"] == "company_payment")
@@ -295,7 +295,7 @@ def test_day_v2_orders_feed_by_effective_then_created_then_tiebreaker(client) ->
     assert events[customer_adjust]["time_display"] == "09:46"
 
 
-def test_daily_v2_customer_adjust_problem_transitions_are_marked_neutral(client) -> None:
+def test_daily_customer_adjust_problem_transitions_are_marked_neutral(client) -> None:
     day = date(2025, 9, 3)
     customer_id = create_customer(client, name="Lina")
 
@@ -310,14 +310,14 @@ def test_daily_v2_customer_adjust_problem_transitions_are_marked_neutral(client)
     )
     assert resp.status_code == 201
 
-    report = client.get("/reports/daily_v2", params={"from": day.isoformat(), "to": day.isoformat()})
+    report = client.get("/reports/daily", params={"from": day.isoformat(), "to": day.isoformat()})
     assert report.status_code == 200
     [row] = report.json()
     cyl12 = next(item for item in row["problem_transitions"] if item["component"] == "cyl_12")
     assert cyl12["intent"] == "customer_adjust"
 
 
-def test_day_v2_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> None:
+def test_day_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> None:
     day = date(2025, 9, 4)
     happened_at = f"{day.isoformat()}T10:00:00"
     customer_id = create_customer(client, name="Lina")
@@ -336,7 +336,7 @@ def test_day_v2_uses_created_at_as_tiebreak_when_effective_time_matches(client) 
     )
     assert second.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
     customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "customer_adjust")
@@ -345,7 +345,7 @@ def test_day_v2_uses_created_at_as_tiebreak_when_effective_time_matches(client) 
     assert customer_adjust < cash_adjust
 
 
-def test_day_v2_formats_report_times_in_business_timezone_for_entry_flows(client) -> None:
+def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -> None:
     day = date(2025, 1, 10)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=8, empty48=1)
 
@@ -393,7 +393,7 @@ def test_day_v2_formats_report_times_in_business_timezone_for_entry_flows(client
     )
     assert resp.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
 
@@ -413,7 +413,7 @@ def test_day_v2_formats_report_times_in_business_timezone_for_entry_flows(client
     assert "18:18" in refill["context_line"]
 
 
-def test_day_v2_payment_wording_is_direction_aware(client) -> None:
+def test_day_payment_wording_is_direction_aware(client) -> None:
     day = date(2025, 1, 11)
     customer_id = create_customer(client, name="Direction Customer")
 
@@ -451,7 +451,7 @@ def test_day_v2_payment_wording_is_direction_aware(client) -> None:
     )
     assert resp.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
 

@@ -13,10 +13,10 @@ def _cash_init(client, *, day: str, amount: float) -> None:
     assert resp.status_code == 201
 
 
-def test_daily_v2_day_rows_do_not_embed_global_customer_totals(client) -> None:
+def test_daily_day_rows_do_not_embed_global_customer_totals(client) -> None:
     day = date(2025, 1, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day.isoformat(), amount=0)
+    _cash_init(client, day=day.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Osama")
     adj_resp = client.post(
@@ -41,7 +41,7 @@ def test_daily_v2_day_rows_do_not_embed_global_customer_totals(client) -> None:
     )
     assert pay_resp.status_code == 201
 
-    report_resp = client.get("/reports/daily_v2", params={"from": day.isoformat(), "to": day.isoformat()})
+    report_resp = client.get("/reports/daily", params={"from": day.isoformat(), "to": day.isoformat()})
     assert report_resp.status_code == 200
     row = report_resp.json()[0]
     assert "customer_money_receivable" not in row
@@ -51,18 +51,18 @@ def test_daily_v2_day_rows_do_not_embed_global_customer_totals(client) -> None:
     assert "customer_48kg_receivable" not in row
     assert "customer_48kg_payable" not in row
 
-    day_resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    day_resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert day_resp.status_code == 200
     day_row = day_resp.json()
     assert "customer_money_receivable" not in day_row
     assert "customer_money_payable" not in day_row
 
 
-def test_daily_v2_low_activity_day_only_shows_day_local_customer_transition(client) -> None:
+def test_daily_low_activity_day_only_shows_day_local_customer_transition(client) -> None:
     day1 = date(2025, 2, 1)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day1.isoformat(), amount=0)
+    _cash_init(client, day=day1.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Customer A")
 
@@ -87,7 +87,7 @@ def test_daily_v2_low_activity_day_only_shows_day_local_customer_transition(clie
     )
     assert resp_b.status_code == 201
 
-    report_resp = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()})
+    report_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     assert report_resp.status_code == 200
     rows = {row["date"]: row for row in report_resp.json()}
     row = rows[day2.isoformat()]

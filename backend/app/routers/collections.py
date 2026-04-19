@@ -9,7 +9,7 @@ from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
-from app.services.ledger import sum_customer_cylinders, sum_customer_money
+from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_cylinders, sum_customer_money
 from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
 from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
@@ -162,7 +162,7 @@ def _build_collection_transactions(
   return txns
 
 
-def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
+def _as_event(txns: list[CustomerTransaction], session: Session) -> CollectionEvent:
   if not txns:
     raise HTTPException(status_code=404, detail="Collection not found")
   base = min(txns, key=_stable_txn_key)
@@ -174,6 +174,15 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
   action_type = "payment" if amount_payment else "payout" if amount_payout else "return"
   amount = amount_payment or amount_payout
   group_id = base.group_id or base.id
+  after_boundary = boundary_for_source(session, source_type="customer_txn", source_id=after.id)
+  if after_boundary is not None:
+    live = snapshot_customer_debts(session, customer_id=base.customer_id, boundary=after_boundary)
+  else:
+    live = {
+      "debt_cash": after.debt_cash,
+      "debt_cylinders_12": after.debt_cylinders_12,
+      "debt_cylinders_48": after.debt_cylinders_48,
+    }
   return CollectionEvent(
     id=group_id,
     customer_id=base.customer_id,
@@ -184,6 +193,9 @@ def _as_event(txns: list[CustomerTransaction]) -> CollectionEvent:
     debt_cash=after.debt_cash,
     debt_cylinders_12=after.debt_cylinders_12,
     debt_cylinders_48=after.debt_cylinders_48,
+    live_debt_cash=live["debt_cash"],
+    live_debt_cylinders_12=live["debt_cylinders_12"],
+    live_debt_cylinders_48=live["debt_cylinders_48"],
     system_id=base.system_id,
     created_at=base.created_at,
     effective_at=base.happened_at,
@@ -226,7 +238,7 @@ def list_collections(
   for row in rows:
     key = row.group_id or row.id
     groups.setdefault(key, []).append(row)
-  return [_as_event(txns) for txns in groups.values()]
+  return [_as_event(txns, session) for txns in groups.values()]
 
 
 @router.post(
@@ -273,7 +285,7 @@ def create_collection(
           .where(CustomerTransaction.tenant_id == tenant_id)
           .where(CustomerTransaction.deleted_at == None)  # noqa: E711
         ).all()
-        return _as_event(txns or [existing])
+        return _as_event(txns or [existing], session)
 
     group_id = _new_group_id()
     txns = _build_collection_transactions(
@@ -296,7 +308,7 @@ def create_collection(
     raise
   for txn in txns:
     session.refresh(txn)
-  return _as_event(txns)
+  return _as_event(txns, session)
 
 
 @router.put(
@@ -412,7 +424,7 @@ def update_collection(
     raise
   for txn in new_txns:
     session.refresh(txn)
-  return _as_event(new_txns)
+  return _as_event(new_txns, session)
 
 
 @router.delete(

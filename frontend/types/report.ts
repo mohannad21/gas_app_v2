@@ -25,7 +25,7 @@ export const DailyAuditSummarySchema = z.object({
 });
 export type DailyAuditSummary = z.infer<typeof DailyAuditSummarySchema>;
 
-export const DailyReportV2CashMathSchema = z.object({
+export const DailyReportCashMathSchema = z.object({
   sales: z.number(),
   late: z.number(),
   expenses: z.number(),
@@ -33,34 +33,34 @@ export const DailyReportV2CashMathSchema = z.object({
   adjust: z.number(),
   other: z.number().optional(),
 });
-export type DailyReportV2CashMath = z.infer<typeof DailyReportV2CashMathSchema>;
+export type DailyReportCashMath = z.infer<typeof DailyReportCashMathSchema>;
 
-export const DailyReportV2MathCustomersSchema = z.object({
+export const DailyReportMathCustomersSchema = z.object({
   sales_cash: z.number(),
   paid_earlier: z.number(),
   extra_paid: z.number(),
 });
-export type DailyReportV2MathCustomers = z.infer<typeof DailyReportV2MathCustomersSchema>;
+export type DailyReportMathCustomers = z.infer<typeof DailyReportMathCustomersSchema>;
 
-export const DailyReportV2MathCompanySchema = z.object({
+export const DailyReportMathCompanySchema = z.object({
   paid_company: z.number(),
   extra_company: z.number(),
 });
-export type DailyReportV2MathCompany = z.infer<typeof DailyReportV2MathCompanySchema>;
+export type DailyReportMathCompany = z.infer<typeof DailyReportMathCompanySchema>;
 
-export const DailyReportV2MathResultSchema = z.object({
+export const DailyReportMathResultSchema = z.object({
   expenses: z.number(),
   adjustments: z.number(),
   pocket_delta: z.number(),
 });
-export type DailyReportV2MathResult = z.infer<typeof DailyReportV2MathResultSchema>;
+export type DailyReportMathResult = z.infer<typeof DailyReportMathResultSchema>;
 
-export const DailyReportV2MathSchema = z.object({
-  customers: DailyReportV2MathCustomersSchema,
-  company: DailyReportV2MathCompanySchema,
-  result: DailyReportV2MathResultSchema,
+export const DailyReportMathSchema = z.object({
+  customers: DailyReportMathCustomersSchema,
+  company: DailyReportMathCompanySchema,
+  result: DailyReportMathResultSchema,
 });
-export type DailyReportV2Math = z.infer<typeof DailyReportV2MathSchema>;
+export type DailyReportMath = z.infer<typeof DailyReportMathSchema>;
 
 export const BalanceTransitionSchema = z.object({
   scope: z.enum(["customer", "company"]),
@@ -73,7 +73,7 @@ export const BalanceTransitionSchema = z.object({
 });
 export type BalanceTransition = z.infer<typeof BalanceTransitionSchema>;
 
-export const DailyReportV2CardSchema = z.object({
+export const DailyReportCardSchema = z.object({
   date: z.string(),
   cash_start: z.number(),
   cash_end: z.number(),
@@ -81,8 +81,8 @@ export const DailyReportV2CardSchema = z.object({
   sold_48kg: z.number(),
   net_today: z.number(),
   has_refill: z.boolean().optional().default(false),
-  cash_math: DailyReportV2CashMathSchema,
-  math: DailyReportV2MathSchema.nullish(),
+  cash_math: DailyReportCashMathSchema,
+  math: DailyReportMathSchema.nullish(),
   company_start: z.number().optional(),
   company_end: z.number().optional(),
   company_12kg_start: z.number().optional(),
@@ -119,7 +119,7 @@ export const DailyReportV2CardSchema = z.object({
     .default([]),
   recalculated: z.boolean().optional(),
 });
-export type DailyReportV2Card = z.infer<typeof DailyReportV2CardSchema>;
+export type DailyReportCard = z.infer<typeof DailyReportCardSchema>;
 
 export const Level3CounterpartySchema = z.object({
   type: z.enum(["customer", "company", "none"]),
@@ -207,7 +207,7 @@ export const ActivityNoteSchema = z.object({
 });
 export type ActivityNote = z.infer<typeof ActivityNoteSchema>;
 
-export const DailyReportV2EventSchema = z.object({
+export const DailyReportEventSchema = z.object({
   event_type: z.string(),
   id: z.string().nullish(),
   effective_at: z.string(),
@@ -286,9 +286,9 @@ export const DailyReportV2EventSchema = z.object({
   inventory_after: ReportInventoryStateSchema.nullish(),
   balance_transitions: z.array(BalanceTransitionSchema).nullish(),
 });
-export type DailyReportV2Event = z.infer<typeof DailyReportV2EventSchema>;
+export type DailyReportEvent = z.infer<typeof DailyReportEventSchema>;
 
-export const DailyReportV2DaySchema = z.object({
+export const DailyReportDaySchema = z.object({
   date: z.string(),
   cash_start: z.number(),
   cash_end: z.number(),
@@ -314,9 +314,9 @@ export const DailyReportV2DaySchema = z.object({
   inventory_end: ReportInventoryTotalsSchema,
   recalculated: z.boolean().optional(),
   audit_summary: DailyAuditSummarySchema,
-  events: z.array(DailyReportV2EventSchema),
+  events: z.array(DailyReportEventSchema),
 });
-export type DailyReportV2Day = z.infer<typeof DailyReportV2DaySchema>;
+export type DailyReportDay = z.infer<typeof DailyReportDaySchema>;
 
 export const WhatsappLinkSchema = z.object({
   url: z.string(),

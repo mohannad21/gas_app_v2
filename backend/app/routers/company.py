@@ -18,8 +18,8 @@ from app.schemas import (
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
-from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_company_transaction
+from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_company_transaction, reverse_source
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/company", tags=["company"])
@@ -202,16 +202,75 @@ def list_company_payments(
     CompanyTransaction.id.desc(),
   ).limit(limit)
   rows = session.exec(stmt).all()
-  return [
-    CompanyPaymentOut(
+  result = []
+  for row in rows:
+    boundary = boundary_for_source(session, source_type="company_txn", source_id=row.id)
+    live_debt_cash = sum_company_money(session, boundary=boundary) if boundary is not None else None
+    result.append(CompanyPaymentOut(
       id=row.id,
       happened_at=row.happened_at,
       amount=row.paid,
       note=row.note,
       is_deleted=row.deleted_at is not None,
+      live_debt_cash=live_debt_cash,
+    ))
+  return result
+
+
+@router.delete(
+  "/payments/{payment_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("company:write"))],
+)
+def delete_company_payment(
+  payment_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
+  try:
+    existing = session.get(CompanyTransaction, payment_id)
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "payment":
+      raise HTTPException(status_code=404, detail="Company payment not found")
+    acquire_company_lock(session)
+    reversal_happened_at = existing.happened_at
+    reversal_day = existing.day
+    reversal = CompanyTransaction(
+      tenant_id=tenant_id,
+      happened_at=reversal_happened_at,
+      day=reversal_day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
     )
-    for row in rows
-  ]
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.deleted_at = datetime.now(timezone.utc)
+    session.add(existing)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
 
 
 @router.post(

@@ -4,7 +4,7 @@ import {
   CollectionEvent,
   CompanyPayment,
   CustomerAdjustment,
-  DailyReportV2Event,
+  DailyReportEvent,
   Expense,
   InventoryAdjustment,
   InventoryRefillSummary,
@@ -12,7 +12,7 @@ import {
 } from "@/types/domain";
 import { makeBalanceTransition } from "@/lib/balanceTransitions";
 
-const BASE: Pick<DailyReportV2Event, "cash_before" | "cash_after"> = {
+const BASE: Pick<DailyReportEvent, "cash_before" | "cash_after"> = {
   cash_before: 0,
   cash_after: 0,
 };
@@ -26,7 +26,7 @@ function getCylinderSnapshot(record: Record<string, number> | null | undefined, 
 }
 
 function pushTransition(
-  transitions: NonNullable<DailyReportV2Event["balance_transitions"]>,
+  transitions: NonNullable<DailyReportEvent["balance_transitions"]>,
   scope: "customer" | "company",
   component: "money" | "cyl_12" | "cyl_48",
   before: number,
@@ -46,12 +46,10 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 }
 
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
+  if (refill.kind === "buy_iron") return "company_buy_iron" as const;
   const totals = getCompanyInventoryTotals(refill);
-  const totalBuys = totals.buy12 + totals.buy48;
   const totalReturns = totals.return12 + totals.return48;
-
-  if (totalBuys > 0 && totalReturns === 0) return "company_buy_iron" as const;
-  if (totalBuys === 0 && totalReturns > 0) return "company_return_empties" as const;
+  if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "company_return_empties" as const;
   return "refill" as const;
 }
 
@@ -65,7 +63,7 @@ export function getCompanyInventoryEditTab(refill: InventoryRefillSummary) {
 export function orderToEvent(
   order: Order,
   opts?: { customerName?: string; customerDescription?: string | null; systemName?: string }
-): DailyReportV2Event {
+): DailyReportEvent {
   const mode = order.order_mode ?? "replacement";
   const modeLabel =
     mode === "sell_iron" ? "Sell full" : mode === "buy_iron" ? "Buy empty" : "Replacement";
@@ -105,7 +103,7 @@ export function orderToEvent(
     getCylinderSnapshot(order.cyl_balance_before ?? null, "48kg") ??
     (gas === "48kg" ? cyl48After - cylinderDelta : cyl48After);
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -151,7 +149,7 @@ export function orderToEvent(
 export function collectionToEvent(
   col: CollectionEvent,
   opts?: { customerName?: string; customerDescription?: string | null }
-): DailyReportV2Event {
+): DailyReportEvent {
   const actionType = col.action_type;
   const amount = col.amount_money ?? 0;
   const qty12 = col.qty_12kg ?? 0;
@@ -188,15 +186,22 @@ export function collectionToEvent(
     heroText = parts.length > 0 ? `Returned ${parts.join(" | ")} empties` : "Returned empties";
   }
 
-  const moneyAfter = Number(col.debt_cash ?? 0);
-  const cyl12After = Number(col.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(col.debt_cylinders_48 ?? 0);
+  const moneyAfter =
+    col.live_debt_cash != null ? col.live_debt_cash : Number(col.debt_cash ?? 0);
+  const cyl12After =
+    col.live_debt_cylinders_12 != null
+      ? col.live_debt_cylinders_12
+      : Number(col.debt_cylinders_12 ?? 0);
+  const cyl48After =
+    col.live_debt_cylinders_48 != null
+      ? col.live_debt_cylinders_48
+      : Number(col.debt_cylinders_48 ?? 0);
   const moneyBefore =
     actionType === "payment" ? moneyAfter + amount : actionType === "payout" ? moneyAfter - amount : moneyAfter;
   const cyl12Before = actionType === "return" ? cyl12After + qty12 : cyl12After;
   const cyl48Before = actionType === "return" ? cyl48After + qty48 : cyl48After;
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -236,19 +241,26 @@ export function collectionToEvent(
 export function customerAdjustmentToEvent(
   adj: CustomerAdjustment,
   opts?: { customerName?: string; customerDescription?: string | null }
-): DailyReportV2Event {
+): DailyReportEvent {
   const money = adj.amount_money ?? 0;
   const qty12 = adj.count_12kg ?? 0;
   const qty48 = adj.count_48kg ?? 0;
 
-  const moneyAfter = Number(adj.debt_cash ?? 0);
-  const cyl12After = Number(adj.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(adj.debt_cylinders_48 ?? 0);
+  const moneyAfter =
+    adj.live_debt_cash != null ? adj.live_debt_cash : Number(adj.debt_cash ?? 0);
+  const cyl12After =
+    adj.live_debt_cylinders_12 != null
+      ? adj.live_debt_cylinders_12
+      : Number(adj.debt_cylinders_12 ?? 0);
+  const cyl48After =
+    adj.live_debt_cylinders_48 != null
+      ? adj.live_debt_cylinders_48
+      : Number(adj.debt_cylinders_48 ?? 0);
   const moneyBefore = moneyAfter - money;
   const cyl12Before = cyl12After - qty12;
   const cyl48Before = cyl48After - qty48;
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -281,7 +293,7 @@ export function customerAdjustmentToEvent(
   };
 }
 
-export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportV2Event {
+export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportEvent {
   const totals = getCompanyInventoryTotals(refill);
   const eventType = getCompanyInventoryEventType(refill);
   const parts: string[] = [];
@@ -297,14 +309,26 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
         ? "Return empties"
         : "Refill";
 
-  const cyl12After = Number(refill.debt_cylinders_12 ?? 0);
-  const cyl48After = Number(refill.debt_cylinders_48 ?? 0);
-  const cyl12Before = cyl12After - totals.return12 + totals.buy12;
-  const cyl48Before = cyl48After - totals.return48 + totals.buy48;
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
+  let cyl12Before = 0;
+  let cyl12After = 0;
+  let cyl48Before = 0;
+  let cyl48After = 0;
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
-  pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
-  pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+  if (eventType !== "company_buy_iron") {
+    cyl12After =
+      refill.live_debt_cylinders_12 != null
+        ? refill.live_debt_cylinders_12
+        : Number(refill.debt_cylinders_12 ?? 0);
+    cyl48After =
+      refill.live_debt_cylinders_48 != null
+        ? refill.live_debt_cylinders_48
+        : Number(refill.debt_cylinders_48 ?? 0);
+    cyl12Before = cyl12After - totals.return12 + totals.buy12;
+    cyl48Before = cyl48After - totals.return48 + totals.buy48;
+    pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
+    pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+  }
 
   return {
     ...BASE,
@@ -328,8 +352,19 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
   };
 }
 
-export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Event {
+export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent {
   const amount = payment.amount ?? 0;
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
+  let companyMoneyBefore: number | null = null;
+  let companyMoneyAfter: number | null = null;
+
+  if (payment.live_debt_cash != null) {
+    companyMoneyAfter = payment.live_debt_cash;
+    // A payment reduces our debt to the company (amount >= 0 means we paid them)
+    companyMoneyBefore = companyMoneyAfter + amount;
+    pushTransition(transitions, "company", "money", companyMoneyBefore, companyMoneyAfter);
+  }
+
   return {
     ...BASE,
     event_type: "company_payment",
@@ -343,11 +378,14 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Eve
     money_delta: Math.abs(amount),
     hero_text: amount !== 0 ? `Amount ${Math.abs(amount).toFixed(0)}` : null,
     note: payment.note ?? null,
+    company_before: companyMoneyBefore ?? undefined,
+    company_after: companyMoneyAfter ?? undefined,
     counterparty: { type: "company", display_name: "Company", description: null, display: null },
+    balance_transitions: transitions.length > 0 ? transitions : undefined,
   };
 }
 
-export function expenseToEvent(expense: Expense): DailyReportV2Event {
+export function expenseToEvent(expense: Expense): DailyReportEvent {
   return {
     ...BASE,
     event_type: "expense",
@@ -366,7 +404,7 @@ export function expenseToEvent(expense: Expense): DailyReportV2Event {
   };
 }
 
-export function bankDepositToEvent(deposit: BankDeposit): DailyReportV2Event {
+export function bankDepositToEvent(deposit: BankDeposit): DailyReportEvent {
   const isOut = deposit.direction === "wallet_to_bank";
   const label = isOut ? "Wallet to Bank" : "Bank to Wallet";
   return {
@@ -386,7 +424,7 @@ export function bankDepositToEvent(deposit: BankDeposit): DailyReportV2Event {
   };
 }
 
-export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyReportV2Event {
+export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyReportEvent {
   const gas = adj.gas_type ?? "12kg";
   const heroText = `${gas}: full ${adj.delta_full > 0 ? "+" : ""}${adj.delta_full} empty ${adj.delta_empty > 0 ? "+" : ""}${adj.delta_empty}`;
   return {
@@ -404,7 +442,7 @@ export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyRepor
   };
 }
 
-export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportV2Event {
+export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
   const delta = adj.delta_cash ?? 0;
   return {
     ...BASE,

@@ -41,7 +41,7 @@ def test_order_update_preserves_original_day(client) -> None:
     assert update_resp.status_code == 200
     new_order_id = update_resp.json()["id"]
 
-    day1_resp = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    day1_resp = client.get("/reports/day", params={"date": day1.isoformat()})
     assert day1_resp.status_code == 200
     day1_events = day1_resp.json()["events"]
     order_event = next(event for event in day1_events if event["event_type"] == "order")
@@ -50,6 +50,6 @@ def test_order_update_preserves_original_day(client) -> None:
     assert order_event["cash_after"] == 1050
     assert order_event["inventory_after"]["full12"] == 8
 
-    day2_resp = client.get("/reports/day_v2", params={"date": day2.isoformat()})
+    day2_resp = client.get("/reports/day", params={"date": day2.isoformat()})
     assert day2_resp.status_code == 200
     assert not any(event["event_type"] == "order" for event in day2_resp.json()["events"])

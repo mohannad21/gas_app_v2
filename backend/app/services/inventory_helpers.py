@@ -6,6 +6,7 @@ Date/time parsing, snapshot computation, and validation helpers for inventory ro
 from datetime import datetime
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlmodel import Session
 
 from app.schemas import InventorySnapshot

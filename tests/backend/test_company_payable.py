@@ -30,7 +30,7 @@ def test_company_payable_partial_refill(client) -> None:
     )
     assert resp.status_code == 200
 
-    report = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day1.isoformat()})
+    report = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
     row = report.json()[0]
     assert row["company_end"] == 50
@@ -72,7 +72,7 @@ def test_company_payment_affects_cash_and_company(client) -> None:
     )
     assert resp.status_code == 201
 
-    day = client.get("/reports/day_v2", params={"date": day1.isoformat()}).json()
+    day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
     payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
     assert payment["cash_before"] == 1000
     assert payment["cash_after"] == 950
@@ -130,13 +130,13 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     )
     assert resp.status_code == 201
 
-    before = client.get("/reports/day_v2", params={"date": day2.isoformat()}).json()
+    before = client.get("/reports/day", params={"date": day2.isoformat()}).json()
     before_payment = next(event for event in before["events"] if event["event_type"] == "company_payment")
 
     delete_resp = client.delete(f"/orders/{order_id}")
     assert delete_resp.status_code in {200, 204}
 
-    after = client.get("/reports/day_v2", params={"date": day2.isoformat()}).json()
+    after = client.get("/reports/day", params={"date": day2.isoformat()}).json()
     after_payment = next(event for event in after["events"] if event["event_type"] == "company_payment")
 
     assert after_payment["cash_before"] == before_payment["cash_before"] - 100
@@ -180,7 +180,7 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
     )
     assert resp.status_code == 201
 
-    day = client.get("/reports/day_v2", params={"date": day1.isoformat()}).json()
+    day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
     payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
     assert payment["cash_after"] == -1000
     assert payment["company_after"] == 0
@@ -209,7 +209,7 @@ def test_company_buy_iron_unpaid_remainder_visible_in_report(client) -> None:
     )
     assert resp.status_code == 201
 
-    day_report = client.get("/reports/day_v2", params={"date": day.isoformat()}).json()
+    day_report = client.get("/reports/day", params={"date": day.isoformat()}).json()
     event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_iron")
 
     assert event["status"] == "needs_action"

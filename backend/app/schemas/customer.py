@@ -42,6 +42,9 @@ class CustomerAdjustmentOut(SQLModel):
   debt_cash: int = 0
   debt_cylinders_12: int = 0
   debt_cylinders_48: int = 0
+  live_debt_cash: Optional[int] = None
+  live_debt_cylinders_12: Optional[int] = None
+  live_debt_cylinders_48: Optional[int] = None
 
 
 class CustomerOut(SQLModel):

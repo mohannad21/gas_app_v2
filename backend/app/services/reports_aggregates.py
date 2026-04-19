@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.models import LedgerEntry
-from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportV2Event, ReportInventoryState, ReportInventoryTotals
+from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportEvent, ReportInventoryState, ReportInventoryTotals
 from app.services.ledger import sum_ledger
 
 
@@ -317,7 +317,7 @@ def _customer_balance_transitions(
 
 
 def _event_order_key(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   event_sort_ids: dict[int, str],
 ) -> tuple:
@@ -411,11 +411,12 @@ def _sold_full_by_day(
     .where(LedgerEntry.account == "inv")
     .where(LedgerEntry.state == "full")
     .where(LedgerEntry.unit == "count")
+    .where(LedgerEntry.source_type == "customer_txn")
     .where(LedgerEntry.day >= date_start)
     .where(LedgerEntry.day <= date_end)
     .group_by(LedgerEntry.day, LedgerEntry.gas_type)
   ).all()
-  return {(day, gas_type): int(qty or 0) for day, gas_type, qty in rows}
+  return {(day, gas_type): -int(qty or 0) for day, gas_type, qty in rows}
 
 
 def _cash_math_by_day(
@@ -490,8 +491,9 @@ def _snapshot_transitions_for_customer(
   *,
   before: CustomerLedgerState,
   after: CustomerLedgerState,
+  intent: Optional[str] = None,
 ) -> list[BalanceTransition]:
-  return _customer_balance_transitions(before=before, after=after, include_static=True)
+  return _customer_balance_transitions(before=before, after=after, include_static=True, intent=intent)
 
 
 def _snapshot_transitions_for_company(

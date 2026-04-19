@@ -33,6 +33,7 @@ export const CompanyPaymentSchema = z.object({
   amount: z.number(),
   note: z.string().nullish(),
   is_deleted: z.boolean().optional(),
+  live_debt_cash: z.number().nullish(),
 });
 export type CompanyPayment = z.infer<typeof CompanyPaymentSchema>;
 export type CompanyPaymentCreateInput = {

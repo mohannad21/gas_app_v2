@@ -78,7 +78,12 @@ export async function listCompanyPayments(includeDeleted?: boolean): Promise<Com
   return parseArray(CompanyPaymentSchema, data).map((row) => ({
     ...row,
     amount: fromMinorUnits(row.amount),
+    live_debt_cash: row.live_debt_cash != null ? fromMinorUnits(row.live_debt_cash) : row.live_debt_cash,
   }));
+}
+
+export async function deleteCompanyPayment(paymentId: string): Promise<void> {
+  await api.delete(`/company/payments/${paymentId}`);
 }
 
 export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): Promise<CompanyBuyIron> {

@@ -24,7 +24,7 @@ export {  getInventoryLatest, initInventory, createInventoryRefill, listInventor
 export { listInventoryAdjustments, updateInventoryAdjustment, deleteInventoryAdjustment, listCashAdjustments, createCashAdjustment, updateCashAdjustment, deleteCashAdjustment } from "./adjustments";
 
 // Company & System
-export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, createCompanyPayment, listCompanyPayments, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
+export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, createCompanyPayment, listCompanyPayments, deleteCompanyPayment, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
 
 // Billing
 export { getPlanBillingStatus } from "./billing";
@@ -54,4 +54,4 @@ export {
 export { listPriceSettings, savePriceSetting } from "./prices";
 
 // Reports
-export { listDailyReportsV2, getDailyReportV2 } from "./reports";
+export { listDailyReports, getDailyReport } from "./reports";
