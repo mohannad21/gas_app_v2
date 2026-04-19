@@ -54,4 +54,4 @@ export {
 export { listPriceSettings, savePriceSetting } from "./prices";
 
 // Reports
-export { listDailyReportsV2, getDailyReportV2 } from "./reports";
+export { listDailyReports, getDailyReport } from "./reports";

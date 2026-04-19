@@ -131,12 +131,12 @@ def test_refill_paid_now_affects_cash_and_timeline(client) -> None:
     )
     assert resp.status_code == 200
 
-    report = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day1.isoformat()})
+    report = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
     row = report.json()[0]
     assert row["cash_end"] == 800
 
-    timeline = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
     refill_event = next(event for event in timeline.json()["events"] if event["event_type"] == "refill")
     assert refill_event["cash_before"] == 1000
@@ -173,12 +173,12 @@ def test_refill_paid_now_zero_keeps_cash(client) -> None:
     )
     assert resp.status_code == 200
 
-    report = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day1.isoformat()})
+    report = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
     row = report.json()[0]
     assert row["cash_end"] == 1000
 
-    timeline = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
     refill_event = next(event for event in timeline.json()["events"] if event["event_type"] == "refill")
     assert refill_event["cash_before"] == 1000
@@ -230,7 +230,7 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
         paid_amount=50,
     )
 
-    timeline = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
     events = [event for event in timeline.json()["events"] if event["event_type"] in {"refill", "order"}]
     assert len(events) >= 2

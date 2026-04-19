@@ -36,7 +36,7 @@ def test_system_initialize_company_only_creates_no_customers(client) -> None:
     customers = client.get("/customers").json()
     assert customers == []
 
-    report = client.get("/reports/daily_v2", params={"from": today, "to": today}).json()
+    report = client.get("/reports/daily", params={"from": today, "to": today}).json()
     assert report
     row = report[0]
     assert row["company_end"] == 500
@@ -59,7 +59,7 @@ def test_company_payable_zeroes_after_payment(client) -> None:
     )
     assert payment.status_code == 201
 
-    report = client.get("/reports/daily_v2", params={"from": today, "to": today}).json()
+    report = client.get("/reports/daily", params={"from": today, "to": today}).json()
     assert report
     row = report[0]
     assert row["company_end"] == 0
@@ -85,7 +85,7 @@ def test_system_initialize_day_feed_shows_opening_events(client) -> None:
     resp = client.post("/system/initialize", json=payload)
     assert resp.status_code == 200
 
-    report = client.get("/reports/day_v2", params={"date": today})
+    report = client.get("/reports/day", params={"date": today})
     assert report.status_code == 200
     init_events = [event for event in report.json()["events"] if event["event_type"] == "init"]
     assert len(init_events) == 2
@@ -115,7 +115,7 @@ def test_inventory_init_is_visible_in_day_feed(client) -> None:
     today = date.today().isoformat()
     init_inventory(client, date=today, full12=10, empty12=4, full48=6, empty48=2)
 
-    report = client.get("/reports/day_v2", params={"date": today})
+    report = client.get("/reports/day", params={"date": today})
     assert report.status_code == 200
     adjust_events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
     assert adjust_events
@@ -129,10 +129,10 @@ def test_system_initialize_init_visibility_survives_daily_range(client) -> None:
     resp = client.post("/system/initialize", json=payload)
     assert resp.status_code == 200
 
-    daily = client.get("/reports/daily_v2", params={"from": today, "to": today})
+    daily = client.get("/reports/daily", params={"from": today, "to": today})
     assert daily.status_code == 200
     assert len(daily.json()) == 1
 
-    day = client.get("/reports/day_v2", params={"date": today})
+    day = client.get("/reports/day", params={"date": today})
     assert day.status_code == 200
     assert any(event["event_type"] == "init" for event in day.json()["events"])

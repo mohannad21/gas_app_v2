@@ -39,7 +39,7 @@ def _post_order(
     return resp.json()["id"]
 
 
-def test_day_v2_smart_ticket_order_fields(client) -> None:
+def test_day_smart_ticket_order_fields(client) -> None:
     day = date(2025, 10, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
     customer_id = create_customer(client, name="Ticket Orders")
@@ -112,7 +112,7 @@ def test_day_v2_smart_ticket_order_fields(client) -> None:
         paid=150,
     )
 
-    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     events = {event["source_id"]: event for event in resp.json()["events"] if event["event_type"] == "order"}
 
@@ -147,7 +147,7 @@ def test_day_v2_smart_ticket_order_fields(client) -> None:
     assert buy_unbal["action_lines"] == ["Pay customer 50"]
 
 
-def test_day_v2_smart_ticket_refill_fields(client) -> None:
+def test_day_smart_ticket_refill_fields(client) -> None:
     day = date(2025, 10, 2)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
 
@@ -193,7 +193,7 @@ def test_day_v2_smart_ticket_refill_fields(client) -> None:
         balanced_id = balanced_txn.id
         unbalanced_id = unbalanced_txn.id
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     refill_events = {
         event["source_id"]: event for event in report.json()["events"] if event["event_type"] == "refill"
@@ -214,7 +214,7 @@ def test_day_v2_smart_ticket_refill_fields(client) -> None:
     ]
 
 
-def test_day_v2_refill_does_not_merge_new_shells(client) -> None:
+def test_day_refill_does_not_merge_new_shells(client) -> None:
     day = date(2025, 10, 3)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
 
@@ -241,7 +241,7 @@ def test_day_v2_refill_does_not_merge_new_shells(client) -> None:
         session.commit()
         txn_id = txn.id
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["source_id"] == txn_id)
     assert event["event_type"] == "refill"
@@ -251,7 +251,7 @@ def test_day_v2_refill_does_not_merge_new_shells(client) -> None:
     assert event["return48"] == 0
 
 
-def test_day_v2_ordering_tie_breaker_source_id(client) -> None:
+def test_day_ordering_tie_breaker_source_id(client) -> None:
     day = date(2025, 10, 4)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
     customer_id = create_customer(client, name="Ordering")
@@ -292,7 +292,7 @@ def test_day_v2_ordering_tie_breaker_source_id(client) -> None:
             session.add(txn)
         session.commit()
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "order"]
     assert [event["source_id"] for event in events] == sorted([order_a, order_b], reverse=True)

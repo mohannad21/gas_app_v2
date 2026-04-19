@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.models import LedgerEntry
-from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportV2Event, ReportInventoryState, ReportInventoryTotals
+from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportEvent, ReportInventoryState, ReportInventoryTotals
 from app.services.ledger import sum_ledger
 
 
@@ -317,7 +317,7 @@ def _customer_balance_transitions(
 
 
 def _event_order_key(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   event_sort_ids: dict[int, str],
 ) -> tuple:

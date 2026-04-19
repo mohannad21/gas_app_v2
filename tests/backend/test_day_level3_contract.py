@@ -61,7 +61,7 @@ def test_level3_replacement_settled_fields(client) -> None:
         paid=100,
     )
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = _get_event(report.json(), order_id)
 
@@ -94,7 +94,7 @@ def test_level3_replacement_unsettled_actions(client) -> None:
         paid=50,
     )
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = _get_event(report.json(), order_id)
 
@@ -123,7 +123,7 @@ def test_level3_replacement_owe_full_action(client) -> None:
         paid=0,
     )
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = _get_event(report.json(), order_id)
 
@@ -159,7 +159,7 @@ def test_level3_late_pay_not_settled_with_cylinders(client) -> None:
         },
     )
     assert payment.status_code == 201
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
 
@@ -190,7 +190,7 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
     )
     assert resp.status_code == 200
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
@@ -217,7 +217,7 @@ def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
     )
     assert resp.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
@@ -244,7 +244,7 @@ def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
     )
     assert resp.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
@@ -274,7 +274,7 @@ def test_level3_system_only_for_replacement(client) -> None:
         paid=100,
     )
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = _get_event(report.json(), sell_id)
 
@@ -312,7 +312,7 @@ def test_level3_money_delta_matches_hero_primary(client) -> None:
     )
     assert payment.status_code == 201
 
-    report = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
 

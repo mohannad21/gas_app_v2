@@ -1,8 +1,8 @@
 from conftest import init_inventory, iso_at
 
 
-def _get_daily_v2(client, day: str) -> dict:
-    rows = client.get(f"/reports/daily_v2?from={day}&to={day}").json()
+def _get_daily(client, day: str) -> dict:
+    rows = client.get(f"/reports/daily?from={day}&to={day}").json()
     assert rows
     return rows[0]
 
@@ -36,7 +36,7 @@ def test_refill_details_time_correct_after_edit(client) -> None:
     assert details["return48"] == 2
     assert details["notes"] == "first"
 
-    daily_before = _get_daily_v2(client, "2025-01-02")
+    daily_before = _get_daily(client, "2025-01-02")
     assert daily_before["inventory_start"]["full12"] == 52
     assert daily_before["inventory_start"]["empty12"] == 7
     assert daily_before["inventory_start"]["full48"] == 21
@@ -73,7 +73,7 @@ def test_refill_details_time_correct_after_edit(client) -> None:
     assert details_updated["return48"] == 1
     assert details_updated["notes"] == "edit"
 
-    daily_after = _get_daily_v2(client, "2025-01-02")
+    daily_after = _get_daily(client, "2025-01-02")
     assert daily_after["inventory_start"]["full12"] == 51
     assert daily_after["inventory_start"]["empty12"] == 8
     assert daily_after["inventory_start"]["full48"] == 20

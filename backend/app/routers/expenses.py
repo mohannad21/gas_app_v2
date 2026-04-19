@@ -11,8 +11,8 @@ from app.schemas import (
   ExpenseCategoryCreate,
   ExpenseCategoryOut,
   ExpenseCategoryToggle,
-  ExpenseCreateLegacy,
-  ExpenseOutLegacy,
+  ExpenseCreate,
+  ExpenseOut,
   ExpenseUpdate,
 )
 from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_expense, reverse_source
@@ -39,7 +39,7 @@ def _get_category_name(session: Session, category_id: Optional[str]) -> str:
   return cat.name if cat else "Other"
 
 
-@router.get("", response_model=list[ExpenseOutLegacy])
+@router.get("", response_model=list[ExpenseOut])
 def list_expenses(
   date: str | None = Query(default=None),
   before: Optional[str] = Query(default=None),
@@ -47,7 +47,7 @@ def list_expenses(
   include_deleted: bool = Query(default=False, alias="include_deleted"),
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> list[ExpenseOutLegacy]:
+) -> list[ExpenseOut]:
   stmt = (
     select(Expense)
     .where(Expense.kind == "expense")
@@ -79,7 +79,7 @@ def list_expenses(
     rows = [row for row in rows if row.category_id != cash_cat.id]
   cats = {cat.id: cat.name for cat in session.exec(select(ExpenseCategory)).all()}
   return [
-    ExpenseOutLegacy(
+    ExpenseOut(
       id=row.id,
       date=row.day.isoformat(),
       happened_at=row.happened_at,
@@ -96,15 +96,15 @@ def list_expenses(
 
 @router.post(
   "",
-  response_model=ExpenseOutLegacy,
+  response_model=ExpenseOut,
   status_code=status.HTTP_201_CREATED,
   dependencies=[Depends(require_permission("expenses:write"))],
 )
 def create_expense(
-  payload: ExpenseCreateLegacy,
+  payload: ExpenseCreate,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> ExpenseOutLegacy:
+) -> ExpenseOut:
   try:
     day = datetime.fromisoformat(payload.date).date()
   except ValueError as exc:
@@ -130,7 +130,7 @@ def create_expense(
   post_expense(session, expense)
   session.commit()
   session.refresh(expense)
-  return ExpenseOutLegacy(
+  return ExpenseOut(
     id=expense.id,
     date=expense.day.isoformat(),
     happened_at=expense.happened_at,
@@ -193,7 +193,7 @@ def delete_expense(
 
 @router.patch(
   "/{expense_id}",
-  response_model=ExpenseOutLegacy,
+  response_model=ExpenseOut,
   dependencies=[Depends(require_permission("expenses:write"))],
 )
 def update_expense(
@@ -201,7 +201,7 @@ def update_expense(
   payload: ExpenseUpdate,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> ExpenseOutLegacy:
+) -> ExpenseOut:
   expense = session.get(Expense, expense_id)
   if not expense or expense.tenant_id != tenant_id or expense.kind != "expense" or expense.deleted_at is not None:
     raise HTTPException(status_code=404, detail="expense_not_found")
@@ -273,7 +273,7 @@ def update_expense(
   session.refresh(new_expense)
 
   cats = {cat.id: cat.name for cat in session.exec(select(ExpenseCategory)).all()}
-  return ExpenseOutLegacy(
+  return ExpenseOut(
     id=new_expense.id,
     date=new_expense.day.isoformat(),
     happened_at=new_expense.happened_at,

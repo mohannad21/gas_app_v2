@@ -7,7 +7,7 @@ and Level3 schema construction for the daily reporting system.
 from typing import Literal, Optional
 
 from app.models import Customer
-from app.schemas import ActivityNote, DailyReportV2Event, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System
+from app.schemas import ActivityNote, DailyReportEvent, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System
 from app.utils.time import business_local_datetime_from_utc
 
 from .reports_aggregates import CustomerLedgerState
@@ -46,14 +46,14 @@ def _customer_identity(customer: Optional[Customer]) -> tuple[Optional[str], Opt
   return (customer.name, customer.note)
 
 
-def _company_payment_label(event: DailyReportV2Event) -> str:
+def _company_payment_label(event: DailyReportEvent) -> str:
   paid = _safe_int(event.paid_now or event.total_cost)
   if paid < 0:
     return "Payment from company"
   return "Paid company"
 
 
-def _event_label(event: DailyReportV2Event) -> str:
+def _event_label(event: DailyReportEvent) -> str:
   if event.event_type == "order":
     if event.order_mode:
       return _ORDER_LABELS.get(event.order_mode, "Order")
@@ -78,7 +78,7 @@ def _safe_int(value: Optional[int]) -> int:
   return int(value)
 
 
-def _is_company_return_only_refill(event: DailyReportV2Event) -> bool:
+def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
   if event.event_type != "refill":
     return False
   buy12 = _safe_int(event.buy12)
@@ -93,7 +93,7 @@ def _is_company_return_only_refill(event: DailyReportV2Event) -> bool:
   return has_returns and no_buys and no_money
 
 
-def _is_company_receive_only_refill(event: DailyReportV2Event) -> bool:
+def _is_company_receive_only_refill(event: DailyReportEvent) -> bool:
   if event.event_type != "refill":
     return False
   buy12 = _safe_int(event.buy12)
@@ -108,11 +108,11 @@ def _is_company_receive_only_refill(event: DailyReportV2Event) -> bool:
   return has_buys and no_returns and no_money
 
 
-def _is_company_settle_only_refill(event: DailyReportV2Event) -> bool:
+def _is_company_settle_only_refill(event: DailyReportEvent) -> bool:
   return _is_company_return_only_refill(event) or _is_company_receive_only_refill(event)
 
 
-def _event_is_balanced(event: DailyReportV2Event) -> bool:
+def _event_is_balanced(event: DailyReportEvent) -> bool:
   if event.event_type == "order":
     total = _safe_int(event.order_total)
     paid = _safe_int(event.order_paid)
@@ -148,7 +148,7 @@ def _event_is_balanced(event: DailyReportV2Event) -> bool:
   return True
 
 
-def _event_action_lines(event: DailyReportV2Event) -> list[str]:
+def _event_action_lines(event: DailyReportEvent) -> list[str]:
   lines: list[str] = []
   if event.event_type == "order" and event.order_mode == "replacement":
     installed = _safe_int(event.order_installed)
@@ -201,7 +201,7 @@ def _event_action_lines(event: DailyReportV2Event) -> list[str]:
   return lines
 
 
-def _apply_ticket_fields(event: DailyReportV2Event) -> None:
+def _apply_ticket_fields(event: DailyReportEvent) -> None:
   if not event.id:
     event.id = event.source_id or f"{event.event_type}:{event.effective_at.isoformat()}"
   event.label = _event_label(event)
@@ -210,7 +210,7 @@ def _apply_ticket_fields(event: DailyReportV2Event) -> None:
   event.action_lines = _event_action_lines(event)
 
 
-def _level3_counterparty(event: DailyReportV2Event) -> Level3Counterparty:
+def _level3_counterparty(event: DailyReportEvent) -> Level3Counterparty:
   if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout", "customer_adjust"}:
     display_name = event.customer_name or "Customer"
     display = display_name
@@ -227,14 +227,14 @@ def _level3_counterparty(event: DailyReportV2Event) -> Level3Counterparty:
   return Level3Counterparty(type="none", display_name=None, description=None, display=None)
 
 
-def _level3_system(event: DailyReportV2Event) -> Optional[Level3System]:
+def _level3_system(event: DailyReportEvent) -> Optional[Level3System]:
   if event.event_type == "order" and event.order_mode == "replacement":
     if event.system_name:
       return Level3System(display_name=event.system_name)
   return None
 
 
-def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
+def _level3_hero(event: DailyReportEvent) -> Level3Hero:
   gas = f" {event.gas_type}" if event.gas_type else ""
   if event.event_type == "order":
     if event.order_mode == "replacement":
@@ -277,13 +277,13 @@ def _level3_hero(event: DailyReportV2Event) -> Level3Hero:
   return Level3Hero(text=_titleize_event_type(event.event_type))
 
 
-def _cash_delta(event: DailyReportV2Event) -> int:
+def _cash_delta(event: DailyReportEvent) -> int:
   if event.cash_before is None or event.cash_after is None:
     return 0
   return int(event.cash_after - event.cash_before)
 
 
-def _level3_money(event: DailyReportV2Event) -> Level3Money:
+def _level3_money(event: DailyReportEvent) -> Level3Money:
   verb: Literal["received", "paid", "none"] = "none"
   amount = 0
 
@@ -339,7 +339,7 @@ def _level3_money(event: DailyReportV2Event) -> Level3Money:
 
 
 def _level3_settlement(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   customer_after: Optional[CustomerLedgerState] = None,
 ) -> Level3Settlement:
@@ -394,7 +394,7 @@ def _level3_settlement(
   return Level3Settlement(scope="none", is_settled=True, components=None)
 
 
-def _event_kind(event: DailyReportV2Event) -> str:
+def _event_kind(event: DailyReportEvent) -> str:
   if event.event_type == "order":
     if event.order_mode == "replacement":
       return "replace"
@@ -438,7 +438,7 @@ def _time_display(value) -> str:
   return business_local_datetime_from_utc(value).strftime("%H:%M:%S")
 
 
-def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
+def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
   gas = event.gas_type or "12kg"
   if event.event_type == "order":
     installed = _safe_int(event.order_installed)
@@ -528,7 +528,7 @@ def _hero_text_for_event(event: DailyReportV2Event, money_decimals: int) -> str:
   return event.hero.text if event.hero else (event.label or "Activity")
 
 
-def _activity_type(event: DailyReportV2Event) -> str:
+def _activity_type(event: DailyReportEvent) -> str:
   if event.event_type == "order" and event.order_mode == "replacement":
     return "replace"
   if event.event_type == "order" and event.order_mode == "sell_iron":
@@ -562,7 +562,7 @@ def _activity_type(event: DailyReportV2Event) -> str:
   return event.event_type
 
 
-def _context_line(event: DailyReportV2Event) -> str:
+def _context_line(event: DailyReportEvent) -> str:
   label = event.label or _titleize_event_type(event.event_type)
   parts = [label, _time_display(event.effective_at)]
   if event.event_type == "order" and event.order_mode == "replacement" and event.system_name:
@@ -571,7 +571,7 @@ def _context_line(event: DailyReportV2Event) -> str:
 
 
 def _apply_ui_fields(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   money_decimals: int,
   notes: list[ActivityNote],
@@ -747,7 +747,7 @@ def _company_actions_from_debt(
 
 
 def _apply_level3_fields(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   customer_after: Optional[CustomerLedgerState] = None,
 ) -> None:
@@ -774,7 +774,7 @@ def _apply_level3_fields(
     event.open_actions = []
 
 
-def _status_mode(event: DailyReportV2Event) -> Literal["atomic", "settlement"]:
+def _status_mode(event: DailyReportEvent) -> Literal["atomic", "settlement"]:
   if event.event_type in {
     "collection_money",
     "collection_empty",
@@ -982,7 +982,7 @@ def _company_pills_from_debt(
   return actions
 
 
-def _atomic_action_pills(event: DailyReportV2Event) -> list[Level3Action]:
+def _atomic_action_pills(event: DailyReportEvent) -> list[Level3Action]:
   actions: list[Level3Action] = []
 
   if event.event_type == "order":
@@ -1059,7 +1059,7 @@ def _atomic_action_pills(event: DailyReportV2Event) -> list[Level3Action]:
 
 
 def _remaining_actions_for_event(
-  event: DailyReportV2Event,
+  event: DailyReportEvent,
   *,
   customer_before: Optional[CustomerLedgerState] = None,
   customer_after: Optional[CustomerLedgerState] = None,
@@ -1238,7 +1238,7 @@ def _append_cylinder_note(
   )
 
 
-def _notes_for_event(event: DailyReportV2Event) -> list[ActivityNote]:
+def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
   """Generates activity notes for various event types."""
   notes: list[ActivityNote] = []
 
@@ -1301,7 +1301,7 @@ def _notes_for_event(event: DailyReportV2Event) -> list[ActivityNote]:
   return notes
 
 
-def _apply_status_fields(event: DailyReportV2Event) -> None:
+def _apply_status_fields(event: DailyReportEvent) -> None:
   event.status_mode = _status_mode(event)
   event.action_pills = _atomic_action_pills(event)
   event.is_ok = len(event.action_pills) == 0 and event.is_balanced

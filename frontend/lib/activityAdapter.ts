@@ -4,7 +4,7 @@ import {
   CollectionEvent,
   CompanyPayment,
   CustomerAdjustment,
-  DailyReportV2Event,
+  DailyReportEvent,
   Expense,
   InventoryAdjustment,
   InventoryRefillSummary,
@@ -12,7 +12,7 @@ import {
 } from "@/types/domain";
 import { makeBalanceTransition } from "@/lib/balanceTransitions";
 
-const BASE: Pick<DailyReportV2Event, "cash_before" | "cash_after"> = {
+const BASE: Pick<DailyReportEvent, "cash_before" | "cash_after"> = {
   cash_before: 0,
   cash_after: 0,
 };
@@ -26,7 +26,7 @@ function getCylinderSnapshot(record: Record<string, number> | null | undefined, 
 }
 
 function pushTransition(
-  transitions: NonNullable<DailyReportV2Event["balance_transitions"]>,
+  transitions: NonNullable<DailyReportEvent["balance_transitions"]>,
   scope: "customer" | "company",
   component: "money" | "cyl_12" | "cyl_48",
   before: number,
@@ -63,7 +63,7 @@ export function getCompanyInventoryEditTab(refill: InventoryRefillSummary) {
 export function orderToEvent(
   order: Order,
   opts?: { customerName?: string; customerDescription?: string | null; systemName?: string }
-): DailyReportV2Event {
+): DailyReportEvent {
   const mode = order.order_mode ?? "replacement";
   const modeLabel =
     mode === "sell_iron" ? "Sell full" : mode === "buy_iron" ? "Buy empty" : "Replacement";
@@ -103,7 +103,7 @@ export function orderToEvent(
     getCylinderSnapshot(order.cyl_balance_before ?? null, "48kg") ??
     (gas === "48kg" ? cyl48After - cylinderDelta : cyl48After);
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -149,7 +149,7 @@ export function orderToEvent(
 export function collectionToEvent(
   col: CollectionEvent,
   opts?: { customerName?: string; customerDescription?: string | null }
-): DailyReportV2Event {
+): DailyReportEvent {
   const actionType = col.action_type;
   const amount = col.amount_money ?? 0;
   const qty12 = col.qty_12kg ?? 0;
@@ -201,7 +201,7 @@ export function collectionToEvent(
   const cyl12Before = actionType === "return" ? cyl12After + qty12 : cyl12After;
   const cyl48Before = actionType === "return" ? cyl48After + qty48 : cyl48After;
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -241,7 +241,7 @@ export function collectionToEvent(
 export function customerAdjustmentToEvent(
   adj: CustomerAdjustment,
   opts?: { customerName?: string; customerDescription?: string | null }
-): DailyReportV2Event {
+): DailyReportEvent {
   const money = adj.amount_money ?? 0;
   const qty12 = adj.count_12kg ?? 0;
   const qty48 = adj.count_48kg ?? 0;
@@ -260,7 +260,7 @@ export function customerAdjustmentToEvent(
   const cyl12Before = cyl12After - qty12;
   const cyl48Before = cyl48After - qty48;
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   pushTransition(transitions, "customer", "money", moneyBefore, moneyAfter);
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
@@ -293,7 +293,7 @@ export function customerAdjustmentToEvent(
   };
 }
 
-export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportV2Event {
+export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportEvent {
   const totals = getCompanyInventoryTotals(refill);
   const eventType = getCompanyInventoryEventType(refill);
   const parts: string[] = [];
@@ -309,7 +309,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
         ? "Return empties"
         : "Refill";
 
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   let cyl12Before = 0;
   let cyl12After = 0;
   let cyl48Before = 0;
@@ -352,9 +352,9 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
   };
 }
 
-export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Event {
+export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent {
   const amount = payment.amount ?? 0;
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   let companyMoneyBefore: number | null = null;
   let companyMoneyAfter: number | null = null;
 
@@ -385,7 +385,7 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportV2Eve
   };
 }
 
-export function expenseToEvent(expense: Expense): DailyReportV2Event {
+export function expenseToEvent(expense: Expense): DailyReportEvent {
   return {
     ...BASE,
     event_type: "expense",
@@ -404,7 +404,7 @@ export function expenseToEvent(expense: Expense): DailyReportV2Event {
   };
 }
 
-export function bankDepositToEvent(deposit: BankDeposit): DailyReportV2Event {
+export function bankDepositToEvent(deposit: BankDeposit): DailyReportEvent {
   const isOut = deposit.direction === "wallet_to_bank";
   const label = isOut ? "Wallet to Bank" : "Bank to Wallet";
   return {
@@ -424,7 +424,7 @@ export function bankDepositToEvent(deposit: BankDeposit): DailyReportV2Event {
   };
 }
 
-export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyReportV2Event {
+export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyReportEvent {
   const gas = adj.gas_type ?? "12kg";
   const heroText = `${gas}: full ${adj.delta_full > 0 ? "+" : ""}${adj.delta_full} empty ${adj.delta_empty > 0 ? "+" : ""}${adj.delta_empty}`;
   return {
@@ -442,7 +442,7 @@ export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyRepor
   };
 }
 
-export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportV2Event {
+export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
   const delta = adj.delta_cash ?? 0;
   return {
     ...BASE,

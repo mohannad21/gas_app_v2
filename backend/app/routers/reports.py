@@ -27,10 +27,10 @@ from app.models import (
   SystemSettings,
 )
 from app.schemas import (
-  DailyReportV2Card,
-  DailyReportV2CashMath,
-  DailyReportV2Day,
-  DailyReportV2Event,
+  DailyReportCard,
+  DailyReportCashMath,
+  DailyReportDay,
+  DailyReportEvent,
   ReportInventoryTotals,
 )
 from app.services.reports_aggregates import (
@@ -73,13 +73,13 @@ from app.services.reports_event_fields import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-@router.get("/daily_v2", response_model=list[DailyReportV2Card])
-def list_daily_reports_v2(
+@router.get("/daily", response_model=list[DailyReportCard])
+def list_daily_reports(
   from_: Optional[str] = Query(default=None, alias="from"),
   to: Optional[str] = Query(default=None),
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> list[DailyReportV2Card]:
+) -> list[DailyReportCard]:
   """List daily report cards for a date range (default 14 days)."""
   today = datetime.now(timezone.utc).date()
   if to:
@@ -237,7 +237,7 @@ def list_daily_reports_v2(
   adjustments_by_day = {row[0]: int(row[1] or 0) for row in adjustment_rows}
 
   # Build daily cards
-  response: list[DailyReportV2Card] = []
+  response: list[DailyReportCard] = []
   for current in _date_range(start_date, end_date):
     cash_start = running_cash
     running_cash += cash_deltas.get(current, 0)
@@ -292,14 +292,14 @@ def list_daily_reports_v2(
         )
       )
 
-    card = DailyReportV2Card(
+    card = DailyReportCard(
       date=current.isoformat(),
       cash_start=cash_start,
       cash_end=running_cash,
       sold_12kg=sold_full.get((current, "12kg"), 0),
       sold_48kg=sold_full.get((current, "48kg"), 0),
       net_today=running_cash - cash_start,
-      cash_math=DailyReportV2CashMath(
+      cash_math=DailyReportCashMath(
         sales=customer_sales_by_day.get(current, 0),
         late=customer_pay_by_day.get(current, 0),
         expenses=expenses_by_day.get(current, 0),
@@ -348,12 +348,12 @@ def list_daily_reports_v2(
   return response
 
 
-@router.get("/day_v2", response_model=DailyReportV2Day)
-def get_daily_report_v2(
+@router.get("/day", response_model=DailyReportDay)
+def get_daily_report(
   date: Optional[str] = Query(default=None),
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> DailyReportV2Day:
+) -> DailyReportDay:
   """Return full event feed for a single business date."""
   if date:
     try:
@@ -445,7 +445,7 @@ def get_daily_report_v2(
   running_inventory = _sum_inventory_before_day(session, report_day)
 
   # Build event objects
-  events: list[DailyReportV2Event] = []
+  events: list[DailyReportEvent] = []
   event_sort_ids: dict[int, str] = {}
   event_source_keys: dict[int, tuple[str, str]] = {}
 
@@ -454,7 +454,7 @@ def get_daily_report_v2(
     entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
   for txn in customer_txns:
-    event = DailyReportV2Event(
+    event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
       event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else "customer_adjust" if txn.kind == "adjust" else txn.kind,
@@ -480,7 +480,7 @@ def get_daily_report_v2(
     event_source_keys[id(event)] = ("customer_txn", txn.id)
 
   for txn in company_txns:
-    event = DailyReportV2Event(
+    event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
       event_type="refill" if txn.kind == "refill" else "company_buy_iron" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else "company_adjustment" if txn.kind == "adjust" else txn.kind,
@@ -499,7 +499,7 @@ def get_daily_report_v2(
     event_source_keys[id(event)] = ("company_txn", txn.id)
 
   for exp in expenses:
-    event = DailyReportV2Event(
+    event = DailyReportEvent(
       id=exp.id,
       source_id=exp.id,
       event_type="bank_deposit" if exp.kind == "deposit" else "expense",
@@ -515,7 +515,7 @@ def get_daily_report_v2(
     event_source_keys[id(event)] = ("expense", exp.id)
 
   for ca in cash_adjustments:
-    event = DailyReportV2Event(
+    event = DailyReportEvent(
       id=ca.id,
       source_id=ca.id,
       event_type="cash_adjust",
@@ -529,7 +529,7 @@ def get_daily_report_v2(
     event_source_keys[id(event)] = ("cash_adjust", ca.id)
 
   for ia in inventory_adjustments:
-    event = DailyReportV2Event(
+    event = DailyReportEvent(
       id=ia.id,
       source_id=ia.id,
       event_type="adjust",
@@ -631,7 +631,7 @@ def get_daily_report_v2(
   # Get audit summary
   audit_summary = get_daily_audit_summary(session, day=report_day)
 
-  return DailyReportV2Day(
+  return DailyReportDay(
     date=report_day.isoformat(),
     cash_start=_sum_cash_before_day(session, report_day),
     cash_end=_sum_cash_at_day_end(session, report_day),

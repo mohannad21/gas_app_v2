@@ -3,10 +3,10 @@ import { memo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { DailyReportV2Card } from "@/types/domain";
+import { DailyReportCard } from "@/types/domain";
 
 type DayPickerStripProps = {
-  rows: DailyReportV2Card[];
+  rows: DailyReportCard[];
   selectedDate: string | null;
   onSelect: (date: string) => void;
 };
@@ -16,7 +16,7 @@ const DayCard = memo(function DayCard({
   selected,
   onSelect,
 }: {
-  item: DailyReportV2Card;
+  item: DailyReportCard;
   selected: boolean;
   onSelect: (date: string) => void;
 }) {

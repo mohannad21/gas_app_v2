@@ -18,9 +18,9 @@ from .inventory import InventoryAdjustCreate, InventoryAdjustUpdate, InventoryAd
 from .order import CollectionCreate, CollectionEvent, CollectionUpdate, OrderCreate, OrderOut, OrderUpdate
 from .price import PriceCreate, PriceOut
 from .profile import TenantProfileOut, TenantProfileUpdate
-from .report import ActivityNote, BalanceTransition, DailyAuditSummary, DailyReportV2Card, DailyReportV2CashMath, DailyReportV2Day, DailyReportV2Event, DailyReportV2Math, DailyReportV2MathCompany, DailyReportV2MathCustomers, DailyReportV2MathResult, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System, ReportInventoryState, ReportInventoryTotals
+from .report import ActivityNote, BalanceTransition, DailyAuditSummary, DailyReportCard, DailyReportCashMath, DailyReportDay, DailyReportEvent, DailyReportMath, DailyReportMathCompany, DailyReportMathCustomers, DailyReportMathResult, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System, ReportInventoryState, ReportInventoryTotals
 from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, SystemHealthCheckOut, SystemInitialize, SystemOut, SystemSettingsOut, SystemTypeOptionCreate, SystemTypeOptionOut, SystemTypeOptionUpdate, SystemUpdate
-from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCreate, ExpenseCreateLegacy, ExpenseOut, ExpenseOutLegacy, ExpenseUpdate
+from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCreate, ExpenseOut, ExpenseUpdate
 from .workers import InviteActivateRequest, PendingInviteOut, WorkerInviteCreate, WorkerInviteOut, WorkerMemberOut
 
 __all__ = [
@@ -90,9 +90,7 @@ __all__ = [
     "CashAdjustmentRow",
     "ExpenseCreate",
     "ExpenseOut",
-    "ExpenseCreateLegacy",
     "ExpenseUpdate",
-    "ExpenseOutLegacy",
     "CompanyCylinderSettleCreate",
     "CompanyCylinderSettleOut",
     "CompanyPaymentCreate",
@@ -113,13 +111,13 @@ __all__ = [
     "ReportInventoryTotals",
     "ReportInventoryState",
     "DailyAuditSummary",
-    "DailyReportV2CashMath",
-    "DailyReportV2MathCustomers",
-    "DailyReportV2MathCompany",
-    "DailyReportV2MathResult",
-    "DailyReportV2Math",
+    "DailyReportCashMath",
+    "DailyReportMathCustomers",
+    "DailyReportMathCompany",
+    "DailyReportMathResult",
+    "DailyReportMath",
     "BalanceTransition",
-    "DailyReportV2Card",
+    "DailyReportCard",
     "Level3Counterparty",
     "Level3System",
     "Level3Hero",
@@ -128,6 +126,6 @@ __all__ = [
     "Level3Settlement",
     "Level3Action",
     "ActivityNote",
-    "DailyReportV2Event",
-    "DailyReportV2Day",
+    "DailyReportEvent",
+    "DailyReportDay",
 ]

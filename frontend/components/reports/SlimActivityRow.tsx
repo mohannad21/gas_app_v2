@@ -7,11 +7,11 @@ import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } 
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
 import { getEventColor } from "@/lib/reports/eventColors";
-import { DailyReportV2Event } from "@/types/domain";
+import { DailyReportEvent } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
 type SlimActivityRowProps = {
-  event: DailyReportV2Event;
+  event: DailyReportEvent;
   formatMoney?: (value: number) => string;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -103,7 +103,7 @@ const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
   return parts.length > 0 ? parts.join(" | ") : null;
 };
 
-const formatOrderMetric = (event: DailyReportV2Event) => {
+const formatOrderMetric = (event: DailyReportEvent) => {
   const lines: string[] = [];
   const isSystemAttached = event.order_mode === "replacement" || event.order_mode === "sell_iron";
   if (event.system_name && isSystemAttached) lines.push(`System: ${event.system_name}`);
@@ -117,7 +117,7 @@ const formatOrderMetric = (event: DailyReportV2Event) => {
   return lines.length > 0 ? lines.join("\n") : null;
 };
 
-const buildHeroAction = (event: DailyReportV2Event, formatMoney: (v: number) => string) => {
+const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => string) => {
   // Order and refill have explicit formatting — always apply it first
   if (event.event_type === "order") {
     return formatOrderMetric(event);
@@ -190,7 +190,7 @@ const splitDisplayName = (value: string | null | undefined) => {
   return { name: value, desc: "" };
 };
 
-const transitionIntentForEvent = (event: DailyReportV2Event) => {
+const transitionIntentForEvent = (event: DailyReportEvent) => {
   if (event.event_type === "order") return "customer_order" as const;
   if (event.event_type === "collection_money") return "customer_payment" as const;
   if (event.event_type === "collection_payout") return "customer_payout" as const;
@@ -210,7 +210,7 @@ const transitionIntentForEvent = (event: DailyReportV2Event) => {
 };
 
 const pushEventTransition = (
-  transitions: NonNullable<DailyReportV2Event["balance_transitions"]>,
+  transitions: NonNullable<DailyReportEvent["balance_transitions"]>,
   scope: "customer" | "company",
   component: "money" | "cyl_12" | "cyl_48",
   beforeValue: number | null | undefined,
@@ -225,8 +225,8 @@ const pushEventTransition = (
   });
 };
 
-const buildDisplayTransitions = (event: DailyReportV2Event) => {
-  const transitions: NonNullable<DailyReportV2Event["balance_transitions"]> = [];
+const buildDisplayTransitions = (event: DailyReportEvent) => {
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   const intent = transitionIntentForEvent(event);
   const isCompanyEvent = intent.startsWith("company_");
 

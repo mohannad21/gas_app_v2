@@ -4,11 +4,11 @@ import { render, waitFor } from "@testing-library/react-native";
 
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 
-const mockGetDailyReportV2 = jest.fn();
+const mockGetDailyReport = jest.fn();
 const mockUseDailyReportsV2 = jest.fn();
 
 jest.mock("@/lib/api", () => ({
-  getDailyReportV2: (...args: unknown[]) => mockGetDailyReportV2(...args),
+  getDailyReport: (...args: unknown[]) => mockGetDailyReport(...args),
 }));
 
 jest.mock("@/hooks/useReports", () => ({
@@ -45,7 +45,7 @@ function Harness({
 
 describe("useDailyReportScreen ownership", () => {
   beforeEach(() => {
-    mockGetDailyReportV2.mockReset();
+    mockGetDailyReport.mockReset();
     mockUseDailyReportsV2.mockReset();
     const reportListResult = {
       data: [{ date: "2025-01-01" }],
@@ -60,7 +60,7 @@ describe("useDailyReportScreen ownership", () => {
   });
 
   it("fetches a selected report day through the hook and reaches success state", async () => {
-    mockGetDailyReportV2.mockResolvedValue({ date: "2025-01-01", events: [] });
+    mockGetDailyReport.mockResolvedValue({ date: "2025-01-01", events: [] });
     const snapshots: Array<{ statusByDate: Record<string, string>; dayByDate: Record<string, unknown> }> = [];
 
     const onSnapshot = (snapshot: { statusByDate: Record<string, string>; dayByDate: Record<string, unknown> }) => {
@@ -75,13 +75,13 @@ describe("useDailyReportScreen ownership", () => {
       expect(getByTestId("status").props.children).toBe("success");
     });
 
-    expect(mockGetDailyReportV2).toHaveBeenCalledWith("2025-01-01");
+    expect(mockGetDailyReport).toHaveBeenCalledWith("2025-01-01");
     expect(snapshots.some((snapshot) => snapshot.statusByDate["2025-01-01"] === "loading")).toBe(true);
     expect(snapshots.some((snapshot) => snapshot.statusByDate["2025-01-01"] === "success")).toBe(true);
   });
 
   it("tracks error separately from loading when a day fetch fails", async () => {
-    mockGetDailyReportV2.mockRejectedValue(new Error("boom"));
+    mockGetDailyReport.mockRejectedValue(new Error("boom"));
     const snapshots: Array<{ statusByDate: Record<string, string>; dayByDate: Record<string, unknown> }> = [];
 
     const onSnapshot = (snapshot: { statusByDate: Record<string, string>; dayByDate: Record<string, unknown> }) => {
@@ -96,7 +96,7 @@ describe("useDailyReportScreen ownership", () => {
       expect(getByTestId("status").props.children).toBe("error");
     });
 
-    expect(mockGetDailyReportV2).toHaveBeenCalledWith("2025-01-02");
+    expect(mockGetDailyReport).toHaveBeenCalledWith("2025-01-02");
     expect(
       snapshots.some(
         (snapshot) =>

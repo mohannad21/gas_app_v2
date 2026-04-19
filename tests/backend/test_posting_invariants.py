@@ -36,7 +36,7 @@ def _bootstrap_day(
 
 
 def _get_day_events(client, *, day: date) -> list[dict]:
-    resp = client.get("/reports/day_v2", params={"date": day.isoformat()})
+    resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     return resp.json()["events"]
 

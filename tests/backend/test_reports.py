@@ -76,7 +76,7 @@ def _cash_init(client, *, day: str, amount: float) -> None:
     assert resp.status_code == 201
 
 
-def test_cash_carryover_daily_v2(client, monkeypatch) -> None:
+def test_cash_carryover_daily(client, monkeypatch) -> None:
     day1 = date(2025, 1, 1)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=5, empty48=0)
@@ -98,7 +98,7 @@ def test_cash_carryover_daily_v2(client, monkeypatch) -> None:
 
     _post_expense(client, expense_date=day1.isoformat(), amount=30)
 
-    resp = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()})
+    resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     assert resp.status_code == 200
     rows = {row["date"]: row for row in resp.json()}
     assert rows[day1.isoformat()]["cash_start"] == 1000
@@ -106,13 +106,13 @@ def test_cash_carryover_daily_v2(client, monkeypatch) -> None:
     assert rows[day2.isoformat()]["cash_start"] == 1070
 
 
-def test_daily_v2_bookends_match_inventory_summary(client, monkeypatch) -> None:
+def test_daily_bookends_match_inventory_summary(client, monkeypatch) -> None:
     day1 = date(2025, 2, 1)
 
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=12, empty12=3, full48=6, empty48=2)
     _cash_init(client, day=day1.isoformat(), amount=500)
 
-    report_resp = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day1.isoformat()})
+    report_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report_resp.status_code == 200
     row = report_resp.json()[0]
 
@@ -128,7 +128,7 @@ def test_daily_v2_bookends_match_inventory_summary(client, monkeypatch) -> None:
     assert row["cash_end"] == 500
 
 
-def test_day_v2_timeline_rules(client, monkeypatch) -> None:
+def test_day_timeline_rules(client, monkeypatch) -> None:
     day1 = date(2025, 3, 1)
 
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=5, empty48=0)
@@ -151,7 +151,7 @@ def test_day_v2_timeline_rules(client, monkeypatch) -> None:
     _post_expense(client, expense_date=day1.isoformat(), amount=20)
     _post_adjust(client, day=day1.isoformat())
 
-    resp = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    resp = client.get("/reports/day", params={"date": day1.isoformat()})
     assert resp.status_code == 200
     body = resp.json()
     events = body["events"]
@@ -236,26 +236,26 @@ def test_option_b_cascade_delete_order(client, monkeypatch) -> None:
         paid_amount=300,
     )
 
-    before_day1 = client.get("/reports/day_v2", params={"date": day1.isoformat()}).json()
-    before_day2 = client.get("/reports/day_v2", params={"date": day2.isoformat()}).json()
+    before_day1 = client.get("/reports/day", params={"date": day1.isoformat()}).json()
+    before_day2 = client.get("/reports/day", params={"date": day2.isoformat()}).json()
     before_order_b = next(event for event in before_day1["events"] if event["source_id"] == order_b)
     before_order_c = next(event for event in before_day2["events"] if event["source_id"] == order_c)
 
-    before_daily = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()}).json()
+    before_daily = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()}).json()
     before_by_date = {row["date"]: row for row in before_daily}
 
     delete_resp = client.delete(f"/orders/{order_a}")
     assert delete_resp.status_code in {200, 204}
 
-    after_day1 = client.get("/reports/day_v2", params={"date": day1.isoformat()}).json()
-    after_day2 = client.get("/reports/day_v2", params={"date": day2.isoformat()}).json()
+    after_day1 = client.get("/reports/day", params={"date": day1.isoformat()}).json()
+    after_day2 = client.get("/reports/day", params={"date": day2.isoformat()}).json()
     after_order_b = next(event for event in after_day1["events"] if event["source_id"] == order_b)
     after_order_c = next(event for event in after_day2["events"] if event["source_id"] == order_c)
 
     assert after_order_b["cash_before"] == before_order_b["cash_before"] - 100
     assert after_order_b["cash_after"] == before_order_b["cash_after"] - 100
 
-    after_daily = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()}).json()
+    after_daily = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()}).json()
     after_by_date = {row["date"]: row for row in after_daily}
 
     assert after_by_date[day1.isoformat()]["cash_end"] == before_by_date[day1.isoformat()]["cash_end"] - 100
@@ -302,7 +302,7 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
     )
     assert update_resp.status_code == 200
 
-    day_resp = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    day_resp = client.get("/reports/day", params={"date": day1.isoformat()})
     assert day_resp.status_code == 200
     order_event = next(event for event in day_resp.json()["events"] if event["source_id"] == order_id)
     assert order_event["cash_before"] == 500
@@ -310,7 +310,7 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
     assert order_event["inventory_before"]["full12"] == 10
     assert order_event["inventory_after"]["full12"] == 8
 
-    daily_resp = client.get("/reports/daily_v2", params={"from": day1.isoformat(), "to": day2.isoformat()})
+    daily_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     daily = {row["date"]: row for row in daily_resp.json()}
     assert daily[day2.isoformat()]["cash_start"] == 650
 
@@ -324,7 +324,7 @@ def test_expense_ordering_by_created_at(client, monkeypatch) -> None:
     _post_expense(client, expense_date=day1.isoformat(), amount=10, expense_type="fuel")
     _post_expense(client, expense_date=day1.isoformat(), amount=20, expense_type="food")
 
-    resp = client.get("/reports/day_v2", params={"date": day1.isoformat()})
+    resp = client.get("/reports/day", params={"date": day1.isoformat()})
     assert resp.status_code == 200
     expenses = [event for event in resp.json()["events"] if event["event_type"] == "expense"]
     assert len(expenses) == 2

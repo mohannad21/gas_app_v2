@@ -3,12 +3,12 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { DailyReportV2Card } from "@/types/domain";
+import { DailyReportCard } from "@/types/domain";
 
 const formatMoney = (v: number) => `₪${Math.abs(Number(v || 0)).toFixed(0)}`;
 
 type DaySummaryBoxProps = {
-  card: DailyReportV2Card;
+  card: DailyReportCard;
 };
 
 export default function DaySummaryBox({ card }: DaySummaryBoxProps) {

@@ -244,7 +244,7 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
         "reason": "damage",
     })
 
-    resp = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    resp = client.get("/reports/day", params={"date": "2025-01-02"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["date"] == "2025-01-02"
@@ -285,7 +285,7 @@ def test_inventory_adjust_grouped_report_event_for_multi_row_action(client) -> N
     assert len(rows) == 2
     assert {row["group_id"] for row in rows} == {group_id}
 
-    report = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    report = client.get("/reports/day", params={"date": "2025-01-02"})
     assert report.status_code == 200
     events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
     assert len(events) == 1
@@ -315,7 +315,7 @@ def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
     })
     create_order(client, customer_id=c_id, system_id=s_id, delivered_at="2025-01-02T11:00:00", installed=1, received=0)
 
-    resp = client.get("/reports/day_v2", params={"date": "2025-01-02"})
+    resp = client.get("/reports/day", params={"date": "2025-01-02"})
     assert resp.status_code == 200
     body = resp.json()
     events = [e for e in body["events"] if e["event_type"] in {"refill", "order"}]

@@ -1,11 +1,11 @@
-import { DailyReportV2Event } from "@/types/domain";
+import { DailyReportEvent } from "@/types/domain";
 
 const baseEvent = {
   cash_before: 1000,
   cash_after: 1000,
 };
 
-export const level3Fixtures: DailyReportV2Event[] = [
+export const level3Fixtures: DailyReportEvent[] = [
   {
     ...baseEvent,
     event_type: "order",

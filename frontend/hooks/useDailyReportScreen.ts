@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDailyReportsV2 } from "@/hooks/useReports";
-import { getDailyReportV2 } from "@/lib/api";
-import { DailyReportV2Day } from "@/types/domain";
+import { getDailyReport } from "@/lib/api";
+import { DailyReportDay } from "@/types/domain";
 
 const getLocalDateString = () => {
   const now = new Date();
@@ -33,7 +33,7 @@ export function useDailyReportScreen(rangeDays = 30, selectedDate?: string | nul
   }, [v2Query.data]);
 
   const [v2Expanded, setV2Expanded] = useState<string[]>([]);
-  const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportV2Day | null>>({});
+  const [v2DayByDate, setV2DayByDate] = useState<Record<string, DailyReportDay | null>>({});
   const [v2DayStatusByDate, setV2DayStatusByDate] = useState<Record<string, ReportDayLoadStatus>>({});
   const requestedDatesRef = useRef<Set<string>>(new Set());
 
@@ -68,7 +68,7 @@ export function useDailyReportScreen(rangeDays = 30, selectedDate?: string | nul
     const load = async () => {
       for (const date of missing) {
         try {
-          const day = await getDailyReportV2(date);
+          const day = await getDailyReport(date);
           if (cancelled) return;
           setV2DayByDate((prev) => ({ ...prev, [date]: day }));
           setV2DayStatusByDate((prev) => ({ ...prev, [date]: "success" }));
