@@ -509,13 +509,21 @@ def get_daily_report(
   # Build event objects
   events: list[DailyReportEvent] = []
   event_sort_ids: dict[int, str] = {}
-  event_source_keys: dict[int, tuple[str, str]] = {}
+  event_source_keys: dict[int, list[tuple[str, str]]] = {}
 
   entries_by_source: dict[tuple[str, str], list[LedgerEntry]] = defaultdict(list)
   for entry in entries:
     entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
+  adjust_groups: dict[str, list[CustomerTransaction]] = {}
+  non_adjust_txns: list[CustomerTransaction] = []
   for txn in customer_txns:
+    if txn.kind == "adjust" and txn.group_id:
+      adjust_groups.setdefault(txn.group_id, []).append(txn)
+    else:
+      non_adjust_txns.append(txn)
+
+  for txn in non_adjust_txns:
     stable_source_id = txn.group_id or txn.id
     event = DailyReportEvent(
       id=txn.id,
@@ -540,7 +548,25 @@ def get_daily_report(
     )
     events.append(event)
     event_sort_ids[id(event)] = stable_source_id or ""
-    event_source_keys[id(event)] = ("customer_txn", txn.id)
+    event_source_keys[id(event)] = [("customer_txn", txn.id)]
+
+  for group_key, txns in adjust_groups.items():
+    base = txns[0]
+    event = DailyReportEvent(
+      id=base.id,
+      source_id=group_key,
+      event_type="customer_adjust",
+      effective_at=base.happened_at,
+      created_at=base.created_at,
+      customer_id=base.customer_id,
+      customer_name=customers[base.customer_id].name if base.customer_id and base.customer_id in customers else None,
+      customer_description=customers[base.customer_id].note if base.customer_id and base.customer_id in customers else None,
+      gas_type=base.gas_type,
+      reason=base.note,
+    )
+    events.append(event)
+    event_sort_ids[id(event)] = base.id or ""
+    event_source_keys[id(event)] = [("customer_txn", txn.id) for txn in txns]
 
   for txn in company_txns:
     event = DailyReportEvent(
@@ -559,7 +585,7 @@ def get_daily_report(
     )
     events.append(event)
     event_sort_ids[id(event)] = txn.id or ""
-    event_source_keys[id(event)] = ("company_txn", txn.id)
+    event_source_keys[id(event)] = [("company_txn", txn.id)]
 
   for exp in expenses:
     event = DailyReportEvent(
@@ -575,7 +601,7 @@ def get_daily_report(
     )
     events.append(event)
     event_sort_ids[id(event)] = exp.id or ""
-    event_source_keys[id(event)] = ("expense", exp.id)
+    event_source_keys[id(event)] = [("expense", exp.id)]
 
   for ca in cash_adjustments:
     source_entries = entries_by_source.get(("cash_adjust", ca.id), [])
@@ -591,21 +617,27 @@ def get_daily_report(
     )
     events.append(event)
     event_sort_ids[id(event)] = cash_entry_id or ca.id or ""
-    event_source_keys[id(event)] = ("cash_adjust", ca.id)
+    event_source_keys[id(event)] = [("cash_adjust", ca.id)]
 
+  ia_groups: dict[str, list[InventoryAdjustment]] = {}
   for ia in inventory_adjustments:
+    key = ia.group_id or ia.id
+    ia_groups.setdefault(key, []).append(ia)
+
+  for group_key, ia_list in ia_groups.items():
+    base = ia_list[0]
     event = DailyReportEvent(
-      id=ia.id,
-      source_id=ia.id,
+      id=base.id,
+      source_id=group_key,
       event_type="adjust",
-      effective_at=ia.happened_at,
-      created_at=ia.created_at,
-      gas_type=ia.gas_type,
-      reason=ia.note,
+      effective_at=base.happened_at,
+      created_at=base.created_at,
+      gas_type=base.gas_type,
+      reason=base.note,
     )
     events.append(event)
-    event_sort_ids[id(event)] = ia.id or ""
-    event_source_keys[id(event)] = ("inventory_adjust", ia.id)
+    event_sort_ids[id(event)] = base.id or ""
+    event_source_keys[id(event)] = [("inventory_adjust", ia.id) for ia in ia_list]
 
   # Get settings
   settings = session.get(SystemSettings, "system")
@@ -629,8 +661,10 @@ def get_daily_report(
     event.company_48kg_before = running_company_48
     inventory_before = _report_inventory_state(running_inventory)
 
-    source_key = event_source_keys.get(id(event))
-    event_entries = entries_by_source.get(source_key, []) if source_key else []
+    source_keys = event_source_keys.get(id(event), [])
+    event_entries = []
+    for source_key in source_keys:
+      event_entries.extend(entries_by_source.get(source_key, []))
     running_cash, running_bank, running_company_money, running_company_12, running_company_48, running_inventory = _apply_ledger_entries_to_balances(
       event_entries,
       cash=running_cash,

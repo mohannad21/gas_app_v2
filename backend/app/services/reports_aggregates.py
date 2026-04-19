@@ -411,11 +411,12 @@ def _sold_full_by_day(
     .where(LedgerEntry.account == "inv")
     .where(LedgerEntry.state == "full")
     .where(LedgerEntry.unit == "count")
+    .where(LedgerEntry.source_type == "customer_txn")
     .where(LedgerEntry.day >= date_start)
     .where(LedgerEntry.day <= date_end)
     .group_by(LedgerEntry.day, LedgerEntry.gas_type)
   ).all()
-  return {(day, gas_type): int(qty or 0) for day, gas_type, qty in rows}
+  return {(day, gas_type): -int(qty or 0) for day, gas_type, qty in rows}
 
 
 def _cash_math_by_day(
