@@ -152,7 +152,7 @@ def resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTr
 def order_out(txn: CustomerTransaction) -> OrderOut:
   """Serialize order transaction to OrderOut schema."""
   return OrderOut(
-    id=txn.id,
+    id=txn.group_id or txn.id,
     customer_id=txn.customer_id,
     system_id=txn.system_id or "",
     delivered_at=txn.happened_at,

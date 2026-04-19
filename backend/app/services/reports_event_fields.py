@@ -17,14 +17,14 @@ from .reports_aggregates import CustomerLedgerState
 _EVENT_LABELS: dict[str, str] = {
   "refill": "Refill",
   "company_buy_iron": "Bought full cylinders",
-  "collection_money": "Received payment",
+  "collection_money": "Payment from customer",
   "collection_empty": "Returned empties",
-  "company_payment": "Paid company",
+  "company_payment": "Payment to company",
   "expense": "Expense",
   "bank_deposit": "Deposit",
   "adjust": "Inventory adjustment",
   "cash_adjust": "Wallet adjustment",
-  "collection_payout": "Paid customer",
+  "collection_payout": "Payment to customer",
   "customer_adjust": "Balance adjustment",
   "init": "Opening balance",
 }
@@ -50,7 +50,7 @@ def _company_payment_label(event: DailyReportEvent) -> str:
   paid = _safe_int(event.paid_now or event.total_cost)
   if paid < 0:
     return "Payment from company"
-  return "Paid company"
+  return "Payment to company"
 
 
 def _event_label(event: DailyReportEvent) -> str:
@@ -66,7 +66,7 @@ def _event_label(event: DailyReportEvent) -> str:
     paid = _safe_int(event.paid_now or event.total_cost)
     if paid < 0:
       return "Payment from company"
-    return "Paid company"
+    return "Payment to company"
   if event.event_type == "bank_deposit":
     return "Bank → Wallet" if event.transfer_direction == "bank_to_wallet" else "Wallet → Bank"
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
@@ -245,7 +245,7 @@ def _level3_hero(event: DailyReportEvent) -> Level3Hero:
       return Level3Hero(text=f"Buy Empty{gas}".strip())
     return Level3Hero(text="Order")
   if event.event_type == "collection_money":
-    return Level3Hero(text="Received payment")
+    return Level3Hero(text="Payment from customer")
   if event.event_type == "collection_empty":
     return Level3Hero(text="Returned empties")
   if event.event_type == "refill":
@@ -269,7 +269,7 @@ def _level3_hero(event: DailyReportEvent) -> Level3Hero:
   if event.event_type == "bank_deposit":
     return Level3Hero(text=_event_label(event))
   if event.event_type == "collection_payout":
-    return Level3Hero(text="Paid customer")
+    return Level3Hero(text="Payment to customer")
   if event.event_type == "customer_adjust":
     return Level3Hero(text="Balance adjustment")
   if event.event_type == "init":
@@ -435,7 +435,7 @@ def _event_kind(event: DailyReportEvent) -> str:
 
 
 def _time_display(value) -> str:
-  return business_local_datetime_from_utc(value).strftime("%H:%M:%S")
+  return business_local_datetime_from_utc(value).strftime("%H:%M")
 
 
 def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
@@ -486,8 +486,8 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
   if event.event_type == "collection_money":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Received payment {_format_money_major(amount, money_decimals)}"
-    return "Received payment"
+      return f"Payment from customer {_format_money_major(amount, money_decimals)}"
+    return "Payment from customer"
   if event.event_type == "collection_empty":
     parts: list[str] = []
     if event.return12:
@@ -506,8 +506,8 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
   if event.event_type == "collection_payout":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Paid customer {_format_money_major(amount, money_decimals)}"
-    return "Paid customer"
+      return f"Payment to customer {_format_money_major(amount, money_decimals)}"
+    return "Payment to customer"
   if event.event_type == "customer_adjust":
     return "Adjusted customer balance"
   if event.event_type == "expense":
@@ -625,20 +625,24 @@ def _apply_ui_fields(
 
   event.notes = notes
 
+  event.remaining_actions = list(event.action_pills)
+  has_remaining_actions = len(event.remaining_actions) > 0
+
   if event.status_mode == "settlement":
-    event.status = "balance_settled" if event.is_ok else "needs_action"
+    event.is_ok = event.settlement.is_settled if event.settlement is not None else not has_remaining_actions
+    event.status = "balance_settled" if event.is_ok and not has_remaining_actions else "needs_action"
   else:
     if event.is_atomic_ok and len(notes) == 0:
       event.status = "atomic_ok"
+      event.is_ok = True
     else:
       event.status = "needs_action"
+      event.is_ok = False
 
   if event.is_ok:
     event.status_badge = "Balance settled" if event.status_mode == "settlement" else "OK"
   else:
     event.status_badge = None
-
-  event.remaining_actions = list(event.action_pills)
 
 
 def _customer_actions_from_debt(debt_cash: int, debt_12: int, debt_48: int) -> list[Level3Action]:
@@ -1242,7 +1246,19 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
   """Generates activity notes for various event types."""
   notes: list[ActivityNote] = []
 
-  if event.event_type in {"order", "collection_money", "collection_empty", "collection_payout", "customer_adjust"}:
+  if event.event_type == "collection_money":
+    amount = event.money.amount if event.money is not None else 0
+    if amount > 0:
+      notes.append(_note(kind="money", direction="customer_pays_you", remaining_after=amount))
+    return notes
+
+  if event.event_type == "collection_payout":
+    amount = event.money.amount if event.money is not None else 0
+    if amount > 0:
+      notes.append(_note(kind="money", direction="you_pay_customer", remaining_after=amount))
+    return notes
+
+  if event.event_type in {"order", "collection_empty", "customer_adjust"}:
     _append_money_note(
       notes,
       before=event.customer_money_before,

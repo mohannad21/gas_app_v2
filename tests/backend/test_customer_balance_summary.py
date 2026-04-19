@@ -16,7 +16,7 @@ def _cash_init(client, *, day: str, amount: float) -> None:
 def test_daily_day_rows_do_not_embed_global_customer_totals(client) -> None:
     day = date(2025, 1, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day.isoformat(), amount=0)
+    _cash_init(client, day=day.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Osama")
     adj_resp = client.post(
@@ -62,7 +62,7 @@ def test_daily_low_activity_day_only_shows_day_local_customer_transition(client)
     day1 = date(2025, 2, 1)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day1.isoformat(), amount=0)
+    _cash_init(client, day=day1.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Customer A")
 

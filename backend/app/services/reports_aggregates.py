@@ -490,8 +490,9 @@ def _snapshot_transitions_for_customer(
   *,
   before: CustomerLedgerState,
   after: CustomerLedgerState,
+  intent: Optional[str] = None,
 ) -> list[BalanceTransition]:
-  return _customer_balance_transitions(before=before, after=after, include_static=True)
+  return _customer_balance_transitions(before=before, after=after, include_static=True, intent=intent)
 
 
 def _snapshot_transitions_for_company(

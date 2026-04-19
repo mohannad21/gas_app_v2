@@ -3,6 +3,7 @@
 from sqlmodel import Session, select
 
 import app.db as app_db
+from app.config import DEFAULT_TENANT_ID
 from app.models import CompanyTransaction, CustomerTransaction
 from app.services.posting import derive_day, post_company_transaction
 from conftest import create_customer, create_system, init_inventory, iso_at
@@ -117,12 +118,12 @@ def test_day_smart_ticket_order_fields(client) -> None:
     events = {event["source_id"]: event for event in resp.json()["events"] if event["event_type"] == "order"}
 
     rep_bal = events[rep_bal_id]
-    assert rep_bal["label"] == "Replace"
+    assert rep_bal["label"] == "Replacement"
     assert rep_bal["is_balanced"] is True
     assert rep_bal["action_lines"] == []
 
     rep_unbal = events[rep_unbal_id]
-    assert rep_unbal["label"] == "Replace"
+    assert rep_unbal["label"] == "Replacement"
     assert rep_unbal["is_balanced"] is False
     assert rep_unbal["action_lines"] == ["Return 1x12kg", "Collect 50"]
 
@@ -221,6 +222,7 @@ def test_day_refill_does_not_merge_new_shells(client) -> None:
     happened_at = datetime(2025, 10, 3, 9, 0, tzinfo=timezone.utc)
     with Session(app_db.engine) as session:
         txn = CompanyTransaction(
+            tenant_id=DEFAULT_TENANT_ID,
             happened_at=happened_at,
             day=derive_day(happened_at),
             kind="refill",

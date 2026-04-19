@@ -40,7 +40,7 @@ def test_wallet_to_bank_reduces_wallet_and_appears_in_timeline(client) -> None:
     assert transfer_event["bank_before"] == 0
     assert transfer_event["bank_after"] == 200
     assert transfer_event["reason"] == "transfer out"
-    assert transfer_event["label"] == "Wallet to Bank"
+    assert transfer_event["label"] == "Wallet → Bank"
     assert transfer_event["hero_text"].endswith("to bank")
     assert transfer_event["transfer_direction"] == "wallet_to_bank"
     assert transfer_event["money_direction"] == "none"
@@ -104,7 +104,7 @@ def test_bank_to_wallet_increases_wallet_and_appears_in_timeline(client) -> None
     assert transfer_event["cash_after"] == 120
     assert transfer_event["bank_before"] == 0
     assert transfer_event["bank_after"] == -120
-    assert transfer_event["label"] == "Bank to Wallet"
+    assert transfer_event["label"] == "Bank → Wallet"
     assert transfer_event["hero_text"].endswith("to wallet")
     assert transfer_event["transfer_direction"] == "bank_to_wallet"
 

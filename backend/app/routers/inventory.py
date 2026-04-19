@@ -21,9 +21,30 @@ from app.schemas import (
 from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_inventory
 from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.services.inventory_helpers import parse_datetime, snapshot_at, time_of_day, reject_new_shells_for_refill, validate_inventory_adjustment_reason
+from app.utils.time import business_local_datetime_from_utc
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
+
+
+def _resolve_active_refill(session: Session, refill_id: str) -> CompanyTransaction | None:
+  current = session.get(CompanyTransaction, refill_id)
+  if not current or current.kind != "refill":
+    return current
+
+  visited: set[str] = set()
+  while current.deleted_at is not None and current.id not in visited:
+    visited.add(current.id)
+    next_txn = session.exec(
+      select(CompanyTransaction)
+      .where(CompanyTransaction.kind == "refill")
+      .where(CompanyTransaction.reversed_id == current.id)
+      .order_by(CompanyTransaction.created_at.desc())
+    ).first()
+    if not next_txn:
+      break
+    current = next_txn
+  return current
 
 
 @router.get("/latest", response_model=InventorySnapshot)
@@ -418,7 +439,7 @@ def list_refills(
       refill_id=row.id,
       date=row.day.isoformat(),
       time_of_day=time_of_day(row.happened_at),
-      effective_at=row.happened_at,
+      effective_at=business_local_datetime_from_utc(row.happened_at),
       buy12=row.new12 if row.kind == "buy_iron" else row.buy12,
       return12=row.return12,
       buy48=row.new48 if row.kind == "buy_iron" else row.buy48,
@@ -444,14 +465,14 @@ def get_refill_details(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> InventoryRefillDetails:
-  row = session.get(CompanyTransaction, refill_id)
+  row = _resolve_active_refill(session, refill_id)
   if not row or row.tenant_id != tenant_id or row.deleted_at is not None or row.kind != "refill":
     raise HTTPException(status_code=404, detail="Refill not found")
   return InventoryRefillDetails(
     refill_id=row.id,
     business_date=row.day.isoformat(),
     time_of_day=time_of_day(row.happened_at),
-    effective_at=row.happened_at,
+    effective_at=business_local_datetime_from_utc(row.happened_at),
     buy12=row.buy12,
     return12=row.return12,
     buy48=row.buy48,
@@ -482,7 +503,7 @@ def update_refill(
 ) -> InventoryRefillDetails:
   reject_new_shells_for_refill(payload.new12, payload.new48)
   try:
-    existing = session.get(CompanyTransaction, refill_id)
+    existing = _resolve_active_refill(session, refill_id)
     if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
       raise HTTPException(status_code=404, detail="Refill not found")
     acquire_company_lock(session)
@@ -559,7 +580,7 @@ def update_refill(
     refill_id=new_txn.id,
     business_date=new_txn.day.isoformat(),
     time_of_day=time_of_day(new_txn.happened_at),
-    effective_at=new_txn.happened_at,
+    effective_at=business_local_datetime_from_utc(new_txn.happened_at),
     buy12=new_txn.buy12,
     return12=new_txn.return12,
     buy48=new_txn.buy48,
@@ -588,7 +609,7 @@ def delete_refill(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
   try:
-    existing = session.get(CompanyTransaction, refill_id)
+    existing = _resolve_active_refill(session, refill_id)
     if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
       return
     acquire_company_lock(session)

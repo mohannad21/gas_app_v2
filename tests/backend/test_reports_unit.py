@@ -121,7 +121,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-a",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_a_id[0] if isinstance(entry_a_id, tuple) else entry_a_id,
+                "old_id": entry_a_id[0],
             },
         )
         session.execute(
@@ -141,7 +141,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
                 "new_source": "adjust-b",
                 "ts": happened_at,
                 "day": happened_at.date(),
-                "old_id": entry_b_id[0] if isinstance(entry_b_id, tuple) else entry_b_id,
+                "old_id": entry_b_id[0],
             },
         )
         session.commit()

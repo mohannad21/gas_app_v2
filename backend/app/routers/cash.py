@@ -14,6 +14,25 @@ from app.services.posting import derive_day, normalize_happened_at, post_cash_ad
 router = APIRouter(prefix="/cash", tags=["cash"])
 
 
+def _resolve_active_cash_adjustment(session: Session, adjust_id: str) -> CashAdjustment | None:
+  current = session.get(CashAdjustment, adjust_id)
+  if not current:
+    return None
+
+  visited: set[str] = set()
+  while current.deleted_at is not None and current.id not in visited:
+    visited.add(current.id)
+    next_adjustment = session.exec(
+      select(CashAdjustment)
+      .where(CashAdjustment.reversed_id == current.id)
+      .order_by(CashAdjustment.created_at.desc())
+    ).first()
+    if not next_adjustment:
+      break
+    current = next_adjustment
+  return current
+
+
 def _transfer_direction(expense: Expense) -> str:
   return "bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank"
 
@@ -153,6 +172,7 @@ def update_cash_adjustment(
     day=reversal_day,
     delta_cash=new_amount,
     note=new_note,
+    reversed_id=existing.id,
   )
   session.add(new_adjustment)
   post_cash_adjustment(session, new_adjustment)
@@ -174,7 +194,7 @@ def delete_cash_adjustment(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
-  existing = session.get(CashAdjustment, adjust_id)
+  existing = _resolve_active_cash_adjustment(session, adjust_id)
   if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     return
   reversal_happened_at = existing.happened_at

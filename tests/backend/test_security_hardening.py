@@ -59,6 +59,7 @@ def test_whatsapp_link_is_url_encoded() -> None:
                 id=order_id,
                 kind="order",
                 is_reversed=False,
+                deleted_at=None,
                 customer_id=customer_id,
                 installed=2,
                 gas_type="12kg",
@@ -68,7 +69,7 @@ def test_whatsapp_link_is_url_encoded() -> None:
                 total=120,
             )
             if key == order_id
-            else SimpleNamespace(id=customer_id, phone="+49 171 555 0101")
+            else SimpleNamespace(id=customer_id, phone="+49 171 555 0101", deleted_at=None)
             if key == customer_id
             else None
         )

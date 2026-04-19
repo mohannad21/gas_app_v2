@@ -18,7 +18,10 @@ if str(ROOT) not in sys.path:
 BACKEND_ROOT = ROOT / "backend"
 ENV_TEST = BACKEND_ROOT / ".env.test"
 if ENV_TEST.exists():
-    load_dotenv(ENV_TEST, override=False)
+    load_dotenv(ENV_TEST, override=True)
+    database_url_test = os.getenv("DATABASE_URL_TEST")
+    if database_url_test:
+        os.environ["DATABASE_URL"] = database_url_test
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -188,7 +191,7 @@ def create_order(
     return resp.json()["id"]
 
 def get_daily_row(client, date_str: str) -> dict[str, Any]:
-    resp = client.get("/reports/daily_v2", params={"from": date_str, "to": date_str})
+    resp = client.get("/reports/daily", params={"from": date_str, "to": date_str})
     assert resp.status_code == 200
     rows = resp.json()
     row = next((item for item in rows if item["date"] == date_str), None)

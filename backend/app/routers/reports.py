@@ -31,6 +31,7 @@ from app.schemas import (
   DailyReportCashMath,
   DailyReportDay,
   DailyReportEvent,
+  ReportInventoryState,
   ReportInventoryTotals,
 )
 from app.services.reports_aggregates import (
@@ -71,6 +72,65 @@ from app.services.reports_event_fields import (
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _sparse_inventory_state(
+  totals: ReportInventoryTotals,
+  *,
+  touched: set[tuple[Optional[str], Optional[str]]],
+) -> ReportInventoryState:
+  return ReportInventoryState(
+    full12=totals.full12 if ("12kg", "full") in touched else None,
+    empty12=totals.empty12 if ("12kg", "empty") in touched else None,
+    full48=totals.full48 if ("48kg", "full") in touched else None,
+    empty48=totals.empty48 if ("48kg", "empty") in touched else None,
+  )
+
+
+def _inventory_state_for_event(
+  event: DailyReportEvent,
+  totals: ReportInventoryState,
+  *,
+  event_entries: list[LedgerEntry],
+) -> ReportInventoryState | None:
+  if event.event_type in {
+    "collection_money",
+    "collection_payout",
+    "company_payment",
+    "expense",
+    "bank_deposit",
+    "cash_adjust",
+    "customer_adjust",
+  }:
+    return None
+
+  if event.event_type == "order":
+    if event.gas_type == "12kg":
+      return ReportInventoryState(
+        full12=totals.full12,
+        empty12=totals.empty12,
+        full48=None,
+        empty48=None,
+      )
+    if event.gas_type == "48kg":
+      return ReportInventoryState(
+        full12=None,
+        empty12=None,
+        full48=totals.full48,
+        empty48=totals.empty48,
+      )
+
+  if event.event_type == "refill":
+    return totals
+
+  touched_inventory = {
+    (entry.gas_type, entry.state)
+    for entry in event_entries
+    if entry.account == "inv" and entry.unit == "count"
+  }
+  if not touched_inventory:
+    return None
+  return _sparse_inventory_state(totals, touched=touched_inventory)
 
 
 @router.get("/daily", response_model=list[DailyReportCard])
@@ -268,11 +328,13 @@ def list_daily_reports(
       if customer is None:
         continue
       before, after = _customer_day_state_bounds(session, customer_id=customer_id, day=current)
+      activity_kinds = customer_activity_kinds.get((current, customer_id), set())
+      transition_intent = "customer_adjust" if activity_kinds == {"adjust"} else None
       problem_lines.extend(
         _snapshot_lines_for_customer(customer_id=customer_id, before=before, after=after)
       )
       problem_transitions.extend(
-        _snapshot_transitions_for_customer(before=before, after=after)
+        _snapshot_transitions_for_customer(before=before, after=after, intent=transition_intent)
       )
 
     # Company problems
@@ -454,9 +516,10 @@ def get_daily_report(
     entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
   for txn in customer_txns:
+    stable_source_id = txn.group_id or txn.id
     event = DailyReportEvent(
       id=txn.id,
-      source_id=txn.id,
+      source_id=stable_source_id,
       event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else "customer_adjust" if txn.kind == "adjust" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
@@ -476,7 +539,7 @@ def get_daily_report(
       return48=txn.received if txn.kind == "return" and txn.gas_type == "48kg" else None,
     )
     events.append(event)
-    event_sort_ids[id(event)] = txn.id or ""
+    event_sort_ids[id(event)] = stable_source_id or ""
     event_source_keys[id(event)] = ("customer_txn", txn.id)
 
   for txn in company_txns:
@@ -515,6 +578,8 @@ def get_daily_report(
     event_source_keys[id(event)] = ("expense", exp.id)
 
   for ca in cash_adjustments:
+    source_entries = entries_by_source.get(("cash_adjust", ca.id), [])
+    cash_entry_id = next((entry.id for entry in source_entries if entry.account == "cash"), None)
     event = DailyReportEvent(
       id=ca.id,
       source_id=ca.id,
@@ -525,7 +590,7 @@ def get_daily_report(
       reason=ca.note,
     )
     events.append(event)
-    event_sort_ids[id(event)] = ca.id or ""
+    event_sort_ids[id(event)] = cash_entry_id or ca.id or ""
     event_source_keys[id(event)] = ("cash_adjust", ca.id)
 
   for ia in inventory_adjustments:
@@ -562,7 +627,7 @@ def get_daily_report(
     event.company_before = running_company_money
     event.company_12kg_before = running_company_12
     event.company_48kg_before = running_company_48
-    event.inventory_before = _report_inventory_state(running_inventory)
+    inventory_before = _report_inventory_state(running_inventory)
 
     source_key = event_source_keys.get(id(event))
     event_entries = entries_by_source.get(source_key, []) if source_key else []
@@ -588,7 +653,9 @@ def get_daily_report(
     event.company_after = running_company_money
     event.company_12kg_after = running_company_12
     event.company_48kg_after = running_company_48
-    event.inventory_after = _report_inventory_state(running_inventory)
+    inventory_after = _report_inventory_state(running_inventory)
+    event.inventory_before = _inventory_state_for_event(event, inventory_before, event_entries=event_entries)
+    event.inventory_after = _inventory_state_for_event(event, inventory_after, event_entries=event_entries)
 
     balance_transitions = []
     if customer_before is not None and customer_after is not None:
@@ -598,6 +665,7 @@ def get_daily_report(
           after=customer_after,
           display_name=event.customer_name,
           display_description=event.customer_description,
+          intent="customer_adjust" if event.event_type == "customer_adjust" else None,
         )
       )
     balance_transitions.extend(
@@ -627,6 +695,8 @@ def get_daily_report(
     # UI fields
     notes = _notes_for_event(event)
     _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
+
+  events.reverse()
 
   # Get audit summary
   audit_summary = get_daily_audit_summary(session, day=report_day)

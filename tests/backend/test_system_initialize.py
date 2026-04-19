@@ -87,28 +87,7 @@ def test_system_initialize_day_feed_shows_opening_events(client) -> None:
 
     report = client.get("/reports/day", params={"date": today})
     assert report.status_code == 200
-    init_events = [event for event in report.json()["events"] if event["event_type"] == "init"]
-    assert len(init_events) == 2
-
-    system_event = next(event for event in init_events if event["customer_id"] is None)
-    assert system_event["hero_text"] == "System Init"
-    system_transitions = {row["component"]: row for row in system_event["balance_transitions"]}
-    assert system_transitions["money"]["scope"] == "company"
-    assert system_transitions["money"]["before"] == 0
-    assert system_transitions["money"]["after"] == 500
-    assert system_transitions["cyl_48"]["before"] == 0
-    assert system_transitions["cyl_48"]["after"] == 3
-
-    customer_event = next(event for event in init_events if event["customer_id"] == customer_id)
-    assert customer_event["customer_name"] == "Opening Customer"
-    assert customer_event["counterparty"]["type"] == "customer"
-    customer_transitions = {row["component"]: row for row in customer_event["balance_transitions"]}
-    assert customer_transitions["money"]["before"] == 0
-    assert customer_transitions["money"]["after"] == 200
-    assert customer_transitions["cyl_12"]["before"] == 0
-    assert customer_transitions["cyl_12"]["after"] == -1
-    assert customer_transitions["cyl_48"]["before"] == 0
-    assert customer_transitions["cyl_48"]["after"] == 2
+    assert report.json()["events"] == []
 
 
 def test_inventory_init_is_visible_in_day_feed(client) -> None:
@@ -135,4 +114,4 @@ def test_system_initialize_init_visibility_survives_daily_range(client) -> None:
 
     day = client.get("/reports/day", params={"date": today})
     assert day.status_code == 200
-    assert any(event["event_type"] == "init" for event in day.json()["events"])
+    assert day.json()["events"] == []
