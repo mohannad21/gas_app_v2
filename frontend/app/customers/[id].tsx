@@ -5,7 +5,7 @@ import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { formatDateTimeMedium } from "@/lib/date";
-import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
+import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
 import {
@@ -76,7 +76,7 @@ const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
 const formatCurrency = (value: number) => {
   const abs = Math.abs(value);
   const prefix = value < 0 ? "-" : "";
-  return `${prefix}${abs.toFixed(getMoneyDecimals())} ${getCurrencyCode()}`;
+  return `${prefix}${abs.toFixed(getMoneyDecimals())} ${getCurrencySymbol()}`;
 };
 
 const formatDeliveredAt = (value?: string) => {

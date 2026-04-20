@@ -7,6 +7,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
 import { formatDateLocale } from "@/lib/date";
+import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 
 export default function CustomersListScreen() {
   const [unpaidOnly, setUnpaidOnly] = useState(false);
@@ -84,7 +85,7 @@ export default function CustomersListScreen() {
       <View style={styles.dashboard}>
         <View style={styles.dashboardCard}>
           <Text style={styles.cardLabel}>Total Debt</Text>
-          <Text style={styles.cardValue}>${dashboard.totalDebt.toFixed(2)}</Text>
+          <Text style={styles.cardValue}>{getCurrencySymbol()}{dashboard.totalDebt.toFixed(getMoneyDecimals())}</Text>
         </View>
         <View style={styles.dashboardCard}>
           <Text style={styles.cardLabel}>Unpaid Customers</Text>
@@ -159,7 +160,7 @@ export default function CustomersListScreen() {
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Balances</Text>
                 <Text style={styles.detailValue}>
-                  ${item.money_balance.toFixed(2)} |{" "}
+                  {getCurrencySymbol()}{item.money_balance.toFixed(getMoneyDecimals())} |{" "}
                   <Text style={[styles.detailValue, { color: gasColor("12kg"), fontWeight: "700" }]}>
                     12kg {item.cylinder_balance_12kg}
                   </Text>{" "}

@@ -4,6 +4,7 @@ import {
   calcCustomerMoneyDelta,
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
+import { getCurrencySymbol } from "@/lib/money";
 import { PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 
 export type DaySummaryTotals = {
@@ -396,7 +397,7 @@ export function buildDaySummaryLines(
     const out: string[] = [];
     if (cyl12 !== 0) out.push(`${formatSignedCount(cyl12)}x 12kg`);
     if (cyl48 !== 0) out.push(`${formatSignedCount(cyl48)}x 48kg`);
-    if (cash !== 0) out.push(`${formatSignedMoney(cash)}\u00c3\u00a2\u00e2\u0082\u00ac\u00c2\u00aa`);
+    if (cash !== 0) out.push(`${formatSignedMoney(cash)} ${getCurrencySymbol()}`);
     return out.length > 0 ? out.join(" | ") : null;
   };
 
@@ -404,21 +405,21 @@ export function buildDaySummaryLines(
   const debt = parts(summary.newDebt.cash, summary.newDebt.cyl12, summary.newDebt.cyl48);
   if (debt)
     lines.push({
-      label: `\u00c3\u00b0\u00c5\u00b8\u00e2\u0080\u009d\u00c2\u00b4 New Debt: ${debt}`,
+      label: `New Debt: ${debt}`,
       color: "#b91c1c",
     });
 
   const collections = parts(summary.collections.cash, summary.collections.cyl12, summary.collections.cyl48);
   if (collections)
     lines.push({
-      label: `\u00c3\u00b0\u00c5\u00b8\u00c5\u00b8\u00c2\u00a2 Collections: ${collections}`,
+      label: `Collections: ${collections}`,
       color: "#16a34a",
     });
 
   const business = parts(summary.business.cash, summary.business.cyl12, summary.business.cyl48);
   if (business)
     lines.push({
-      label: `\u00c3\u00b0\u00c5\u00b8\u00e2\u0080\u009d\u00c2\u00b5 Business Flow: ${business}`,
+      label: `Business Flow: ${business}`,
       color: "#0a7ea4",
     });
 

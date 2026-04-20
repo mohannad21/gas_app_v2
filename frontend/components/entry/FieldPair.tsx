@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { getMoneyDecimals } from "@/lib/money";
+
 export type FieldStepper = {
   delta: number;
   label: string;
@@ -57,7 +59,7 @@ function formatValue(value: number, valueMode: "integer" | "decimal") {
   if (Number.isInteger(normalized)) {
     return String(normalized);
   }
-  return normalized.toFixed(2).replace(/\.?0+$/, "");
+  return normalized.toFixed(getMoneyDecimals()).replace(/\.?0+$/, "");
 }
 
 function useRepeatablePress(action: () => void) {

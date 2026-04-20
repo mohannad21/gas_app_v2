@@ -272,9 +272,11 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
   const moneyAmount =
     (event.event_type === "collection_money" || event.event_type === "collection_payout")
       ? Number(event.money_amount ?? event.money_delta ?? 0)
-      : typeof event?.money_delta === "number"
-        ? event.money_delta
-        : Number(event?.money_amount ?? 0);
+      : event.event_type === "company_payment"
+        ? Number(event.money_amount ?? event.money?.amount ?? 0)
+        : typeof event?.money_delta === "number"
+          ? event.money_delta
+          : Number(event?.money_amount ?? 0);
   const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
     (event.event_type === "refill" || event.event_type === "company_buy_iron")

@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.auth import get_tenant_id
+from app.constants import DEFAULT_CURRENCY_CODE
 from app.db import get_session
 from app.models import (
   CashAdjustment,
@@ -69,6 +70,7 @@ from app.services.reports_event_fields import (
   _apply_status_fields,
   _remaining_actions_for_event,
   _notes_for_event,
+  currency_symbol_for_code,
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -212,6 +214,8 @@ def list_daily_reports(
   # Get settings and customers
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
+  currency_code = settings.currency_code if settings else DEFAULT_CURRENCY_CODE
+  currency_symbol = currency_symbol_for_code(currency_code)
   customers = {
     c.id: c for c in session.exec(
       select(Customer)
@@ -331,7 +335,12 @@ def list_daily_reports(
       activity_kinds = customer_activity_kinds.get((current, customer_id), set())
       transition_intent = "customer_adjust" if activity_kinds == {"adjust"} else None
       problem_lines.extend(
-        _snapshot_lines_for_customer(customer_id=customer_id, before=before, after=after)
+        _snapshot_lines_for_customer(
+          customer_id=customer_id,
+          before=before,
+          after=after,
+          currency_symbol=currency_symbol,
+        )
       )
       problem_transitions.extend(
         _snapshot_transitions_for_customer(before=before, after=after, intent=transition_intent)
@@ -341,7 +350,11 @@ def list_daily_reports(
     if current in company_activity_days or current in refill_days:
       company_before, company_after = _company_day_state_bounds(session, day=current)
       problem_lines.extend(
-        _snapshot_lines_for_company(before=company_before, after=company_after)
+        _snapshot_lines_for_company(
+          before=company_before,
+          after=company_after,
+          currency_symbol=currency_symbol,
+        )
       )
       problem_transitions.extend(
         _snapshot_transitions_for_company(
@@ -642,6 +655,8 @@ def get_daily_report(
   # Get settings
   settings = session.get(SystemSettings, "system")
   money_decimals = settings.money_decimals if settings else 2
+  currency_code = settings.currency_code if settings else DEFAULT_CURRENCY_CODE
+  currency_symbol = currency_symbol_for_code(currency_code)
 
   events.sort(key=lambda e: _event_order_key(e, event_sort_ids=event_sort_ids))
 
@@ -721,14 +736,23 @@ def get_daily_report(
     _apply_level3_fields(event, customer_after=customer_after)
 
     # Status fields
-    _apply_status_fields(event)
+    _apply_status_fields(event, currency_symbol)
 
     # Remaining actions
-    event.action_pills = _remaining_actions_for_event(event, customer_after=customer_after)
+    event.action_pills = _remaining_actions_for_event(
+      event,
+      customer_after=customer_after,
+      currency_symbol=currency_symbol,
+    )
 
     # UI fields
     notes = _notes_for_event(event)
-    _apply_ui_fields(event, money_decimals=money_decimals, notes=notes)
+    _apply_ui_fields(
+      event,
+      money_decimals=money_decimals,
+      currency_symbol=currency_symbol,
+      notes=notes,
+    )
 
   events.reverse()
 

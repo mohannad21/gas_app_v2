@@ -31,6 +31,7 @@ import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
 import DaySummaryBox from "@/components/reports/DaySummaryBox";
@@ -42,7 +43,7 @@ const formatMoney = (value: number) => Number(value || 0).toFixed(0);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
 const formatMoneySigned = (value: number) => {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}₪${formatMoney(Math.abs(value))}`;
+  return `${sign}${getCurrencySymbol()}${formatMoney(Math.abs(value))}`;
 };
 const buildCashMathLines = (cashMath?: any) => {
   if (!cashMath) return [];
