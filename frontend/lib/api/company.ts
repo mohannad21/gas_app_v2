@@ -30,6 +30,17 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   return parsed;
 }
 
+export async function updateSystemSettings(payload: {
+  currency_code?: string;
+  money_decimals?: number;
+}): Promise<SystemSettings> {
+  const { data } = await api.patch("/system/settings", payload);
+  const parsed = parse(SystemSettingsSchema, data);
+  setMoneyDecimals(parsed.money_decimals);
+  setCurrencyCode(parsed.currency_code);
+  return parsed;
+}
+
 export async function getCompanyBalances(): Promise<CompanyBalances> {
   const { data } = await api.get("/company/balances");
   const parsed = parse(CompanyBalancesSchema, data);

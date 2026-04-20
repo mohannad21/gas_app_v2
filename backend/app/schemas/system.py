@@ -68,6 +68,11 @@ class SystemSettingsOut(SQLModel):
   created_at: datetime
 
 
+class SystemSettingsUpdate(SQLModel):
+  currency_code: Optional[str] = None
+  money_decimals: Optional[int] = None
+
+
 class CustomerOpeningBalance(SQLModel):
   customer_id: str
   money: int = 0

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getSystemSettings, initializeSystem } from "@/lib/api";
+import { getSystemSettings, initializeSystem, updateSystemSettings } from "@/lib/api";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { showToast } from "@/lib/toast";
 import { SystemInitializeInput, SystemSettings } from "@/types/domain";
@@ -34,3 +34,18 @@ export function useInitializeSystem(options?: { showToast?: boolean }) {
   });
 }
 
+export function useUpdateSystemSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { currency_code?: string; money_decimals?: number }) =>
+      updateSystemSettings(payload),
+    onError: (err) => {
+      showToast(getUserFacingApiError(err, "Failed to update settings."));
+      logApiError("[updateSystemSettings ERROR]", err);
+    },
+    onSuccess: () => {
+      showToast("Settings saved");
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+    },
+  });
+}

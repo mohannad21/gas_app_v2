@@ -63,6 +63,10 @@ export default function AccountScreen() {
           <Text style={styles.rowText}>Expense Categories</Text>
           <Text style={styles.rowChevron}>{">"}</Text>
         </Pressable>
+        <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/configuration/currency-settings")}>
+          <Text style={styles.rowText}>Currency</Text>
+          <Text style={styles.rowChevron}>{">"}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.section}>

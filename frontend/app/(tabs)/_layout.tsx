@@ -91,6 +91,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="account/configuration/currency-settings"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="account/plan-billing"
         options={{
           href: null,

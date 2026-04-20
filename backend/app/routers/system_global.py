@@ -17,10 +17,11 @@ from app.models import (
     SystemSettings,
 )
 from app.schemas import (
-    LedgerHealthIssue, 
-    SystemHealthCheckOut, 
-    SystemInitialize, 
-    SystemSettingsOut
+    LedgerHealthIssue,
+    SystemHealthCheckOut,
+    SystemInitialize,
+    SystemSettingsOut,
+    SystemSettingsUpdate,
 )
 from app.services.posting import (
     LedgerLine,
@@ -51,6 +52,30 @@ def get_system_settings(session: Session = Depends(get_session)) -> SystemSettin
             money_decimals=2,
             created_at=datetime.now(timezone.utc)
         )
+    return SystemSettingsOut(
+        id=settings.id,
+        is_setup_completed=settings.is_setup_completed,
+        currency_code=settings.currency_code,
+        money_decimals=settings.money_decimals,
+        created_at=settings.created_at,
+    )
+
+@router.patch("/settings", response_model=SystemSettingsOut)
+def update_system_settings(
+    payload: SystemSettingsUpdate,
+    session: Session = Depends(get_session),
+) -> SystemSettingsOut:
+    """Update currency_code and/or money_decimals after initialization."""
+    settings = session.get(SystemSettings, "system")
+    if not settings:
+        raise HTTPException(status_code=400, detail="system_not_initialized")
+    if payload.currency_code is not None:
+        settings.currency_code = payload.currency_code.strip()
+    if payload.money_decimals is not None:
+        settings.money_decimals = max(0, payload.money_decimals)
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
     return SystemSettingsOut(
         id=settings.id,
         is_setup_completed=settings.is_setup_completed,
