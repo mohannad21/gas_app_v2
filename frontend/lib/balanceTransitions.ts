@@ -1,6 +1,6 @@
 import type { BalanceTransition } from "@/types/domain";
 import { getBalanceDirectionLabel, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
-import { getCurrencyCode, getCurrencySymbol } from "@/lib/money";
+import { getCurrencySymbol } from "@/lib/money";
 
 type BalanceScope = BalanceTransition["scope"];
 type BalanceComponent = BalanceTransition["component"];
@@ -33,7 +33,7 @@ type TransitionInput = Partial<BalanceTransition> & {
 const defaultFormatMoney: FormatMoney = (value) => String(Number(value || 0));
 
 function formatMoneyValue(value: number, formatMoney: FormatMoney) {
-  return `${formatMoney(Math.abs(value))} ${getCurrencyCode()}`;
+  return `${formatMoney(Math.abs(value))} ${getCurrencySymbol()}`;
 }
 
 function formatCylinderValue(scope: BalanceScope, component: BalanceComponent, value: number) {
