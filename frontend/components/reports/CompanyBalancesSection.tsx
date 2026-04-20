@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { getCurrencyCode } from "@/lib/money";
+import { getCurrencySymbol } from "@/lib/money";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
 
 type CompanyBalancesSectionProps = {
@@ -42,7 +42,7 @@ function buildCompanyBoxes(
   return [
     {
       label: "Money balance",
-      value: `${formatMoney(Math.abs(moneyNet))} ${getCurrencyCode()}`,
+      value: `${formatMoney(Math.abs(moneyNet))} ${getCurrencySymbol()}`,
       direction: directionForCompanyMoney(moneyNet),
     },
     {

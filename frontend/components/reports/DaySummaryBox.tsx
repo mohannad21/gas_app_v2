@@ -3,9 +3,10 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import { getCurrencySymbol } from "@/lib/money";
 import { DailyReportCard } from "@/types/domain";
 
-const formatMoney = (v: number) => `₪${Math.abs(Number(v || 0)).toFixed(0)}`;
+const formatMoney = (v: number) => `${getCurrencySymbol()}${Math.abs(Number(v || 0)).toFixed(0)}`;
 
 type DaySummaryBoxProps = {
   card: DailyReportCard;
@@ -48,7 +49,7 @@ export default function DaySummaryBox({ card }: DaySummaryBoxProps) {
               ))}
             </View>
           ) : (
-            <Text style={styles.allGood}>✅ All settled</Text>
+            <Text style={styles.allGood}>âœ… All settled</Text>
           )}
         </View>
       ) : null}

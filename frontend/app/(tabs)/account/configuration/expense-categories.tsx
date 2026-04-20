@@ -22,7 +22,7 @@ import {
 } from "@/hooks/useExpenseCategories";
 import { useExpenses } from "@/hooks/useExpenses";
 import { formatDateMedium } from "@/lib/date";
-import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
+import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 
 function statusTone(isActive: boolean) {
   return isActive
@@ -39,7 +39,7 @@ export default function ExpenseCategoriesConfigurationScreen() {
   const recentExpenses = (expensesQuery.data ?? []).slice(0, 15);
 
   function formatMoney(value: number) {
-    return `${value.toFixed(getMoneyDecimals())} ${getCurrencyCode()}`;
+    return `${value.toFixed(getMoneyDecimals())} ${getCurrencySymbol()}`;
   }
 
   const [modalVisible, setModalVisible] = useState(false);

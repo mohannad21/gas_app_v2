@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useInitializeSystem, useSystemSettings } from "@/hooks/useSystemSettings";
 import FieldPair, { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import PriceInputForm, { PriceFormValues } from "@/components/PriceInputForm";
+import { getCurrencySymbol } from "@/lib/money";
 
 type CompanyBalance = {
   direction: "owes_me" | "i_owe" | "balanced";
@@ -231,7 +232,7 @@ export default function WelcomeScreen() {
         question: "How much money is in your wallet to start the day?",
         explanation: "This is your wallet balance right now.",
         type: "inputs",
-        fields: [{ key: "cashStart", label: "Starting wallet (₪)", placeholder: "0", unit: "money" }],
+        fields: [{ key: "cashStart", label: `Starting wallet (${getCurrencySymbol()})`, placeholder: "0", unit: "money" }],
       },
       {
         id: "review",
@@ -287,8 +288,8 @@ export default function WelcomeScreen() {
     const money = (value: string) => toNumber(value);
     const count = (value: string) => toNumber(value);
 
-    if (companyPayMoneyValue > 0) lines.push(`Debts on distributor: ${companyPayMoneyValue}₪`);
-    if (companyPayMoneyValue < 0) lines.push(`Credit for distributor: ${Math.abs(companyPayMoneyValue)}₪`);
+    if (companyPayMoneyValue > 0) lines.push(`Debts on distributor: ${companyPayMoneyValue}${getCurrencySymbol()}`);
+    if (companyPayMoneyValue < 0) lines.push(`Credit for distributor: ${Math.abs(companyPayMoneyValue)}${getCurrencySymbol()}`);
 
     if (companyBalances.empty12 > 0) lines.push(`Debts on distributor: ${companyBalances.empty12}x 12kg`);
     if (companyBalances.empty48 > 0) lines.push(`Debts on distributor: ${companyBalances.empty48}x 48kg`);
@@ -305,7 +306,7 @@ export default function WelcomeScreen() {
         `Inventory empty: ${count(state.inventoryEmpty12)}x 12kg, ${count(state.inventoryEmpty48)}x 48kg`
       );
     }
-    if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}₪`);
+    if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}${getCurrencySymbol()}`);
 
     return lines.length > 0 ? lines : ["No opening balances provided."];
   }, [state, companyBalances, companyPayMoneyValue]);

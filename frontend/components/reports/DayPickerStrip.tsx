@@ -3,6 +3,7 @@ import { memo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
+import { getCurrencySymbol } from "@/lib/money";
 import { DailyReportCard } from "@/types/domain";
 
 type DayPickerStripProps = {
@@ -24,7 +25,7 @@ const DayCard = memo(function DayCard({
   const dayNum = d.getDate();
   const month = d.toLocaleDateString("en-US", { month: "short" });
   const net = typeof item.net_today === "number" ? item.net_today : 0;
-  const netStr = `${net >= 0 ? "+" : ""}₪${Math.abs(net)}`;
+  const netStr = `${net >= 0 ? "+" : ""}${getCurrencySymbol()}${Math.abs(net)}`;
   const netColor = selected ? "#fff" : net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
   const metricLabelStyle = selected ? styles.metricLabelSelected : styles.metricLabel;
   const metricValueStyle = selected ? styles.metricValueSelected : styles.metricValue;

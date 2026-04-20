@@ -25,7 +25,7 @@ import {
   orderToEvent,
   refillSummaryToEvent,
 } from "@/lib/activityAdapter";
-import { getCurrencyCode } from "@/lib/money";
+import { getCurrencySymbol } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
@@ -1497,9 +1497,9 @@ export function AddCustomersSection({
 
           const moneyLabel =
             money > 0
-              ? `Debts on customer ${money.toFixed(0)} ${getCurrencyCode()}`
+              ? `Debts on customer ${money.toFixed(0)} ${getCurrencySymbol()}`
               : money < 0
-                ? `Credit for customer ${Math.abs(money).toFixed(0)} ${getCurrencyCode()}`
+                ? `Credit for customer ${Math.abs(money).toFixed(0)} ${getCurrencySymbol()}`
                 : "Settled";
           const cyl12Label =
             cyl12 > 0

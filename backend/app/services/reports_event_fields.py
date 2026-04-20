@@ -438,7 +438,7 @@ def _time_display(value) -> str:
   return business_local_datetime_from_utc(value).strftime("%H:%M")
 
 
-def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
+def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_symbol: str) -> str:
   gas = event.gas_type or "12kg"
   if event.event_type == "order":
     installed = _safe_int(event.order_installed)
@@ -486,7 +486,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
   if event.event_type == "collection_money":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Payment from customer {_format_money_major(amount, money_decimals)}"
+      return f"Payment from customer {_format_money_major(amount, money_decimals, currency_symbol)}"
     return "Payment from customer"
   if event.event_type == "collection_empty":
     parts: list[str] = []
@@ -501,12 +501,12 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     label = _company_payment_label(event)
     if amount:
-      return f"{label} {_format_money_major(amount, money_decimals)}"
+      return f"{label} {_format_money_major(amount, money_decimals, currency_symbol)}"
     return label
   if event.event_type == "collection_payout":
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
-      return f"Payment to customer {_format_money_major(amount, money_decimals)}"
+      return f"Payment to customer {_format_money_major(amount, money_decimals, currency_symbol)}"
     return "Payment to customer"
   if event.event_type == "customer_adjust":
     return "Adjusted customer balance"
@@ -516,10 +516,10 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int) -> str:
     amount = _safe_int(event.total_cost)
     if event.transfer_direction == "bank_to_wallet":
       if amount:
-        return f"Transferred {_format_money_major(amount, money_decimals)} to wallet"
+        return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to wallet"
       return "Transferred to wallet"
     if amount:
-      return f"Transferred {_format_money_major(amount, money_decimals)} to bank"
+      return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to bank"
     return "Transferred to bank"
   if event.event_type == "cash_adjust":
     return "Wallet adjustment"
@@ -574,6 +574,7 @@ def _apply_ui_fields(
   event: DailyReportEvent,
   *,
   money_decimals: int,
+  currency_symbol: str,
   notes: list[ActivityNote],
 ) -> None:
   event.event_kind = _event_kind(event)
@@ -610,7 +611,7 @@ def _apply_ui_fields(
     event.money_direction = "none"
     event.money_delta = 0
 
-  event.hero_text = _hero_text_for_event(event, money_decimals)
+  event.hero_text = _hero_text_for_event(event, money_decimals, currency_symbol)
   event.hero_primary = event.hero_text
   event.context_line = _context_line(event)
 
@@ -802,8 +803,24 @@ def _gas_short(gas_type: Optional[str]) -> Optional[str]:
   return None
 
 
-def _format_money(amount: int) -> str:
-  return f"₪{amount}"
+_CURRENCY_SYMBOLS: dict[str, str] = {
+  "USD": "$",
+  "ILS": "₪",
+  "EUR": "€",
+  "GBP": "£",
+  "JOD": "JD",
+  "EGP": "E£",
+  "SAR": "﷼",
+  "AED": "د.إ",
+}
+
+
+def currency_symbol_for_code(code: str) -> str:
+  return _CURRENCY_SYMBOLS.get(code, code)
+
+
+def _format_money(amount: int, symbol: str) -> str:
+  return f"{symbol}{amount}"
 
 
 def _money_major(amount: int, decimals: int) -> int:
@@ -813,8 +830,8 @@ def _money_major(amount: int, decimals: int) -> int:
   return int(round(amount / scale))
 
 
-def _format_money_major(amount: int, decimals: int) -> str:
-  return f"₪{_money_major(amount, decimals)}"
+def _format_money_major(amount: int, decimals: int, symbol: str) -> str:
+  return f"{symbol}{_money_major(amount, decimals)}"
 
 
 def _empty_word(qty: int) -> str:
@@ -846,14 +863,18 @@ def _pill(
   )
 
 
-def _money_pill(direction: Literal["customer->dist", "dist->customer", "dist->company", "company->dist"], amount: int) -> Level3Action:
+def _money_pill(
+  direction: Literal["customer->dist", "dist->customer", "dist->company", "company->dist"],
+  amount: int,
+  currency_symbol: str,
+) -> Level3Action:
   if direction == "customer->dist":
     return _pill(
       category="money",
       kind="money",
       direction=direction,
       severity="warning",
-      text=f"Customer pays you {_format_money(amount)}",
+      text=f"Customer pays you {_format_money(amount, currency_symbol)}",
       amount=amount,
     )
   if direction == "dist->customer":
@@ -862,7 +883,7 @@ def _money_pill(direction: Literal["customer->dist", "dist->customer", "dist->co
       kind="money",
       direction=direction,
       severity="warning",
-      text=f"You pay customer {_format_money(amount)}",
+      text=f"You pay customer {_format_money(amount, currency_symbol)}",
       amount=amount,
     )
   if direction == "dist->company":
@@ -871,7 +892,7 @@ def _money_pill(direction: Literal["customer->dist", "dist->customer", "dist->co
       kind="money",
       direction=direction,
       severity="danger",
-      text=f"You pay company {_format_money(amount)}",
+      text=f"You pay company {_format_money(amount, currency_symbol)}",
       amount=amount,
     )
   return _pill(
@@ -879,7 +900,7 @@ def _money_pill(direction: Literal["customer->dist", "dist->customer", "dist->co
     kind="money",
     direction="company->dist",
     severity="danger",
-    text=f"Company pays you {_format_money(amount)}",
+    text=f"Company pays you {_format_money(amount, currency_symbol)}",
     amount=amount,
   )
 
@@ -945,12 +966,17 @@ def _full_pill(
   )
 
 
-def _customer_pills_from_debt(debt_cash: int, debt_12: int, debt_48: int) -> list[Level3Action]:
+def _customer_pills_from_debt(
+  debt_cash: int,
+  debt_12: int,
+  debt_48: int,
+  currency_symbol: str,
+) -> list[Level3Action]:
   actions: list[Level3Action] = []
   if debt_cash > 0:
-    actions.append(_money_pill("customer->dist", debt_cash))
+    actions.append(_money_pill("customer->dist", debt_cash, currency_symbol))
   elif debt_cash < 0:
-    actions.append(_money_pill("dist->customer", abs(debt_cash)))
+    actions.append(_money_pill("dist->customer", abs(debt_cash), currency_symbol))
   if debt_12 > 0:
     actions.append(_empty_pill(direction="customer->dist", gas="12", qty=debt_12))
   elif debt_12 < 0:
@@ -966,13 +992,14 @@ def _company_pills_from_debt(
   company_money: Optional[int],
   company_cyl_12: Optional[int],
   company_cyl_48: Optional[int],
+  currency_symbol: str,
 ) -> list[Level3Action]:
   actions: list[Level3Action] = []
   if isinstance(company_money, int):
     if company_money > 0:
-      actions.append(_money_pill("dist->company", company_money))
+      actions.append(_money_pill("dist->company", company_money, currency_symbol))
     elif company_money < 0:
-      actions.append(_money_pill("company->dist", abs(company_money)))
+      actions.append(_money_pill("company->dist", abs(company_money), currency_symbol))
   if isinstance(company_cyl_12, int):
     if company_cyl_12 < 0:
       actions.append(_empty_pill(direction="dist->company", gas="12", qty=abs(company_cyl_12)))
@@ -986,7 +1013,7 @@ def _company_pills_from_debt(
   return actions
 
 
-def _atomic_action_pills(event: DailyReportEvent) -> list[Level3Action]:
+def _atomic_action_pills(event: DailyReportEvent, currency_symbol: str) -> list[Level3Action]:
   actions: list[Level3Action] = []
 
   if event.event_type == "order":
@@ -1005,23 +1032,23 @@ def _atomic_action_pills(event: DailyReportEvent) -> list[Level3Action]:
         if gas:
           actions.append(_full_pill(direction="dist->customer", gas=gas, qty=received - installed))
       if diff > 0:
-        actions.append(_money_pill("customer->dist", diff))
+        actions.append(_money_pill("customer->dist", diff, currency_symbol))
       elif diff < 0:
-        actions.append(_money_pill("dist->customer", abs(diff)))
+        actions.append(_money_pill("dist->customer", abs(diff), currency_symbol))
       return actions
 
     if event.order_mode == "sell_iron":
       if diff > 0:
-        actions.append(_money_pill("customer->dist", diff))
+        actions.append(_money_pill("customer->dist", diff, currency_symbol))
       elif diff < 0:
-        actions.append(_money_pill("dist->customer", abs(diff)))
+        actions.append(_money_pill("dist->customer", abs(diff), currency_symbol))
       return actions
 
     if event.order_mode == "buy_iron":
       if diff > 0:
-        actions.append(_money_pill("dist->customer", diff))
+        actions.append(_money_pill("dist->customer", diff, currency_symbol))
       elif diff < 0:
-        actions.append(_money_pill("customer->dist", abs(diff)))
+        actions.append(_money_pill("customer->dist", abs(diff), currency_symbol))
       return actions
 
   if event.event_type == "refill":
@@ -1041,9 +1068,9 @@ def _atomic_action_pills(event: DailyReportEvent) -> list[Level3Action]:
     paid_now = _safe_int(event.paid_now)
     diff = total_cost - paid_now
     if diff > 0:
-      actions.append(_money_pill("dist->company", diff))
+      actions.append(_money_pill("dist->company", diff, currency_symbol))
     elif diff < 0:
-      actions.append(_money_pill("company->dist", abs(diff)))
+      actions.append(_money_pill("company->dist", abs(diff), currency_symbol))
     return actions
 
   if event.event_type == "company_buy_iron":
@@ -1051,9 +1078,9 @@ def _atomic_action_pills(event: DailyReportEvent) -> list[Level3Action]:
     paid_now = _safe_int(event.paid_now)
     diff = total_cost - paid_now
     if diff > 0:
-      actions.append(_money_pill("dist->company", diff))
+      actions.append(_money_pill("dist->company", diff, currency_symbol))
     elif diff < 0:
-      actions.append(_money_pill("company->dist", abs(diff)))
+      actions.append(_money_pill("company->dist", abs(diff), currency_symbol))
     return actions
 
   if event.event_type in {"expense", "adjust", "cash_adjust", "bank_deposit"}:
@@ -1067,6 +1094,7 @@ def _remaining_actions_for_event(
   *,
   customer_before: Optional[CustomerLedgerState] = None,
   customer_after: Optional[CustomerLedgerState] = None,
+  currency_symbol: str,
 ) -> list[Level3Action]:
   if event.event_type == "order" and event.order_mode == "replacement":
     actions: list[Level3Action] = []
@@ -1085,9 +1113,9 @@ def _remaining_actions_for_event(
       elif after_cyl < 0 and gas:
         actions.append(_full_pill(direction="dist->customer", gas=gas, qty=abs(after_cyl)))
       if after_cash > 0:
-        actions.append(_money_pill("customer->dist", after_cash))
+        actions.append(_money_pill("customer->dist", after_cash, currency_symbol))
       elif after_cash < 0:
-        actions.append(_money_pill("dist->customer", abs(after_cash)))
+        actions.append(_money_pill("dist->customer", abs(after_cash), currency_symbol))
       return actions
 
     if installed > received and gas:
@@ -1096,9 +1124,9 @@ def _remaining_actions_for_event(
       actions.append(_full_pill(direction="dist->customer", gas=gas, qty=received - installed))
 
     if diff > 0:
-      actions.append(_money_pill("customer->dist", diff))
+      actions.append(_money_pill("customer->dist", diff, currency_symbol))
     elif diff < 0:
-      actions.append(_money_pill("dist->customer", abs(diff)))
+      actions.append(_money_pill("dist->customer", abs(diff), currency_symbol))
     return actions
 
   if event.event_type == "refill":
@@ -1106,6 +1134,7 @@ def _remaining_actions_for_event(
       event.company_after,
       event.company_12kg_after,
       event.company_48kg_after,
+      currency_symbol,
     )
     return [action for action in actions if action.direction != "company->dist"]
 
@@ -1114,32 +1143,32 @@ def _remaining_actions_for_event(
       return []
     debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cylinders = debt_12 != 0 or debt_48 != 0
-    return _customer_pills_from_debt(debt_cash, debt_12, debt_48)
+    return _customer_pills_from_debt(debt_cash, debt_12, debt_48, currency_symbol)
 
   if event.event_type == "collection_empty":
     if customer_after is None:
       return []
     debt_cash, debt_12, debt_48 = customer_after
     event.has_other_outstanding_cash = debt_cash != 0
-    return _customer_pills_from_debt(debt_cash, debt_12, debt_48)
+    return _customer_pills_from_debt(debt_cash, debt_12, debt_48, currency_symbol)
 
   if event.event_type == "collection_payout":
     if customer_after is None:
       return []
-    return _customer_pills_from_debt(*customer_after)
+    return _customer_pills_from_debt(*customer_after, currency_symbol)
 
   if event.event_type == "customer_adjust":
     if customer_after is None:
       return []
-    return _customer_pills_from_debt(*customer_after)
+    return _customer_pills_from_debt(*customer_after, currency_symbol)
 
   if event.event_type == "company_payment":
     actions: list[Level3Action] = []
     if isinstance(event.company_after, int):
       if event.company_after > 0:
-        actions.append(_money_pill("dist->company", event.company_after))
+        actions.append(_money_pill("dist->company", event.company_after, currency_symbol))
       elif event.company_after < 0:
-        text = f"Company still owes you {_format_money(abs(event.company_after))}"
+        text = f"Company still owes you {_format_money(abs(event.company_after), currency_symbol)}"
         actions.append(
           _pill(
             category="money",
@@ -1317,8 +1346,8 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
   return notes
 
 
-def _apply_status_fields(event: DailyReportEvent) -> None:
+def _apply_status_fields(event: DailyReportEvent, currency_symbol: str) -> None:
   event.status_mode = _status_mode(event)
-  event.action_pills = _atomic_action_pills(event)
+  event.action_pills = _atomic_action_pills(event, currency_symbol)
   event.is_ok = len(event.action_pills) == 0 and event.is_balanced
   event.is_atomic_ok = event.is_ok and event.status_mode == "atomic"

@@ -521,6 +521,7 @@ def _snapshot_lines_for_customer(
   customer_id: str,
   before: CustomerLedgerState,
   after: CustomerLedgerState,
+  currency_symbol: str,
 ) -> list[tuple[str, str, str]]:
   """Returns snapshot output lines (customer_id, problem_type, description)."""
   lines: list[tuple[str, str, str]] = []
@@ -528,7 +529,7 @@ def _snapshot_lines_for_customer(
   money_after, cyl12_after, cyl48_after = after
 
   if money_after > 0:
-    lines.append((customer_id, "cash_outstanding", f"₪{money_after}"))
+    lines.append((customer_id, "cash_outstanding", f"{currency_symbol}{money_after}"))
   if cyl12_after > 0:
     lines.append((customer_id, "cyl12_outstanding", f"{cyl12_after}x12kg"))
   if cyl48_after > 0:
@@ -541,6 +542,7 @@ def _snapshot_lines_for_company(
   *,
   before: tuple[int, int, int],
   after: tuple[int, int, int],
+  currency_symbol: str,
 ) -> list[tuple[str, str, str]]:
   """Returns snapshot output lines (type, category, value)."""
   lines: list[tuple[str, str, str]] = []
@@ -548,7 +550,7 @@ def _snapshot_lines_for_company(
   money_after, cyl12_after, cyl48_after = after
 
   if money_after > 0:
-    lines.append(("company", "cash_outstanding", f"₪{money_after}"))
+    lines.append(("company", "cash_outstanding", f"{currency_symbol}{money_after}"))
   if cyl12_after > 0:
     lines.append(("company", "cyl12_outstanding", f"{cyl12_after}x12kg"))
   if cyl48_after > 0:
