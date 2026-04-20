@@ -163,6 +163,9 @@ function formatTransitionRow(
   const valBefore = formatCompactAmount(transition.component, before, formatMoney);
   const valAfter = formatCompactAmount(transition.component, after, formatMoney);
   const beforePart = dirBefore ? `${dirBefore} ${valBefore}` : valBefore;
+  if (Math.abs(after) < 0.01) {
+    return `${label}: ${beforePart} → Settled`;
+  }
   const afterPart = dirAfter ? `${valAfter} ${dirAfter}` : valAfter;
   return `${label}: ${beforePart} → ${afterPart} ${scope}`;
 }
