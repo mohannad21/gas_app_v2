@@ -39,13 +39,22 @@ def _sum_inventory_before_day(session: Session, day: date) -> ReportInventoryTot
   return _sum_inventory_at_day_end(session, prev)
 
 
-def _sum_cash_at_day_end(session: Session, day: date) -> int:
-  return sum_ledger(session, account="cash", unit="money", day_to=day)
+def _sum_cash_at_day_end(session: Session, day: date, exclude_source_types: Optional[list[str]] = None) -> int:
+  if not exclude_source_types:
+    return sum_ledger(session, account="cash", unit="money", day_to=day)
+  stmt = (
+    select(func.coalesce(func.sum(LedgerEntry.amount), 0))
+    .where(LedgerEntry.account == "cash")
+    .where(LedgerEntry.unit == "money")
+    .where(LedgerEntry.day <= day)
+    .where(LedgerEntry.source_type.notin_(exclude_source_types))
+  )
+  return int(session.exec(stmt).one() or 0)
 
 
-def _sum_cash_before_day(session: Session, day: date) -> int:
+def _sum_cash_before_day(session: Session, day: date, exclude_source_types: Optional[list[str]] = None) -> int:
   prev = day - timedelta(days=1)
-  return _sum_cash_at_day_end(session, prev)
+  return _sum_cash_at_day_end(session, prev, exclude_source_types)
 
 
 def _sum_bank_at_day_end(session: Session, day: date) -> int:
@@ -375,8 +384,9 @@ def _daily_deltas(
   unit: str,
   date_start: date,
   date_end: date,
+  exclude_source_types: Optional[list[str]] = None,
 ) -> dict[date, int]:
-  rows = session.exec(
+  q = (
     select(
       LedgerEntry.day,
       func.coalesce(func.sum(LedgerEntry.amount), 0),
@@ -391,8 +401,10 @@ def _daily_deltas(
     .where(
       LedgerEntry.state == state if state else True
     )
-    .group_by(LedgerEntry.day)
-  ).all()
+  )
+  if exclude_source_types:
+    q = q.where(LedgerEntry.source_type.notin_(exclude_source_types))
+  rows = session.exec(q.group_by(LedgerEntry.day)).all()
   return {day: int(delta or 0) for day, delta in rows}
 
 

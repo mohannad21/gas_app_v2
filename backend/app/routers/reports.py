@@ -164,7 +164,7 @@ def list_daily_reports(
     return []
 
   # Aggregate daily deltas for all accounts
-  cash_deltas = _daily_deltas(session, account="cash", unit="money", date_start=start_date, date_end=end_date)
+  cash_deltas = _daily_deltas(session, account="cash", unit="money", date_start=start_date, date_end=end_date, exclude_source_types=["company_txn"])
   company_deltas = _daily_deltas(
     session, account="company_money_debts", unit="money", date_start=start_date, date_end=end_date
   )
@@ -201,7 +201,7 @@ def list_daily_reports(
   )
 
   # Get running balances at start of date range
-  running_cash = _sum_cash_before_day(session, start_date)
+  running_cash = _sum_cash_before_day(session, start_date, exclude_source_types=["company_txn"])
   running_company = _sum_company_before_day(session, start_date)
   running_company_12 = _sum_company_cyl_before_day(session, start_date, "12kg")
   running_company_48 = _sum_company_cyl_before_day(session, start_date, "48kg")
@@ -512,7 +512,7 @@ def get_daily_report(
     cid: customer_before_states.get(cid, (0, 0, 0)) for cid in customer_ids
   }
 
-  running_cash = _sum_cash_before_day(session, report_day)
+  running_cash = _sum_cash_before_day(session, report_day, exclude_source_types=["company_txn"])
   running_bank = _sum_bank_before_day(session, report_day)
   running_company_money = _sum_company_before_day(session, report_day)
   running_company_12 = _sum_company_cyl_before_day(session, report_day, "12kg")
@@ -761,8 +761,8 @@ def get_daily_report(
 
   return DailyReportDay(
     date=report_day.isoformat(),
-    cash_start=_sum_cash_before_day(session, report_day),
-    cash_end=_sum_cash_at_day_end(session, report_day),
+    cash_start=_sum_cash_before_day(session, report_day, exclude_source_types=["company_txn"]),
+    cash_end=_sum_cash_at_day_end(session, report_day, exclude_source_types=["company_txn"]),
     company_start=_sum_company_before_day(session, report_day),
     company_end=_sum_company_at_day_end(session, report_day),
     company_12kg_start=_sum_company_cyl_before_day(session, report_day, "12kg"),
