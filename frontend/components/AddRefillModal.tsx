@@ -24,7 +24,9 @@ import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { parseCountValue, sanitizeCountInput as sanitizeSharedCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
+import { formatDisplayMoney } from "@/lib/money";
 import {
   calcCompanyCylinderLedgerDelta,
   calcMoneyUiResult,
@@ -94,21 +96,56 @@ function formatCount(value: number | null | undefined) {
 
 function formatMoney(value: number | null | undefined) {
   if (value === null || value === undefined) return "--";
-  return Number(value).toFixed(0);
+  return formatDisplayMoney(value);
 }
 
 function sanitizeCountInput(value: string) {
+  return sanitizeSharedCountInput(value);
+}
+
+function sanitizeDecimalInput(value: string): string {
   if (!value.trim()) return "";
-  const parsed = parseInt(value, 10);
-  if (Number.isNaN(parsed)) return "";
-  return String(Math.max(0, parsed));
+  // Keep digits and at most one decimal point; strip everything else
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const dotIndex = cleaned.indexOf(".");
+  if (dotIndex === -1) return cleaned;
+  // Allow at most getMoneyDecimals() digits after the point
+  return cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
+}
+
+function getTradeValueSizeStyle(value: string) {
+  if (value.length >= 8) return styles.tradeValueTight;
+  if (value.length >= 6) return styles.tradeValueCompact;
+  return null;
+}
+
+function TradeValueText({
+  value,
+  variant = "default",
+}: {
+  value: string | number;
+  variant?: "default" | "readonly";
+}) {
+  const textValue = String(value);
+  return (
+    <Text
+      style={[
+        variant === "readonly" ? styles.tradeReadonlyPriceValue : styles.tradeStatValue,
+        getTradeValueSizeStyle(textValue),
+      ]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.68}
+    >
+      {textValue}
+    </Text>
+  );
 }
 
 function sanitizeCountInputMax(value: string, max: number) {
   if (!value.trim()) return "";
-  const parsed = parseInt(value, 10);
-  if (Number.isNaN(parsed)) return "";
-  return String(Math.min(Math.max(0, parsed), Math.max(0, max)));
+  const parsed = parseCountValue(value);
+  return String(Math.min(parsed, Math.max(0, max)));
 }
 
 export function sanitizeBuyCountInput(value: string, max: number | null | undefined, isBuyMode: boolean) {
@@ -143,6 +180,18 @@ export function RefillForm({
     { delta: 20, label: "+20", position: "top-right" },
     { delta: -5, label: "-5", position: "left" },
     { delta: 5, label: "+5", position: "right" },
+  ];
+  const FIELD_PAID_STEPPERS: FieldStepper[] = [
+    { delta: -20, label: "-20", position: "extra-top-left" },
+    { delta: 20, label: "+20", position: "extra-top-right" },
+    { delta: -5, label: "-5", position: "top-left" },
+    { delta: 5, label: "+5", position: "top-right" },
+    { delta: -1, label: "-1", position: "left" },
+    { delta: 1, label: "+1", position: "right" },
+    { delta: -0.1, label: "-0.1", position: "bottom-left" },
+    { delta: 0.1, label: "+0.1", position: "bottom-right" },
+    { delta: -0.01, label: "-0.01", position: "extra-bottom-left" },
+    { delta: 0.01, label: "+0.01", position: "extra-bottom-right" },
   ];
   const FIELD_QTY_STEPPERS: FieldStepper[] = [
     { delta: -1, label: "-", position: "left" },
@@ -594,7 +643,7 @@ export function RefillForm({
                     style={[styles.nowButton, editEntry && styles.dateFieldDisabled]}
                     onPress={editEntry ? undefined : () => {
                       formState.setDate(getCurrentLocalDate());
-                      formState.setTime(getCurrentLocalTime({ includeSeconds: true }));
+                      formState.setTime(getCurrentLocalTime());
                     }}
                   >
                     <Text style={styles.nowButtonText}>Now</Text>
@@ -864,7 +913,7 @@ export function RefillForm({
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
                         <View style={styles.tradeStatValueWrap}>
-                          <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                          <TradeValueText value={totalBuy12} />
                         </View>
                       </View>
                       <View style={styles.tradeOperatorCell}>
@@ -876,7 +925,7 @@ export function RefillForm({
                       <View style={styles.tradeReadonlyPriceCell}>
                         <Text style={styles.tradeReadonlyPriceTitle}>PRICE</Text>
                         <View style={styles.tradeReadonlyPriceValueWrap}>
-                          <Text style={styles.tradeReadonlyPriceValue}>{price12Value}</Text>
+                          <TradeValueText value={price12Value} variant="readonly" />
                         </View>
                       </View>
                       <View style={styles.tradeOperatorCell}>
@@ -888,7 +937,7 @@ export function RefillForm({
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>TOTAL</Text>
                         <View style={styles.tradeStatValueWrap}>
-                          <Text style={styles.tradeStatValue}>{line12Cost.toFixed(0)}</Text>
+                          <TradeValueText value={formatDisplayMoney(line12Cost)} />
                         </View>
                       </View>
                     </View>
@@ -916,7 +965,7 @@ export function RefillForm({
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
                         <View style={styles.tradeStatValueWrap}>
-                          <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                          <TradeValueText value={totalBuy48} />
                         </View>
                       </View>
                       <View style={styles.tradeOperatorCell}>
@@ -928,7 +977,7 @@ export function RefillForm({
                       <View style={styles.tradeReadonlyPriceCell}>
                         <Text style={styles.tradeReadonlyPriceTitle}>PRICE</Text>
                         <View style={styles.tradeReadonlyPriceValueWrap}>
-                          <Text style={styles.tradeReadonlyPriceValue}>{price48Value}</Text>
+                          <TradeValueText value={price48Value} variant="readonly" />
                         </View>
                       </View>
                       <View style={styles.tradeOperatorCell}>
@@ -940,7 +989,7 @@ export function RefillForm({
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>TOTAL</Text>
                         <View style={styles.tradeStatValueWrap}>
-                          <Text style={styles.tradeStatValue}>{line48Cost.toFixed(0)}</Text>
+                          <TradeValueText value={formatDisplayMoney(line48Cost)} />
                         </View>
                       </View>
                     </View>
@@ -972,7 +1021,7 @@ export function RefillForm({
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
                             <View style={styles.tradeStatValueWrap}>
-                              <Text style={styles.tradeStatValue}>{totalBuy12}</Text>
+                              <TradeValueText value={totalBuy12} />
                             </View>
                           </View>
                           <View style={styles.tradeOperatorCell}>
@@ -984,9 +1033,10 @@ export function RefillForm({
                           <FieldCell
                             title="Iron Price"
                             value={ironPrice12Value}
+                            valueMode="decimal"
                             onIncrement={() => adjustIronPrice12(5)}
                             onDecrement={() => adjustIronPrice12(-5)}
-                            onChangeText={(t) => formState.setIronPrice12Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice12Input(sanitizeDecimalInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -998,7 +1048,7 @@ export function RefillForm({
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>TOTAL</Text>
                             <View style={styles.tradeStatValueWrap}>
-                              <Text style={styles.tradeStatValue}>{ironLine12Cost.toFixed(0)}</Text>
+                              <TradeValueText value={formatDisplayMoney(ironLine12Cost)} />
                             </View>
                           </View>
                         </View>
@@ -1009,7 +1059,7 @@ export function RefillForm({
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
                             <View style={styles.tradeStatValueWrap}>
-                              <Text style={styles.tradeStatValue}>{totalBuy48}</Text>
+                              <TradeValueText value={totalBuy48} />
                             </View>
                           </View>
                           <View style={styles.tradeOperatorCell}>
@@ -1021,9 +1071,10 @@ export function RefillForm({
                           <FieldCell
                             title="Iron Price"
                             value={ironPrice48Value}
+                            valueMode="decimal"
                             onIncrement={() => adjustIronPrice48(5)}
                             onDecrement={() => adjustIronPrice48(-5)}
-                            onChangeText={(t) => formState.setIronPrice48Input(sanitizeCountInput(t))}
+                            onChangeText={(t) => formState.setIronPrice48Input(sanitizeDecimalInput(t))}
                             steppers={FIELD_MONEY_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
@@ -1035,7 +1086,7 @@ export function RefillForm({
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>TOTAL</Text>
                             <View style={styles.tradeStatValueWrap}>
-                              <Text style={styles.tradeStatValue}>{ironLine48Cost.toFixed(0)}</Text>
+                              <TradeValueText value={formatDisplayMoney(ironLine48Cost)} />
                             </View>
                           </View>
                         </View>
@@ -1060,23 +1111,25 @@ export function RefillForm({
                         title={CUSTOMER_WORDING.total}
                         comment=" "
                         value={totalCost}
+                        valueMode="decimal"
                         onIncrement={() => {}}
                         onDecrement={() => {}}
                         editable={false}
                       />
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
-                        comment={`Wallet ${formatMoney(walletBalance)} -> ${formatMoney(walletAfterPaid)}`}
+                        comment={`Wallet ${formatMoney(walletBalance)}→${formatMoney(walletAfterPaid)}`}
                         value={paidNowValue}
+                        valueMode="decimal"
                         onIncrement={() => adjustPaid(5)}
                         onDecrement={() => adjustPaid(-5)}
                         onChangeText={(text) => {
                           if (!canEditMoney) return;
                           formState.setPaidTouched(true);
-                          formState.setPaidNow(sanitizeCountInput(text));
+                          formState.setPaidNow(sanitizeDecimalInput(text));
                         }}
                         editable={canEditMoney}
-                        steppers={FIELD_MONEY_STEPPERS}
+                        steppers={FIELD_PAID_STEPPERS}
                       />
                     </View>
                     {/* Paid all toggle — aligned under Paid (right) field */}
@@ -1111,7 +1164,7 @@ export function RefillForm({
                                   pathname: "/expenses/new",
                                   params: {
                                     tab: "bank_to_wallet",
-                                    amount: refillWalletShortfall.toFixed(0),
+                                    amount: formatDisplayMoney(refillWalletShortfall),
                                   },
                                 })
                             : undefined
@@ -1177,10 +1230,10 @@ export function RefillForm({
         onSave={async () => {
           await initInventory.mutateAsync({
             date: formState.date,
-            full12: Number(formState.initCounts.full12) || 0,
-            empty12: Number(formState.initCounts.empty12) || 0,
-            full48: Number(formState.initCounts.full48) || 0,
-            empty48: Number(formState.initCounts.empty48) || 0,
+            full12: parseCountValue(formState.initCounts.full12),
+            empty12: parseCountValue(formState.initCounts.empty12),
+            full48: parseCountValue(formState.initCounts.full48),
+            empty48: parseCountValue(formState.initCounts.empty48),
             reason: "initial",
           });
           Keyboard.dismiss();
@@ -1393,7 +1446,7 @@ function InitInventoryModal({
                     placeholder="0"
                     keyboardType="numeric"
                     value={counts.full12}
-                    onChangeText={(value) => onChangeCounts({ ...counts, full12: value })}
+                    onChangeText={(value) => onChangeCounts({ ...counts, full12: sanitizeCountInput(value) })}
                     inputAccessoryViewID={accessoryId}
                   />
                 </View>
@@ -1404,7 +1457,7 @@ function InitInventoryModal({
                     placeholder="0"
                     keyboardType="numeric"
                     value={counts.empty12}
-                    onChangeText={(value) => onChangeCounts({ ...counts, empty12: value })}
+                    onChangeText={(value) => onChangeCounts({ ...counts, empty12: sanitizeCountInput(value) })}
                     inputAccessoryViewID={accessoryId}
                   />
                 </View>
@@ -1417,7 +1470,7 @@ function InitInventoryModal({
                     placeholder="0"
                     keyboardType="numeric"
                     value={counts.full48}
-                    onChangeText={(value) => onChangeCounts({ ...counts, full48: value })}
+                    onChangeText={(value) => onChangeCounts({ ...counts, full48: sanitizeCountInput(value) })}
                     inputAccessoryViewID={accessoryId}
                   />
                 </View>
@@ -1428,7 +1481,7 @@ function InitInventoryModal({
                     placeholder="0"
                     keyboardType="numeric"
                     value={counts.empty48}
-                    onChangeText={(value) => onChangeCounts({ ...counts, empty48: value })}
+                    onChangeText={(value) => onChangeCounts({ ...counts, empty48: sanitizeCountInput(value) })}
                     inputAccessoryViewID={accessoryId}
                   />
                 </View>
@@ -1994,6 +2047,8 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: 4,
   },
   tradeReadonlyPriceCell: {
     flex: 1,
@@ -2020,12 +2075,15 @@ const styles = StyleSheet.create({
     borderColor: "#d7dde4",
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: 4,
   },
   tradeReadonlyPriceValue: {
     fontSize: 20,
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
+    width: "100%",
   },
   tradeStatLabel: {
     fontSize: 11,
@@ -2039,6 +2097,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
+    width: "100%",
+  },
+  tradeValueCompact: {
+    fontSize: 17,
+  },
+  tradeValueTight: {
+    fontSize: 15,
   },
   tradeOperatorCell: {
     width: 20,

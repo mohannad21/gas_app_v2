@@ -20,7 +20,7 @@ export function useRefillFormState(
 ) {
   // Date & time
   const [date, setDate] = useState(getCurrentLocalDate());
-  const [time, setTime] = useState(getCurrentLocalTime({ includeSeconds: true }));
+  const [time, setTime] = useState(getCurrentLocalTime());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
 
@@ -84,7 +84,7 @@ export function useRefillFormState(
       setIronPrice48Input("0");
     } else {
       setDate(getCurrentLocalDate());
-      setTime(getCurrentLocalTime({ includeSeconds: true }));
+      setTime(getCurrentLocalTime());
       setBuy12("");
       setRet12("");
       setBuy48("");
@@ -150,7 +150,7 @@ export function useRefillFormState(
 
   const resetFormForCurrentMode = () => {
     setDate(getCurrentLocalDate());
-    setTime(getCurrentLocalTime({ includeSeconds: true }));
+    setTime(getCurrentLocalTime());
     setBuy12(isReturnMode ? "0" : "");
     setRet12(isBuyMode ? "0" : "");
     setBuy48(isReturnMode ? "0" : "");

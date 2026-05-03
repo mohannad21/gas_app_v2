@@ -110,9 +110,7 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
       queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.customer_id) });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", variables.customer_id] });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      queryClient.invalidateQueries({ queryKey: ["reports-v2"] });
-      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
     },
   });
 }

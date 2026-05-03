@@ -52,6 +52,7 @@ def sum_ledger(
   state: Optional[str] = None,
   unit: Optional[str] = None,
   customer_id: Optional[str] = None,
+  exclude_source_types: Optional[list[str]] = None,
 ) -> int:
   stmt = select(func.coalesce(func.sum(LedgerEntry.amount), 0))
   stmt = stmt.where(LedgerEntry.account == account)
@@ -63,6 +64,8 @@ def sum_ledger(
     stmt = stmt.where(LedgerEntry.unit == unit)
   if customer_id is not None:
     stmt = stmt.where(LedgerEntry.customer_id == customer_id)
+  if exclude_source_types:
+    stmt = stmt.where(LedgerEntry.source_type.notin_(exclude_source_types))
   if boundary is not None:
     boundary_up_to = boundary.happened_at
     up_to = boundary_up_to
@@ -100,8 +103,13 @@ def sum_inventory(
   return out
 
 
-def sum_cash(session: Session, *, up_to: Optional[datetime] = None) -> int:
-  return sum_ledger(session, account="cash", unit="money", up_to=up_to)
+def sum_cash(
+  session: Session,
+  *,
+  up_to: Optional[datetime] = None,
+  exclude_source_types: Optional[list[str]] = None,
+) -> int:
+  return sum_ledger(session, account="cash", unit="money", up_to=up_to, exclude_source_types=exclude_source_types)
 
 
 def sum_bank(session: Session, *, up_to: Optional[datetime] = None) -> int:

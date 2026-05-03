@@ -66,6 +66,7 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
     isSuccess: true,
     refetch: mockCompanyBalancesRefetch,
   }),
+  useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useSystems", () => ({
@@ -89,6 +90,7 @@ jest.mock("@/hooks/useReports", () => ({
 
 jest.mock("@/hooks/useCompanyPayments", () => ({
   useCompanyPayments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyPayment: () => ({ mutate: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useCash", () => ({

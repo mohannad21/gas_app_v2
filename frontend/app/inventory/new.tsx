@@ -29,6 +29,8 @@ import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } 
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
+import { formatDisplayMoney } from "@/lib/money";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 import {
   useAdjustInventory,
@@ -48,6 +50,14 @@ type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
 
 const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
 const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
+const CASH_ADJUST_STEPPERS: FieldStepper[] = [
+  { delta: -100, label: "-100", position: "extra-top-left" },
+  { delta: 100, label: "+100", position: "extra-top-right" },
+  { delta: -20, label: "-20", position: "top-left" },
+  { delta: 20, label: "+20", position: "top-right" },
+  { delta: -5, label: "-5", position: "left" },
+  { delta: 5, label: "+5", position: "right" },
+];
 const MONEY_STEPPERS: FieldStepper[] = [
   { delta: -20, label: "-20", position: "top-left" },
   { delta: 20, label: "+20", position: "top-right" },
@@ -60,11 +70,21 @@ function getLocalDateString() {
 }
 
 function getNowTime() {
-  return getCurrentLocalTime({ includeSeconds: true });
+  return getCurrentLocalTime();
 }
 
 function newInventoryAdjustGroupId() {
   return `inventory-adjust-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatCountTransitionComment(before: number | null | undefined, after: number | null | undefined) {
+  if (before === null || before === undefined || after === null || after === undefined) return undefined;
+  return `${before}->${after}`;
+}
+
+function formatMoneyTransitionComment(before: number | null | undefined, after: number | null | undefined) {
+  if (before === null || before === undefined || after === null || after === undefined) return undefined;
+  return `${formatDisplayMoney(before)}->${formatDisplayMoney(after)}`;
 }
 
 function CalendarModal({
@@ -243,22 +263,18 @@ function InventoryAdjustForm({
     }
   }, [entry, visible, date]);
 
-  const deltaFull12 = Number(full12) || 0;
-  const deltaEmpty12 = Number(empty12) || 0;
-  const deltaFull48 = Number(full48) || 0;
-  const deltaEmpty48 = Number(empty48) || 0;
+  const deltaFull12 = parseCountValue(full12, { allowNegative: true });
+  const deltaEmpty12 = parseCountValue(empty12, { allowNegative: true });
+  const deltaFull48 = parseCountValue(full48, { allowNegative: true });
+  const deltaEmpty48 = parseCountValue(empty48, { allowNegative: true });
   const baseFull12 = inventoryBefore?.full12;
   const baseEmpty12 = inventoryBefore?.empty12;
   const baseFull48 = inventoryBefore?.full48;
   const baseEmpty48 = inventoryBefore?.empty48;
-  const status12 =
-    baseFull12 !== undefined && baseEmpty12 !== undefined
-      ? `Full ${baseFull12} to ${baseFull12 + deltaFull12} | Empty ${baseEmpty12} to ${baseEmpty12 + deltaEmpty12}`
-      : null;
-  const status48 =
-    baseFull48 !== undefined && baseEmpty48 !== undefined
-      ? `Full ${baseFull48} to ${baseFull48 + deltaFull48} | Empty ${baseEmpty48} to ${baseEmpty48 + deltaEmpty48}`
-      : null;
+  const full12Comment = formatCountTransitionComment(baseFull12, baseFull12 !== undefined ? baseFull12 + deltaFull12 : undefined);
+  const empty12Comment = formatCountTransitionComment(baseEmpty12, baseEmpty12 !== undefined ? baseEmpty12 + deltaEmpty12 : undefined);
+  const full48Comment = formatCountTransitionComment(baseFull48, baseFull48 !== undefined ? baseFull48 + deltaFull48 : undefined);
+  const empty48Comment = formatCountTransitionComment(baseEmpty48, baseEmpty48 !== undefined ? baseEmpty48 + deltaEmpty48 : undefined);
 
   const resetForm = () => {
     setGasType(entry?.gas_type ?? "12kg");
@@ -315,7 +331,7 @@ function InventoryAdjustForm({
   };
 
   const stepValue = (setter: (value: string) => void, value: string, delta: number) => {
-    const current = Number(value) || 0;
+    const current = parseCountValue(value, { allowNegative: true });
     setter(String(current + delta));
   };
 
@@ -350,11 +366,13 @@ function InventoryAdjustForm({
         </>
       ) : null}
 
-      <BigBox title="12kg" statusLine={status12} statusIsAlert={(deltaFull12 || deltaEmpty12) !== 0}>
+      <BigBox title="12kg" defaultExpanded>
         <View style={styles.entryFieldPair}>
           <FieldCell
             title="Full"
+            comment={full12Comment}
             value={deltaFull12}
+            allowNegative
             onIncrement={() => {
               if (entry && gasType !== "12kg") return;
               stepValue(setFull12, full12, 1);
@@ -363,12 +381,14 @@ function InventoryAdjustForm({
               if (entry && gasType !== "12kg") return;
               stepValue(setFull12, full12, -1);
             }}
-            onChangeText={(value) => setFull12(value)}
+            onChangeText={(value) => setFull12(sanitizeCountInput(value, { allowNegative: true }))}
             editable={!entry || gasType === "12kg"}
           />
           <FieldCell
             title="Empty"
+            comment={empty12Comment}
             value={deltaEmpty12}
+            allowNegative
             onIncrement={() => {
               if (entry && gasType !== "12kg") return;
               stepValue(setEmpty12, empty12, 1);
@@ -377,16 +397,18 @@ function InventoryAdjustForm({
               if (entry && gasType !== "12kg") return;
               stepValue(setEmpty12, empty12, -1);
             }}
-            onChangeText={(value) => setEmpty12(value)}
+            onChangeText={(value) => setEmpty12(sanitizeCountInput(value, { allowNegative: true }))}
             editable={!entry || gasType === "12kg"}
           />
         </View>
       </BigBox>
-      <BigBox title="48kg" statusLine={status48} statusIsAlert={(deltaFull48 || deltaEmpty48) !== 0}>
+      <BigBox title="48kg" defaultExpanded>
         <View style={styles.entryFieldPair}>
           <FieldCell
             title="Full"
+            comment={full48Comment}
             value={deltaFull48}
+            allowNegative
             onIncrement={() => {
               if (entry && gasType !== "48kg") return;
               stepValue(setFull48, full48, 1);
@@ -395,12 +417,14 @@ function InventoryAdjustForm({
               if (entry && gasType !== "48kg") return;
               stepValue(setFull48, full48, -1);
             }}
-            onChangeText={(value) => setFull48(value)}
+            onChangeText={(value) => setFull48(sanitizeCountInput(value, { allowNegative: true }))}
             editable={!entry || gasType === "48kg"}
           />
           <FieldCell
             title="Empty"
+            comment={empty48Comment}
             value={deltaEmpty48}
+            allowNegative
             onIncrement={() => {
               if (entry && gasType !== "48kg") return;
               stepValue(setEmpty48, empty48, 1);
@@ -409,7 +433,7 @@ function InventoryAdjustForm({
               if (entry && gasType !== "48kg") return;
               stepValue(setEmpty48, empty48, -1);
             }}
-            onChangeText={(value) => setEmpty48(value)}
+            onChangeText={(value) => setEmpty48(sanitizeCountInput(value, { allowNegative: true }))}
             editable={!entry || gasType === "48kg"}
           />
         </View>
@@ -497,8 +521,7 @@ function CashAdjustForm({
   }, [entry, visible, date]);
 
   const deltaValue = Number(deltaCash) || 0;
-  const cashStatusLine =
-    cashBefore !== null ? `Cash ${cashBefore.toFixed(0)} to ${(cashBefore + deltaValue).toFixed(0)}` : null;
+  const cashComment = formatMoneyTransitionComment(cashBefore, cashBefore !== null ? cashBefore + deltaValue : null);
 
   const resetForm = () => {
     setDeltaCash(String(entry?.delta_cash ?? 0));
@@ -545,15 +568,18 @@ function CashAdjustForm({
           <Ionicons name="time-outline" size={16} color="#0a7ea4" />
         </Pressable>
       </View>
-      <BigBox title="Amount" statusLine={cashStatusLine} statusIsAlert={deltaValue < 0}>
+      <BigBox title="Amount" defaultExpanded>
         <StandaloneField>
           <FieldCell
             title="Amount"
+            comment={cashComment}
             value={deltaValue}
+            valueMode="decimal"
+            allowNegative
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}
             onChangeText={setDeltaCash}
-            steppers={MONEY_STEPPERS}
+            steppers={CASH_ADJUST_STEPPERS}
           />
         </StandaloneField>
       </BigBox>
@@ -648,7 +674,7 @@ function CompanyPaymentForm({
       mode: amountValue > 0 ? "transition" : "current",
       collapseAllSettled: true,
       intent: "company_payment",
-      formatMoney: (value) => value.toFixed(0),
+      formatMoney: (value) => formatDisplayMoney(value),
     }
   );
   const payDisabled = companyBalance <= 0;
@@ -783,8 +809,9 @@ function CompanyPaymentForm({
         >
           <FieldCell
             title={CUSTOMER_WORDING.paid}
-            comment={`Wallet ${walletBalance.toFixed(0)} -> ${walletAfter.toFixed(0)}`}
+            comment={`Wallet ${formatDisplayMoney(walletBalance)} -> ${formatDisplayMoney(walletAfter)}`}
             value={amountValue}
+            valueMode="decimal"
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}
             onChangeText={setAmount}
@@ -801,7 +828,7 @@ function CompanyPaymentForm({
               ]}
               onPress={() => {
                 if (amountValue === 0) {
-                  setAmount(totalDue.toFixed(0));
+                  setAmount(formatDisplayMoney(totalDue));
                 } else {
                   setAmount("0");
                 }
@@ -827,7 +854,7 @@ function CompanyPaymentForm({
                     pathname: "/expenses/new",
                     params: {
                       tab: "bank_to_wallet",
-                      amount: companyPaymentShortfall.toFixed(0),
+                      amount: formatDisplayMoney(companyPaymentShortfall),
                     },
                   })
               : undefined
@@ -1006,6 +1033,16 @@ export default function InventoryNewScreen() {
           <Text style={styles.hubTitle}>
             {section === "company" ? "Company Activities" : "Ledger Adjustments"}
           </Text>
+          {section === "company" ? (
+            <Pressable
+              style={styles.hubHeaderButton}
+              onPress={() => router.push("/inventory/company-balance-adjust")}
+              accessibilityRole="button"
+              accessibilityLabel="Adjust company balances"
+            >
+              <Text style={styles.hubHeaderButtonText}>Adjust balances</Text>
+            </Pressable>
+          ) : null}
         </View>
         <View style={styles.modeRow}>
           {visibleTabs.map((tab) => {
@@ -1148,6 +1185,16 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "800",
     color: "#0f172a",
+  },
+  hubHeaderButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#e2e8f0",
+  },
+  hubHeaderButtonText: {
+    fontWeight: "700",
+    color: "#0a7ea4",
   },
   modeRow: {
     flexDirection: "row",

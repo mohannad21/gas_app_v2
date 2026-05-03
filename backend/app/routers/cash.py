@@ -9,7 +9,7 @@ from app.db import get_session
 from app.models import CashAdjustment, Expense
 from app.services.ledger import sum_cash
 from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
-from app.services.posting import derive_day, normalize_happened_at, post_cash_adjustment, post_expense, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, post_cash_adjustment, post_expense, reverse_source
 
 router = APIRouter(prefix="/cash", tags=["cash"])
 
@@ -103,7 +103,7 @@ def create_cash_adjustment(
         created_at=existing.created_at,
         is_deleted=existing.deleted_at is not None,
       )
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   adjustment = CashAdjustment(
     tenant_id=tenant_id,
     request_id=payload.request_id,
@@ -263,6 +263,7 @@ def list_bank_deposits(
     BankDepositOut(
       id=row.id,
       happened_at=row.happened_at,
+      created_at=row.created_at,
       amount=row.amount,
       direction=_transfer_direction(row),
       note=row.note,
@@ -290,13 +291,14 @@ def create_bank_deposit(
       return BankDepositOut(
         id=existing.id,
         happened_at=existing.happened_at,
+        created_at=existing.created_at,
         amount=existing.amount,
         direction=_transfer_direction(existing),
         note=existing.note,
       )
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   if payload.direction == "wallet_to_bank":
-    wallet_available = sum_cash(session, up_to=happened_at)
+    wallet_available = sum_cash(session, up_to=happened_at, exclude_source_types=["company_txn"])
     if payload.amount > wallet_available:
       raise HTTPException(
         status_code=400,
@@ -325,6 +327,7 @@ def create_bank_deposit(
   return BankDepositOut(
     id=expense.id,
     happened_at=expense.happened_at,
+    created_at=expense.created_at,
     amount=expense.amount,
     direction=payload.direction,
     note=expense.note,

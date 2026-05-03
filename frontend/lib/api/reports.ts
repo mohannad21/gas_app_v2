@@ -1,4 +1,5 @@
 import { fromMinorUnits } from "@/lib/money";
+import { normalizeBankDepositDisplayEvent } from "@/lib/activityAdapter";
 import {
   DailyReportCard,
   DailyReportCardSchema,
@@ -53,8 +54,9 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
       cash_in: fromMinorUnits(parsed.audit_summary.cash_in),
       new_debt: fromMinorUnits(parsed.audit_summary.new_debt),
     },
-    events: parsed.events.map((ev) => ({
-      ...ev,
+    events: parsed.events.map((ev) =>
+      normalizeBankDepositDisplayEvent({
+        ...ev,
       cash_before: ev.cash_before != null ? fromMinorUnits(ev.cash_before) : ev.cash_before,
       cash_after: ev.cash_after != null ? fromMinorUnits(ev.cash_after) : ev.cash_after,
       company_before: ev.company_before != null ? fromMinorUnits(ev.company_before) : ev.company_before,
@@ -72,7 +74,8 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
           }
         : ev.money,
       money_amount: ev.money_amount != null ? fromMinorUnits(ev.money_amount) : ev.money_amount,
-      money_delta: ev.money_delta != null ? fromMinorUnits(ev.money_delta) : ev.money_delta,
+      // The backend already sends event.money_delta in major units.
+      money_delta: ev.money_delta,
       money_received: ev.money_received != null ? fromMinorUnits(ev.money_received) : ev.money_received,
       notes: Array.isArray(ev.notes)
         ? ev.notes.map((note) =>
@@ -108,6 +111,7 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
           )
         : ev.action_pills,
       balance_transitions: mapBalanceTransitionAmounts(ev.balance_transitions) ?? ev.balance_transitions,
-    })),
+    })
+    ),
   };
 }

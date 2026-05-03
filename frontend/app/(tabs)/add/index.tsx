@@ -17,20 +17,23 @@ import {
   bankDepositToEvent,
   cashAdjustmentToEvent,
   collectionToEvent,
+  companyBalanceAdjustmentToEvent,
   companyPaymentToEvent,
   customerAdjustmentToEvent,
-  expenseToEvent,
-  getCompanyInventoryEditTab,
-  inventoryAdjustmentToEvent,
-  orderToEvent,
-  refillSummaryToEvent,
-} from "@/lib/activityAdapter";
-import { getCurrencySymbol } from "@/lib/money";
+    expenseToEvent,
+    getCompanyInventoryEditTab,
+    inventoryAdjustmentToEvent,
+    inventoryAdjustmentGroupToEvent,
+    orderToEvent,
+    refillSummaryToEvent,
+  } from "@/lib/activityAdapter";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
 import { useCompanyPayments, useDeleteCompanyPayment } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
+import { useCompanyBalanceAdjustments } from "@/hooks/useCompanyBalances";
 import {
   CUSTOMER_DELETE_BLOCKED_MESSAGE,
   isCustomerDeleteBlockedError,
@@ -62,7 +65,7 @@ import {
   PriceMatrixSection,
   gasTypes,
 } from "@/components/PriceMatrix";
-import { BankDeposit, CashAdjustment, CollectionEvent, CompanyPayment, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
+import { BankDeposit, CashAdjustment, CollectionEvent, CompanyBalanceAdjustment, CompanyPayment, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
 
 type AddMode =
   | "customer_activities"
@@ -80,7 +83,7 @@ type CustomerActivityFilter =
   | "buy_empty"
   | "adjustment";
 
-type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
+type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full" | "adjustment";
 type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = "all_categories" | string;
 type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
@@ -146,8 +149,36 @@ type CompanyActivityListItem =
       kind: "company_payment";
       sortAt: string;
       createdAt: string;
-      is_deleted: false;
+      is_deleted: boolean;
       data: CompanyPayment;
+    }
+  | {
+      id: string;
+      kind: "company_adjustment";
+      sortAt: string;
+      createdAt: string;
+      is_deleted: boolean;
+      data: CompanyBalanceAdjustment;
+    };
+
+type LedgerAdjustmentListItem =
+  | {
+      id: string;
+      kind: "inventory_adjustment";
+      sortAt: string;
+      createdAt: string;
+      is_deleted: boolean;
+      data: InventoryAdjustment[];
+      representative: InventoryAdjustment;
+      isGrouped: boolean;
+    }
+  | {
+      id: string;
+      kind: "cash_adjustment";
+      sortAt: string;
+      createdAt: string;
+      is_deleted: boolean;
+      data: CashAdjustment;
     };
 
 function formatPriceGasList(items: string[]) {
@@ -170,6 +201,7 @@ const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
   { id: "refill", label: "Refill" },
   { id: "company_payment", label: "Company Payment" },
   { id: "buy_full", label: "Buy Full" },
+  { id: "adjustment", label: "Adjustment" },
 ];
 
 const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
@@ -211,8 +243,8 @@ export default function AddChooserScreen() {
 
   // Extract delete confirm state into custom hook
   const { confirm, setConfirm, deletingIds, setDeletingIds, markDeleting, unmarkDeleting } = useDeleteConfirm();
-  const ordersQuery = useOrders(true);
-  const collectionsQuery = useCollections(true);
+  const ordersQuery = useOrders(false);
+  const collectionsQuery = useCollections(false);
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
@@ -259,12 +291,13 @@ const formatDateTime = (value?: string) => {
     return `${year}-${month}-${day}`;
   };
   const todayDate = getLocalDateString();
-  const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, true);
-  const allCashAdjustmentsQuery = useCashAdjustments(undefined, true);
-  const companyRefillsQuery = useInventoryRefills(true);
+  const allInventoryAdjustmentsQuery = useInventoryAdjustments(undefined, false);
+  const allCashAdjustmentsQuery = useCashAdjustments(undefined, false);
+  const companyRefillsQuery = useInventoryRefills(false);
   const companyPaymentsQuery = useCompanyPayments({ enabled: isCompanyActivities });
-  const expensesQuery = useExpenses(undefined, { enabled: isExpenses, includeDeleted: true });
-  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses, includeDeleted: true });
+  const companyAdjustmentsQuery = useCompanyBalanceAdjustments({ enabled: isCompanyActivities });
+  const expensesQuery = useExpenses(undefined, { enabled: isExpenses, includeDeleted: false });
+  const bankDepositsQuery = useBankDeposits(undefined, { enabled: isExpenses, includeDeleted: false });
   const deleteBankDeposit = useDeleteBankDeposit();
 
 
@@ -339,15 +372,17 @@ const formatDateTime = (value?: string) => {
       customerName: customersById.get(collection.customer_id)?.name ?? collection.customer_id,
       data: collection,
     }));
-    const adjustmentItems = (customerAdjustmentsQuery.data ?? []).map<CustomerActivityListItem>((adjustment) => ({
-      id: `adjustment-${adjustment.id}`,
-      kind: "adjustment" as const,
-      filterId: "adjustment" as const,
-      sortAt: adjustment.created_at || adjustment.effective_at || new Date().toISOString(),
-      createdAt: adjustment.created_at || adjustment.effective_at || "",
-      customerName: customersById.get(adjustment.customer_id)?.name ?? adjustment.customer_id,
-      data: adjustment,
-    }));
+    const adjustmentItems = (customerAdjustmentsQuery.data ?? [])
+      .filter((adjustment) => !adjustment.is_deleted)
+      .map<CustomerActivityListItem>((adjustment) => ({
+        id: `adjustment-${adjustment.id}`,
+        kind: "adjustment" as const,
+        filterId: "adjustment" as const,
+        sortAt: adjustment.created_at || adjustment.effective_at || new Date().toISOString(),
+        createdAt: adjustment.created_at || adjustment.effective_at || "",
+        customerName: customersById.get(adjustment.customer_id)?.name ?? adjustment.customer_id,
+        data: adjustment,
+      }));
 
     return [...orderItems, ...collectionItems, ...adjustmentItems].sort(compareChronology);
   }, [collections, compareChronology, customerAdjustmentsQuery.data, customersById, orders]);
@@ -365,42 +400,78 @@ const formatDateTime = (value?: string) => {
       .map((refill) => ({
         id: `refill-${refill.refill_id}`,
         kind: "refill" as const,
-        sortAt: refill.effective_at,
-        createdAt: refill.effective_at,
+        sortAt: refill.created_at ?? refill.effective_at,
+        createdAt: refill.created_at ?? refill.effective_at,
         is_deleted: Boolean(refill.is_deleted),
         data: refill,
       }));
     const companyPaymentItems = (companyPaymentsQuery.data ?? []).map((payment) => ({
         id: `company-payment-${payment.id}`,
         kind: "company_payment" as const,
-        sortAt: payment.happened_at,
-        createdAt: payment.happened_at,
-        is_deleted: false as const,
+        sortAt: payment.created_at ?? payment.happened_at,
+        createdAt: payment.created_at ?? payment.happened_at,
+        is_deleted: Boolean(payment.is_deleted),
         data: payment,
       }));
+    const companyAdjustmentItems = (companyAdjustmentsQuery.data ?? []).map((adjustment) => ({
+      id: `company-adjustment-${adjustment.id}`,
+      kind: "company_adjustment" as const,
+      sortAt: adjustment.created_at ?? adjustment.happened_at,
+      createdAt: adjustment.created_at ?? adjustment.happened_at,
+      is_deleted: Boolean(adjustment.is_deleted),
+      data: adjustment,
+    }));
 
-    return [...refillItems, ...companyPaymentItems].sort(compareChronology);
-  }, [compareChronology, companyPaymentsQuery.data, companyRefillsQuery.data]);
-  const ledgerAdjustmentItems = useMemo(
+    return [...refillItems, ...companyPaymentItems, ...companyAdjustmentItems]
+      .filter((entry) => !entry.is_deleted)
+      .sort(compareChronology);
+  }, [compareChronology, companyAdjustmentsQuery.data, companyPaymentsQuery.data, companyRefillsQuery.data]);
+  const ledgerAdjustmentItems = useMemo<LedgerAdjustmentListItem[]>(
     () => {
-      const inventoryItems = (allInventoryAdjustmentsQuery.data ?? []).map((adjustment) => ({
-        id: `inventory-adjustment-${adjustment.id}`,
-        kind: "inventory_adjustment" as const,
-        sortAt: adjustment.effective_at,
-        createdAt: adjustment.created_at ?? adjustment.effective_at,
-        is_deleted: Boolean(adjustment.is_deleted),
-        data: adjustment,
-      }));
-      const cashItems = (allCashAdjustmentsQuery.data ?? []).map((adjustment) => ({
+      const groupedInventory = new Map<string, InventoryAdjustment[]>();
+      for (const adjustment of allInventoryAdjustmentsQuery.data ?? []) {
+        const key = adjustment.group_id ?? adjustment.id;
+        const existing = groupedInventory.get(key);
+        if (existing) {
+          existing.push(adjustment);
+        } else {
+          groupedInventory.set(key, [adjustment]);
+        }
+      }
+      const inventoryItems = Array.from(groupedInventory.entries()).map<LedgerAdjustmentListItem>(([groupKey, entries]) => {
+        const sortedEntries = [...entries].sort((left, right) => {
+          const gasOrder =
+            (left.gas_type === "12kg" ? 0 : 1) - (right.gas_type === "12kg" ? 0 : 1);
+          if (gasOrder !== 0) return gasOrder;
+          return compareChronology(
+            { id: left.id, sortAt: left.effective_at, createdAt: left.created_at ?? left.effective_at },
+            { id: right.id, sortAt: right.effective_at, createdAt: right.created_at ?? right.effective_at }
+          );
+        });
+        const representative = sortedEntries[0];
+        return {
+          id: `inventory-adjustment-${groupKey}`,
+          kind: "inventory_adjustment",
+          sortAt: representative.created_at ?? representative.effective_at,
+          createdAt: representative.created_at ?? representative.effective_at,
+          is_deleted: sortedEntries.every((entry) => Boolean(entry.is_deleted)),
+          data: sortedEntries,
+          representative,
+          isGrouped: sortedEntries.length > 1,
+        };
+      });
+      const cashItems = (allCashAdjustmentsQuery.data ?? []).map<LedgerAdjustmentListItem>((adjustment) => ({
         id: `cash-adjustment-${adjustment.id}`,
-        kind: "cash_adjustment" as const,
-        sortAt: adjustment.effective_at,
+        kind: "cash_adjustment",
+        sortAt: adjustment.created_at ?? adjustment.effective_at,
         createdAt: adjustment.created_at ?? adjustment.effective_at,
         is_deleted: Boolean(adjustment.is_deleted),
         data: adjustment,
       }));
 
-      return [...inventoryItems, ...cashItems].sort(compareChronology);
+      return [...inventoryItems, ...cashItems]
+        .filter((entry) => !entry.is_deleted)
+        .sort(compareChronology);
     },
     [allCashAdjustmentsQuery.data, allInventoryAdjustmentsQuery.data, compareChronology]
   );
@@ -447,6 +518,9 @@ const formatDateTime = (value?: string) => {
         if (companyActivityFilter === "all") {
           return true;
         }
+        if (entry.kind === "company_adjustment") {
+          return companyActivityFilter === "adjustment";
+        }
         if (entry.kind === "company_payment") {
           return companyActivityFilter === "company_payment";
         }
@@ -468,21 +542,25 @@ const formatDateTime = (value?: string) => {
     [companyActivityFilter, companyActivityItems]
   );
   const expenseListItems = useMemo<ExpenseListItem[]>(() => {
-    const expenseItems = expenses.map<ExpenseListItem>((item) => ({
-      id: `expense-${item.id}`,
-      kind: "expense" as const,
-      sortAt: item.happened_at ?? item.created_at ?? item.date,
-      createdAt: item.created_at ?? item.happened_at ?? item.date,
-      data: item,
-    }));
-    const bankTransferItems = bankDeposits.map<ExpenseListItem>((item) => ({
-      id: `bank-deposit-${item.id}`,
-      kind: "bank_transfer" as const,
-      direction: item.direction,
-      sortAt: item.happened_at,
-      createdAt: item.happened_at,
-      data: item,
-    }));
+    const expenseItems = expenses
+      .filter((item) => !item.is_deleted)
+      .map<ExpenseListItem>((item) => ({
+        id: `expense-${item.id}`,
+        kind: "expense" as const,
+        sortAt: item.created_at ?? item.happened_at ?? item.date,
+        createdAt: item.created_at ?? item.happened_at ?? item.date,
+        data: item,
+      }));
+    const bankTransferItems = bankDeposits
+      .filter((item) => !item.is_deleted)
+      .map<ExpenseListItem>((item) => ({
+        id: `bank-deposit-${item.id}`,
+        kind: "bank_transfer" as const,
+        direction: item.direction,
+        sortAt: item.created_at ?? item.happened_at,
+        createdAt: item.created_at ?? item.happened_at,
+        data: item,
+      }));
 
     return [...expenseItems, ...bankTransferItems].sort(compareChronology);
   }, [bankDeposits, compareChronology, expenses]);
@@ -582,6 +660,7 @@ const formatDateTime = (value?: string) => {
     balances: companyBalancesQuery.refetch,
     refills: companyRefillsQuery.refetch,
     payments: companyPaymentsQuery.refetch,
+    adjustments: companyAdjustmentsQuery.refetch,
     inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
     cashAdjustments: allCashAdjustmentsQuery.refetch,
   });
@@ -589,6 +668,7 @@ const formatDateTime = (value?: string) => {
     balances: companyBalancesQuery.refetch,
     refills: companyRefillsQuery.refetch,
     payments: companyPaymentsQuery.refetch,
+    adjustments: companyAdjustmentsQuery.refetch,
     inventoryAdjustments: allInventoryAdjustmentsQuery.refetch,
     cashAdjustments: allCashAdjustmentsQuery.refetch,
   };
@@ -617,6 +697,7 @@ const formatDateTime = (value?: string) => {
         if (isCompanyActivities) {
           companyActivitiesFocusRefetchers.current.refills();
           companyActivitiesFocusRefetchers.current.payments();
+          companyActivitiesFocusRefetchers.current.adjustments();
         }
         if (isLedgerAdjustments) {
           companyActivitiesFocusRefetchers.current.inventoryAdjustments();
@@ -787,11 +868,12 @@ const formatDateTime = (value?: string) => {
   const canSavePrices = dirtyPriceCombosRef.current.size > 0;
 
   const {
-    handleRemoveRefill,
-    handleDeleteInventoryAdjustment,
-    handleDeleteCashAdjustment,
-    handleDeleteExpense,
-    handleDeleteBankTransfer,
+      handleRemoveRefill,
+      handleDeleteInventoryAdjustment,
+      handleDeleteInventoryAdjustmentGroup,
+      handleDeleteCashAdjustment,
+      handleDeleteExpense,
+      handleDeleteBankTransfer,
   } = useAddEntryDeleteHandlers({
     deleteRefill,
     deleteInventoryAdjust,
@@ -929,7 +1011,7 @@ const formatDateTime = (value?: string) => {
           <CompanyBalancesSection
             companySummary={companySummary}
             companyBalancesReady={companyBalancesQuery.isSuccess}
-            formatMoney={(value) => Number(value || 0).toFixed(0)}
+            formatMoney={(value) => formatDisplayMoney(value)}
             formatCount={(value) => Number(value || 0).toFixed(0)}
           />
         </>
@@ -985,7 +1067,7 @@ const formatDateTime = (value?: string) => {
               ) : null
             }
             renderItem={({ item }) => {
-              const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+              const fmtMoney = (v: number) => formatDisplayMoney(v);
               if (item.kind === "adjustment") {
                 return (
                   <SlimActivityRow
@@ -1010,7 +1092,6 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
-                      isDeleted={collection.is_deleted || deletingIds.has(collection.id)}
                       onEdit={() => openCollectionEdit(collection)}
                       onDelete={() => confirmDeleteCollection(collection.id)}
                     />
@@ -1029,7 +1110,6 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
-                    isDeleted={order.is_deleted || deletingIds.has(order.id)}
                     onEdit={() => router.push(`/orders/${order.id}/edit`)}
                     onDelete={() => confirmDeleteOrder(order.id)}
                   />
@@ -1058,7 +1138,7 @@ const formatDateTime = (value?: string) => {
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ gap: 0 }}
               renderItem={({ item }) => {
-                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+                const fmtMoney = (v: number) => formatDisplayMoney(v);
                 if (item.kind === "bank_transfer") {
                   return (
                     <SlimActivityRow
@@ -1102,7 +1182,7 @@ const formatDateTime = (value?: string) => {
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ gap: 0 }}
               renderItem={({ item: entry }) => {
-                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
+                const fmtMoney = (v: number) => formatDisplayMoney(v);
                 if (entry.kind === "company_payment") {
                   return (
                     <SlimActivityRow
@@ -1112,6 +1192,17 @@ const formatDateTime = (value?: string) => {
                       showEffectiveAtBottom
                       isDeleted={deletingIds.has(entry.data.id)}
                       onDelete={() => handleDeleteCompanyPayment(entry.data)}
+                    />
+                  );
+                }
+                if (entry.kind === "company_adjustment") {
+                  return (
+                    <SlimActivityRow
+                      event={companyBalanceAdjustmentToEvent(entry.data)}
+                      formatMoney={fmtMoney}
+                      showCreatedAt
+                      showEffectiveAtBottom
+                      isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
                     />
                   );
                 }
@@ -1141,32 +1232,45 @@ const formatDateTime = (value?: string) => {
           {filteredLedgerAdjustmentItems.length === 0 ? (
             <Text style={styles.meta}>No ledger adjustments match these filters.</Text>
           ) : (
-            <FlatList
-              key="ledger-list"
-              data={filteredLedgerAdjustmentItems}
-              keyExtractor={(item) => `${item.kind}-${item.data.id}`}
-              contentContainerStyle={{ gap: 0 }}
-              renderItem={({ item: entry }) => {
-                const fmtMoney = (v: number) => Number(v || 0).toFixed(0);
-                if (entry.kind === "inventory_adjustment") {
-                  const adjustment = entry.data;
-                  return (
-                    <SlimActivityRow
-                      event={inventoryAdjustmentToEvent(adjustment)}
-                      formatMoney={fmtMoney}
-                      showCreatedAt
-                      showEffectiveAtBottom
-                      isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
-                      onEdit={() =>
-                        router.push({
-                          pathname: "/inventory/new",
-                          params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
-                        })
-                      }
-                      onDelete={() => handleDeleteInventoryAdjustment(adjustment)}
-                    />
-                  );
-                }
+              <FlatList
+                key="ledger-list"
+                data={filteredLedgerAdjustmentItems}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ gap: 0 }}
+                renderItem={({ item: entry }) => {
+                  const fmtMoney = (v: number) => formatDisplayMoney(v);
+                  if (entry.kind === "inventory_adjustment") {
+                    const adjustments = entry.data;
+                    const adjustment = entry.representative;
+                    const deletingGroup = adjustments.some((item) => deletingIds.has(item.id));
+                    return (
+                      <SlimActivityRow
+                        event={
+                          entry.isGrouped
+                            ? inventoryAdjustmentGroupToEvent(adjustments)
+                            : inventoryAdjustmentToEvent(adjustment)
+                        }
+                        formatMoney={fmtMoney}
+                        showCreatedAt
+                        showEffectiveAtBottom
+                        isDeleted={entry.is_deleted || deletingGroup}
+                        onEdit={
+                          entry.isGrouped
+                            ? undefined
+                            : () =>
+                                router.push({
+                                  pathname: "/inventory/new",
+                                  params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
+                                })
+                        }
+                        onDelete={() =>
+                          entry.isGrouped
+                            ? handleDeleteInventoryAdjustmentGroup(adjustments)
+                            : handleDeleteInventoryAdjustment(adjustment)
+                        }
+                      />
+                    );
+                  }
                 const adjustment = entry.data;
                 return (
                   <SlimActivityRow
@@ -1497,9 +1601,9 @@ export function AddCustomersSection({
 
           const moneyLabel =
             money > 0
-              ? `Debts on customer ${money.toFixed(0)} ${getCurrencySymbol()}`
+              ? `Debts on customer ${formatDisplayMoney(money)} ${getCurrencySymbol()}`
               : money < 0
-                ? `Credit for customer ${Math.abs(money).toFixed(0)} ${getCurrencySymbol()}`
+                ? `Credit for customer ${formatDisplayMoney(Math.abs(money))} ${getCurrencySymbol()}`
                 : "Settled";
           const cyl12Label =
             cyl12 > 0

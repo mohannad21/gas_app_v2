@@ -71,6 +71,10 @@ jest.mock("@/hooks/useBalancesSummary", () => ({
   }),
 }));
 
+jest.mock("@/hooks/useCompanyBalances", () => ({
+  useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+}));
+
 jest.mock("@/hooks/useExpenses", () => ({
   useExpenses: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteExpense: () => ({ mutateAsync: jest.fn() }),
@@ -83,6 +87,7 @@ jest.mock("@/hooks/useBankDeposits", () => ({
 
 jest.mock("@/hooks/useCompanyPayments", () => ({
   useCompanyPayments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyPayment: () => ({ mutate: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useInventory", () => ({

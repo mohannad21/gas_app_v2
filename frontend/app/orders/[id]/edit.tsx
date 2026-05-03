@@ -20,6 +20,7 @@ import BigBox from "@/components/entry/BigBox";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { calcCustomerCylinderDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { formatDisplayMoney } from "@/lib/money";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 /**
@@ -111,11 +112,11 @@ export default function EditOrderScreen() {
   const moneyAfter = moneyBefore + remaining;
   const cylinderStatusLine = formatBalanceTransitions(
     [makeBalanceTransition("customer", selectedGas === "12kg" ? "cyl_12" : "cyl_48", cylinderBefore, cylinderAfter)],
-    { mode: "transition", formatMoney: (value) => value.toFixed(0) }
+    { mode: "transition", formatMoney: (value) => formatDisplayMoney(value) }
   ).join("\n");
   const moneyStatusLine = formatBalanceTransitions(
     [makeBalanceTransition("customer", "money", moneyBefore, moneyAfter)],
-    { mode: "transition", formatMoney: (value) => value.toFixed(0) }
+    { mode: "transition", formatMoney: (value) => formatDisplayMoney(value) }
   ).join("\n");
   const moneySteppers: FieldStepper[] = [
     { delta: -20, label: "-20", position: "top-left" },

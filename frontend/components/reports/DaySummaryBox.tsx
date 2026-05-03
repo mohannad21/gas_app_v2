@@ -3,10 +3,10 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { getCurrencySymbol } from "@/lib/money";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { DailyReportCard } from "@/types/domain";
 
-const formatMoney = (v: number) => `${getCurrencySymbol()}${Math.abs(Number(v || 0)).toFixed(0)}`;
+const formatMoney = (v: number) => `${getCurrencySymbol()}${formatDisplayMoney(Math.abs(Number(v || 0)))}`;
 
 type DaySummaryBoxProps = {
   card: DailyReportCard;
@@ -22,7 +22,12 @@ export default function DaySummaryBox({ card }: DaySummaryBoxProps) {
   return (
     <View style={styles.box}>
       <Pressable style={styles.header} onPress={() => setExpanded((v) => !v)}>
-        <Text style={styles.title}>Day summary</Text>
+        <View style={styles.titleRow}>
+          {card.has_refill ? (
+            <Ionicons name="reload-circle" size={16} color="#0ea5e9" style={styles.refillIcon} />
+          ) : null}
+          <Text style={styles.title}>Day summary</Text>
+        </View>
         <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color="#64748b" />
       </Pressable>
 
@@ -73,6 +78,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  refillIcon: {
+    marginTop: 1,
   },
   title: {
     fontSize: FontSizes.lg,

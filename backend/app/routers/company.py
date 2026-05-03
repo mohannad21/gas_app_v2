@@ -19,7 +19,7 @@ from app.schemas import (
   CompanyPaymentOut,
 )
 from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
-from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_company_transaction, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, parse_happened_at_parts, post_company_transaction, reverse_source
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/company", tags=["company"])
@@ -33,7 +33,7 @@ def settle_company_cylinders(
   if payload.quantity <= 0:
     raise HTTPException(status_code=400, detail="quantity_must_be_positive")
 
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   buy12 = return12 = buy48 = return48 = 0
   if payload.gas_type == "12kg":
     if payload.direction == "receive_full":
@@ -122,16 +122,18 @@ def create_company_payment(
   if payload.amount == 0:
     raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
 
-  happened_at = (
-    normalize_happened_at(payload.happened_at)
-    if payload.happened_at
-    else parse_happened_at_parts(
+  happened_at = allocate_happened_at(
+    session,
+    tenant_id=tenant_id,
+    value=
+    payload.happened_at
+    or parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,
       at=payload.at,
     )
-  ) or datetime.now(timezone.utc)
+  )
 
   try:
     acquire_company_lock(session)
@@ -145,6 +147,7 @@ def create_company_payment(
         return CompanyPaymentOut(
           id=existing.id,
           happened_at=existing.happened_at,
+          created_at=existing.created_at,
           amount=existing.paid,
           note=existing.note,
         )
@@ -170,6 +173,7 @@ def create_company_payment(
   return CompanyPaymentOut(
     id=txn.id,
     happened_at=txn.happened_at,
+    created_at=txn.created_at,
     amount=txn.paid,
     note=txn.note,
   )
@@ -209,12 +213,55 @@ def list_company_payments(
     result.append(CompanyPaymentOut(
       id=row.id,
       happened_at=row.happened_at,
+      created_at=row.created_at,
       amount=row.paid,
       note=row.note,
       is_deleted=row.deleted_at is not None,
       live_debt_cash=live_debt_cash,
     ))
   return result
+
+
+@router.get("/balance-adjustments", response_model=list[CompanyBalanceAdjustmentOut])
+def list_company_balance_adjustments(
+  before: Optional[str] = Query(default=None),
+  limit: int = Query(default=50, le=200),
+  include_deleted: bool = Query(default=False, alias="include_deleted"),
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> list[CompanyBalanceAdjustmentOut]:
+  stmt = (
+    select(CompanyTransaction)
+    .where(CompanyTransaction.kind == "adjust")
+    .where(CompanyTransaction.tenant_id == tenant_id)
+  )
+  if not include_deleted:
+    stmt = stmt.where(CompanyTransaction.deleted_at == None)  # noqa: E711
+  if before:
+    try:
+      cursor_dt = datetime.fromisoformat(before)
+    except ValueError as exc:
+      raise HTTPException(status_code=400, detail="Invalid before date format") from exc
+    stmt = stmt.where(CompanyTransaction.happened_at < cursor_dt)
+  stmt = stmt.order_by(
+    CompanyTransaction.happened_at.desc(),
+    CompanyTransaction.created_at.desc(),
+    CompanyTransaction.id.desc(),
+  ).limit(limit)
+  rows = session.exec(stmt).all()
+  return [
+    CompanyBalanceAdjustmentOut(
+      id=row.id,
+      happened_at=row.happened_at,
+      created_at=row.created_at,
+      money_balance=row.debt_cash,
+      cylinder_balance_12=row.debt_cylinders_12,
+      cylinder_balance_48=row.debt_cylinders_48,
+      note=row.note,
+      is_deleted=row.deleted_at is not None,
+    )
+    for row in rows
+  ]
 
 
 @router.delete(
@@ -287,16 +334,18 @@ def create_company_buy_iron(
   if payload.new12 <= 0 and payload.new48 <= 0:
     raise HTTPException(status_code=400, detail="quantity_must_be_positive")
 
-  happened_at = (
-    normalize_happened_at(payload.happened_at)
-    if payload.happened_at
-    else parse_happened_at_parts(
+  happened_at = allocate_happened_at(
+    session,
+    tenant_id=tenant_id,
+    value=
+    payload.happened_at
+    or parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,
       at=payload.at,
     )
-  ) or datetime.now(timezone.utc)
+  )
 
   try:
     acquire_company_lock(session)
@@ -358,16 +407,18 @@ def adjust_company_balances(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyBalanceAdjustmentOut:
-  happened_at = (
-    normalize_happened_at(payload.happened_at)
-    if payload.happened_at
-    else parse_happened_at_parts(
+  happened_at = allocate_happened_at(
+    session,
+    tenant_id=tenant_id,
+    value=
+    payload.happened_at
+    or parse_happened_at_parts(
       date_str=payload.date,
       time_str=payload.time,
       time_of_day=payload.time_of_day,
       at=payload.at,
     )
-  ) or datetime.now(timezone.utc)
+  )
 
   try:
     acquire_company_lock(session)
@@ -382,6 +433,7 @@ def adjust_company_balances(
         return CompanyBalanceAdjustmentOut(
           id=existing.id,
           happened_at=existing.happened_at,
+          created_at=existing.created_at,
           money_balance=existing.total,
           cylinder_balance_12=existing.buy12,
           cylinder_balance_48=existing.buy48,
@@ -421,6 +473,7 @@ def adjust_company_balances(
   return CompanyBalanceAdjustmentOut(
     id=txn.id,
     happened_at=txn.happened_at,
+    created_at=txn.created_at,
     money_balance=payload.money_balance,
     cylinder_balance_12=payload.cylinder_balance_12,
     cylinder_balance_48=payload.cylinder_balance_48,

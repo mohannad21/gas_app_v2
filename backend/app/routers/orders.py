@@ -11,7 +11,7 @@ from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.order_helpers import resolve_value, resolve_update_order_context, validate_order_context_on_update, money_delta_for_mode, order_gas_types, resolve_active_order, order_out, compute_impact
-from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction, reverse_source
 from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -137,7 +137,7 @@ def list_orders(
     CustomerTransaction.id.desc(),
   ).limit(limit)
   rows = session.exec(stmt).all()
-  return [order_out(row) for row in rows]
+  return [order_out(row, session) for row in rows]
 
 
 @router.post(
@@ -151,7 +151,7 @@ def create_order(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> OrderOut:
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   try:
     acquire_customer_locks(session, [payload.customer_id])
     acquire_inventory_locks(session, order_gas_types(payload.gas_type))
@@ -162,7 +162,7 @@ def create_order(
         .where(CustomerTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
-        return order_out(existing)
+        return order_out(existing, session)
 
     customer = session.exec(
       select(Customer)
@@ -229,7 +229,7 @@ def create_order(
     session.rollback()
     raise
   session.refresh(txn)
-  return order_out(txn)
+  return order_out(txn, session)
 
 
 @router.put(
@@ -328,7 +328,7 @@ def update_order(
     session.flush()
 
     happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else existing.happened_at
-    happened_at = normalize_happened_at(happened_at_raw)
+    happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=happened_at_raw)
     paid_amount = resolve_value(payload_data, "paid_amount", existing.paid)
     total_amount = resolve_value(payload_data, "price_total", existing.total)
     installed = resolve_value(payload_data, "cylinders_installed", existing.installed)
@@ -373,7 +373,7 @@ def update_order(
     session.rollback()
     raise
   session.refresh(txn)
-  return order_out(txn)
+  return order_out(txn, session)
 
 
 @router.delete(

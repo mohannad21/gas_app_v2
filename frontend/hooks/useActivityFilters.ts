@@ -10,7 +10,7 @@ export type CustomerActivityFilter =
   | "sell_full"
   | "buy_empty"
   | "adjustment";
-export type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full";
+export type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full" | "adjustment";
 export type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
 export type ExpenseCategoryFilter = "all_categories" | string;
 export type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";

@@ -13,6 +13,7 @@ import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { useCreateCustomer, useCreateCustomerAdjustment } from "@/hooks/useCustomers";
 import { useCreateSystem } from "@/hooks/useSystems";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
+import { parseCountValue } from "@/lib/countInput";
 import { useSystemTypes } from "@/hooks/useSystemTypes";
 import { showToast } from "@/lib/toast";
 
@@ -118,24 +119,29 @@ export default function NewCustomerScreen() {
 
   const renderBalanceAmountField = (
     fieldName: "initial_money_amount" | "initial_12kg_amount" | "initial_48kg_amount",
-    steppers: FieldStepper[]
+    steppers: FieldStepper[],
+    valueMode: "integer" | "decimal" = "integer"
   ) => (
     <>
       <Controller
         control={control}
         name={fieldName}
-        render={({ field: { onChange, value } }) => (
-          <View style={styles.balanceFieldWrap}>
-            <FieldCell
-              title="Amount"
-              value={Number(value ?? 0)}
-              onIncrement={() => onChange(Math.max(0, Number(value ?? 0) + 1))}
-              onDecrement={() => onChange(Math.max(0, Number(value ?? 0) - 1))}
-              onChangeText={(text) => onChange(toPositiveNumber(text))}
-              steppers={steppers}
-            />
-          </View>
-        )}
+        render={({ field: { onChange, value } }) => {
+          const normalizedValue = valueMode === "decimal" ? Number(value ?? 0) : parseCountValue(value);
+          return (
+            <View style={styles.balanceFieldWrap}>
+              <FieldCell
+                title="Amount"
+                value={normalizedValue}
+                valueMode={valueMode}
+                onIncrement={() => onChange(Math.max(0, normalizedValue + 1))}
+                onDecrement={() => onChange(Math.max(0, normalizedValue - 1))}
+                onChangeText={(text) => onChange(valueMode === "decimal" ? toPositiveNumber(text) : parseCountValue(text))}
+                steppers={steppers}
+              />
+            </View>
+          );
+        }}
       />
     </>
   );
@@ -288,7 +294,9 @@ export default function NewCustomerScreen() {
               </View>
             )}
           />
-          {moneyState !== "balanced" ? renderBalanceAmountField("initial_money_amount", CUSTOMER_MONEY_STEPPERS) : null}
+          {moneyState !== "balanced"
+            ? renderBalanceAmountField("initial_money_amount", CUSTOMER_MONEY_STEPPERS, "decimal")
+            : null}
 
           <FieldLabel>12kg cylinders</FieldLabel>
           <Controller

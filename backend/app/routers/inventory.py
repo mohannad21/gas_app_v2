@@ -19,7 +19,7 @@ from app.schemas import (
   InventorySnapshot,
 )
 from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_inventory
-from app.services.posting import derive_day, normalize_happened_at, post_company_transaction, post_inventory_adjustment, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, post_company_transaction, post_inventory_adjustment, reverse_source
 from app.services.inventory_helpers import parse_datetime, snapshot_at, time_of_day, reject_new_shells_for_refill, validate_inventory_adjustment_reason
 from app.utils.time import business_local_datetime_from_utc
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
@@ -79,7 +79,12 @@ def init_inventory(
   full48 = payload.full48
   empty48 = payload.empty48
   reason = payload.reason
-  happened_at = parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None) or datetime.now(timezone.utc)
+  happened_at = allocate_happened_at(
+    session,
+    tenant_id=tenant_id,
+    value=
+    parse_datetime(date_str=date_str, time_str="00:00", time_of_day=None, at=None)
+  )
 
   try:
     acquire_company_lock(session)
@@ -126,7 +131,7 @@ def create_inventory_adjust(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> InventorySnapshot:
   validate_inventory_adjustment_reason(payload.reason, delta_full=payload.delta_full, delta_empty=payload.delta_empty)
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   try:
     acquire_company_lock(session)
     acquire_inventory_locks(session, [payload.gas_type])
@@ -350,7 +355,7 @@ def create_refill(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> InventorySnapshot:
   reject_new_shells_for_refill(payload.new12, payload.new48)
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   try:
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
@@ -440,6 +445,7 @@ def list_refills(
       date=row.day.isoformat(),
       time_of_day=time_of_day(row.happened_at),
       effective_at=business_local_datetime_from_utc(row.happened_at),
+      created_at=business_local_datetime_from_utc(row.created_at),
       buy12=row.new12 if row.kind == "buy_iron" else row.buy12,
       return12=row.return12,
       buy48=row.new48 if row.kind == "buy_iron" else row.buy48,

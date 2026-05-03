@@ -71,6 +71,18 @@ export async function createCompanyBalanceAdjustment(
   };
 }
 
+export async function listCompanyBalanceAdjustments(
+  includeDeleted?: boolean
+): Promise<CompanyBalanceAdjustment[]> {
+  const { data } = await api.get("/company/balance-adjustments", {
+    params: { limit: 50, include_deleted: includeDeleted ?? false },
+  });
+  return parseArray(CompanyBalanceAdjustmentSchema, data).map((row) => ({
+    ...row,
+    money_balance: fromMinorUnits(row.money_balance),
+  }));
+}
+
 export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {
   const happened_at =
     payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });

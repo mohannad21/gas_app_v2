@@ -50,4 +50,8 @@ export function fromMinorUnits(value?: number | null) {
   return value / factor;
 }
 
+export function formatDisplayMoney(value: number): string {
+  return Number(value || 0).toFixed(getMoneyDecimals());
+}
+
 

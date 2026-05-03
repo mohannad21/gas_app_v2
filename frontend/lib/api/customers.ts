@@ -52,6 +52,7 @@ export async function createCustomerAdjustment(
     ...parsed,
     amount_money: fromMinorUnits(parsed.amount_money),
     debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
+    live_debt_cash: parsed.live_debt_cash != null ? fromMinorUnits(parsed.live_debt_cash) : parsed.live_debt_cash,
   };
 }
 
@@ -61,6 +62,7 @@ export async function listCustomerAdjustments(customerId: string): Promise<Custo
     ...item,
     amount_money: fromMinorUnits(item.amount_money),
     debt_cash: item.debt_cash != null ? fromMinorUnits(item.debt_cash) : item.debt_cash,
+    live_debt_cash: item.live_debt_cash != null ? fromMinorUnits(item.live_debt_cash) : item.live_debt_cash,
   }));
 }
 

@@ -15,7 +15,7 @@ from app.schemas import (
   ExpenseOut,
   ExpenseUpdate,
 )
-from app.services.posting import derive_day, normalize_happened_at, parse_happened_at_parts, post_expense, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, normalize_happened_at, parse_happened_at_parts, post_expense, reverse_source
 from app.utils.time import business_tz
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -113,7 +113,7 @@ def create_expense(
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
   category = _get_category(session, payload.expense_type)
   fallback_happened_at = parse_happened_at_parts(date_str=payload.date, time_str="12:00:00")
-  happened_at = normalize_happened_at(payload.happened_at or fallback_happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at or fallback_happened_at)
   expense = Expense(
     tenant_id=tenant_id,
     request_id=payload.request_id,
@@ -250,11 +250,11 @@ def update_expense(
 
   new_category = _get_category(session, new_expense_type)
   if payload.happened_at is not None:
-    normalized_happened_at = normalize_happened_at(new_happened_at)
+    normalized_happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=new_happened_at)
   else:
     existing_local = normalize_happened_at(expense.happened_at).astimezone(business_tz())
     replacement_local = datetime.combine(new_day, existing_local.timetz().replace(tzinfo=None))
-    normalized_happened_at = normalize_happened_at(replacement_local)
+    normalized_happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=replacement_local)
   new_expense = Expense(
     tenant_id=tenant_id,
     request_id=None,

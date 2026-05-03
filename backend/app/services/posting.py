@@ -45,12 +45,72 @@ UNIT_COUNT = "count"
 
 
 def normalize_happened_at(value: Optional[datetime]) -> datetime:
+  """Normalize a user-facing business timestamp into UTC.
+
+  Semantics:
+  - `happened_at` is the business/event time chosen by the user (or derived from
+    UI date/time inputs).
+  - `created_at` remains the audit timestamp for when the row was inserted.
+  - Daily reporting should sort by `happened_at`; `created_at` is only a
+    secondary audit/debug tiebreaker.
+  """
   if value is None:
     return datetime.now(timezone.utc)
   if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
     local = value.replace(tzinfo=business_tz())
     return local.astimezone(timezone.utc)
   return value.astimezone(timezone.utc)
+
+
+_REPORTABLE_HAPPENED_AT_MODELS = (
+  CustomerTransaction,
+  CompanyTransaction,
+  InventoryAdjustment,
+  Expense,
+  CashAdjustment,
+)
+
+
+def allocate_happened_at(
+  session: Session,
+  *,
+  tenant_id: str,
+  value: Optional[datetime],
+) -> datetime:
+  """Allocate a stable `happened_at` for reportable events.
+
+  The user never chooses sub-second precision. When multiple reportable events
+  share the same visible second, this allocator assigns hidden microseconds in
+  strictly increasing order within that second bucket.
+
+  This makes `happened_at` the source of truth for daily report ordering across
+  all activity families, without exposing fractional seconds in the UI.
+  """
+  normalized = normalize_happened_at(value)
+  if normalized.microsecond != 0:
+    return normalized
+
+  bucket_start = normalized.replace(microsecond=0)
+  bucket_end = bucket_start + timedelta(seconds=1)
+  latest_in_bucket: Optional[datetime] = None
+
+  for model in _REPORTABLE_HAPPENED_AT_MODELS:
+    latest = session.exec(
+      select(model.happened_at)
+      .where(model.tenant_id == tenant_id)
+      .where(model.happened_at >= bucket_start)
+      .where(model.happened_at < bucket_end)
+      .order_by(model.happened_at.desc())
+      .limit(1)
+    ).first()
+    if latest is not None and (latest_in_bucket is None or latest > latest_in_bucket):
+      latest_in_bucket = latest
+
+  if latest_in_bucket is None:
+    return bucket_start
+  if latest_in_bucket.microsecond >= 999999:
+    raise HTTPException(status_code=409, detail="too_many_events_same_second")
+  return bucket_start.replace(microsecond=latest_in_bucket.microsecond + 1)
 
 
 def parse_happened_at_parts(

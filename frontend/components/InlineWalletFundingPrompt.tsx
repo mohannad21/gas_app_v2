@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 type InlineWalletFundingPromptProps = {
   walletAmount: number;
@@ -17,7 +18,7 @@ export default function InlineWalletFundingPrompt({
   if (!showTransfer) return null;
   return (
     <View style={styles.wrap}>
-      <Text style={styles.walletText}>You have {walletAmount.toFixed(0)} shekels in the wallet.</Text>
+      <Text style={styles.walletText}>You have {getCurrencySymbol()}{formatDisplayMoney(walletAmount)} in the wallet.</Text>
       <View style={styles.promptRow}>
         <Text style={styles.promptText}>Want to move money from bank to wallet?</Text>
         <Pressable onPress={onTransferNow} style={styles.button}>

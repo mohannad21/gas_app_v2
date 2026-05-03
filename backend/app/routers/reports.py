@@ -51,6 +51,7 @@ from app.services.reports_aggregates import (
   _company_balance_transitions,
   _event_order_key,
   _daily_deltas,
+  _net_by_day,
   _sold_full_by_day,
   _customer_day_state_bounds,
   _company_day_state_bounds,
@@ -165,6 +166,7 @@ def list_daily_reports(
 
   # Aggregate daily deltas for all accounts
   cash_deltas = _daily_deltas(session, account="cash", unit="money", date_start=start_date, date_end=end_date, exclude_source_types=["company_txn"])
+  net_by_day = _net_by_day(session, date_start=start_date, date_end=end_date)
   company_deltas = _daily_deltas(
     session, account="company_money_debts", unit="money", date_start=start_date, date_end=end_date
   )
@@ -373,7 +375,7 @@ def list_daily_reports(
       cash_end=running_cash,
       sold_12kg=sold_full.get((current, "12kg"), 0),
       sold_48kg=sold_full.get((current, "48kg"), 0),
-      net_today=running_cash - cash_start,
+      net_today=net_by_day.get(current, 0),
       cash_math=DailyReportCashMath(
         sales=customer_sales_by_day.get(current, 0),
         late=customer_pay_by_day.get(current, 0),
@@ -512,12 +514,27 @@ def get_daily_report(
     cid: customer_before_states.get(cid, (0, 0, 0)) for cid in customer_ids
   }
 
-  running_cash = _sum_cash_before_day(session, report_day, exclude_source_types=["company_txn"])
+  running_cash = _sum_cash_before_day(session, report_day)
   running_bank = _sum_bank_before_day(session, report_day)
   running_company_money = _sum_company_before_day(session, report_day)
   running_company_12 = _sum_company_cyl_before_day(session, report_day, "12kg")
   running_company_48 = _sum_company_cyl_before_day(session, report_day, "48kg")
   running_inventory = _sum_inventory_before_day(session, report_day)
+
+  # system_init entries have no event object in the loop — fold them into the
+  # opening running state so the first real events see correct before-values.
+  system_init_entries = [e for e in entries if e.source_type == "system_init"]
+  if system_init_entries:
+    running_cash, running_bank, running_company_money, running_company_12, running_company_48, running_inventory = _apply_ledger_entries_to_balances(
+      system_init_entries,
+      cash=running_cash,
+      bank=running_bank,
+      company_money=running_company_money,
+      company_12=running_company_12,
+      company_48=running_company_48,
+      inventory=running_inventory,
+      customer_states=running_customer_states,
+    )
 
   # Build event objects
   events: list[DailyReportEvent] = []
@@ -528,20 +545,17 @@ def get_daily_report(
   for entry in entries:
     entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
-  adjust_groups: dict[str, list[CustomerTransaction]] = {}
-  non_adjust_txns: list[CustomerTransaction] = []
   for txn in customer_txns:
-    if txn.kind == "adjust" and txn.group_id:
-      adjust_groups.setdefault(txn.group_id, []).append(txn)
-    else:
-      non_adjust_txns.append(txn)
-
-  for txn in non_adjust_txns:
+    if txn.kind == "adjust":
+      continue
     stable_source_id = txn.group_id or txn.id
+    # `effective_at` is the report/API name for the stored `happened_at`
+    # business timestamp. Keep that mapping explicit here so reporting does not
+    # drift toward `created_at` semantics.
     event = DailyReportEvent(
       id=txn.id,
       source_id=stable_source_id,
-      event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else "customer_adjust" if txn.kind == "adjust" else txn.kind,
+      event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
       customer_id=txn.customer_id,
@@ -563,29 +577,13 @@ def get_daily_report(
     event_sort_ids[id(event)] = stable_source_id or ""
     event_source_keys[id(event)] = [("customer_txn", txn.id)]
 
-  for group_key, txns in adjust_groups.items():
-    base = txns[0]
-    event = DailyReportEvent(
-      id=base.id,
-      source_id=group_key,
-      event_type="customer_adjust",
-      effective_at=base.happened_at,
-      created_at=base.created_at,
-      customer_id=base.customer_id,
-      customer_name=customers[base.customer_id].name if base.customer_id and base.customer_id in customers else None,
-      customer_description=customers[base.customer_id].note if base.customer_id and base.customer_id in customers else None,
-      gas_type=base.gas_type,
-      reason=base.note,
-    )
-    events.append(event)
-    event_sort_ids[id(event)] = base.id or ""
-    event_source_keys[id(event)] = [("customer_txn", txn.id) for txn in txns]
-
   for txn in company_txns:
+    if txn.kind == "adjust":
+      continue
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type="refill" if txn.kind == "refill" else "company_buy_iron" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else "company_adjustment" if txn.kind == "adjust" else txn.kind,
+      event_type="refill" if txn.kind == "refill" else "company_buy_iron" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
       reason=txn.note,
@@ -761,8 +759,8 @@ def get_daily_report(
 
   return DailyReportDay(
     date=report_day.isoformat(),
-    cash_start=_sum_cash_before_day(session, report_day, exclude_source_types=["company_txn"]),
-    cash_end=_sum_cash_at_day_end(session, report_day, exclude_source_types=["company_txn"]),
+    cash_start=_sum_cash_before_day(session, report_day),
+    cash_end=_sum_cash_at_day_end(session, report_day),
     company_start=_sum_company_before_day(session, report_day),
     company_end=_sum_company_at_day_end(session, report_day),
     company_12kg_start=_sum_company_cyl_before_day(session, report_day, "12kg"),

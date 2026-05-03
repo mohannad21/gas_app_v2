@@ -23,6 +23,24 @@ type SlimActivityRowProps = {
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) =>
   `${formatMoney(amount)} ${getCurrencySymbol()}`;
 
+const takeNonZeroNumber = (...values: Array<number | null | undefined>) => {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value !== 0) {
+      return value;
+    }
+  }
+  return null;
+};
+
+const parseBankTransferAmountFromText = (value: string | null | undefined) => {
+  if (!value) return null;
+  const cleaned = String(value).replace(/,/g, "");
+  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 // Fallback-only adapter for older payloads that still send note objects instead of balance transitions.
 const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
   if (!note) return null;
@@ -269,15 +287,51 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
     heroActionBase && heroActionBase.trim() && heroActionBase !== headerName && heroActionBase !== label
       ? heroActionBase
       : null;
+  const bankTransferText = String(
+    event.hero_primary ?? event.hero_text ?? event.label ?? event.display_name ?? event.context_line ?? ""
+  );
+  const bankTransferDirection =
+    event.event_type === "bank_deposit"
+      ? event.transfer_direction === "bank_to_wallet"
+        ? "in"
+        : event.transfer_direction === "wallet_to_bank"
+          ? "out"
+          : /bank\s*[→-]\s*wallet/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
+            ? "in"
+            : /wallet\s*[→-]\s*bank/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
+              ? "out"
+              : /to wallet/i.test(bankTransferText)
+                ? "in"
+                : /to bank/i.test(bankTransferText)
+                  ? "out"
+                  : "none"
+      : "none";
+  const bankTransferAmount =
+    event.event_type === "bank_deposit"
+      ? Math.abs(
+          takeNonZeroNumber(
+            typeof event.money_amount === "number" ? event.money_amount : null,
+            typeof event.money_delta === "number" ? event.money_delta : null,
+            typeof event.total_cost === "number" ? event.total_cost : null,
+            typeof event.money?.amount === "number" ? event.money.amount : null,
+            parseBankTransferAmountFromText(bankTransferText)
+          ) ?? 0
+        )
+      : 0;
   const moneyAmount =
-    (event.event_type === "collection_money" || event.event_type === "collection_payout")
+    event.event_type === "bank_deposit"
+      ? bankTransferAmount
+      : (event.event_type === "collection_money" || event.event_type === "collection_payout")
       ? Number(event.money_amount ?? event.money_delta ?? 0)
       : event.event_type === "company_payment"
         ? Number(event.money_amount ?? event.money?.amount ?? 0)
         : typeof event?.money_delta === "number"
           ? event.money_delta
           : Number(event?.money_amount ?? 0);
-  const moneyDirection = event?.money_direction ?? event?.money?.verb ?? "none";
+  const moneyDirection =
+    event.event_type === "bank_deposit"
+      ? (event?.money_direction && event.money_direction !== "none" ? event.money_direction : bankTransferDirection)
+      : event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
     (event.event_type === "refill" || event.event_type === "company_buy_iron")
       ? Number(event.paid_now ?? 0)

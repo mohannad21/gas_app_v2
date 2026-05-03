@@ -29,9 +29,9 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
-import { formatSigned, getInitInventoryAfter } from "@/lib/reports/utils";
+import { getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
-import { getCurrencySymbol } from "@/lib/money";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
 import DaySummaryBox from "@/components/reports/DaySummaryBox";
@@ -39,7 +39,7 @@ import DaySummaryBox from "@/components/reports/DaySummaryBox";
 type RevealShelfKey = "ledger" | "customers" | "company";
 
 
-const formatMoney = (value: number) => Number(value || 0).toFixed(0);
+const formatMoney = (value: number) => formatDisplayMoney(value);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
 const formatMoneySigned = (value: number) => {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
@@ -60,6 +60,50 @@ const buildCashMathLines = (cashMath?: any) => {
   pushLine("Other", cashMath.other);
   return lines;
 };
+
+const ISO_TS_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/;
+
+const getPreciseReportTimestampMicros = (value?: string | null) => {
+  if (!value) return 0;
+  const raw = String(value).trim();
+  const match = ISO_TS_RE.exec(raw);
+  if (match) {
+    const [, base, fraction = "", suffix] = match;
+    const microsText = `${fraction}000000`.slice(0, 6);
+    const millisecondsText = microsText.slice(0, 3);
+    const parsedMs = Date.parse(
+      millisecondsText === "000"
+        ? `${base}${suffix}`
+        : `${base}.${millisecondsText}${suffix}`
+    );
+    if (!Number.isNaN(parsedMs)) {
+      const micros = Number(microsText);
+      const parsedMillisPortion = Number(millisecondsText) * 1000;
+      return parsedMs * 1000 + (micros - parsedMillisPortion);
+    }
+  }
+  const fallback = Date.parse(raw);
+  return Number.isNaN(fallback) ? 0 : fallback * 1000;
+};
+
+const getReportEffectiveTime = (event: any) =>
+  getPreciseReportTimestampMicros(event?.effective_at ?? null);
+
+const getReportCreatedTime = (event: any) =>
+  getPreciseReportTimestampMicros(event?.created_at ?? null);
+
+const sortReportEventsNewestFirst = (events: any[]) =>
+  [...events].sort((left, right) => {
+    const rightEffectiveTime = getReportEffectiveTime(right);
+    const leftEffectiveTime = getReportEffectiveTime(left);
+    if (rightEffectiveTime !== leftEffectiveTime) return rightEffectiveTime - leftEffectiveTime;
+
+    const rightCreatedTime = getReportCreatedTime(right);
+    const leftCreatedTime = getReportCreatedTime(left);
+    if (rightCreatedTime !== leftCreatedTime) return rightCreatedTime - leftCreatedTime;
+
+    return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
+  });
 
 type ReportDayCardProps = {
   item: any;
@@ -433,6 +477,18 @@ export default function ReportsScreen() {
     scrollTracker.current.lastTime = 0;
   }, []);
 
+  const latestCard = v2Rows[0];
+  const latestInventory = latestCard?.inventory_end;
+  const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
+  const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
+  const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
+  const selectedEvents = sortReportEventsNewestFirst(
+    ((selectedDayInfo?.events ?? []) as any[]).filter(
+      (ev) => ev?.event_type !== "customer_adjust" && ev?.event_type !== "company_adjustment"
+    )
+  );
+  const keepTabsVisible = selectedEvents.length < 5;
+
   const handleShelfPress = useCallback(
     (nextShelf: RevealShelfKey) => {
       if (activeShelf === nextShelf) {
@@ -447,6 +503,9 @@ export default function ReportsScreen() {
 
   const handleRevealScroll = useCallback(
     (offsetY: number) => {
+      if (keepTabsVisible) {
+        return;
+      }
       const now = Date.now();
       const clampedY = Math.max(offsetY, 0);
       const previousY = scrollTracker.current.lastY;
@@ -486,7 +545,7 @@ export default function ReportsScreen() {
         scrollTracker.current.travel = 0;
       }
     },
-    [hideRevealLayer, showRevealLayer]
+    [hideRevealLayer, keepTabsVisible, showRevealLayer]
   );
 
   const handleScrollEnd = useCallback(() => {
@@ -497,19 +556,16 @@ export default function ReportsScreen() {
     setOpenEventKeys((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
   }, [setOpenEventKeys]);
 
-  const latestCard = v2Rows[0];
-  const latestInventory = latestCard?.inventory_end;
-  const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
-  const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
-  const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
-  const selectedEvents = ((selectedDayInfo?.events ?? []) as any[])
-    .filter((ev) => ev?.event_type !== "customer_adjust")
-    .sort((left, right) => {
-      const rightTime = new Date(right?.effective_at ?? right?.created_at ?? 0).getTime();
-      const leftTime = new Date(left?.effective_at ?? left?.created_at ?? 0).getTime();
-      if (rightTime !== leftTime) return rightTime - leftTime;
-      return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
-    });
+  useEffect(() => {
+    if (!selectedDate) return;
+    if (keepTabsVisible) {
+      setRevealVisible(true);
+      return;
+    }
+    setRevealVisible(false);
+    setActionsVisible(false);
+    setActiveShelf(null);
+  }, [keepTabsVisible, selectedDate, setActionsVisible, setActiveShelf, setRevealVisible]);
 
   const revealShelfContent =
     activeShelf === "ledger" ? (
@@ -1125,6 +1181,56 @@ function EventExpandedPanel({
     ], `${targetGasType}-triplet`);
   };
 
+  const renderSparseGasState = (targetGasType: "12kg" | "48kg") => {
+    const is48 = targetGasType === "48kg";
+    const fullBefore = is48 ? full48Before : full12Before;
+    const fullAfter = is48 ? full48After : full12After;
+    const emptyBefore = is48 ? empty48Before : empty12Before;
+    const emptyAfter = is48 ? empty48After : empty12After;
+    const boxes = [
+      fullBefore != null || fullAfter != null
+        ? renderTopStateBox({
+            key: `${targetGasType}-sparse-full`,
+            label: `${targetGasType} Full`,
+            before: fullBefore,
+            after: fullAfter,
+            format: formatCount,
+            accent: gasColor(targetGasType),
+          })
+        : null,
+      emptyBefore != null || emptyAfter != null
+        ? renderTopStateBox({
+            key: `${targetGasType}-sparse-empty`,
+            label: `${targetGasType} Empty`,
+            before: emptyBefore,
+            after: emptyAfter,
+            format: formatCount,
+            accent: gasColor(targetGasType),
+          })
+        : null,
+      hasCashChange
+        ? renderTopStateBox({
+            key: `${targetGasType}-sparse-cash`,
+            label: "Wallet",
+            before: cashBefore,
+            after: cashAfter,
+            format: formatMoney,
+          })
+        : null,
+    ].filter(Boolean) as ReactNode[];
+    if (boxes.length === 1) {
+      return buildDeltaRow(
+        [
+          placeholderBox(`${targetGasType}-sparse-left`),
+          boxes[0],
+          placeholderBox(`${targetGasType}-sparse-right`),
+        ],
+        `${targetGasType}-sparse-centered`
+      );
+    }
+    return boxes.length > 0 ? renderRows(boxes) : null;
+  };
+
   const renderCenteredWalletOnly = (keyPrefix: string) =>
     buildDeltaRow(
       [
@@ -1137,7 +1243,7 @@ function EventExpandedPanel({
 
   const content = (() => {
     if (eventType === "order" && inferredGasType) return renderGasTriplet(inferredGasType);
-    if (eventType === "collection_empty" && inferredGasType) return renderGasTriplet(inferredGasType);
+    if (eventType === "collection_empty" && inferredGasType) return renderSparseGasState(inferredGasType);
     if (eventType === "collection_money" || eventType === "collection_payout") return renderCenteredWalletOnly(eventType);
     if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") return renderCenteredWalletOnly(eventType);
     if (eventType === "refill" || eventType === "company_buy_iron") {
@@ -1192,7 +1298,7 @@ function V2Timeline({
 
     events.forEach((ev) => {
       const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-      if (eventType === "customer_adjust") {
+      if (eventType === "customer_adjust" || eventType === "company_adjustment") {
         return;
       }
       if (eventType !== "init") {
@@ -1214,12 +1320,7 @@ function V2Timeline({
         existing.gas_type = ev?.gas_type;
       }
     });
-    return merged.sort((left, right) => {
-      const rightTime = new Date(right?.effective_at ?? right?.created_at ?? 0).getTime();
-      const leftTime = new Date(left?.effective_at ?? left?.created_at ?? 0).getTime();
-      if (rightTime !== leftTime) return rightTime - leftTime;
-      return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
-    });
+    return sortReportEventsNewestFirst(merged);
   }, [events]);
 
   const toggleEvent = useCallback((key: string) => {
@@ -1300,7 +1401,9 @@ function DeltaBox({
         ]}
       >
         <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>
-          {isNoChange ? "No change" : formatSigned(delta)}
+          {isNoChange
+            ? "No change"
+            : `${delta >= 0 ? "+" : "-"}${format(Math.abs(delta))}`}
         </Text>
       </View>
       <View style={styles.deltaBoxRow}>

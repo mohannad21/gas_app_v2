@@ -9,7 +9,7 @@ from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
 from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_money, sum_customer_cylinders
-from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction
+from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction
 
 router = APIRouter(prefix="/customer-adjustments", tags=["customer-adjustments"])
 
@@ -108,7 +108,7 @@ def create_adjustment(
       ).all()
       return _adjustment_out(txns or [existing], session)
 
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   group_id = _group_id()
   txns: list[CustomerTransaction] = []
 

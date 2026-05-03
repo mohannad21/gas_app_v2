@@ -2,6 +2,7 @@ import {
   BankDeposit,
   CashAdjustment,
   CollectionEvent,
+  CompanyBalanceAdjustment,
   CompanyPayment,
   CustomerAdjustment,
   DailyReportEvent,
@@ -11,11 +12,98 @@ import {
   Order,
 } from "@/types/domain";
 import { makeBalanceTransition } from "@/lib/balanceTransitions";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 const BASE: Pick<DailyReportEvent, "cash_before" | "cash_after"> = {
   cash_before: 0,
   cash_after: 0,
 };
+
+type BankDepositDisplayDirection = "wallet_to_bank" | "bank_to_wallet";
+
+function takeNonZeroNumber(...values: Array<number | null | undefined>): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value !== 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function parseBankDepositAmountFromText(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const cleaned = String(value).replace(/,/g, "");
+  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveBankDepositDisplayDirection(
+  event: Pick<DailyReportEvent, "transfer_direction" | "money_direction" | "label" | "display_name" | "context_line">
+): BankDepositDisplayDirection | null {
+  if (event.transfer_direction === "wallet_to_bank" || event.transfer_direction === "bank_to_wallet") {
+    return event.transfer_direction;
+  }
+  if (event.money_direction === "out") return "wallet_to_bank";
+  if (event.money_direction === "in") return "bank_to_wallet";
+  const displayText = String(event.label ?? event.display_name ?? event.context_line ?? "");
+  if (/wallet\s*[→-]\s*bank/i.test(displayText)) return "wallet_to_bank";
+  if (/bank\s*[→-]\s*wallet/i.test(displayText)) return "bank_to_wallet";
+  return null;
+}
+
+function buildBankDepositDisplay(direction: BankDepositDisplayDirection, amount: number) {
+  const isOut = direction === "wallet_to_bank";
+  const label = isOut ? "Wallet → Bank" : "Bank → Wallet";
+  return {
+    label,
+    moneyDirection: isOut ? ("out" as const) : ("in" as const),
+    heroText: isOut
+      ? `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to bank`
+      : `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to wallet`,
+  };
+}
+
+export function normalizeBankDepositDisplayEvent(event: DailyReportEvent): DailyReportEvent {
+  if (event.event_type !== "bank_deposit") return event;
+
+  const direction = resolveBankDepositDisplayDirection(event);
+  if (!direction) return event;
+
+  const amountText =
+    event.hero_primary ?? event.hero_text ?? event.label ?? event.display_name ?? event.context_line ?? null;
+  const rawAmount =
+    takeNonZeroNumber(
+      typeof event.money_amount === "number" ? event.money_amount : null,
+      typeof event.money_delta === "number" ? event.money_delta : null,
+      typeof event.total_cost === "number" ? event.total_cost : null,
+      typeof event.money?.amount === "number" ? event.money.amount : null,
+      parseBankDepositAmountFromText(amountText)
+    ) ?? 0;
+  const amount = Math.abs(rawAmount);
+  const display = buildBankDepositDisplay(direction, amount);
+  const moneyAmount =
+    takeNonZeroNumber(typeof event.money_amount === "number" ? event.money_amount : null, amount) ?? 0;
+  const moneyDelta =
+    takeNonZeroNumber(typeof event.money_delta === "number" ? event.money_delta : null, amount) ?? 0;
+  const contextLine = event.context_line && event.context_line.trim() ? event.context_line : display.label;
+  const heroText = event.hero_text && event.hero_text.trim() ? event.hero_text : display.heroText;
+  const heroPrimary = event.hero_primary && event.hero_primary.trim() ? event.hero_primary : display.heroText;
+
+  return {
+    ...event,
+    transfer_direction: direction,
+    label: display.label,
+    display_name: display.label,
+    context_line: contextLine,
+    money_amount: moneyAmount,
+    money_direction: display.moneyDirection,
+    money_delta: moneyDelta,
+    hero_text: heroText,
+    hero_primary: heroPrimary,
+  };
+}
 
 function getCylinderSnapshot(record: Record<string, number> | null | undefined, gas: "12kg" | "48kg") {
   if (!record) return null;
@@ -127,7 +215,7 @@ export function orderToEvent(
     customer_48kg_before: cyl48Before,
     customer_48kg_after: cyl48After,
     money_amount: moneyDelta > 0 ? moneyDelta : null,
-    money_direction: moneyDelta > 0 ? "in" : null,
+    money_direction: moneyDelta > 0 ? (mode === "buy_iron" ? "out" : "in") : null,
     money_delta: moneyDelta > 0 ? moneyDelta : null,
     context_line: "Order",
     display_name: opts?.customerName ?? null,
@@ -165,7 +253,7 @@ export function collectionToEvent(
     eventType = "collection_money";
     contextLine = "Collection";
     if (amount > 0) {
-      heroText = `Payment ${amount.toFixed(0)}`;
+      heroText = `Payment ${formatDisplayMoney(amount)}`;
       moneyDirection = "in";
       moneyDelta = amount;
     }
@@ -173,7 +261,7 @@ export function collectionToEvent(
     eventType = "collection_payout";
     contextLine = "Payout";
     if (amount > 0) {
-      heroText = `Payout ${amount.toFixed(0)}`;
+      heroText = `Payout ${formatDisplayMoney(amount)}`;
       moneyDirection = "out";
       moneyDelta = amount;
     }
@@ -293,6 +381,26 @@ export function customerAdjustmentToEvent(
   };
 }
 
+export function companyBalanceAdjustmentToEvent(adj: CompanyBalanceAdjustment): DailyReportEvent {
+  const parts: string[] = [];
+  if (adj.money_balance !== 0) parts.push(`Money ${formatDisplayMoney(adj.money_balance)}`);
+  if (adj.cylinder_balance_12 !== 0) parts.push(`12kg ${adj.cylinder_balance_12}`);
+  if (adj.cylinder_balance_48 !== 0) parts.push(`48kg ${adj.cylinder_balance_48}`);
+
+  return {
+    ...BASE,
+    event_type: "company_adjustment",
+    id: adj.id,
+    effective_at: adj.happened_at,
+    created_at: adj.created_at ?? adj.happened_at,
+    context_line: "Balance Adjustment",
+    label: "Balance Adjustment",
+    hero_text: parts.length > 0 ? parts.join(" | ") : null,
+    note: adj.note ?? null,
+    counterparty: { type: "company", display_name: "Company", description: null, display: null },
+  };
+}
+
 export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyReportEvent {
   const totals = getCompanyInventoryTotals(refill);
   const eventType = getCompanyInventoryEventType(refill);
@@ -376,7 +484,7 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent
     money_amount: Math.abs(amount),
     money_direction: amount >= 0 ? "out" : "in",
     money_delta: Math.abs(amount),
-    hero_text: amount !== 0 ? `Amount ${Math.abs(amount).toFixed(0)}` : null,
+    hero_text: amount !== 0 ? `Amount ${formatDisplayMoney(Math.abs(amount))}` : null,
     note: payment.note ?? null,
     company_before: companyMoneyBefore ?? undefined,
     company_after: companyMoneyAfter ?? undefined,
@@ -400,33 +508,39 @@ export function expenseToEvent(expense: Expense): DailyReportEvent {
     money_delta: expense.amount,
     note: expense.note ?? null,
     display_name: expense.expense_type,
-    hero_text: expense.amount != null ? `${expense.amount.toFixed(0)}` : null,
+    hero_text: expense.amount != null ? `${formatDisplayMoney(expense.amount)}` : null,
   };
 }
 
 export function bankDepositToEvent(deposit: BankDeposit): DailyReportEvent {
   const isOut = deposit.direction === "wallet_to_bank";
-  const label = isOut ? "Wallet to Bank" : "Bank to Wallet";
+  const label = isOut ? "Wallet → Bank" : "Bank → Wallet";
+  const amount = Math.abs(deposit.amount);
+  const display = buildBankDepositDisplay(deposit.direction, amount);
   return {
     ...BASE,
     event_type: "bank_deposit",
     id: deposit.id,
     effective_at: deposit.happened_at,
     created_at: deposit.happened_at,
-    context_line: label,
-    label,
-    display_name: label,
-    money_amount: Math.abs(deposit.amount),
-    money_direction: isOut ? "out" : "in",
-    money_delta: Math.abs(deposit.amount),
-    hero_text: `${Math.abs(deposit.amount).toFixed(0)}`,
+    transfer_direction: deposit.direction,
+    context_line: display.label,
+    label: display.label,
+    display_name: display.label,
+    money_amount: amount,
+    money_direction: display.moneyDirection,
+    money_delta: amount,
+    hero_text: display.heroText,
     note: deposit.note ?? null,
   };
 }
 
 export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyReportEvent {
   const gas = adj.gas_type ?? "12kg";
-  const heroText = `${gas}: full ${adj.delta_full > 0 ? "+" : ""}${adj.delta_full} empty ${adj.delta_empty > 0 ? "+" : ""}${adj.delta_empty}`;
+  const parts: string[] = [];
+  if (adj.delta_full !== 0) parts.push(`full ${adj.delta_full > 0 ? "+" : ""}${adj.delta_full}`);
+  if (adj.delta_empty !== 0) parts.push(`empty ${adj.delta_empty > 0 ? "+" : ""}${adj.delta_empty}`);
+  const heroText = parts.length > 0 ? `${gas}: ${parts.join(" | ")}` : null;
   return {
     ...BASE,
     event_type: "adjust",
@@ -444,6 +558,7 @@ export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyRepor
 
 export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
   const delta = adj.delta_cash ?? 0;
+  const formattedDelta = `${delta > 0 ? "+" : "-"}${formatDisplayMoney(Math.abs(delta))} ${getCurrencySymbol()}`;
   return {
     ...BASE,
     event_type: "cash_adjust",
@@ -456,7 +571,53 @@ export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
     money_direction: delta >= 0 ? "in" : "out",
     money_delta: Math.abs(delta),
     reason: adj.reason ?? null,
-    hero_text: adj.reason ?? `Amount ${delta > 0 ? "+" : ""}${delta.toFixed(0)}`,
+    hero_text: `Wallet change: ${formattedDelta}`,
     note: adj.reason ?? null,
+  };
+}
+
+export function inventoryAdjustmentGroupToEvent(adjustments: InventoryAdjustment[]): DailyReportEvent {
+  if (adjustments.length === 0) {
+    return {
+      ...BASE,
+      event_type: "adjust",
+      id: "inventory-adjustment-group",
+      effective_at: new Date(0).toISOString(),
+      created_at: new Date(0).toISOString(),
+      context_line: "Inventory Adjustment",
+      label: "Inventory Adjustment",
+      hero_text: null,
+      note: null,
+    };
+  }
+
+  const sorted = [...adjustments].sort((left, right) => {
+    const gasOrder =
+      (left.gas_type === "12kg" ? 0 : 1) - (right.gas_type === "12kg" ? 0 : 1);
+    if (gasOrder !== 0) return gasOrder;
+    return String(left.id).localeCompare(String(right.id));
+  });
+  const primary = sorted[0];
+  const lines = sorted
+    .map((adj) => {
+      const parts: string[] = [];
+      if (adj.delta_full !== 0) parts.push(`full ${adj.delta_full > 0 ? "+" : ""}${adj.delta_full}`);
+      if (adj.delta_empty !== 0) parts.push(`empty ${adj.delta_empty > 0 ? "+" : ""}${adj.delta_empty}`);
+      return parts.length > 0 ? `${adj.gas_type}: ${parts.join(" | ")}` : null;
+    })
+    .filter((line): line is string => Boolean(line));
+  const reason = sorted.map((adj) => adj.reason).find((value) => value && value.trim()) ?? null;
+
+  return {
+    ...BASE,
+    event_type: "adjust",
+    id: primary.group_id ?? primary.id,
+    effective_at: primary.effective_at,
+    created_at: primary.created_at,
+    context_line: "Inventory Adjustment",
+    label: "Inventory Adjustment",
+    reason,
+    hero_text: lines.length > 0 ? lines.join("\n") : null,
+    note: reason,
   };
 }

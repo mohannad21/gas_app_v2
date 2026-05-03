@@ -24,7 +24,9 @@ import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { useCompanyBalances, useCreateCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
+import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
+import { formatDisplayMoney } from "@/lib/money";
 
 const MONEY_STEPPERS: FieldStepper[] = [
   { delta: -20, label: "-20", position: "top-left" },
@@ -43,7 +45,7 @@ function getTodayDate() {
 }
 
 function getNowTime() {
-  return getCurrentLocalTime({ includeSeconds: true });
+  return getCurrentLocalTime();
 }
 
 function CalendarModal({
@@ -173,8 +175,8 @@ export default function CompanyBalanceAdjustScreen() {
   const current12 = balancesQuery.data?.company_cyl_12 ?? 0;
   const current48 = balancesQuery.data?.company_cyl_48 ?? 0;
   const nextMoney = Number(money) || 0;
-  const next12 = Number(cyl12) || 0;
-  const next48 = Number(cyl48) || 0;
+  const next12 = parseCountValue(cyl12, { allowNegative: true });
+  const next48 = parseCountValue(cyl48, { allowNegative: true });
   const saveDisabled =
     createAdjustment.isPending ||
     !balancesQuery.isSuccess ||
@@ -233,13 +235,14 @@ export default function CompanyBalanceAdjustScreen() {
 
           <BigBox
             title="Money balance"
-            statusLine={`Current ${currentMoney.toFixed(0)} -> ${nextMoney.toFixed(0)}`}
+            statusLine={`Current ${formatDisplayMoney(currentMoney)} -> ${formatDisplayMoney(nextMoney)}`}
             defaultExpanded
           >
             <StandaloneField>
               <FieldCell
                 title="Money"
                 value={nextMoney}
+                valueMode="decimal"
                 onIncrement={() => setMoney(String(nextMoney + 5))}
                 onDecrement={() => setMoney(String(nextMoney - 5))}
                 onChangeText={setMoney}
@@ -260,7 +263,7 @@ export default function CompanyBalanceAdjustScreen() {
                 value={next12}
                 onIncrement={() => setCyl12(String(next12 + 1))}
                 onDecrement={() => setCyl12(String(next12 - 1))}
-                onChangeText={setCyl12}
+                onChangeText={(value) => setCyl12(sanitizeCountInput(value, { allowNegative: true }))}
                 steppers={QTY_STEPPERS}
               />
               <FieldCell
@@ -269,7 +272,7 @@ export default function CompanyBalanceAdjustScreen() {
                 value={next48}
                 onIncrement={() => setCyl48(String(next48 + 1))}
                 onDecrement={() => setCyl48(String(next48 - 1))}
-                onChangeText={setCyl48}
+                onChangeText={(value) => setCyl48(sanitizeCountInput(value, { allowNegative: true }))}
                 steppers={QTY_STEPPERS}
               />
             </View>

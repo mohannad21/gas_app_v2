@@ -22,6 +22,7 @@ export const InventoryRefillSummarySchema = z
     date: z.string(),
     time_of_day: z.enum(["morning", "evening"]).optional(),
     effective_at: z.string(),
+    created_at: z.string().optional(),
     buy12: z.number(),
     return12: z.number(),
     buy48: z.number(),

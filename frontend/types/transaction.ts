@@ -30,6 +30,7 @@ export type CashAdjustmentUpdate = z.infer<typeof CashAdjustmentUpdateSchema>;
 export const CompanyPaymentSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
+  created_at: z.string().optional(),
   amount: z.number(),
   note: z.string().nullish(),
   is_deleted: z.boolean().optional(),
@@ -71,10 +72,12 @@ export type CompanyBuyIronCreateInput = {
 export const CompanyBalanceAdjustmentSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
+  created_at: z.string().optional(),
   money_balance: z.number(),
   cylinder_balance_12: z.number(),
   cylinder_balance_48: z.number(),
   note: z.string().nullish(),
+  is_deleted: z.boolean().optional(),
 });
 export type CompanyBalanceAdjustment = z.infer<typeof CompanyBalanceAdjustmentSchema>;
 export type CompanyBalanceAdjustmentCreateInput = {
@@ -132,6 +135,7 @@ export type ExpenseUpdateInput = z.infer<typeof ExpenseUpdateInputSchema>;
 export const BankDepositSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
+  created_at: z.string().optional(),
   amount: z.number(),
   direction: z.enum(["wallet_to_bank", "bank_to_wallet"]),
   note: z.string().nullish(),

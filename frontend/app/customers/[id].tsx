@@ -18,13 +18,14 @@ import {
 } from "@/hooks/useCustomers";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
-import { CollectionEvent, CustomerAdjustment, Order } from "@/types/domain";
+import { Order } from "@/types/domain";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import {
   collectionToEvent,
   customerAdjustmentToEvent,
   orderToEvent,
 } from "@/lib/activityAdapter";
+import { DailyReportEvent } from "@/types/report";
 
 type ActivityFilter =
   | "all"
@@ -34,34 +35,6 @@ type ActivityFilter =
   | "buy_empty"
   | "sell_full"
   | "adjustment";
-
-type ActivityKind =
-  | "replacement"
-  | "late_payment"
-  | "return_empties"
-  | "buy_empty"
-  | "sell_full"
-  | "adjustment"
-  | "payout";
-
-type CustomerActivityItem = {
-  id: string;
-  kind: ActivityKind;
-  title: string;
-  summary: string;
-  effectiveAt: string;
-  createdAt?: string;
-  systemId?: string | null;
-  systemName?: string | null;
-  note?: string | null;
-  moneyBefore: number;
-  moneyAfter: number;
-  cyl12Before: number;
-  cyl12After: number;
-  cyl48Before: number;
-  cyl48After: number;
-  orderId?: string;
-};
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -96,23 +69,45 @@ const formatProfileField = (value?: string | null, fallback = "Not provided") =>
   return trimmed ? trimmed : fallback;
 };
 
-const formatSignedValue = (value: number, format: (v: number) => string) => {
-  if (value === 0) return "No change";
-  return `${value > 0 ? "+" : ""}${format(value)}`;
-};
-
-const formatQtySummary = (qty12?: number | null, qty48?: number | null, suffix = "") => {
-  const parts: string[] = [];
-  if (qty12) parts.push(`${qty12} x 12kg${suffix}`);
-  if (qty48) parts.push(`${qty48} x 48kg${suffix}`);
-  return parts.join(" | ");
-};
-
 const toTimeValue = (value?: string | null) => {
   if (!value) return 0;
   const ms = new Date(value).getTime();
   return Number.isNaN(ms) ? 0 : ms;
 };
+
+export function getLastActiveOrder(orders: Order[]): Order | undefined {
+  return orders
+    .filter((order) => !order.is_deleted)
+    .filter((order) => {
+      const mode = order.order_mode ?? "replacement";
+      return mode === "replacement" || mode === "sell_iron";
+    })
+    .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
+}
+
+export function getOrderCylinders(orders: Order[]): Record<"12kg" | "48kg", number> {
+  const totals: Record<"12kg" | "48kg", number> = {
+    "12kg": 0,
+    "48kg": 0,
+  };
+  orders.filter((order) => !order.is_deleted).forEach((order) => {
+    const mode = order.order_mode ?? "replacement";
+    if (mode !== "replacement" && mode !== "sell_iron") {
+      return;
+    }
+    const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
+    totals[gas] += order.cylinders_installed ?? 0;
+  });
+  return totals;
+}
+
+export function sortCustomerActivityEvents(events: DailyReportEvent[]): DailyReportEvent[] {
+  return [...events].sort(
+    (a, b) =>
+      new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime() ||
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
 
 
 function DetailBalanceBox({
@@ -132,194 +127,21 @@ function DetailBalanceBox({
   );
 }
 
-function buildOrderActivity(order: Order, systemsById: Map<string, string>): CustomerActivityItem {
-  const mode = order.order_mode ?? "replacement";
-  const gas = order.gas_type ?? "12kg";
-  const installed = order.cylinders_installed ?? 0;
-  const received = order.cylinders_received ?? 0;
-  const totalAmount = order.price_total ?? 0;
-  const paidAmount = order.paid_amount ?? 0;
-  const moneyDelta = mode === "buy_iron" ? paidAmount - totalAmount : totalAmount - paidAmount;
-  const cylinderDelta = mode === "replacement" ? installed - received : 0;
-  const delta12 = gas === "12kg" ? cylinderDelta : 0;
-  const delta48 = gas === "48kg" ? cylinderDelta : 0;
-  const moneyAfter = order.debt_cash ?? 0;
-  const cyl12After = order.debt_cylinders_12 ?? 0;
-  const cyl48After = order.debt_cylinders_48 ?? 0;
-
-  if (mode === "replacement") {
-    return {
-      id: `order-${order.id}`,
-      kind: "replacement",
-      title: "Replacement",
-      summary: `Installed ${installed} x ${gas}${received > 0 ? ` | Received ${received} empties` : ""}`,
-      effectiveAt: order.delivered_at,
-      createdAt: order.created_at,
-      systemId: order.system_id || null,
-      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-      note: order.note,
-      moneyBefore: moneyAfter - moneyDelta,
-      moneyAfter,
-      cyl12Before: cyl12After - delta12,
-      cyl12After,
-      cyl48Before: cyl48After - delta48,
-      cyl48After,
-      orderId: order.id,
-    };
-  }
-
-  if (mode === "sell_iron") {
-    return {
-      id: `order-${order.id}`,
-      kind: "sell_full",
-      title: "Sell full",
-      summary: `Sold ${installed} x ${gas}`,
-      effectiveAt: order.delivered_at,
-      createdAt: order.created_at,
-      systemId: order.system_id || null,
-      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-      note: order.note,
-      moneyBefore: moneyAfter - moneyDelta,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-      orderId: order.id,
-    };
-  }
-
-  const boughtQty = received > 0 ? received : installed;
-  return {
-    id: `order-${order.id}`,
-    kind: "buy_empty",
-    title: "Buy empty",
-    summary: `Bought ${boughtQty} x ${gas} empties`,
-    effectiveAt: order.delivered_at,
-    createdAt: order.created_at,
-    systemId: order.system_id || null,
-    systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-    note: order.note,
-    moneyBefore: moneyAfter - moneyDelta,
-    moneyAfter,
-    cyl12Before: cyl12After,
-    cyl12After,
-    cyl48Before: cyl48After,
-    cyl48After,
-    orderId: order.id,
-  };
-}
-
-function buildCollectionActivity(collection: CollectionEvent): CustomerActivityItem {
-  const moneyAfter = collection.debt_cash ?? 0;
-  const cyl12After = collection.debt_cylinders_12 ?? 0;
-  const cyl48After = collection.debt_cylinders_48 ?? 0;
-
-  if (collection.action_type === "payment") {
-    const amount = collection.amount_money ?? 0;
-    return {
-      id: `collection-${collection.id}`,
-      kind: "late_payment",
-      title: "Late payment",
-      summary: amount > 0 ? `Collected ${formatCurrency(amount)}` : "Collected payment",
-      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-      createdAt: collection.created_at ?? collection.effective_at ?? "",
-      note: collection.note,
-      moneyBefore: moneyAfter + amount,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-    };
-  }
-
-  if (collection.action_type === "payout") {
-    const amount = collection.amount_money ?? 0;
-    return {
-      id: `collection-${collection.id}`,
-      kind: "payout",
-      title: "Payout",
-      summary: amount > 0 ? `Paid customer ${formatCurrency(amount)}` : "Customer payout",
-      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-      createdAt: collection.created_at ?? collection.effective_at ?? "",
-      note: collection.note,
-      moneyBefore: moneyAfter - amount,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-    };
-  }
-
-  const qty12 = collection.qty_12kg ?? 0;
-  const qty48 = collection.qty_48kg ?? 0;
-  return {
-    id: `collection-${collection.id}`,
-    kind: "return_empties",
-    title: "Return empties",
-    summary: formatQtySummary(qty12, qty48, " empties") || "Returned empties",
-    effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-    createdAt: collection.created_at ?? collection.effective_at ?? "",
-    note: collection.note,
-    moneyBefore: moneyAfter,
-    moneyAfter,
-    cyl12Before: cyl12After + qty12,
-    cyl12After,
-    cyl48Before: cyl48After + qty48,
-    cyl48After,
-  };
-}
-
-function buildAdjustmentActivity(adjustment: CustomerAdjustment): CustomerActivityItem {
-  const moneyDelta = adjustment.amount_money ?? 0;
-  const delta12 = adjustment.count_12kg ?? 0;
-  const delta48 = adjustment.count_48kg ?? 0;
-  const moneyAfter = adjustment.debt_cash ?? 0;
-  const cyl12After = adjustment.debt_cylinders_12 ?? 0;
-  const cyl48After = adjustment.debt_cylinders_48 ?? 0;
-  const summaryParts = [
-    moneyDelta ? `Money ${formatSignedValue(moneyDelta, formatCurrency)}` : null,
-    delta12 ? `12kg ${formatSignedValue(delta12, formatCylinder)}` : null,
-    delta48 ? `48kg ${formatSignedValue(delta48, formatCylinder)}` : null,
-  ].filter(Boolean);
-
-  return {
-    id: `adjustment-${adjustment.id}`,
-    kind: "adjustment",
-    title: "Adjustment",
-    summary: summaryParts.length > 0 ? summaryParts.join(" | ") : "Manual correction",
-    effectiveAt: adjustment.effective_at,
-    createdAt: adjustment.created_at,
-    note: adjustment.reason,
-    moneyBefore: moneyAfter - moneyDelta,
-    moneyAfter,
-    cyl12Before: cyl12After - delta12,
-    cyl12After,
-    cyl48Before: cyl48After - delta48,
-    cyl48After,
-  };
-}
-
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
-  const [selectedSystemId, setSelectedSystemId] = useState("all");
+  const [selectedSystemName, setSelectedSystemName] = useState("all");
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
-  const collectionsQuery = useCollections(true);
+  const collectionsQuery = useCollections(false);
   const systemsQuery = useSystems(id, { enabled: !!id });
-  const ordersQuery = useOrders(true);
+  const ordersQuery = useOrders(false);
   const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
   const deleteOrder = useDeleteOrder();
   const deleteCollection = useDeleteCollection();
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
-  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const focusRefetchers = useRef({
     orders: ordersQuery.refetch,
     collections: collectionsQuery.refetch,
@@ -358,9 +180,6 @@ export default function CustomerDetailsScreen() {
   );
   const adjustments = useMemo(() => adjustmentsQuery.data ?? [], [adjustmentsQuery.data]);
 
-  const ordersById = useMemo(() => new Map(orders.map((o) => [o.id, o])), [orders]);
-  const collectionsById = useMemo(() => new Map(collections.map((c) => [c.id, c])), [collections]);
-
   useFocusEffect(
     useCallback(() => {
       focusRefetchers.current.orders();
@@ -369,49 +188,61 @@ export default function CustomerDetailsScreen() {
     }, [customerId])
   );
 
-  const orderCylinders = useMemo(() => {
-    const totals: Record<"12kg" | "48kg", number> = {
-      "12kg": 0,
-      "48kg": 0,
-    };
-    orders.forEach((order) => {
-      const mode = order.order_mode ?? "replacement";
-      if (mode !== "replacement" && mode !== "sell_iron") {
-        return;
-      }
-      const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
-      totals[gas] += order.cylinders_installed ?? 0;
-    });
-    return totals;
-  }, [orders]);
+  const orderCylinders = useMemo(() => getOrderCylinders(orders), [orders]);
 
-  const activities = useMemo(() => {
-    const items: CustomerActivityItem[] = [
-      ...orders.map((order) => buildOrderActivity(order, systemsById)),
-      ...collections.map((collection) => buildCollectionActivity(collection)),
-      ...adjustments.map((adjustment) => buildAdjustmentActivity(adjustment)),
-    ];
-
-    return items.sort((left, right) => {
-      const createdGap = toTimeValue(right.createdAt) - toTimeValue(left.createdAt);
-      if (createdGap !== 0) return createdGap;
-      return toTimeValue(right.effectiveAt) - toTimeValue(left.effectiveAt);
-    });
-  }, [adjustments, collections, orders, systemsById]);
+  const activities = useMemo((): DailyReportEvent[] => {
+    const orderEvents = (orders ?? []).map((o) =>
+      orderToEvent(o, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+        systemName: o.system_id ? systemsById.get(o.system_id) : undefined,
+      })
+    );
+    const collectionEvents = (collections ?? []).map((c) =>
+      collectionToEvent(c, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+      })
+    );
+    const adjustmentEvents = (adjustments ?? []).map((a) =>
+      customerAdjustmentToEvent(a, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+      })
+    );
+    return sortCustomerActivityEvents([...orderEvents, ...collectionEvents, ...adjustmentEvents]);
+  }, [orders, collections, adjustments, customer, systemsById]);
 
   const filteredActivities = useMemo(() => {
     let next = activities;
     if (selectedFilter !== "all") {
-      next = next.filter((activity) => activity.kind === selectedFilter);
+      next = next.filter((e) => {
+        switch (selectedFilter) {
+          case "replacement":
+            return e.event_type === "order" && e.order_mode === "replacement";
+          case "late_payment":
+            return e.event_type === "collection_money";
+          case "return_empties":
+            return e.event_type === "collection_empty";
+          case "buy_empty":
+            return e.event_type === "order" && e.order_mode === "buy_iron";
+          case "sell_full":
+            return e.event_type === "order" && e.order_mode === "sell_iron";
+          case "adjustment":
+            return e.event_type === "customer_adjust";
+          default:
+            return true;
+        }
+      });
     }
-    if (selectedFilter === "replacement" && selectedSystemId !== "all") {
-      next = next.filter((activity) => activity.systemId === selectedSystemId);
+    if (selectedFilter === "replacement" && selectedSystemName !== "all") {
+      next = next.filter((e) => e.system_name === selectedSystemName);
     }
     return next;
-  }, [activities, selectedFilter, selectedSystemId]);
+  }, [activities, selectedFilter, selectedSystemName]);
 
   const replacementSystemOptions = useMemo(
-    () => [{ id: "all", label: "All systems" }, ...systems.map((system) => ({ id: system.id, label: system.name }))],
+    () => [{ id: "all", label: "All systems" }, ...systems.map((system) => ({ id: system.name, label: system.name }))],
     [systems]
   );
 
@@ -465,9 +296,7 @@ export default function CustomerDetailsScreen() {
     },
   ];
 
-  const lastOrder = orders
-    .slice()
-    .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
+  const lastOrder = getLastActiveOrder(orders);
   const lastOrderLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No orders yet";
   const activeSystems = systems.filter((system) => system.is_active !== false).length;
   const activitiesLoading =
@@ -517,8 +346,7 @@ export default function CustomerDetailsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          markDeleting(orderId);
-          deleteOrder.mutate(orderId, { onSettled: () => unmarkDeleting(orderId) });
+          deleteOrder.mutate(orderId);
         },
       },
     ]);
@@ -531,8 +359,7 @@ export default function CustomerDetailsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          markDeleting(collectionId);
-          deleteCollection.mutate(collectionId, { onSettled: () => unmarkDeleting(collectionId) });
+          deleteCollection.mutate(collectionId);
         },
       },
     ]);
@@ -541,7 +368,7 @@ export default function CustomerDetailsScreen() {
   const handleFilterPress = (nextFilter: ActivityFilter) => {
     setSelectedFilter(nextFilter);
     if (nextFilter !== "replacement") {
-      setSelectedSystemId("all");
+      setSelectedSystemName("all");
     }
   };
 
@@ -706,12 +533,12 @@ export default function CustomerDetailsScreen() {
           style={styles.filterScroll}
         >
           {replacementSystemOptions.map((option) => {
-            const active = selectedSystemId === option.id;
+            const active = selectedSystemName === option.id;
             return (
               <Pressable
                 key={option.id}
                 onPress={() => {
-                  setSelectedSystemId(option.id);
+                  setSelectedSystemName(option.id);
                 }}
                 style={[styles.secondaryFilterChip, active && styles.secondaryFilterChipActive]}
               >
@@ -750,58 +577,29 @@ export default function CustomerDetailsScreen() {
 
       {!activitiesLoading &&
         !activitiesError &&
-        filteredActivities.map((activity) => {
+        filteredActivities.map((event) => {
           const fmtMoney = (v: number) => Number(v || 0).toFixed(getMoneyDecimals());
-          const customerName = customer.name;
-          const customerDescription = customer.note ?? null;
+          const isOrder = event.event_type === "order";
+          const isCollection =
+            event.event_type === "collection_money" ||
+            event.event_type === "collection_empty" ||
+            event.event_type === "collection_payout";
 
-          if (activity.kind === "adjustment") {
-            const rawAdj = adjustments.find((a) => `adjustment-${a.id}` === activity.id);
-            if (!rawAdj) return null;
-            return (
-              <SlimActivityRow
-                key={activity.id}
-                event={customerAdjustmentToEvent(rawAdj, { customerName, customerDescription })}
-                formatMoney={fmtMoney}
-                showCreatedAt
-                showEffectiveAtBottom
-              />
-            );
-          }
-
-          if (activity.kind === "late_payment" || activity.kind === "return_empties" || activity.kind === "payout") {
-            const rawCol = collections.find((c) => `collection-${c.id}` === activity.id);
-            if (!rawCol) return null;
-            return (
-              <SlimActivityRow
-                key={activity.id}
-                event={collectionToEvent(rawCol, { customerName, customerDescription })}
-                formatMoney={fmtMoney}
-                showCreatedAt
-                showEffectiveAtBottom
-                onEdit={undefined}
-                isDeleted={rawCol.is_deleted || deletingIds.has(rawCol.id)}
-                onDelete={() => handleDeleteCollection(rawCol.id)}
-              />
-            );
-          }
-
-          const rawOrder = activity.orderId ? ordersById.get(activity.orderId) : undefined;
-          if (!rawOrder) return null;
           return (
             <SlimActivityRow
-              key={activity.id}
-              isDeleted={rawOrder.is_deleted || deletingIds.has(rawOrder.id)}
-              event={orderToEvent(rawOrder, {
-                customerName,
-                customerDescription,
-                systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
-              })}
+              key={event.id}
+              event={event}
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom
-              onEdit={activity.orderId ? () => router.push(`/orders/${activity.orderId}/edit`) : undefined}
-              onDelete={activity.orderId ? () => handleDeleteOrder(activity.orderId!) : undefined}
+              onEdit={isOrder ? () => router.push(`/orders/${event.id}/edit`) : undefined}
+              onDelete={
+                isOrder
+                  ? () => handleDeleteOrder(event.id!)
+                  : isCollection
+                    ? () => handleDeleteCollection(event.id!)
+                    : undefined
+              }
             />
           );
         })}
