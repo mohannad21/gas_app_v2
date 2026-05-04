@@ -478,8 +478,9 @@ export default function ReportsScreen() {
   }, []);
 
   const latestCard = v2Rows[0];
-  const latestInventory = latestCard?.inventory_end;
   const selectedCard = selectedDate ? v2Rows.find((row) => row.date === selectedDate) ?? null : null;
+  const displayCard = selectedCard ?? latestCard;
+  const latestInventory = displayCard?.inventory_end;
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
   const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
   const selectedEvents = sortReportEventsNewestFirst(
@@ -594,7 +595,7 @@ export default function ReportsScreen() {
               full48: formatCount(latestInventory?.full48 ?? 0),
               empty48: formatCount(latestInventory?.empty48 ?? 0),
             }}
-            cashEnd={formatMoney(latestCard?.cash_end ?? 0)}
+            cashEnd={formatMoney(displayCard?.cash_end ?? 0)}
             onAdjustInventory={() => {
               router.push("/(tabs)/add?open=adjust-inventory");
             }}

@@ -77,19 +77,6 @@ from app.services.reports_event_fields import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-def _sparse_inventory_state(
-  totals: ReportInventoryTotals,
-  *,
-  touched: set[tuple[Optional[str], Optional[str]]],
-) -> ReportInventoryState:
-  return ReportInventoryState(
-    full12=totals.full12 if ("12kg", "full") in touched else None,
-    empty12=totals.empty12 if ("12kg", "empty") in touched else None,
-    full48=totals.full48 if ("48kg", "full") in touched else None,
-    empty48=totals.empty48 if ("48kg", "empty") in touched else None,
-  )
-
-
 def _inventory_state_for_event(
   event: DailyReportEvent,
   totals: ReportInventoryState,
@@ -133,7 +120,13 @@ def _inventory_state_for_event(
   }
   if not touched_inventory:
     return None
-  return _sparse_inventory_state(totals, touched=touched_inventory)
+  touched_gas_types = {gas_type for gas_type, _ in touched_inventory}
+  return ReportInventoryState(
+    full12=totals.full12 if "12kg" in touched_gas_types else None,
+    empty12=totals.empty12 if "12kg" in touched_gas_types else None,
+    full48=totals.full48 if "48kg" in touched_gas_types else None,
+    empty48=totals.empty48 if "48kg" in touched_gas_types else None,
+  )
 
 
 @router.get("/daily", response_model=list[DailyReportCard])
@@ -165,7 +158,7 @@ def list_daily_reports(
     return []
 
   # Aggregate daily deltas for all accounts
-  cash_deltas = _daily_deltas(session, account="cash", unit="money", date_start=start_date, date_end=end_date, exclude_source_types=["company_txn"])
+  cash_deltas = _daily_deltas(session, account="cash", unit="money", date_start=start_date, date_end=end_date)
   net_by_day = _net_by_day(session, date_start=start_date, date_end=end_date)
   company_deltas = _daily_deltas(
     session, account="company_money_debts", unit="money", date_start=start_date, date_end=end_date
@@ -203,7 +196,7 @@ def list_daily_reports(
   )
 
   # Get running balances at start of date range
-  running_cash = _sum_cash_before_day(session, start_date, exclude_source_types=["company_txn"])
+  running_cash = _sum_cash_before_day(session, start_date)
   running_company = _sum_company_before_day(session, start_date)
   running_company_12 = _sum_company_cyl_before_day(session, start_date, "12kg")
   running_company_48 = _sum_company_cyl_before_day(session, start_date, "48kg")
