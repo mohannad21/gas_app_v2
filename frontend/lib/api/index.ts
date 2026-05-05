@@ -9,7 +9,7 @@
 export { api } from "./client";
 
 // Customers
-export { listCustomers, getCustomerBalance, createCustomer, createCustomerAdjustment, listCustomerAdjustments, updateCustomer, deleteCustomer } from "./customers";
+export { listCustomers, getCustomerBalance, createCustomer, createCustomerAdjustment, listCustomerAdjustments, updateCustomer, deleteCustomer, deleteCustomerAdjustment } from "./customers";
 
 // Orders
 export { listOrders, createOrder, updateOrder, deleteOrder, validateOrderImpact, getOrderWhatsappLink } from "./orders";
@@ -24,7 +24,7 @@ export {  getInventoryLatest, initInventory, createInventoryRefill, listInventor
 export { listInventoryAdjustments, updateInventoryAdjustment, deleteInventoryAdjustment, listCashAdjustments, createCashAdjustment, updateCashAdjustment, deleteCashAdjustment } from "./adjustments";
 
 // Company & System
-export { getSystemSettings, updateSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, listCompanyBalanceAdjustments, createCompanyPayment, listCompanyPayments, deleteCompanyPayment, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
+export { getSystemSettings, updateSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, listCompanyBalanceAdjustments, deleteCompanyBalanceAdjustment, createCompanyPayment, listCompanyPayments, deleteCompanyPayment, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
 
 // Billing
 export { getPlanBillingStatus } from "./billing";

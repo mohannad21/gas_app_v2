@@ -33,13 +33,14 @@ import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
 import { useAddEntryDeleteHandlers } from "@/hooks/useAddEntryDeleteHandlers";
 import { useCompanyPayments, useDeleteCompanyPayment } from "@/hooks/useCompanyPayments";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
-import { useCompanyBalanceAdjustments } from "@/hooks/useCompanyBalances";
+import { useCompanyBalanceAdjustments, useDeleteCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
 import {
   CUSTOMER_DELETE_BLOCKED_MESSAGE,
   isCustomerDeleteBlockedError,
   useAllCustomerAdjustments,
   useCustomers,
   useDeleteCustomer,
+  useDeleteCustomerAdjustment,
 } from "@/hooks/useCustomers";
 import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
@@ -278,6 +279,8 @@ export default function AddChooserScreen() {
   const deleteInventoryAdjust = useDeleteInventoryAdjustment();
   const deleteCashAdjust = useDeleteCashAdjustment();
   const deleteExpense = useDeleteExpense();
+  const deleteCustomerAdjust = useDeleteCustomerAdjustment();
+  const deleteCompanyAdjust = useDeleteCompanyBalanceAdjustment();
 
 const formatDateTime = (value?: string) => {
   if (!value) return "—";
@@ -727,6 +730,36 @@ const formatDateTime = (value?: string) => {
     setConfirm({ type: "collection", id });
   };
 
+  const handleDeleteCustomerAdjustment = (adjustment: CustomerAdjustment) => {
+    Alert.alert(
+      "Delete adjustment?",
+      "This will reverse the balance adjustment and update the customer's ledger.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteCustomerAdjust.mutateAsync({ id: adjustment.id, customerId: adjustment.customer_id }),
+        },
+      ]
+    );
+  };
+
+  const handleDeleteCompanyAdjustment = (adjustment: CompanyBalanceAdjustment) => {
+    Alert.alert(
+      "Delete adjustment?",
+      "This will reverse the balance adjustment and update the company ledger.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteCompanyAdjust.mutateAsync(adjustment.id),
+        },
+      ]
+    );
+  };
+
   const openCollectionEdit = (collection: any) => {
     setCollectionEditTarget(collection);
     setCollectionAmount(
@@ -1078,6 +1111,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    onDelete={() => handleDeleteCustomerAdjustment(item.data)}
                   />
                 );
               }
@@ -1203,6 +1237,7 @@ const formatDateTime = (value?: string) => {
                       showCreatedAt
                       showEffectiveAtBottom
                       isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
+                      onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
                     />
                   );
                 }

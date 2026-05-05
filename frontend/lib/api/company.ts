@@ -68,6 +68,8 @@ export async function createCompanyBalanceAdjustment(
   return {
     ...parsed,
     money_balance: fromMinorUnits(parsed.money_balance),
+    delta_money: fromMinorUnits(parsed.delta_money ?? 0),
+    live_debt_cash: parsed.live_debt_cash != null ? fromMinorUnits(parsed.live_debt_cash) : parsed.live_debt_cash,
   };
 }
 
@@ -80,7 +82,13 @@ export async function listCompanyBalanceAdjustments(
   return parseArray(CompanyBalanceAdjustmentSchema, data).map((row) => ({
     ...row,
     money_balance: fromMinorUnits(row.money_balance),
+    delta_money: fromMinorUnits(row.delta_money ?? 0),
+    live_debt_cash: row.live_debt_cash != null ? fromMinorUnits(row.live_debt_cash) : row.live_debt_cash,
   }));
+}
+
+export async function deleteCompanyBalanceAdjustment(adjustmentId: string): Promise<void> {
+  await api.delete(`/company/balance-adjustments/${adjustmentId}`);
 }
 
 export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {

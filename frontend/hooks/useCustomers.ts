@@ -2,6 +2,7 @@ import {
   createCustomer,
   createCustomerAdjustment,
   deleteCustomer,
+  deleteCustomerAdjustment,
   getCustomerBalance,
   listCustomerAdjustments,
   listCustomers,
@@ -110,6 +111,27 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
       queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.customer_id) });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", variables.customer_id] });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+    },
+  });
+}
+
+export function useDeleteCustomerAdjustment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; customerId?: string }) => deleteCustomerAdjustment(id),
+    onError: (err) => {
+      showToast(getUserFacingApiError(err, "Failed to delete adjustment."));
+      logApiError("[deleteCustomerAdjustment ERROR]", err);
+    },
+    onSuccess: (_, variables) => {
+      showToast("Adjustment deleted");
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      if (variables.customerId) {
+        queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.customerId) });
+        queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", variables.customerId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["customers", "adjustments"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
     },
   });

@@ -383,9 +383,30 @@ export function customerAdjustmentToEvent(
 
 export function companyBalanceAdjustmentToEvent(adj: CompanyBalanceAdjustment): DailyReportEvent {
   const parts: string[] = [];
-  if (adj.money_balance !== 0) parts.push(`Money ${formatDisplayMoney(adj.money_balance)}`);
-  if (adj.cylinder_balance_12 !== 0) parts.push(`12kg ${adj.cylinder_balance_12}`);
-  if (adj.cylinder_balance_48 !== 0) parts.push(`48kg ${adj.cylinder_balance_48}`);
+  const moneyDelta = Number(adj.delta_money ?? 0);
+  const cyl12Delta = Number(adj.delta_cylinder_12 ?? 0);
+  const cyl48Delta = Number(adj.delta_cylinder_48 ?? 0);
+  const moneyAfter = adj.live_debt_cash != null ? adj.live_debt_cash : Number(adj.money_balance ?? 0);
+  const cyl12After =
+    adj.live_debt_cylinders_12 != null
+      ? adj.live_debt_cylinders_12
+      : Number(adj.cylinder_balance_12 ?? 0);
+  const cyl48After =
+    adj.live_debt_cylinders_48 != null
+      ? adj.live_debt_cylinders_48
+      : Number(adj.cylinder_balance_48 ?? 0);
+  const moneyBefore = moneyAfter - moneyDelta;
+  const cyl12Before = cyl12After - cyl12Delta;
+  const cyl48Before = cyl48After - cyl48Delta;
+  const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
+
+  pushTransition(transitions, "company", "money", moneyBefore, moneyAfter);
+  pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
+  pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+
+  if (moneyDelta !== 0) parts.push(`Money ${formatDisplayMoney(Math.abs(moneyDelta))}`);
+  if (cyl12Delta !== 0) parts.push(`12kg ${Math.abs(cyl12Delta)}`);
+  if (cyl48Delta !== 0) parts.push(`48kg ${Math.abs(cyl48Delta)}`);
 
   return {
     ...BASE,
@@ -397,6 +418,13 @@ export function companyBalanceAdjustmentToEvent(adj: CompanyBalanceAdjustment): 
     label: "Balance Adjustment",
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
     note: adj.note ?? null,
+    company_before: moneyBefore,
+    company_after: moneyAfter,
+    company_12kg_before: cyl12Before,
+    company_12kg_after: cyl12After,
+    company_48kg_before: cyl48Before,
+    company_48kg_after: cyl48After,
+    balance_transitions: transitions,
     counterparty: { type: "company", display_name: "Company", description: null, display: null },
   };
 }

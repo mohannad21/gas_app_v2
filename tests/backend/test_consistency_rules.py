@@ -465,6 +465,54 @@ class TestBalanceAdjustmentsNotInDailyReport:
         event_types = _event_types(report)
         assert "customer_adjust" not in event_types
 
+    def test_customer_balance_adjustment_still_updates_later_daily_report_customer_wording(self, client) -> None:
+        _init(client)
+        customer_id = create_customer(client, name="Bal Adj Later Customer")
+        system_id = create_system(client, customer_id=customer_id)
+
+        create_order(
+            client,
+            customer_id=customer_id,
+            system_id=system_id,
+            delivered_at=iso_at(DAY.isoformat(), "morning"),
+            gas_type="12kg",
+            installed=1,
+            received=0,
+            price_total=100,
+            paid_amount=0,
+        )
+        resp = client.post(
+            "/customer-adjustments",
+            json={
+                "customer_id": customer_id,
+                "amount_money": 50,
+                "count_12kg": 0,
+                "count_48kg": 0,
+                "reason": "correction",
+                "happened_at": iso_at(DAY.isoformat(), "midday"),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        _create_collection(
+            client,
+            customer_id=customer_id,
+            happened_at=iso_at(DAY.isoformat(), "evening"),
+            action_type="return",
+            qty_12kg=1,
+        )
+
+        report = _day_report(client, DAY)
+        event_types = _event_types(report)
+        assert "customer_adjust" not in event_types
+
+        later_event = next(
+            event
+            for event in report["events"]
+            if event.get("event_type") == "collection_empty" and event.get("customer_id") == customer_id
+        )
+        assert later_event["customer_money_before"] == 150
+        assert later_event["customer_money_after"] == 150
+
     def test_company_balance_adjustment_not_in_daily_report_events(self, client) -> None:
         _init(client)
         _create_refill(client, happened_at=iso_at(DAY.isoformat(), "morning"))
@@ -484,6 +532,31 @@ class TestBalanceAdjustmentsNotInDailyReport:
         report = _day_report(client, DAY)
         event_types = _event_types(report)
         assert "company_adjustment" not in event_types
+
+    def test_company_balance_adjustment_still_updates_later_daily_report_company_wording(self, client) -> None:
+        _init(client)
+
+        resp = client.post(
+            "/company/balances/adjust",
+            json={
+                "happened_at": iso_at(DAY.isoformat(), "morning"),
+                "money_balance": 0,
+                "cylinder_balance_12": 3,
+                "cylinder_balance_48": 0,
+                "note": "correction",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+        refill_id = _create_refill(client, happened_at=iso_at(DAY.isoformat(), "midday"))
+        assert refill_id
+
+        report = _day_report(client, DAY)
+        event_types = _event_types(report)
+        assert "company_adjustment" not in event_types
+
+        later_event = next(event for event in report["events"] if event.get("event_type") == "refill")
+        assert later_event["company_12kg_before"] == 3
 
 
 # ---------------------------------------------------------------------------

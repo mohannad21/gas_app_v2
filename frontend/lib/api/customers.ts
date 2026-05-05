@@ -75,3 +75,7 @@ export async function updateCustomer(id: string, payload: CustomerUpdateInput): 
 export async function deleteCustomer(id: string): Promise<void> {
   await api.delete(`/customers/${id}`);
 }
+
+export async function deleteCustomerAdjustment(id: string): Promise<void> {
+  await api.delete(`/customer-adjustments/${id}`);
+}

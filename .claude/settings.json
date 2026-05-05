@@ -107,7 +107,8 @@
       "Bash(python -m pytest -x -q)",
       "Bash(python -m pytest test_activity_visibility.py::test_customer_adjustment_appears_in_day_report_and_customer_review -q)",
       "Bash(python -m pytest test_activity_visibility.py::test_customer_adjustment_appears_in_day_report_and_customer_review -v -s)",
-      "Bash(python -m pytest -q)"
+      "Bash(python -m pytest -q)",
+      "Bash(Get-ChildItem -Path 'c:\\\\Users\\\\Mohannad\\\\gas_app_v2' -Recurse -Directory)"
     ],
     "additionalDirectories": [
       "\\tmp"

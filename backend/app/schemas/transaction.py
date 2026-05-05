@@ -163,6 +163,12 @@ class CompanyBalanceAdjustmentOut(SQLModel):
   money_balance: int
   cylinder_balance_12: int
   cylinder_balance_48: int
+  delta_money: int = 0
+  delta_cylinder_12: int = 0
+  delta_cylinder_48: int = 0
+  live_debt_cash: Optional[int] = None
+  live_debt_cylinders_12: Optional[int] = None
+  live_debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
   is_deleted: bool = False
 

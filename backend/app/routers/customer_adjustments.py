@@ -1,15 +1,18 @@
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
 from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_money, sum_customer_cylinders
-from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction
+from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction, reverse_source
+from app.utils.locks import acquire_customer_locks
 
 router = APIRouter(prefix="/customer-adjustments", tags=["customer-adjustments"])
 
@@ -205,4 +208,71 @@ def create_adjustment(
   for txn in txns:
     session.refresh(txn)
   return _adjustment_out(txns, session)
+
+
+@router.delete(
+  "/{adjustment_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("orders:write"))],
+)
+def delete_adjustment(
+  adjustment_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
+  try:
+    txns = session.exec(
+      select(CustomerTransaction)
+      .where(CustomerTransaction.tenant_id == tenant_id)
+      .where(CustomerTransaction.kind == "adjust")
+      .where(CustomerTransaction.deleted_at == None)  # noqa: E711
+      .where(
+        or_(
+          CustomerTransaction.group_id == adjustment_id,
+          CustomerTransaction.id == adjustment_id,
+        )
+      )
+    ).all()
+    if not txns:
+      return
+    acquire_customer_locks(session, [txns[0].customer_id])
+    now = datetime.now(timezone.utc)
+    for txn in txns:
+      reversal = CustomerTransaction(
+        tenant_id=tenant_id,
+        group_id=txn.group_id or txn.id,
+        customer_id=txn.customer_id,
+        system_id=txn.system_id,
+        happened_at=txn.happened_at,
+        day=txn.day,
+        kind="adjust",
+        gas_type=txn.gas_type,
+        installed=txn.installed,
+        received=txn.received,
+        total=txn.total,
+        paid=txn.paid,
+        debt_cash=txn.debt_cash,
+        debt_cylinders_12=txn.debt_cylinders_12,
+        debt_cylinders_48=txn.debt_cylinders_48,
+        note=f"Reversal of {txn.id}",
+        deleted_at=now,
+        reversal_source_id=txn.id,
+      )
+      session.add(reversal)
+      reverse_source(
+        session,
+        source_type="customer_txn",
+        source_id=txn.id,
+        reversal_source_type="customer_txn",
+        reversal_source_id=reversal.id,
+        happened_at=reversal.happened_at,
+        day=reversal.day,
+        note=reversal.note,
+      )
+      txn.deleted_at = now
+      session.add(txn)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
 

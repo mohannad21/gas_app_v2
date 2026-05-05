@@ -15,6 +15,7 @@ import {
   useCustomerBalance,
   useCustomers,
   useDeleteCustomer,
+  useDeleteCustomerAdjustment,
 } from "@/hooks/useCustomers";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
@@ -142,6 +143,7 @@ export default function CustomerDetailsScreen() {
   const deleteSystem = useDeleteSystem();
   const deleteOrder = useDeleteOrder();
   const deleteCollection = useDeleteCollection();
+  const deleteAdjustment = useDeleteCustomerAdjustment();
   const focusRefetchers = useRef({
     orders: ordersQuery.refetch,
     collections: collectionsQuery.refetch,
@@ -350,6 +352,21 @@ export default function CustomerDetailsScreen() {
         },
       },
     ]);
+  };
+
+  const handleDeleteAdjustment = (adjustmentId: string) => {
+    Alert.alert(
+      "Delete adjustment?",
+      "This will reverse the balance adjustment and update the customer's ledger.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteAdjustment.mutate({ id: adjustmentId, customerId }),
+        },
+      ]
+    );
   };
 
   const handleDeleteCollection = (collectionId: string) => {
@@ -585,6 +602,8 @@ export default function CustomerDetailsScreen() {
             event.event_type === "collection_empty" ||
             event.event_type === "collection_payout";
 
+          const isAdjustment = event.event_type === "customer_adjust";
+
           return (
             <SlimActivityRow
               key={event.id}
@@ -598,7 +617,9 @@ export default function CustomerDetailsScreen() {
                   ? () => handleDeleteOrder(event.id!)
                   : isCollection
                     ? () => handleDeleteCollection(event.id!)
-                    : undefined
+                    : isAdjustment
+                      ? () => handleDeleteAdjustment(event.id!)
+                      : undefined
               }
             />
           );

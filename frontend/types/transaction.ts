@@ -76,6 +76,12 @@ export const CompanyBalanceAdjustmentSchema = z.object({
   money_balance: z.number(),
   cylinder_balance_12: z.number(),
   cylinder_balance_48: z.number(),
+  delta_money: z.number().optional().default(0),
+  delta_cylinder_12: z.number().optional().default(0),
+  delta_cylinder_48: z.number().optional().default(0),
+  live_debt_cash: z.number().nullish(),
+  live_debt_cylinders_12: z.number().nullish(),
+  live_debt_cylinders_48: z.number().nullish(),
   note: z.string().nullish(),
   is_deleted: z.boolean().optional(),
 });

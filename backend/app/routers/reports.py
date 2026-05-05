@@ -87,6 +87,7 @@ def _inventory_state_for_event(
     "collection_money",
     "collection_payout",
     "company_payment",
+    "company_adjustment",
     "expense",
     "bank_deposit",
     "cash_adjust",
@@ -539,9 +540,9 @@ def get_daily_report(
     entries_by_source[(entry.source_type, entry.source_id)].append(entry)
 
   for txn in customer_txns:
+    stable_source_id = txn.group_id or txn.id
     if txn.kind == "adjust":
       continue
-    stable_source_id = txn.group_id or txn.id
     # `effective_at` is the report/API name for the stored `happened_at`
     # business timestamp. Keep that mapping explicit here so reporting does not
     # drift toward `created_at` semantics.
@@ -642,6 +643,44 @@ def get_daily_report(
     events.append(event)
     event_sort_ids[id(event)] = base.id or ""
     event_source_keys[id(event)] = [("inventory_adjust", ia.id) for ia in ia_list]
+
+  adjustment_groups: dict[str, list[CustomerTransaction]] = defaultdict(list)
+  for txn in customer_txns:
+    if txn.kind != "adjust":
+      continue
+    adjustment_groups[txn.group_id or txn.id].append(txn)
+
+  for group_key, txns in adjustment_groups.items():
+    base = min(txns, key=lambda txn: (txn.happened_at, txn.created_at, txn.id))
+    event = DailyReportEvent(
+      id=base.id,
+      source_id=group_key,
+      event_type="customer_adjust",
+      effective_at=base.happened_at,
+      created_at=base.created_at,
+      customer_id=base.customer_id,
+      customer_name=customers[base.customer_id].name if base.customer_id and base.customer_id in customers else None,
+      customer_description=customers[base.customer_id].note if base.customer_id and base.customer_id in customers else None,
+      reason=base.note,
+    )
+    events.append(event)
+    event_sort_ids[id(event)] = group_key or base.id or ""
+    event_source_keys[id(event)] = [("customer_txn", txn.id) for txn in txns]
+
+  for txn in company_txns:
+    if txn.kind != "adjust":
+      continue
+    event = DailyReportEvent(
+      id=txn.id,
+      source_id=txn.id,
+      event_type="company_adjustment",
+      effective_at=txn.happened_at,
+      created_at=txn.created_at,
+      reason=txn.note,
+    )
+    events.append(event)
+    event_sort_ids[id(event)] = txn.id or ""
+    event_source_keys[id(event)] = [("company_txn", txn.id)]
 
   # Get settings
   settings = session.get(SystemSettings, "system")
@@ -745,6 +784,7 @@ def get_daily_report(
       notes=notes,
     )
 
+  events = [event for event in events if event.event_type not in {"customer_adjust", "company_adjustment"}]
   events.reverse()
 
   # Get audit summary

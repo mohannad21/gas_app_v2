@@ -38,6 +38,7 @@ jest.mock("@/hooks/useBalancesSummary", () => ({
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, refetch: jest.fn() }),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useOrders", () => ({
@@ -54,6 +55,7 @@ jest.mock("@/hooks/useCollections", () => ({
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, refetch: jest.fn() }),
   CUSTOMER_DELETE_BLOCKED_MESSAGE: "Cannot delete customer with active data.",
   isCustomerDeleteBlockedError: () => false,
