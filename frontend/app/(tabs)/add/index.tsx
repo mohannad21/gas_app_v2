@@ -5,7 +5,6 @@ import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Mo
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
-import CollectionEditModal from "@/components/add/CollectionEditModal";
 import ActivityListSection from "@/components/add/ActivityListSection";
 import {
   CustomerListSubFilter,
@@ -21,7 +20,6 @@ import {
   companyPaymentToEvent,
   customerAdjustmentToEvent,
     expenseToEvent,
-    getCompanyInventoryEditTab,
     inventoryAdjustmentToEvent,
     inventoryAdjustmentGroupToEvent,
     orderToEvent,
@@ -42,7 +40,7 @@ import {
   useDeleteCustomer,
   useDeleteCustomerAdjustment,
 } from "@/hooks/useCustomers";
-import { useCollections, useDeleteCollection, useUpdateCollection } from "@/hooks/useCollections";
+import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useDeleteExpense, useExpenses } from "@/hooks/useExpenses";
 import {
@@ -55,7 +53,6 @@ import { InventoryActivityItem } from "@/hooks/useInventoryActivity";
 import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { useActivityFilters } from "@/hooks/useActivityFilters";
-import { useCollectionEdit } from "@/hooks/useCollectionEdit";
 import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
 import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
@@ -246,7 +243,6 @@ export default function AddChooserScreen() {
   const { confirm, setConfirm, deletingIds, setDeletingIds, markDeleting, unmarkDeleting } = useDeleteConfirm();
   const ordersQuery = useOrders(false);
   const collectionsQuery = useCollections(false);
-  const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const customersQuery = useCustomers();
   const customerIds = useMemo(
@@ -257,22 +253,6 @@ export default function AddChooserScreen() {
   const deleteOrder = useDeleteOrder();
   const systemsQuery = useSystems();
   const { companySummary, companyBalancesQuery } = useBalancesSummary();
-  // Extract collection edit state into custom hook
-  const {
-    collectionEditOpen,
-    setCollectionEditOpen,
-    collectionEditTarget,
-    setCollectionEditTarget,
-    collectionAmount,
-    setCollectionAmount,
-    collectionQty12,
-    setCollectionQty12,
-    collectionQty48,
-    setCollectionQty48,
-    collectionNote,
-    setCollectionNote,
-    resetCollectionForm,
-  } = useCollectionEdit();
   const accessoryId = Platform.OS === "ios" ? "addAccessory" : undefined;
   const deleteRefill = useDeleteRefill();
   const deleteCompanyPayment = useDeleteCompanyPayment();
@@ -760,46 +740,6 @@ const formatDateTime = (value?: string) => {
     );
   };
 
-  const openCollectionEdit = (collection: any) => {
-    setCollectionEditTarget(collection);
-    setCollectionAmount(
-      collection.action_type !== "return" ? String(collection.amount_money ?? "") : ""
-    );
-    setCollectionQty12(collection.action_type === "return" ? String(collection.qty_12kg ?? "") : "");
-    setCollectionQty48(collection.action_type === "return" ? String(collection.qty_48kg ?? "") : "");
-    setCollectionNote(collection.note ?? "");
-    setCollectionEditOpen(true);
-  };
-
-  const handleSaveCollectionEdit = async () => {
-    if (!collectionEditTarget) return;
-    const actionType = collectionEditTarget.action_type;
-    if (actionType === "payment" || actionType === "payout") {
-      const amount = Number(collectionAmount) || 0;
-      if (amount <= 0) {
-        Alert.alert("Missing amount", "Enter a payment amount.");
-        return;
-      }
-      await updateCollection.mutateAsync({
-        id: collectionEditTarget.id,
-        payload: { action_type: actionType, amount_money: amount, note: collectionNote || undefined },
-      });
-    } else {
-      const qty12 = Number(collectionQty12) || 0;
-      const qty48 = Number(collectionQty48) || 0;
-      if (qty12 <= 0 && qty48 <= 0) {
-        Alert.alert("Missing counts", "Enter a return quantity.");
-        return;
-      }
-      await updateCollection.mutateAsync({
-        id: collectionEditTarget.id,
-        payload: { action_type: "return", qty_12kg: qty12, qty_48kg: qty48, note: collectionNote || undefined },
-      });
-    }
-    setCollectionEditOpen(false);
-    setCollectionEditTarget(null);
-  };
-
   const handlePriceInputChange = (
     gas: GasType,
     field: "selling" | "buying" | "selling_iron" | "buying_iron",
@@ -1119,14 +1059,13 @@ const formatDateTime = (value?: string) => {
                 const collection = item.data;
                 return (
                     <SlimActivityRow
-                      event={collectionToEvent(collection, {
+                    event={collectionToEvent(collection, {
                         customerName: item.customerName,
                         customerDescription: customersById.get(collection.customer_id)?.note ?? null,
                       })}
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
-                      onEdit={() => openCollectionEdit(collection)}
                       onDelete={() => confirmDeleteCollection(collection.id)}
                     />
                 );
@@ -1134,20 +1073,17 @@ const formatDateTime = (value?: string) => {
               const order = item.data;
               const systemName = systemsQuery.data?.find((s) => s.id === order.system_id)?.name;
               return (
-                <Pressable onPress={() => router.push(`/orders/${order.id}`)}>
-                  <SlimActivityRow
-                    event={orderToEvent(order, {
-                      customerName: item.customerName,
-                      customerDescription: customersById.get(order.customer_id)?.note ?? null,
-                      systemName,
-                    })}
-                    formatMoney={fmtMoney}
-                    showCreatedAt
-                    showEffectiveAtBottom
-                    onEdit={() => router.push(`/orders/${order.id}/edit`)}
-                    onDelete={() => confirmDeleteOrder(order.id)}
-                  />
-                </Pressable>
+                <SlimActivityRow
+                  event={orderToEvent(order, {
+                    customerName: item.customerName,
+                    customerDescription: customersById.get(order.customer_id)?.note ?? null,
+                    systemName,
+                  })}
+                  formatMoney={fmtMoney}
+                  showCreatedAt
+                  showEffectiveAtBottom
+                  onDelete={() => confirmDeleteOrder(order.id)}
+                />
               );
             }}
           />
@@ -1192,12 +1128,6 @@ const formatDateTime = (value?: string) => {
                     showCreatedAt
                     showEffectiveAtBottom
                     isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
-                    onEdit={() =>
-                      router.push({
-                        pathname: "/expenses/new",
-                        params: { expenseId: item.data.id },
-                      })
-                    }
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
                 );
@@ -1232,20 +1162,14 @@ const formatDateTime = (value?: string) => {
                 if (entry.kind === "company_adjustment") {
                   return (
                     <SlimActivityRow
-                      event={companyBalanceAdjustmentToEvent(entry.data)}
-                      formatMoney={fmtMoney}
-                      showCreatedAt
-                      showEffectiveAtBottom
-                      isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
-                      onEdit={() =>
-                        router.push({
-                          pathname: "/inventory/company-balance-adjust",
-                          params: { adjustmentId: entry.data.id },
-                        })
-                      }
-                      onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
-                    />
-                  );
+                    event={companyBalanceAdjustmentToEvent(entry.data)}
+                    formatMoney={fmtMoney}
+                    showCreatedAt
+                    showEffectiveAtBottom
+                    isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
+                    onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
+                  />
+                );
                 }
                 const refill = entry.data;
                 return (
@@ -1255,12 +1179,6 @@ const formatDateTime = (value?: string) => {
                     showCreatedAt
                     showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
-                    onEdit={() =>
-                      router.push({
-                        pathname: "/inventory/new",
-                        params: { section: "company", tab: getCompanyInventoryEditTab(refill), refillId: refill.refill_id },
-                      })
-                    }
                     onDelete={() => handleRemoveRefill(refill.refill_id)}
                   />
                 );
@@ -1295,15 +1213,6 @@ const formatDateTime = (value?: string) => {
                         showCreatedAt
                         showEffectiveAtBottom
                         isDeleted={entry.is_deleted || deletingGroup}
-                        onEdit={
-                          entry.isGrouped
-                            ? undefined
-                            : () =>
-                                router.push({
-                                  pathname: "/inventory/new",
-                                  params: { section: "ledger", tab: "inventory", adjustId: adjustment.id },
-                                })
-                        }
                         onDelete={() =>
                           entry.isGrouped
                             ? handleDeleteInventoryAdjustmentGroup(adjustments)
@@ -1320,12 +1229,6 @@ const formatDateTime = (value?: string) => {
                     showCreatedAt
                     showEffectiveAtBottom
                     isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
-                    onEdit={() =>
-                      router.push({
-                        pathname: "/inventory/new",
-                        params: { section: "ledger", tab: "cash", cashId: adjustment.id },
-                      })
-                    }
                     onDelete={() => handleDeleteCashAdjustment(adjustment)}
                   />
                 );
@@ -1344,21 +1247,6 @@ const formatDateTime = (value?: string) => {
           </View>
         </InputAccessoryView>
       )}
-
-      <CollectionEditModal
-        isOpen={collectionEditOpen}
-        target={collectionEditTarget}
-        amount={collectionAmount}
-        qty12={collectionQty12}
-        qty48={collectionQty48}
-        note={collectionNote}
-        onAmountChange={setCollectionAmount}
-        onQty12Change={setCollectionQty12}
-        onQty48Change={setCollectionQty48}
-        onNoteChange={setCollectionNote}
-        onClose={() => setCollectionEditOpen(false)}
-        onSave={handleSaveCollectionEdit}
-      />
 
       {/* Confirm modal */}
       <Modal transparent visible={!!confirm} animationType="fade" onRequestClose={() => setConfirm(null)}>

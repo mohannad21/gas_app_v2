@@ -41,6 +41,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     error: null,
     refetch: mockAdjustmentsRefetch,
   }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useDeleteCustomer: () => ({ mutateAsync: jest.fn() }),
 }));
 
@@ -140,7 +141,7 @@ describe("Customer detail balance boxes", () => {
     expect(getByText("Money balance")).toBeTruthy();
     expect(getByText("12kg balance")).toBeTruthy();
     expect(getByText("48kg balance")).toBeTruthy();
-    expect(getByText("120.00 USD")).toBeTruthy();
+    expect(getByText("120.00 $")).toBeTruthy();
     expect(getByText("-2")).toBeTruthy();
     expect(getByText("3")).toBeTruthy();
 
@@ -185,5 +186,10 @@ describe("Customer detail balance boxes", () => {
     expect(getByText("12kg balance: credit 10 → 12 credit (for customer)")).toBeTruthy();
     expect(getByText("48kg balance: debts 9 → 12 debts (on customer)")).toBeTruthy();
     expect(queryByText("Money balance: credit 100.00 $ → 0.00 $ (on customer)")).toBeNull();
+  });
+  it("does not show Edit actions on customer activity rows", () => {
+    const { queryByLabelText } = render(<CustomerDetailsScreen />);
+
+    expect(queryByLabelText("Edit")).toBeNull();
   });
 });

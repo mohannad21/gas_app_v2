@@ -611,7 +611,6 @@ export default function CustomerDetailsScreen() {
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom
-              onEdit={isOrder ? () => router.push(`/orders/${event.id}/edit`) : undefined}
               onDelete={
                 isOrder
                   ? () => handleDeleteOrder(event.id!)

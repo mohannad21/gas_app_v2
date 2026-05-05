@@ -138,13 +138,13 @@ jest.mock("@/hooks/useCash", () => ({
 }));
 
 describe("Add Entry — company adjustment card actions", () => {
-  it("shows Delete and Edit buttons on a company balance adjustment card", () => {
-    const { getByText, getByLabelText } = render(<AddChooserScreen />);
+  it("shows Delete but not Edit on a company balance adjustment card", () => {
+    const { getByText, getByLabelText, queryByLabelText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("Company\nActivities"));
     fireEvent.press(getByText("Adjustment"));
 
     expect(getByLabelText("Delete")).toBeTruthy();
-    expect(getByLabelText("Edit")).toBeTruthy();
+    expect(queryByLabelText("Edit")).toBeNull();
   });
 });
