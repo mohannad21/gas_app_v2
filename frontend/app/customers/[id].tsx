@@ -114,18 +114,37 @@ export function sortCustomerActivityEvents(events: DailyReportEvent[]): DailyRep
 function DetailBalanceBox({
   label,
   value,
+  state,
   accent,
 }: {
   label: string;
   value: string;
+  state: "Debt" | "Credit" | "Balanced";
   accent?: string;
 }) {
+  const stateColor =
+    state === "Debt" ? "#b42318" : state === "Credit" ? "#0a7ea4" : "#667085";
   return (
     <View style={styles.balanceBox}>
       <Text style={[styles.balanceBoxLabel, accent ? { color: accent } : null]}>{label}</Text>
       <Text style={styles.balanceBoxValue}>{value}</Text>
+      <Text style={[styles.balanceBoxState, { color: stateColor }]}>{state}</Text>
     </View>
   );
+}
+
+function getCustomerBalanceState(value: number): "Debt" | "Credit" | "Balanced" {
+  if (value > 0) return "Debt";
+  if (value < 0) return "Credit";
+  return "Balanced";
+}
+
+function formatAbsoluteCurrency(value: number) {
+  return `${Math.abs(value).toFixed(getMoneyDecimals())} ${getCurrencySymbol()}`;
+}
+
+function formatAbsoluteCylinder(value: number) {
+  return `${Math.abs(value)}`;
 }
 
 export default function CustomerDetailsScreen() {
@@ -271,16 +290,19 @@ export default function CustomerDetailsScreen() {
   const balanceStats = [
     {
       label: "Money balance",
-      value: formatCurrency(moneyBalance),
+      value: formatAbsoluteCurrency(moneyBalance),
+      state: getCustomerBalanceState(moneyBalance),
     },
     {
       label: "12kg balance",
-      value: formatCylinder(cylBalance12),
+      value: formatAbsoluteCylinder(cylBalance12),
+      state: getCustomerBalanceState(cylBalance12),
       gas: "12kg" as const,
     },
     {
       label: "48kg balance",
-      value: formatCylinder(cylBalance48),
+      value: formatAbsoluteCylinder(cylBalance48),
+      state: getCustomerBalanceState(cylBalance48),
       gas: "48kg" as const,
     },
   ];
@@ -580,6 +602,7 @@ export default function CustomerDetailsScreen() {
               key={stat.label}
               label={stat.label}
               value={stat.value}
+              state={stat.state}
               accent={stat.gas ? gasColor(stat.gas) : undefined}
             />
           ))}
@@ -906,6 +929,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "900",
     marginTop: "auto",
+  },
+  balanceBoxState: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   activityCard: {
     backgroundColor: "#fff",

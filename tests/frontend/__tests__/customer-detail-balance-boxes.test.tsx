@@ -7,6 +7,12 @@ const mockOrdersRefetch = jest.fn();
 const mockCollectionsRefetch = jest.fn();
 const mockAdjustmentsRefetch = jest.fn();
 let mockAdjustmentsData: any[] = [];
+let mockBalanceData = {
+  customer_id: "cust-1",
+  money_balance: 120,
+  cylinder_balance_12kg: -2,
+  cylinder_balance_48kg: 3,
+};
 
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({
@@ -27,12 +33,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     refetch: jest.fn(),
   }),
   useCustomerBalance: () => ({
-    data: {
-      customer_id: "cust-1",
-      money_balance: 120,
-      cylinder_balance_12kg: -2,
-      cylinder_balance_48kg: 3,
-    },
+    data: mockBalanceData,
   }),
   useCustomerAdjustments: () => ({
     data: mockAdjustmentsData,
@@ -132,18 +133,26 @@ describe("Customer detail balance boxes", () => {
     mockCollectionsRefetch.mockClear();
     mockAdjustmentsRefetch.mockClear();
     mockAdjustmentsData = [];
+    mockBalanceData = {
+      customer_id: "cust-1",
+      money_balance: 120,
+      cylinder_balance_12kg: -2,
+      cylinder_balance_48kg: 3,
+    };
   });
 
   it("replaces the old balances section with compact boxes below the filters", () => {
-    const { getByText, queryByText, toJSON } = render(<CustomerDetailsScreen />);
+    const { getByText, getAllByText, queryByText, toJSON } = render(<CustomerDetailsScreen />);
 
     expect(queryByText("Balances")).toBeNull();
     expect(getByText("Money balance")).toBeTruthy();
     expect(getByText("12kg balance")).toBeTruthy();
     expect(getByText("48kg balance")).toBeTruthy();
     expect(getByText("120.00 $")).toBeTruthy();
-    expect(getByText("-2")).toBeTruthy();
+    expect(getByText("2")).toBeTruthy();
     expect(getByText("3")).toBeTruthy();
+    expect(getAllByText("Debt")).toHaveLength(2);
+    expect(getAllByText("Credit")).toHaveLength(1);
 
     const tree = JSON.stringify(toJSON());
     expect(tree.indexOf("Adjustments")).toBeLessThan(tree.indexOf("Money balance"));
@@ -191,5 +200,20 @@ describe("Customer detail balance boxes", () => {
     const { queryByLabelText } = render(<CustomerDetailsScreen />);
 
     expect(queryByLabelText("Edit")).toBeNull();
+  });
+
+  it("shows Balanced for zero-value boxes", () => {
+    mockBalanceData = {
+      customer_id: "cust-1",
+      money_balance: 0,
+      cylinder_balance_12kg: 0,
+      cylinder_balance_48kg: 0,
+    };
+
+    const { getAllByText, getByText } = render(<CustomerDetailsScreen />);
+
+    expect(getByText("0.00 $")).toBeTruthy();
+    expect(getAllByText("0")).toHaveLength(3);
+    expect(getAllByText("Balanced")).toHaveLength(3);
   });
 });
