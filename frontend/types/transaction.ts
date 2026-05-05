@@ -97,6 +97,16 @@ export type CompanyBalanceAdjustmentCreateInput = {
   happened_at?: string;
   request_id?: string;
 };
+export type CompanyBalanceAdjustmentUpdateInput = {
+  money_balance?: number;
+  cylinder_balance_12?: number;
+  cylinder_balance_48?: number;
+  note?: string;
+  date?: string;
+  time?: string;
+  time_of_day?: "morning" | "evening";
+  happened_at?: string;
+};
 
 export const CompanyBalancesSchema = z.object({
   company_money: z.number(),

@@ -111,7 +111,10 @@ export function useCreateCustomerAdjustment(options?: { showToast?: boolean }) {
       queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(variables.customer_id) });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", variables.customer_id] });
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
   });
 }
@@ -132,7 +135,10 @@ export function useDeleteCustomerAdjustment() {
         queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", variables.customerId] });
       }
       queryClient.invalidateQueries({ queryKey: ["customers", "adjustments"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
   });
 }

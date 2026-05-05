@@ -57,7 +57,10 @@ jest.mock("@/hooks/useCollections", () => ({
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  CUSTOMER_DELETE_BLOCKED_MESSAGE: "Cannot delete customer with active data.",
+  isCustomerDeleteBlockedError: () => false,
 }));
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
@@ -67,6 +70,8 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
     refetch: mockCompanyBalancesRefetch,
   }),
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
+  useUpdateCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useSystems", () => ({
@@ -187,7 +192,7 @@ describe("company balance UI sync", () => {
     fireEvent.press(view.getByText("Company\nActivities"));
     fireEvent.press(view.getByText("Company Balances"));
     await waitFor(() => {
-      expect(view.getByText("10 shekels")).toBeTruthy();
+      expect(view.getByText("10.00 $")).toBeTruthy();
     });
   }
 
@@ -205,8 +210,8 @@ describe("company balance UI sync", () => {
     await openCompanySummary(view);
     await refocusAndRerender(view, { company_money: 30, company_cyl_12: 0, company_cyl_48: 0 });
 
-    expect(view.getByText("30 shekels")).toBeTruthy();
-    expect(view.queryByText("10 shekels")).toBeNull();
+    expect(view.getByText("30.00 $")).toBeTruthy();
+    expect(view.queryByText("10.00 $")).toBeNull();
   });
 
   it("updates the visible company summary after a refill update when the screen regains focus", async () => {
@@ -215,8 +220,8 @@ describe("company balance UI sync", () => {
     await openCompanySummary(view);
     await refocusAndRerender(view, { company_money: 5, company_cyl_12: 0, company_cyl_48: 0 });
 
-    expect(view.getByText("5 shekels")).toBeTruthy();
-    expect(view.queryByText("10 shekels")).toBeNull();
+    expect(view.getByText("5.00 $")).toBeTruthy();
+    expect(view.queryByText("10.00 $")).toBeNull();
   });
 
   it("updates the visible company summary immediately after deleting a refill from the company activities screen", async () => {
@@ -226,12 +231,12 @@ describe("company balance UI sync", () => {
     await openCompanySummary(view);
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText("Remove refill"));
+      fireEvent.press(view.getByLabelText("Delete"));
     });
     view.rerender(<AddChooserScreen />);
 
     expect(mockCompanyBalancesRefetch).not.toHaveBeenCalled();
-    expect(view.getByText("0 shekels")).toBeTruthy();
-    expect(view.queryByText("10 shekels")).toBeNull();
+    expect(view.getByText("0.00 $")).toBeTruthy();
+    expect(view.queryByText("10.00 $")).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import {
   CompanyBalancesSchema,
   CompanyBalanceAdjustment,
   CompanyBalanceAdjustmentCreateInput,
+  CompanyBalanceAdjustmentUpdateInput,
   CompanyBalanceAdjustmentSchema,
   CompanyBuyIron,
   CompanyBuyIronCreateInput,
@@ -89,6 +90,29 @@ export async function listCompanyBalanceAdjustments(
 
 export async function deleteCompanyBalanceAdjustment(adjustmentId: string): Promise<void> {
   await api.delete(`/company/balance-adjustments/${adjustmentId}`);
+}
+
+export async function updateCompanyBalanceAdjustment(
+  adjustmentId: string,
+  payload: CompanyBalanceAdjustmentUpdateInput
+): Promise<CompanyBalanceAdjustment> {
+  const happened_at =
+    payload.happened_at ??
+    buildActivityHappenedAt({ date: payload.date, time: payload.time });
+  const { data } = await api.put(`/company/balance-adjustments/${adjustmentId}`, {
+    happened_at,
+    money_balance: payload.money_balance != null ? toMinorUnits(payload.money_balance) : undefined,
+    cylinder_balance_12: payload.cylinder_balance_12,
+    cylinder_balance_48: payload.cylinder_balance_48,
+    note: payload.note,
+  });
+  const parsed = parse(CompanyBalanceAdjustmentSchema, data);
+  return {
+    ...parsed,
+    money_balance: fromMinorUnits(parsed.money_balance),
+    delta_money: fromMinorUnits(parsed.delta_money ?? 0),
+    live_debt_cash: parsed.live_debt_cash != null ? fromMinorUnits(parsed.live_debt_cash) : parsed.live_debt_cash,
+  };
 }
 
 export async function createCompanyPayment(payload: CompanyPaymentCreateInput): Promise<CompanyPayment> {

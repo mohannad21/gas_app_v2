@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   InputAccessoryView,
@@ -22,11 +22,18 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
-import { useCompanyBalances, useCreateCompanyBalanceAdjustment } from "@/hooks/useCompanyBalances";
+import {
+  useCompanyBalanceAdjustments,
+  useCompanyBalances,
+  useCreateCompanyBalanceAdjustment,
+  useUpdateCompanyBalanceAdjustment,
+} from "@/hooks/useCompanyBalances";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
-import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
-import { getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
+import { parseCountValue } from "@/lib/countInput";
+import { getCurrentLocalDate, getCurrentLocalTime, getTimeHMSFromIso, toDateKey } from "@/lib/date";
 import { formatDisplayMoney } from "@/lib/money";
+
+type BalanceState = "debts_on_distributor" | "balanced" | "credit_for_distributor";
 
 const MONEY_STEPPERS: FieldStepper[] = [
   { delta: -20, label: "-20", position: "top-left" },
@@ -36,17 +43,15 @@ const MONEY_STEPPERS: FieldStepper[] = [
 ];
 
 const QTY_STEPPERS: FieldStepper[] = [
-  { delta: -1, label: "-", position: "left" },
-  { delta: 1, label: "+", position: "right" },
+  { delta: -1, label: "-1", position: "left" },
+  { delta: 1, label: "+1", position: "right" },
 ];
 
-function getTodayDate() {
-  return getCurrentLocalDate();
-}
-
-function getNowTime() {
-  return getCurrentLocalTime();
-}
+const BALANCE_OPTIONS: Array<{ id: BalanceState; label: string }> = [
+  { id: "debts_on_distributor", label: "Debts on distributor" },
+  { id: "balanced", label: "Balanced" },
+  { id: "credit_for_distributor", label: "Credit for distributor" },
+];
 
 function CalendarModal({
   visible,
@@ -114,7 +119,10 @@ function CalendarModal({
               day ? (
                 <Pressable
                   key={`${month.getMonth()}-${day}`}
-                  style={[styles.calendarCell, formatDate(new Date(month.getFullYear(), month.getMonth(), day)) === value && styles.selectedCell]}
+                  style={[
+                    styles.calendarCell,
+                    formatDate(new Date(month.getFullYear(), month.getMonth(), day)) === value && styles.selectedCell,
+                  ]}
                   onPress={() => {
                     onSelect(formatDate(new Date(month.getFullYear(), month.getMonth(), day)));
                     onClose();
@@ -150,61 +158,245 @@ function TimePickerModal({
   return <MinuteTimePickerModal visible={visible} value={value} onSelect={onSelect} onClose={onClose} />;
 }
 
+const getTodayDate = () => getCurrentLocalDate();
+const getNowTime = () => getCurrentLocalTime();
+
+const toPositiveNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? Math.abs(parsed) : 0;
+};
+
+const toPositiveCount = (value: string) => {
+  const parsed = parseCountValue(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(Math.abs(parsed))) : 0;
+};
+
+const deriveMoneyBalance = (value: number) => {
+  if (value > 0) return { state: "debts_on_distributor" as BalanceState, amount: Math.abs(value) };
+  if (value < 0) return { state: "credit_for_distributor" as BalanceState, amount: Math.abs(value) };
+  return { state: "balanced" as BalanceState, amount: 0 };
+};
+
+const deriveCylinderBalance = (value: number) => {
+  if (value < 0) return { state: "debts_on_distributor" as BalanceState, amount: Math.abs(value) };
+  if (value > 0) return { state: "credit_for_distributor" as BalanceState, amount: Math.abs(value) };
+  return { state: "balanced" as BalanceState, amount: 0 };
+};
+
+const resolveMoneyBalance = (state: BalanceState, amount: number) => {
+  const normalized = Number.isFinite(amount) ? Math.abs(amount) : 0;
+  if (state === "debts_on_distributor") return normalized;
+  if (state === "credit_for_distributor") return -normalized;
+  return 0;
+};
+
+const resolveCylinderBalance = (state: BalanceState, amount: number) => {
+  const normalized = Number.isFinite(amount) ? Math.trunc(Math.abs(amount)) : 0;
+  if (state === "debts_on_distributor") return -normalized;
+  if (state === "credit_for_distributor") return normalized;
+  return 0;
+};
+
+const describeState = (state: BalanceState) => {
+  if (state === "debts_on_distributor") return "Debts on distributor";
+  if (state === "credit_for_distributor") return "Credit for distributor";
+  return "Balanced";
+};
+
+const describeMoneyValue = (value: number) => {
+  const derived = deriveMoneyBalance(value);
+  if (derived.state === "balanced") return "Balanced";
+  return `${describeState(derived.state)} ${formatDisplayMoney(derived.amount)}`;
+};
+
+const describeCylinderValue = (value: number) => {
+  const derived = deriveCylinderBalance(value);
+  if (derived.state === "balanced") return "Balanced";
+  return `${describeState(derived.state)} ${derived.amount}`;
+};
+
 export default function CompanyBalanceAdjustScreen() {
+  const params = useLocalSearchParams<{ adjustmentId?: string | string[] }>();
+  const adjustmentId = Array.isArray(params.adjustmentId) ? params.adjustmentId[0] : params.adjustmentId;
+  const isEditing = !!adjustmentId;
+
   const balancesQuery = useCompanyBalances();
+  const adjustmentsQuery = useCompanyBalanceAdjustments({ enabled: isEditing });
   const createAdjustment = useCreateCompanyBalanceAdjustment();
+  const updateAdjustment = useUpdateCompanyBalanceAdjustment();
   const accessoryId = Platform.OS === "ios" ? "companyBalanceAdjustAccessory" : undefined;
+
+  const editingAdjustment = useMemo(
+    () => (adjustmentsQuery.data ?? []).find((entry) => entry.id === adjustmentId) ?? null,
+    [adjustmentsQuery.data, adjustmentId]
+  );
 
   const [date, setDate] = useState(getTodayDate());
   const [time, setTime] = useState(getNowTime());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
-  const [money, setMoney] = useState("0");
-  const [cyl12, setCyl12] = useState("0");
-  const [cyl48, setCyl48] = useState("0");
+  const [moneyState, setMoneyState] = useState<BalanceState>("balanced");
+  const [moneyAmount, setMoneyAmount] = useState(0);
+  const [cyl12State, setCyl12State] = useState<BalanceState>("balanced");
+  const [cyl12Amount, setCyl12Amount] = useState(0);
+  const [cyl48State, setCyl48State] = useState<BalanceState>("balanced");
+  const [cyl48Amount, setCyl48Amount] = useState(0);
   const [note, setNote] = useState("");
+  const [seedKey, setSeedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!balancesQuery.data) return;
-    setMoney(String(balancesQuery.data.company_money ?? 0));
-    setCyl12(String(balancesQuery.data.company_cyl_12 ?? 0));
-    setCyl48(String(balancesQuery.data.company_cyl_48 ?? 0));
-  }, [balancesQuery.data]);
+    if (isEditing) {
+      if (!editingAdjustment || seedKey === `edit:${editingAdjustment.id}`) return;
+      const moneyBalance = deriveMoneyBalance(editingAdjustment.money_balance ?? 0);
+      const cyl12Balance = deriveCylinderBalance(editingAdjustment.cylinder_balance_12 ?? 0);
+      const cyl48Balance = deriveCylinderBalance(editingAdjustment.cylinder_balance_48 ?? 0);
+      setDate(toDateKey(editingAdjustment.happened_at) || getTodayDate());
+      setTime(getTimeHMSFromIso(editingAdjustment.happened_at).slice(0, 5));
+      setMoneyState(moneyBalance.state);
+      setMoneyAmount(moneyBalance.amount);
+      setCyl12State(cyl12Balance.state);
+      setCyl12Amount(cyl12Balance.amount);
+      setCyl48State(cyl48Balance.state);
+      setCyl48Amount(cyl48Balance.amount);
+      setNote(editingAdjustment.note ?? "");
+      setSeedKey(`edit:${editingAdjustment.id}`);
+      return;
+    }
+    if (!balancesQuery.data || seedKey === "create") return;
+    const moneyBalance = deriveMoneyBalance(balancesQuery.data.company_money ?? 0);
+    const cyl12Balance = deriveCylinderBalance(balancesQuery.data.company_cyl_12 ?? 0);
+    const cyl48Balance = deriveCylinderBalance(balancesQuery.data.company_cyl_48 ?? 0);
+    setDate(getTodayDate());
+    setTime(getNowTime());
+    setMoneyState(moneyBalance.state);
+    setMoneyAmount(moneyBalance.amount);
+    setCyl12State(cyl12Balance.state);
+    setCyl12Amount(cyl12Balance.amount);
+    setCyl48State(cyl48Balance.state);
+    setCyl48Amount(cyl48Balance.amount);
+    setNote("");
+    setSeedKey("create");
+  }, [balancesQuery.data, editingAdjustment, isEditing, seedKey]);
 
   const currentMoney = balancesQuery.data?.company_money ?? 0;
   const current12 = balancesQuery.data?.company_cyl_12 ?? 0;
   const current48 = balancesQuery.data?.company_cyl_48 ?? 0;
-  const nextMoney = Number(money) || 0;
-  const next12 = parseCountValue(cyl12, { allowNegative: true });
-  const next48 = parseCountValue(cyl48, { allowNegative: true });
+  const nextMoney = resolveMoneyBalance(moneyState, moneyAmount);
+  const next12 = resolveCylinderBalance(cyl12State, cyl12Amount);
+  const next48 = resolveCylinderBalance(cyl48State, cyl48Amount);
+  const baselineDate = isEditing && editingAdjustment ? toDateKey(editingAdjustment.happened_at) : getTodayDate();
+  const baselineTime = isEditing && editingAdjustment ? getTimeHMSFromIso(editingAdjustment.happened_at).slice(0, 5) : getNowTime();
+  const baselineMoney = isEditing && editingAdjustment ? editingAdjustment.money_balance : currentMoney;
+  const baseline12 = isEditing && editingAdjustment ? editingAdjustment.cylinder_balance_12 : current12;
+  const baseline48 = isEditing && editingAdjustment ? editingAdjustment.cylinder_balance_48 : current48;
+  const baselineNote = isEditing && editingAdjustment ? editingAdjustment.note ?? "" : "";
+  const isSubmitting = createAdjustment.isPending || updateAdjustment.isPending;
+  const loadingEditTarget = isEditing && adjustmentsQuery.isLoading;
+  const missingEditTarget = isEditing && !adjustmentsQuery.isLoading && !editingAdjustment;
   const saveDisabled =
-    createAdjustment.isPending ||
+    isSubmitting ||
     !balancesQuery.isSuccess ||
-    (nextMoney === currentMoney && next12 === current12 && next48 === current48);
+    loadingEditTarget ||
+    missingEditTarget ||
+    (nextMoney === baselineMoney &&
+      next12 === baseline12 &&
+      next48 === baseline48 &&
+      note.trim() === baselineNote.trim() &&
+      date === baselineDate &&
+      time === baselineTime);
 
   const save = async () => {
     try {
-      await createAdjustment.mutateAsync({
+      const payload = {
         date,
         time,
         money_balance: nextMoney,
         cylinder_balance_12: next12,
         cylinder_balance_48: next48,
         note: note.trim() || undefined,
-      });
+      };
+      if (adjustmentId) {
+        await updateAdjustment.mutateAsync({ id: adjustmentId, payload });
+      } else {
+        await createAdjustment.mutateAsync(payload);
+      }
       Keyboard.dismiss();
       router.back();
     } catch (err: any) {
       logApiError("[company balance adjustment save] error", err);
-      Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save company balance adjustment."));
+      Alert.alert(
+        isEditing ? "Update failed" : "Adjustment failed",
+        getUserFacingApiError(err, isEditing ? "Failed to update company balance adjustment." : "Failed to save company balance adjustment.")
+      );
     }
   };
+
+  const renderChoices = (
+    selected: BalanceState,
+    onChange: (next: BalanceState) => void,
+    onBalanced: () => void
+  ) => (
+    <View style={styles.balanceChoiceRow}>
+      {BALANCE_OPTIONS.map((option) => (
+        <Pressable
+          key={option.id}
+          onPress={() => {
+            onChange(option.id);
+            if (option.id === "balanced") onBalanced();
+          }}
+          style={({ pressed }) => [
+            styles.balanceChoiceButton,
+            pressed && styles.chipPressed,
+            selected === option.id && styles.chipActive,
+          ]}
+        >
+          <Text style={[styles.balanceChoiceText, selected === option.id && styles.chipTextActive]}>
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const renderAmountField = (
+    amount: number,
+    setAmount: (next: number) => void,
+    steppers: FieldStepper[],
+    valueMode: "integer" | "decimal" = "integer"
+  ) => (
+    <StandaloneField>
+      <FieldCell
+        title="Amount"
+        value={amount}
+        valueMode={valueMode}
+        onIncrement={() => setAmount(amount + 1)}
+        onDecrement={() => setAmount(Math.max(0, amount - 1))}
+        onChangeText={(text) => setAmount(valueMode === "decimal" ? toPositiveNumber(text) : toPositiveCount(text))}
+        steppers={steppers}
+      />
+    </StandaloneField>
+  );
+
+  if (missingEditTarget) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <View style={styles.center}>
+          <Text style={styles.missingTitle}>Adjustment not found.</Text>
+          <Pressable style={styles.closeBtn} onPress={() => router.back()}>
+            <Text style={styles.closeBtnText}>Back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
       <KeyboardAvoidingView style={styles.screenInner} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Adjust Company Balances</Text>
+          <Text style={styles.title}>{isEditing ? "Edit Company Balance Adjustment" : "Adjust Company Balances"}</Text>
           <Pressable onPress={() => router.back()}>
             <Ionicons name="close" size={20} color="#0f172a" />
           </Pressable>
@@ -235,47 +427,29 @@ export default function CompanyBalanceAdjustScreen() {
 
           <BigBox
             title="Money balance"
-            statusLine={`Current ${formatDisplayMoney(currentMoney)} -> ${formatDisplayMoney(nextMoney)}`}
+            statusLine={`Current ${describeMoneyValue(currentMoney)} -> ${describeMoneyValue(nextMoney)}`}
             defaultExpanded
           >
-            <StandaloneField>
-              <FieldCell
-                title="Money"
-                value={nextMoney}
-                valueMode="decimal"
-                onIncrement={() => setMoney(String(nextMoney + 5))}
-                onDecrement={() => setMoney(String(nextMoney - 5))}
-                onChangeText={setMoney}
-                steppers={MONEY_STEPPERS}
-              />
-            </StandaloneField>
+            {renderChoices(moneyState, setMoneyState, () => setMoneyAmount(0))}
+            {moneyState !== "balanced" ? renderAmountField(moneyAmount, setMoneyAmount, MONEY_STEPPERS, "decimal") : null}
           </BigBox>
 
           <BigBox
-            title="Cylinder balances"
-            statusLine={`12kg ${current12} -> ${next12}\n48kg ${current48} -> ${next48}`}
+            title="12kg balance"
+            statusLine={`Current ${describeCylinderValue(current12)} -> ${describeCylinderValue(next12)}`}
             defaultExpanded
           >
-            <View style={styles.fieldPair}>
-              <FieldCell
-                title="12kg"
-                comment={`Current ${current12} -> ${next12}`}
-                value={next12}
-                onIncrement={() => setCyl12(String(next12 + 1))}
-                onDecrement={() => setCyl12(String(next12 - 1))}
-                onChangeText={(value) => setCyl12(sanitizeCountInput(value, { allowNegative: true }))}
-                steppers={QTY_STEPPERS}
-              />
-              <FieldCell
-                title="48kg"
-                comment={`Current ${current48} -> ${next48}`}
-                value={next48}
-                onIncrement={() => setCyl48(String(next48 + 1))}
-                onDecrement={() => setCyl48(String(next48 - 1))}
-                onChangeText={(value) => setCyl48(sanitizeCountInput(value, { allowNegative: true }))}
-                steppers={QTY_STEPPERS}
-              />
-            </View>
+            {renderChoices(cyl12State, setCyl12State, () => setCyl12Amount(0))}
+            {cyl12State !== "balanced" ? renderAmountField(cyl12Amount, setCyl12Amount, QTY_STEPPERS) : null}
+          </BigBox>
+
+          <BigBox
+            title="48kg balance"
+            statusLine={`Current ${describeCylinderValue(current48)} -> ${describeCylinderValue(next48)}`}
+            defaultExpanded
+          >
+            {renderChoices(cyl48State, setCyl48State, () => setCyl48Amount(0))}
+            {cyl48State !== "balanced" ? renderAmountField(cyl48Amount, setCyl48Amount, QTY_STEPPERS) : null}
           </BigBox>
 
           <View style={styles.sectionCard}>
@@ -289,19 +463,14 @@ export default function CompanyBalanceAdjustScreen() {
             />
           </View>
         </ScrollView>
-        <FooterActions onSave={save} saveDisabled={saveDisabled} saving={createAdjustment.isPending} />
-        <CalendarModal
-          visible={calendarOpen}
-          value={date}
-          onSelect={setDate}
-          onClose={() => setCalendarOpen(false)}
+        <FooterActions
+          onSave={save}
+          saveDisabled={saveDisabled}
+          saving={isSubmitting}
+          saveLabel={isEditing ? "Update" : "Save"}
         />
-        <TimePickerModal
-          visible={timeOpen}
-          value={time}
-          onSelect={setTime}
-          onClose={() => setTimeOpen(false)}
-        />
+        <CalendarModal visible={calendarOpen} value={date} onSelect={setDate} onClose={() => setCalendarOpen(false)} />
+        <TimePickerModal visible={timeOpen} value={time} onSelect={setTime} onClose={() => setTimeOpen(false)} />
       </KeyboardAvoidingView>
       {Platform.OS === "ios" && accessoryId ? (
         <InputAccessoryView nativeID={accessoryId}>
@@ -334,9 +503,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
+    flex: 1,
     fontSize: 26,
     fontWeight: "800",
     color: "#0f172a",
+    paddingRight: 12,
   },
   content: {
     gap: 12,
@@ -392,13 +563,35 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
   },
-  standaloneFieldWrap: {
-    width: "100%",
-    alignSelf: "stretch",
-  },
-  fieldPair: {
+  balanceChoiceRow: {
     flexDirection: "row",
-    gap: 12,
+    alignItems: "stretch",
+    gap: 8,
+  },
+  balanceChoiceButton: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#e8eef1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  balanceChoiceText: {
+    color: "#444",
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  chipPressed: {
+    opacity: 0.8,
+  },
+  chipActive: {
+    backgroundColor: "#0a7ea4",
+  },
+  chipTextActive: {
+    color: "#fff",
   },
   input: {
     backgroundColor: "#fff",
@@ -464,21 +657,6 @@ const styles = StyleSheet.create({
     color: "#1f2937",
     fontWeight: "600",
   },
-  timeList: {
-    maxHeight: 280,
-  },
-  timeListContent: {
-    gap: 4,
-  },
-  timeItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  timeText: {
-    color: "#1f2937",
-    fontWeight: "600",
-  },
   closeBtn: {
     alignSelf: "center",
     paddingHorizontal: 16,
@@ -504,5 +682,17 @@ const styles = StyleSheet.create({
   accessoryText: {
     color: "#0a7ea4",
     fontWeight: "700",
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 20,
+  },
+  missingTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
   },
 });

@@ -10,6 +10,7 @@ from app.models import CompanyTransaction
 from app.schemas import (
   CompanyBalanceAdjustmentCreate,
   CompanyBalanceAdjustmentOut,
+  CompanyBalanceAdjustmentUpdate,
   CompanyBalancesOut,
   CompanyBuyIronCreate,
   CompanyBuyIronOut,
@@ -23,6 +24,87 @@ from app.services.posting import allocate_happened_at, derive_day, parse_happene
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/company", tags=["company"])
+
+
+def _resolve_active_company_adjustment(session: Session, adjustment_id: str) -> CompanyTransaction | None:
+  current = session.get(CompanyTransaction, adjustment_id)
+  if not current:
+    return None
+
+  visited: set[str] = set()
+  while current.deleted_at is not None and current.id not in visited:
+    visited.add(current.id)
+    next_adjustment = session.exec(
+      select(CompanyTransaction)
+      .where(CompanyTransaction.reversed_id == current.id)
+      .order_by(CompanyTransaction.created_at.desc())
+    ).first()
+    if not next_adjustment:
+      break
+    current = next_adjustment
+  return current
+
+
+def _company_adjustment_target_happened_at(
+  session: Session,
+  tenant_id: str,
+  payload: CompanyBalanceAdjustmentCreate | CompanyBalanceAdjustmentUpdate,
+  *,
+  fallback: datetime | None = None,
+) -> datetime:
+  happened_at = payload.happened_at
+  if happened_at is None and (payload.date or payload.time or payload.time_of_day or payload.at):
+    happened_at = parse_happened_at_parts(
+      date_str=payload.date,
+      time_str=payload.time,
+      time_of_day=payload.time_of_day,
+      at=payload.at,
+    )
+  if happened_at is None:
+    happened_at = fallback
+  if happened_at is None:
+    raise HTTPException(status_code=400, detail="happened_at_required")
+  return allocate_happened_at(session, tenant_id=tenant_id, value=happened_at)
+
+
+def _post_company_adjustment(
+  session: Session,
+  *,
+  tenant_id: str,
+  happened_at: datetime,
+  money_balance: int,
+  cylinder_balance_12: int,
+  cylinder_balance_48: int,
+  note: str | None,
+  request_id: str | None = None,
+  reversed_id: str | None = None,
+) -> CompanyTransaction:
+  current_money = sum_company_money(session, up_to=happened_at)
+  current_cyl_12 = sum_company_cylinders(session, gas_type="12kg", up_to=happened_at)
+  current_cyl_48 = sum_company_cylinders(session, gas_type="48kg", up_to=happened_at)
+
+  delta_money = money_balance - current_money
+  delta_cyl_12 = cylinder_balance_12 - current_cyl_12
+  delta_cyl_48 = cylinder_balance_48 - current_cyl_48
+  if delta_money == 0 and delta_cyl_12 == 0 and delta_cyl_48 == 0:
+    raise HTTPException(status_code=400, detail="adjustment_required")
+
+  txn = CompanyTransaction(
+    tenant_id=tenant_id,
+    happened_at=happened_at,
+    day=derive_day(happened_at),
+    kind="adjust",
+    buy12=delta_cyl_12,
+    buy48=delta_cyl_48,
+    total=delta_money,
+    paid=0,
+    note=note,
+    request_id=request_id,
+    reversed_id=reversed_id,
+  )
+  session.add(txn)
+  post_company_transaction(session, txn)
+  return txn
 
 
 def _company_adjustment_out(row: CompanyTransaction, session: Session) -> CompanyBalanceAdjustmentOut:
@@ -347,7 +429,7 @@ def delete_company_balance_adjustment(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
   try:
-    existing = session.get(CompanyTransaction, adjustment_id)
+    existing = _resolve_active_company_adjustment(session, adjustment_id)
     if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust":
       raise HTTPException(status_code=404, detail="Company balance adjustment not found")
     acquire_company_lock(session)
@@ -388,6 +470,81 @@ def delete_company_balance_adjustment(
   except Exception:
     session.rollback()
     raise
+
+
+@router.put(
+  "/balance-adjustments/{adjustment_id}",
+  response_model=CompanyBalanceAdjustmentOut,
+  dependencies=[Depends(require_permission("company:write"))],
+)
+def update_company_balance_adjustment(
+  adjustment_id: str,
+  payload: CompanyBalanceAdjustmentUpdate,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> CompanyBalanceAdjustmentOut:
+  try:
+    existing = _resolve_active_company_adjustment(session, adjustment_id)
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust":
+      raise HTTPException(status_code=404, detail="Company balance adjustment not found")
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    reversal = CompanyTransaction(
+      tenant_id=tenant_id,
+      happened_at=existing.happened_at,
+      day=existing.day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.deleted_at = datetime.now(timezone.utc)
+    session.add(existing)
+
+    happened_at = _company_adjustment_target_happened_at(
+      session,
+      tenant_id,
+      payload,
+      fallback=existing.happened_at,
+    )
+    next_adjustment = _post_company_adjustment(
+      session,
+      tenant_id=tenant_id,
+      happened_at=happened_at,
+      money_balance=payload.money_balance if payload.money_balance is not None else existing.debt_cash,
+      cylinder_balance_12=payload.cylinder_balance_12 if payload.cylinder_balance_12 is not None else existing.debt_cylinders_12,
+      cylinder_balance_48=payload.cylinder_balance_48 if payload.cylinder_balance_48 is not None else existing.debt_cylinders_48,
+      note=payload.note if payload.note is not None else existing.note,
+      reversed_id=existing.id,
+    )
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
+  session.refresh(next_adjustment)
+  return _company_adjustment_out(next_adjustment, session)
 
 
 @router.post(
@@ -477,18 +634,7 @@ def adjust_company_balances(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CompanyBalanceAdjustmentOut:
-  happened_at = allocate_happened_at(
-    session,
-    tenant_id=tenant_id,
-    value=
-    payload.happened_at
-    or parse_happened_at_parts(
-      date_str=payload.date,
-      time_str=payload.time,
-      time_of_day=payload.time_of_day,
-      at=payload.at,
-    )
-  )
+  happened_at = _company_adjustment_target_happened_at(session, tenant_id, payload)
 
   try:
     acquire_company_lock(session)
@@ -502,30 +648,16 @@ def adjust_company_balances(
       if existing:
         return _company_adjustment_out(existing, session)
 
-    current_money = sum_company_money(session)
-    current_cyl_12 = sum_company_cylinders(session, gas_type="12kg")
-    current_cyl_48 = sum_company_cylinders(session, gas_type="48kg")
-
-    delta_money = payload.money_balance - current_money
-    delta_cyl_12 = payload.cylinder_balance_12 - current_cyl_12
-    delta_cyl_48 = payload.cylinder_balance_48 - current_cyl_48
-    if delta_money == 0 and delta_cyl_12 == 0 and delta_cyl_48 == 0:
-      raise HTTPException(status_code=400, detail="adjustment_required")
-
-    txn = CompanyTransaction(
+    txn = _post_company_adjustment(
+      session,
       tenant_id=tenant_id,
       happened_at=happened_at,
-      day=derive_day(happened_at),
-      kind="adjust",
-      buy12=delta_cyl_12,
-      buy48=delta_cyl_48,
-      total=delta_money,
-      paid=0,
+      money_balance=payload.money_balance,
+      cylinder_balance_12=payload.cylinder_balance_12,
+      cylinder_balance_48=payload.cylinder_balance_48,
       note=payload.note,
       request_id=payload.request_id,
     )
-    session.add(txn)
-    post_company_transaction(session, txn)
     session.commit()
   except Exception:
     session.rollback()

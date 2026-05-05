@@ -70,6 +70,7 @@ export function useUpdateCollection() {
         .getQueryData<CollectionEvent[]>(["collections"])
         ?.find((collection) => collection.id === variables.id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, variables.payload.customer_id ?? existing?.customer_id);
       invalidateCustomerAdjustmentHistory(queryClient, variables.payload.customer_id ?? existing?.customer_id);
@@ -94,6 +95,7 @@ export function useDeleteCollection() {
         .getQueryData<CollectionEvent[]>(["collections"])
         ?.find((collection) => collection.id === id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, existing?.customer_id);
       invalidateCustomerAdjustmentHistory(queryClient, existing?.customer_id);

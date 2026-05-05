@@ -446,25 +446,36 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
         : "Refill";
 
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
+  const moneyAfter = refill.live_debt_cash != null ? refill.live_debt_cash : Number(refill.debt_cash ?? 0);
+  const moneyDelta = Number(refill.total_cost ?? 0) - Number(refill.paid_now ?? 0);
+  const moneyBefore = moneyAfter - moneyDelta;
   let cyl12Before = 0;
   let cyl12After = 0;
   let cyl48Before = 0;
   let cyl48After = 0;
 
+  cyl12After =
+    refill.live_debt_cylinders_12 != null
+      ? refill.live_debt_cylinders_12
+      : Number(refill.debt_cylinders_12 ?? 0);
+  cyl48After =
+    refill.live_debt_cylinders_48 != null
+      ? refill.live_debt_cylinders_48
+      : Number(refill.debt_cylinders_48 ?? 0);
+
+  pushTransition(transitions, "company", "money", moneyBefore, moneyAfter);
+
   if (eventType !== "company_buy_iron") {
-    cyl12After =
-      refill.live_debt_cylinders_12 != null
-        ? refill.live_debt_cylinders_12
-        : Number(refill.debt_cylinders_12 ?? 0);
-    cyl48After =
-      refill.live_debt_cylinders_48 != null
-        ? refill.live_debt_cylinders_48
-        : Number(refill.debt_cylinders_48 ?? 0);
     cyl12Before = cyl12After - totals.return12 + totals.buy12;
     cyl48Before = cyl48After - totals.return48 + totals.buy48;
-    pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
-    pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
+  } else {
+    // Buying new shells changes company money, but not the tracked company cylinder debt.
+    cyl12Before = cyl12After;
+    cyl48Before = cyl48After;
   }
+
+  pushTransition(transitions, "company", "cyl_12", cyl12Before, cyl12After);
+  pushTransition(transitions, "company", "cyl_48", cyl48Before, cyl48After);
 
   return {
     ...BASE,
@@ -479,6 +490,8 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
     return12: totals.return12,
     buy48: totals.buy48,
     return48: totals.return48,
+    company_before: moneyBefore,
+    company_after: moneyAfter,
     balance_transitions: transitions.length > 0 ? transitions : undefined,
     company_12kg_before: cyl12Before,
     company_12kg_after: cyl12After,

@@ -1237,6 +1237,12 @@ const formatDateTime = (value?: string) => {
                       showCreatedAt
                       showEffectiveAtBottom
                       isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
+                      onEdit={() =>
+                        router.push({
+                          pathname: "/inventory/company-balance-adjust",
+                          params: { adjustmentId: entry.data.id },
+                        })
+                      }
                       onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
                     />
                   );

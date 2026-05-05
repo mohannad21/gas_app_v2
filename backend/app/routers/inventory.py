@@ -452,6 +452,8 @@ def list_refills(
       return48=row.return48,
       new12=row.new12,
       new48=row.new48,
+      total_cost=row.total,
+      paid_now=row.paid,
       debt_cash=row.debt_cash,
       debt_cylinders_12=row.debt_cylinders_12,
       debt_cylinders_48=row.debt_cylinders_48,

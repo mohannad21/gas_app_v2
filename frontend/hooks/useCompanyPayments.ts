@@ -26,6 +26,8 @@ export function useCreateCompanyPayment() {
       showToast("Company payment saved");
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -44,6 +46,8 @@ export function useDeleteCompanyPayment() {
       showToast("Company payment deleted");
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },

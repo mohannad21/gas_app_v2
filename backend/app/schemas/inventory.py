@@ -107,6 +107,8 @@ class InventoryRefillSummary(SQLModel):
   return48: int
   new12: int = 0
   new48: int = 0
+  total_cost: int = 0
+  paid_now: int = 0
   debt_cash: int = 0
   debt_cylinders_12: int = 0
   debt_cylinders_48: int = 0

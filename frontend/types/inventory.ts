@@ -29,6 +29,8 @@ export const InventoryRefillSummarySchema = z
     return48: z.number(),
     new12: z.number().optional(),
     new48: z.number().optional(),
+    total_cost: z.number().optional().default(0),
+    paid_now: z.number().optional().default(0),
     debt_cash: z.number().optional().default(0),
     debt_cylinders_12: z.number().optional().default(0),
     debt_cylinders_48: z.number().optional().default(0),

@@ -558,6 +558,92 @@ class TestBalanceAdjustmentsNotInDailyReport:
         later_event = next(event for event in report["events"] if event.get("event_type") == "refill")
         assert later_event["company_12kg_before"] == 3
 
+    def test_company_balance_adjustment_delete_reverts_later_wording(self, client) -> None:
+        _init(client)
+
+        adj_resp = client.post(
+            "/company/balances/adjust",
+            json={
+                "happened_at": iso_at(DAY.isoformat(), "morning"),
+                "money_balance": 0,
+                "cylinder_balance_12": 5,
+                "cylinder_balance_48": 0,
+                "note": "initial correction",
+            },
+        )
+        assert adj_resp.status_code == 201, adj_resp.text
+        adj_id = adj_resp.json()["id"]
+
+        _create_refill(client, happened_at=iso_at(DAY.isoformat(), "evening"))
+
+        report = _day_report(client, DAY)
+        later_event = next(e for e in report["events"] if e.get("event_type") == "refill")
+        assert later_event["company_12kg_before"] == 5
+
+        del_resp = client.delete(f"/company/balance-adjustments/{adj_id}")
+        assert del_resp.status_code == 204, del_resp.text
+
+        report2 = _day_report(client, DAY)
+        later_event2 = next(e for e in report2["events"] if e.get("event_type") == "refill")
+        assert later_event2["company_12kg_before"] == 0
+
+    def test_company_balance_adjustment_update_changes_later_wording(self, client) -> None:
+        _init(client)
+
+        adj_resp = client.post(
+            "/company/balances/adjust",
+            json={
+                "happened_at": iso_at(DAY.isoformat(), "morning"),
+                "money_balance": 0,
+                "cylinder_balance_12": 5,
+                "cylinder_balance_48": 0,
+                "note": "initial correction",
+            },
+        )
+        assert adj_resp.status_code == 201, adj_resp.text
+        adj_id = adj_resp.json()["id"]
+
+        _create_refill(client, happened_at=iso_at(DAY.isoformat(), "evening"))
+
+        report = _day_report(client, DAY)
+        later_event = next(e for e in report["events"] if e.get("event_type") == "refill")
+        assert later_event["company_12kg_before"] == 5
+
+        upd_resp = client.put(
+            f"/company/balance-adjustments/{adj_id}",
+            json={"money_balance": 0, "cylinder_balance_12": 10, "cylinder_balance_48": 0},
+        )
+        assert upd_resp.status_code == 200, upd_resp.text
+
+        report2 = _day_report(client, DAY)
+        later_event2 = next(e for e in report2["events"] if e.get("event_type") == "refill")
+        assert later_event2["company_12kg_before"] == 10
+
+    def test_company_balance_adjustment_backdated_affects_same_day_later_events(self, client) -> None:
+        _init(client)
+
+        _create_refill(client, happened_at=iso_at(DAY.isoformat(), "midday"))
+
+        report_before = _day_report(client, DAY)
+        refill_before = next(e for e in report_before["events"] if e.get("event_type") == "refill")
+        assert refill_before["company_12kg_before"] == 0
+
+        adj_resp = client.post(
+            "/company/balances/adjust",
+            json={
+                "happened_at": iso_at(DAY.isoformat(), "morning"),
+                "money_balance": 0,
+                "cylinder_balance_12": 7,
+                "cylinder_balance_48": 0,
+                "note": "backdated correction",
+            },
+        )
+        assert adj_resp.status_code == 201, adj_resp.text
+
+        report_after = _day_report(client, DAY)
+        refill_after = next(e for e in report_after["events"] if e.get("event_type") == "refill")
+        assert refill_after["company_12kg_before"] == 7
+
 
 # ---------------------------------------------------------------------------
 # 5. Day box unchanged after balance adjustments

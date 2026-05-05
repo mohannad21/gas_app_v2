@@ -156,6 +156,18 @@ class CompanyBalanceAdjustmentCreate(SQLModel):
   at: Optional[str] = None
 
 
+class CompanyBalanceAdjustmentUpdate(SQLModel):
+  money_balance: Optional[int] = None
+  cylinder_balance_12: Optional[int] = None
+  cylinder_balance_48: Optional[int] = None
+  note: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
 class CompanyBalanceAdjustmentOut(SQLModel):
   id: str
   happened_at: datetime
