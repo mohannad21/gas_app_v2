@@ -42,12 +42,14 @@ jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: (...args: unknown[]) => mockCustomers(...args),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
   useAllCustomerAdjustments: (...args: unknown[]) => mockCustomerAdjustments(...args),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   CUSTOMER_DELETE_BLOCKED_MESSAGE: "Cannot delete customer with active data.",
   isCustomerDeleteBlockedError: () => false,
 }));
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalanceAdjustments: (...args: unknown[]) => mockCompanyAdjustments(...args),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useOrders", () => ({
@@ -205,7 +207,7 @@ describe("Add Entry adjustment visibility", () => {
     const { getByText, queryByText } = render(<AddChooserScreen />);
     fireEvent.press(getByText("Company\nActivities"));
 
-    expect(getByText("Money 150")).toBeTruthy();
-    expect(queryByText("Money 999")).toBeNull();
+    expect(getByText("Money balance: unchanged — debts 150 $ (on distributor)")).toBeTruthy();
+    expect(queryByText("Money balance: unchanged — debts 999 $ (on distributor)")).toBeNull();
   });
 });

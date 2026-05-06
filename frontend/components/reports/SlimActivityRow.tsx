@@ -52,9 +52,7 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
   if (note.kind === "money") {
     const amountText = formatMoneyValue(after, formatMoney);
     if (note.direction === "customer_pays_you") {
-      return withBefore
-        ? `Debts on customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `Debts on customer ${amountText}`;
+      return `Customer still owes ${amountText}`;
     }
     if (note.direction === "you_pay_customer") {
       return withBefore
@@ -124,7 +122,8 @@ const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
 const formatOrderMetric = (event: DailyReportEvent) => {
   const lines: string[] = [];
   const isSystemAttached = event.order_mode === "replacement" || event.order_mode === "sell_iron";
-  if (event.system_name && isSystemAttached) lines.push(`System: ${event.system_name}`);
+  const resolvedSystemName = event.system_name ?? (event as any).system?.display_name ?? null;
+  if (resolvedSystemName && isSystemAttached) lines.push(`System: ${resolvedSystemName}`);
   const gas = event.gas_type ? `${event.gas_type}` : "";
   const installed = Number(event.order_installed ?? 0);
   const received = Number(event.order_received ?? 0);

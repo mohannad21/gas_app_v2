@@ -20,6 +20,7 @@ import {
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
 import { Order } from "@/types/domain";
+import FilterChipRow from "@/components/add/FilterChipRow";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import {
   collectionToEvent,
@@ -29,22 +30,22 @@ import {
 import { DailyReportEvent } from "@/types/report";
 
 type ActivityFilter =
-  | "all"
   | "replacement"
   | "late_payment"
+  | "payout"
   | "return_empties"
   | "buy_empty"
   | "sell_full"
   | "adjustment";
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Late payment" },
-  { id: "return_empties", label: "Return empties" },
+  { id: "late_payment", label: "Received payment" },
+  { id: "payout", label: "Paid customer" },
+  { id: "return_empties", label: "Returned empties" },
   { id: "buy_empty", label: "Buy empty" },
   { id: "sell_full", label: "Sell full" },
-  { id: "adjustment", label: "Adjustments" },
+  { id: "adjustment", label: "Balance adjustment" },
 ];
 
 const formatCurrency = (value: number) => {
@@ -150,8 +151,9 @@ function formatAbsoluteCylinder(value: number) {
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
-  const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
-  const [selectedSystemName, setSelectedSystemName] = useState("all");
+  const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
+  const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
+  const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections(false);
@@ -234,15 +236,96 @@ export default function CustomerDetailsScreen() {
     return sortCustomerActivityEvents([...orderEvents, ...collectionEvents, ...adjustmentEvents]);
   }, [orders, collections, adjustments, customer, systemsById]);
 
+  const availableActivityFilters = useMemo(() => {
+    const visible = new Set<ActivityFilter>();
+    for (const event of activities) {
+      if (event.event_type === "order" && event.order_mode === "replacement") visible.add("replacement");
+      if (event.event_type === "collection_money") visible.add("late_payment");
+      if (event.event_type === "collection_payout") visible.add("payout");
+      if (event.event_type === "collection_empty") visible.add("return_empties");
+      if (event.event_type === "order" && event.order_mode === "buy_iron") visible.add("buy_empty");
+      if (event.event_type === "order" && event.order_mode === "sell_iron") visible.add("sell_full");
+      if (event.event_type === "customer_adjust") visible.add("adjustment");
+    }
+    return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
+  }, [activities]);
+
+  const level2Options = useMemo(() => {
+    if (!selectedFilter) return [] as { id: string; label: string }[];
+    switch (selectedFilter) {
+      case "replacement": {
+        const options: { id: string; label: string }[] = [];
+        for (const system of systems) {
+          const hasReplacement = orders.some(
+            (order) => !order.is_deleted && order.order_mode === "replacement" && order.system_id === system.id
+          );
+          if (hasReplacement) {
+            options.push({ id: system.id, label: system.name });
+          }
+        }
+        return options;
+      }
+      case "return_empties": {
+        const has12 = collections.some((item) => item.action_type === "return" && Number(item.qty_12kg ?? 0) > 0);
+        const has48 = collections.some((item) => item.action_type === "return" && Number(item.qty_48kg ?? 0) > 0);
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "buy_empty":
+      case "sell_full": {
+        const mode = selectedFilter === "buy_empty" ? "buy_iron" : "sell_iron";
+        const has12 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "12kg");
+        const has48 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "48kg");
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "adjustment": {
+        const hasMoney = adjustments.some((item) => Number(item.amount_money ?? 0) !== 0);
+        const has12 = adjustments.some((item) => Number(item.count_12kg ?? 0) !== 0);
+        const has48 = adjustments.some((item) => Number(item.count_48kg ?? 0) !== 0);
+        return [
+          hasMoney ? { id: "money", label: "Money" } : null,
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      default:
+        return [];
+    }
+  }, [adjustments, collections, orders, selectedFilter, systems]);
+
+  const level3Options = useMemo(() => {
+    if (selectedFilter !== "replacement") return [] as { id: string; label: string }[];
+    const scope = orders.filter(
+      (o) => !o.is_deleted && o.order_mode === "replacement" && (selectedLevel2 === null || o.system_id === selectedLevel2)
+    );
+    const check = (id: string, label: string, predicate: (o: any) => boolean) =>
+      scope.some(predicate) ? { id, label } : null;
+    return [
+      check("money_debt", "Money debt", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) > 0),
+      check("money_credit", "Money credit", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) < 0),
+      check("12kg_debt", "12kg debt", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
+      check("12kg_credit", "12kg credit", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
+      check("48kg_debt", "48kg debt", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
+      check("48kg_credit", "48kg credit", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
+    ].filter((opt): opt is { id: string; label: string } => opt !== null);
+  }, [selectedFilter, selectedLevel2, orders]);
+
   const filteredActivities = useMemo(() => {
     let next = activities;
-    if (selectedFilter !== "all") {
+    if (selectedFilter) {
       next = next.filter((e) => {
         switch (selectedFilter) {
           case "replacement":
             return e.event_type === "order" && e.order_mode === "replacement";
           case "late_payment":
             return e.event_type === "collection_money";
+          case "payout":
+            return e.event_type === "collection_payout";
           case "return_empties":
             return e.event_type === "collection_empty";
           case "buy_empty":
@@ -256,16 +339,68 @@ export default function CustomerDetailsScreen() {
         }
       });
     }
-    if (selectedFilter === "replacement" && selectedSystemName !== "all") {
-      next = next.filter((e) => e.system_name === selectedSystemName);
+    if (!selectedFilter || !selectedLevel2) {
+      if (selectedFilter === "replacement" && selectedLevel3) {
+        return next.filter((event) => {
+          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
+          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
+          switch (selectedLevel3) {
+            case "money_debt": return moneyDiff > 0;
+            case "money_credit": return moneyDiff < 0;
+            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
+            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
+            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
+            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
+            default: return true;
+          }
+        });
+      }
+      return next;
     }
-    return next;
-  }, [activities, selectedFilter, selectedSystemName]);
-
-  const replacementSystemOptions = useMemo(
-    () => [{ id: "all", label: "All systems" }, ...systems.map((system) => ({ id: system.name, label: system.name }))],
-    [systems]
-  );
+    switch (selectedFilter) {
+      case "replacement": {
+        const l2Filtered = next.filter((event) => {
+          const matchingOrder = orders.find((order) => order.id === event.id);
+          return matchingOrder?.system_id === selectedLevel2;
+        });
+        if (!selectedLevel3) return l2Filtered;
+        return l2Filtered.filter((event) => {
+          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
+          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
+          switch (selectedLevel3) {
+            case "money_debt": return moneyDiff > 0;
+            case "money_credit": return moneyDiff < 0;
+            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
+            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
+            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
+            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
+            default: return true;
+          }
+        });
+      }
+      case "return_empties":
+        return next.filter(
+          (event) =>
+            (selectedLevel2 === "12kg" && Number(event.return12 ?? 0) > 0) ||
+            (selectedLevel2 === "48kg" && Number(event.return48 ?? 0) > 0)
+        );
+      case "buy_empty":
+      case "sell_full":
+        return next.filter((event) => event.gas_type === selectedLevel2);
+      case "adjustment":
+        return next.filter(
+          (event) =>
+            (selectedLevel2 === "money" &&
+              Number((event.customer_money_after ?? 0) - (event.customer_money_before ?? 0)) !== 0) ||
+            (selectedLevel2 === "12kg" &&
+              Number((event.customer_12kg_after ?? 0) - (event.customer_12kg_before ?? 0)) !== 0) ||
+            (selectedLevel2 === "48kg" &&
+              Number((event.customer_48kg_after ?? 0) - (event.customer_48kg_before ?? 0)) !== 0)
+        );
+      default:
+        return next;
+    }
+  }, [activities, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
 
   if (customersQuery.isLoading) {
     return (
@@ -404,13 +539,6 @@ export default function CustomerDetailsScreen() {
     ]);
   };
 
-  const handleFilterPress = (nextFilter: ActivityFilter) => {
-    setSelectedFilter(nextFilter);
-    if (nextFilter !== "replacement") {
-      setSelectedSystemName("all");
-    }
-  };
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
@@ -544,55 +672,41 @@ export default function CustomerDetailsScreen() {
         </Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-        style={styles.filterScroll}
-      >
-        {ACTIVITY_FILTER_OPTIONS.map((option) => {
-          const active = selectedFilter === option.id;
-          return (
-            <Pressable
-              key={option.id}
-              onPress={() => handleFilterPress(option.id)}
-              style={[styles.filterChip, active && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {selectedFilter === "replacement" ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.secondaryFilterRow}
+      {availableActivityFilters.length > 1 ? (
+        <FilterChipRow
+          options={availableActivityFilters}
+          value={selectedFilter}
+          onChange={(next) => {
+            setSelectedFilter(next);
+            setSelectedLevel2(null);
+            setSelectedLevel3(null);
+          }}
           style={styles.filterScroll}
-        >
-          {replacementSystemOptions.map((option) => {
-            const active = selectedSystemName === option.id;
-            return (
-              <Pressable
-                key={option.id}
-                onPress={() => {
-                  setSelectedSystemName(option.id);
-                }}
-                style={[styles.secondaryFilterChip, active && styles.secondaryFilterChipActive]}
-              >
-                <Text
-                  style={[
-                    styles.secondaryFilterChipText,
-                    active && styles.secondaryFilterChipTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          contentContainerStyle={styles.filterRow}
+        />
+      ) : null}
+
+      {selectedFilter && level2Options.length > 1 ? (
+        <FilterChipRow
+          options={level2Options}
+          value={selectedLevel2}
+          onChange={(next) => {
+            setSelectedLevel2(next);
+            setSelectedLevel3(null);
+          }}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.secondaryFilterRow}
+        />
+      ) : null}
+
+      {selectedFilter === "replacement" && level3Options.length > 1 ? (
+        <FilterChipRow
+          options={level3Options}
+          value={selectedLevel3}
+          onChange={setSelectedLevel3}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.secondaryFilterRow}
+        />
       ) : null}
 
       <View style={styles.detailBalancesBlock}>

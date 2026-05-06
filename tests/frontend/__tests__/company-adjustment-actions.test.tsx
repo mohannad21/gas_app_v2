@@ -142,7 +142,6 @@ describe("Add Entry — company adjustment card actions", () => {
     const { getByText, getByLabelText, queryByLabelText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("Company\nActivities"));
-    fireEvent.press(getByText("Adjustment"));
 
     expect(getByLabelText("Delete")).toBeTruthy();
     expect(queryByLabelText("Edit")).toBeNull();

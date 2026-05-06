@@ -486,6 +486,8 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
     context_line: contextLine,
     label: contextLine,
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
+    total_cost: Number(refill.total_cost ?? 0),
+    paid_now: Number(refill.paid_now ?? 0),
     buy12: totals.buy12,
     return12: totals.return12,
     buy48: totals.buy48,
@@ -503,6 +505,8 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
 export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent {
   const amount = payment.amount ?? 0;
+  const direction = amount >= 0 ? ("out" as const) : ("in" as const);
+  const label = direction === "out" ? "Paid company" : "Received from company";
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   let companyMoneyBefore: number | null = null;
   let companyMoneyAfter: number | null = null;
@@ -520,12 +524,12 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent
     id: payment.id,
     effective_at: payment.happened_at,
     created_at: payment.happened_at,
-    context_line: "Paid company",
-    label: "Paid company",
+    context_line: label,
+    label: label,
     money_amount: Math.abs(amount),
-    money_direction: amount >= 0 ? "out" : "in",
+    money_direction: direction,
     money_delta: Math.abs(amount),
-    hero_text: amount !== 0 ? `Amount ${formatDisplayMoney(Math.abs(amount))}` : null,
+    hero_text: null,
     note: payment.note ?? null,
     company_before: companyMoneyBefore ?? undefined,
     company_after: companyMoneyAfter ?? undefined,

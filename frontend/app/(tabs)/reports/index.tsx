@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +23,7 @@ import { Spacing } from "@/constants/spacing";
 import ReportHeader from "@/components/reports/ReportHeader";
 import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
 import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
+import FilterChipRow from "@/components/add/FilterChipRow";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { useDailyReportScreen } from "@/hooks/useDailyReportScreen";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
@@ -34,9 +36,11 @@ import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
-import DaySummaryBox from "@/components/reports/DaySummaryBox";
 
 type RevealShelfKey = "ledger" | "customers" | "company";
+type ActivityFilterGroupKey = "customer" | "company" | "expenses" | "ledger";
+type ActivityFilterOption = { key: ActivityFilterGroupKey; label: string };
+type ActivitySubtypeOption = { key: string; label: string };
 
 
 const formatMoney = (value: number) => formatDisplayMoney(value);
@@ -104,6 +108,80 @@ const sortReportEventsNewestFirst = (events: any[]) =>
 
     return String(right?.id ?? right?.source_id ?? "").localeCompare(String(left?.id ?? left?.source_id ?? ""));
   });
+
+const ACTIVITY_GROUP_OPTIONS: Record<Exclude<ActivityFilterGroupKey, "all">, ActivityFilterOption> = {
+  customer: { key: "customer", label: "Customer Activities" },
+  company: { key: "company", label: "Company Activities" },
+  expenses: { key: "expenses", label: "Expenses" },
+  ledger: { key: "ledger", label: "Ledger Adjustments" },
+};
+
+const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> => {
+  switch (event?.event_type) {
+    case "order":
+    case "collection_money":
+    case "collection_payout":
+    case "collection_empty":
+      return "customer";
+    case "company_payment":
+    case "company_buy_iron":
+    case "refill":
+    case "company_return_empties":
+      return "company";
+    case "expense":
+    case "bank_deposit":
+      return "expenses";
+    case "adjust":
+    case "cash_adjust":
+      return "ledger";
+    default:
+      return "customer";
+  }
+};
+
+const getEventSubtype = (event: any): ActivitySubtypeOption => {
+  switch (event?.event_type) {
+    case "order": {
+      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: "Sell full" };
+      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: "Buy empty" };
+      return { key: "replacement", label: "Replacement" };
+    }
+    case "collection_money":
+      return { key: "customer_payment", label: "Received payment" };
+    case "collection_payout":
+      return { key: "customer_payout", label: "Paid customer" };
+    case "collection_empty":
+      return { key: "customer_return", label: "Returned empties" };
+    case "company_payment":
+      return event?.money_direction === "in"
+        ? { key: "received_from_company", label: "Received from company" }
+        : { key: "company_payment", label: "Paid company" };
+    case "company_buy_iron":
+      return { key: "company_buy_full", label: "Bought full" };
+    case "refill": {
+      const isReturnOnly =
+        (!(event?.buy12 ?? 0) && !(event?.buy48 ?? 0) && ((event?.return12 ?? 0) > 0 || (event?.return48 ?? 0) > 0)) ||
+        event?.label === "Returned empties";
+      return isReturnOnly
+        ? { key: "company_return", label: "Returned empties" }
+        : { key: "company_refill", label: "Refill" };
+    }
+    case "company_return_empties":
+      return { key: "company_return", label: "Returned empties" };
+    case "expense":
+      return { key: "expense", label: "Expense" };
+    case "bank_deposit":
+      return event?.transfer_direction === "bank_to_wallet"
+        ? { key: "bank_to_wallet", label: "Bank to wallet" }
+        : { key: "wallet_to_bank", label: "Wallet to bank" };
+    case "cash_adjust":
+      return { key: "wallet_adjustment", label: "Wallet adjustment" };
+    case "adjust":
+      return { key: "inventory_adjustment", label: "Inventory adjustment" };
+    default:
+      return { key: String(event?.event_type ?? "activity"), label: String(event?.label ?? event?.event_type ?? "Activity") };
+  }
+};
 
 type ReportDayCardProps = {
   item: any;
@@ -318,6 +396,9 @@ export default function ReportsScreen() {
 
   // Sync tooltip
   const [syncInfoDate, setSyncInfoDate] = useState<string | null>(null);
+  const [activityGroupFilter, setActivityGroupFilter] = useState<ActivityFilterGroupKey | null>(null);
+  const [activitySubtypeFilter, setActivitySubtypeFilter] = useState<string | null>(null);
+  const [activityLevel3Filter, setActivityLevel3Filter] = useState<string | null>(null);
 
   // Extract day selection state into custom hook
   const { selectedDate, setSelectedDate, openEventKeys, setOpenEventKeys } = useDaySelection();
@@ -483,12 +564,104 @@ export default function ReportsScreen() {
   const latestInventory = displayCard?.inventory_end;
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
   const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
-  const selectedEvents = sortReportEventsNewestFirst(
+  const rawSelectedEvents = sortReportEventsNewestFirst(
     ((selectedDayInfo?.events ?? []) as any[]).filter(
       (ev) => ev?.event_type !== "customer_adjust" && ev?.event_type !== "company_adjustment"
     )
   );
+  const availableGroupOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: ActivityFilterOption[] = [];
+    for (const event of rawSelectedEvents) {
+      const groupKey = getEventGroupKey(event);
+      if (seen.has(groupKey)) continue;
+      seen.add(groupKey);
+      options.push(ACTIVITY_GROUP_OPTIONS[groupKey]);
+    }
+    return options;
+  }, [rawSelectedEvents]);
+  const availableSubtypeOptions = useMemo(() => {
+    if (!activityGroupFilter) return [] as ActivitySubtypeOption[];
+    const seen = new Set<string>();
+    const options: ActivitySubtypeOption[] = [];
+    for (const event of rawSelectedEvents) {
+      if (getEventGroupKey(event) !== activityGroupFilter) continue;
+      const subtype = getEventSubtype(event);
+      if (seen.has(subtype.key)) continue;
+      seen.add(subtype.key);
+      options.push(subtype);
+    }
+    return options;
+  }, [activityGroupFilter, rawSelectedEvents]);
+  const l2FilteredEvents = useMemo(() => {
+    return rawSelectedEvents.filter((event) => {
+      if (activityGroupFilter && getEventGroupKey(event) !== activityGroupFilter) return false;
+      if (activityGroupFilter && activitySubtypeFilter && getEventSubtype(event).key !== activitySubtypeFilter) return false;
+      return true;
+    });
+  }, [activityGroupFilter, activitySubtypeFilter, rawSelectedEvents]);
+  const availableLevel3Options = useMemo(() => {
+    if (activitySubtypeFilter !== "replacement") return [] as { key: string; label: string }[];
+    const check = (key: string, label: string, predicate: (ev: any) => boolean) =>
+      l2FilteredEvents.some(predicate) ? { key, label } : null;
+    return [
+      check("money_debt", "Money debt", (ev) => (ev.order_total ?? 0) - (ev.order_paid ?? 0) > 0),
+      check("money_credit", "Money credit", (ev) => (ev.order_total ?? 0) - (ev.order_paid ?? 0) < 0),
+      check("12kg_debt", "12kg debt", (ev) => ev.gas_type === "12kg" && (ev.order_installed ?? 0) > (ev.order_received ?? 0)),
+      check("12kg_credit", "12kg credit", (ev) => ev.gas_type === "12kg" && (ev.order_installed ?? 0) < (ev.order_received ?? 0)),
+      check("48kg_debt", "48kg debt", (ev) => ev.gas_type === "48kg" && (ev.order_installed ?? 0) > (ev.order_received ?? 0)),
+      check("48kg_credit", "48kg credit", (ev) => ev.gas_type === "48kg" && (ev.order_installed ?? 0) < (ev.order_received ?? 0)),
+    ].filter((opt): opt is { key: string; label: string } => opt !== null);
+  }, [activitySubtypeFilter, l2FilteredEvents]);
+  const selectedEvents = useMemo(() => {
+    return rawSelectedEvents.filter((event) => {
+      if (activityGroupFilter && getEventGroupKey(event) !== activityGroupFilter) return false;
+      if (activityGroupFilter && activitySubtypeFilter) {
+        if (getEventSubtype(event).key !== activitySubtypeFilter) return false;
+      }
+      if (activitySubtypeFilter === "replacement" && activityLevel3Filter) {
+        const moneyDiff = (event?.order_total ?? 0) - (event?.order_paid ?? 0);
+        const cylDiff = (event?.order_installed ?? 0) - (event?.order_received ?? 0);
+        switch (activityLevel3Filter) {
+          case "money_debt": return moneyDiff > 0;
+          case "money_credit": return moneyDiff < 0;
+          case "12kg_debt": return event?.gas_type === "12kg" && cylDiff > 0;
+          case "12kg_credit": return event?.gas_type === "12kg" && cylDiff < 0;
+          case "48kg_debt": return event?.gas_type === "48kg" && cylDiff > 0;
+          case "48kg_credit": return event?.gas_type === "48kg" && cylDiff < 0;
+          default: return true;
+        }
+      }
+      return true;
+    });
+  }, [activityGroupFilter, activitySubtypeFilter, activityLevel3Filter, rawSelectedEvents]);
   const keepTabsVisible = selectedEvents.length < 5;
+
+  useEffect(() => {
+    setActivityGroupFilter(null);
+    setActivitySubtypeFilter(null);
+    setActivityLevel3Filter(null);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (activityGroupFilter && !availableGroupOptions.some((option) => option.key === activityGroupFilter)) {
+      setActivityGroupFilter(null);
+    }
+  }, [activityGroupFilter, availableGroupOptions]);
+
+  useEffect(() => {
+    if (!activityGroupFilter) {
+      if (activitySubtypeFilter) setActivitySubtypeFilter(null);
+      return;
+    }
+    if (activitySubtypeFilter && !availableSubtypeOptions.some((option) => option.key === activitySubtypeFilter)) {
+      setActivitySubtypeFilter(null);
+    }
+  }, [activitySubtypeFilter, availableSubtypeOptions, activityGroupFilter]);
+
+  useEffect(() => {
+    setActivityLevel3Filter(null);
+  }, [activitySubtypeFilter]);
 
   const handleShelfPress = useCallback(
     (nextShelf: RevealShelfKey) => {
@@ -722,9 +895,45 @@ export default function ReportsScreen() {
               {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
               {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
               <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} />
-              {selectedCard ? (
-                <View style={styles.daySummaryWrap}>
-                  <DaySummaryBox card={selectedCard} />
+              {rawSelectedEvents.length > 0 ? (
+                <View style={styles.filterPanel}>
+                  {availableGroupOptions.length > 1 ? (
+                    <FilterChipRow
+                      options={availableGroupOptions.map((option) => ({ id: option.key, label: option.label }))}
+                      value={activityGroupFilter}
+                      onChange={(next) => {
+                        setActivityGroupFilter(next);
+                        setActivitySubtypeFilter(null);
+                        setActivityLevel3Filter(null);
+                      }}
+                      style={styles.filterScroll}
+                      contentContainerStyle={styles.filterScrollContent}
+                      testID="reports-filter-groups"
+                    />
+                  ) : null}
+                  {activityGroupFilter && availableSubtypeOptions.length > 1 ? (
+                    <FilterChipRow
+                      options={availableSubtypeOptions.map((option) => ({ id: option.key, label: option.label }))}
+                      value={activitySubtypeFilter}
+                      onChange={(next) => {
+                        setActivitySubtypeFilter(next);
+                        setActivityLevel3Filter(null);
+                      }}
+                      style={[styles.filterScroll, styles.filterScrollSubtypes]}
+                      contentContainerStyle={styles.filterScrollContent}
+                      testID="reports-filter-subtypes"
+                    />
+                  ) : null}
+                  {activitySubtypeFilter === "replacement" && availableLevel3Options.length > 1 ? (
+                    <FilterChipRow
+                      options={availableLevel3Options.map((option) => ({ id: option.key, label: option.label }))}
+                      value={activityLevel3Filter}
+                      onChange={setActivityLevel3Filter}
+                      style={[styles.filterScroll, styles.filterScrollSubtypes]}
+                      contentContainerStyle={styles.filterScrollContent}
+                      testID="reports-filter-level3"
+                    />
+                  ) : null}
                 </View>
               ) : null}
             </>
@@ -734,8 +943,10 @@ export default function ReportsScreen() {
               <Text style={styles.meta}>Loading activities...</Text>
             ) : selectedDayStatus === "error" ? (
               <Text style={styles.error}>Failed to load activities.</Text>
-            ) : selectedDayStatus === "success" && selectedEvents.length === 0 ? (
+            ) : selectedDayStatus === "success" && rawSelectedEvents.length === 0 ? (
               <Text style={styles.meta}>No activities on this day.</Text>
+            ) : selectedDayStatus === "success" && selectedEvents.length === 0 ? (
+              <Text style={styles.meta}>No matching activities for this filter.</Text>
             ) : null
           }
           renderItem={({ item, index }) => {
@@ -1493,7 +1704,21 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 236,
   },
-  daySummaryWrap: {
+  filterPanel: {
+    marginTop: 18,
+    marginBottom: 18,
+    paddingHorizontal: 12,
+  },
+  filterScroll: {
+    flexGrow: 0,
+  },
+  filterScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 12,
+  },
+  filterScrollSubtypes: {
     marginTop: 10,
   },
   emptyStateWrap: {

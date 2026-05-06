@@ -72,7 +72,6 @@ type AddMode =
   | "ledger_adjustments";
 
 type CustomerActivityFilter =
-  | "all"
   | "replacement"
   | "late_payment"
   | "return_empties"
@@ -81,17 +80,17 @@ type CustomerActivityFilter =
   | "buy_empty"
   | "adjustment";
 
-type CompanyActivityFilter = "all" | "refill" | "company_payment" | "buy_full" | "adjustment";
-type ExpensePrimaryFilter = "all" | "expense" | "wallet_to_bank" | "bank_to_wallet";
-type ExpenseCategoryFilter = "all_categories" | string;
-type LedgerActivityFilter = "all" | "inventory_adjustment" | "cash_adjustment";
+type CompanyActivityFilter = "refill" | "company_payment" | "received_from_company" | "buy_full" | "company_return" | "adjustment";
+type ExpensePrimaryFilter = "expense" | "wallet_to_bank" | "bank_to_wallet";
+type ExpenseCategoryFilter = string;
+type LedgerActivityFilter = "inventory_adjustment" | "cash_adjustment";
 type PriceSaveStatusTone = "success" | "warning" | "error";
 
 type CustomerActivityListItem =
   | {
       id: string;
       kind: "order";
-      filterId: Exclude<CustomerActivityFilter, "all" | "late_payment" | "return_empties" | "payout" | "adjustment">;
+      filterId: Exclude<CustomerActivityFilter, "late_payment" | "return_empties" | "payout" | "adjustment">;
       sortAt: string;
       createdAt: string;
       customerName: string;
@@ -100,7 +99,7 @@ type CustomerActivityListItem =
   | {
       id: string;
       kind: "collection";
-      filterId: Exclude<CustomerActivityFilter, "all" | "replacement" | "sell_full" | "buy_empty" | "adjustment">;
+      filterId: Exclude<CustomerActivityFilter, "replacement" | "sell_full" | "buy_empty" | "adjustment">;
       sortAt: string;
       createdAt: string;
       customerName: string;
@@ -127,7 +126,7 @@ type ExpenseListItem =
   | {
       id: string;
       kind: "bank_transfer";
-      direction: Exclude<ExpensePrimaryFilter, "all" | "expense">;
+      direction: Exclude<ExpensePrimaryFilter, "expense">;
       sortAt: string;
       createdAt: string;
       data: BankDeposit;
@@ -184,35 +183,33 @@ function formatPriceGasList(items: string[]) {
 }
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Late Payment" },
-  { id: "return_empties", label: "Return Empties" },
-  { id: "payout", label: "Payout" },
-  { id: "sell_full", label: "Sell Full" },
-  { id: "buy_empty", label: "Buy Empty" },
-  { id: "adjustment", label: "Adjustment" },
+  { id: "late_payment", label: "Received payment" },
+  { id: "payout", label: "Paid customer" },
+  { id: "return_empties", label: "Returned empties" },
+  { id: "sell_full", label: "Sell full" },
+  { id: "buy_empty", label: "Buy empty" },
+  { id: "adjustment", label: "Balance adjustment" },
 ];
 
 const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "refill", label: "Refill" },
-  { id: "company_payment", label: "Company Payment" },
-  { id: "buy_full", label: "Buy Full" },
-  { id: "adjustment", label: "Adjustment" },
+  { id: "company_payment", label: "Paid company" },
+  { id: "received_from_company", label: "Received from company" },
+  { id: "buy_full", label: "Bought full" },
+  { id: "company_return", label: "Returned empties" },
+  { id: "adjustment", label: "Balance adjustment" },
 ];
 
 const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "expense", label: "Expense" },
-  { id: "wallet_to_bank", label: "Wallet to Bank" },
-  { id: "bank_to_wallet", label: "Bank to Wallet" },
+  { id: "wallet_to_bank", label: "Wallet to bank" },
+  { id: "bank_to_wallet", label: "Bank to wallet" },
 ];
 
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "inventory_adjustment", label: "Inventory Adjustment" },
-  { id: "cash_adjustment", label: "Wallet Adjustment" },
+  { id: "inventory_adjustment", label: "Inventory adjustment" },
+  { id: "cash_adjustment", label: "Wallet adjustment" },
 ];
 
 export default function AddChooserScreen() {
@@ -232,6 +229,9 @@ export default function AddChooserScreen() {
     ledgerActivityFilter,
     setLedgerActivityFilter,
   } = useActivityFilters();
+  const [customerActivityLevel2, setCustomerActivityLevel2] = useState<string | null>(null);
+  const [customerActivityLevel3, setCustomerActivityLevel3] = useState<string | null>(null);
+  const [companyActivityLevel2, setCompanyActivityLevel2] = useState<string | null>(null);
 
   const [customerSearch, setCustomerSearch] = useState("");
   const isCustomerActivities = mode === "customer_activities";
@@ -473,39 +473,275 @@ const formatDateTime = (value?: string) => {
     return [...rows].sort((a, b) => toSafeTime(b.happened_at) - toSafeTime(a.happened_at));
   }, [bankDepositsQuery.data, toSafeTime]);
   const expenseCategoryOptions = useMemo(
-    () => [
-      { id: "all_categories" as const, label: "All categories" },
-      ...Array.from(new Set(expenses.map((item) => item.expense_type).filter(Boolean)))
+    () =>
+      Array.from(new Set(expenses.map((item) => item.expense_type).filter(Boolean)))
         .sort((left, right) => left.localeCompare(right))
         .map((category) => ({ id: category, label: category })),
-    ],
     [expenses]
   );
   const deferredCustomerSearch = useDeferredValue(customerSearch.trim().toLowerCase());
-  const filteredCustomerActivityItems = useMemo(
+  const customerSearchScopedItems = useMemo(
     () =>
       customerActivityItems.filter((item) => {
-        if (customerActivityFilter !== "all" && item.filterId !== customerActivityFilter) {
-          return false;
-        }
-        if (!deferredCustomerSearch) {
-          return true;
-        }
+        if (!deferredCustomerSearch) return true;
         return item.customerName.toLowerCase().includes(deferredCustomerSearch);
       }),
-    [customerActivityFilter, customerActivityItems, deferredCustomerSearch]
+    [customerActivityItems, deferredCustomerSearch]
   );
+  const availableCustomerActivityFilters = useMemo(() => {
+    const visible = new Set(customerSearchScopedItems.map((item) => item.filterId));
+    return customerActivityFilters.filter((option) => visible.has(option.id));
+  }, [customerSearchScopedItems]);
+  const customerActivityLevel2Options = useMemo(() => {
+    if (!customerActivityFilter) return [] as { id: string; label: string }[];
+    switch (customerActivityFilter) {
+      case "replacement": {
+        const systemsById = new Map((systemsQuery.data ?? []).map((system) => [system.id, system.name]));
+        const seen = new Set<string>();
+        const options: { id: string; label: string }[] = [];
+        for (const item of customerSearchScopedItems) {
+          if (item.kind !== "order" || item.filterId !== "replacement" || !item.data.system_id) continue;
+          if (seen.has(item.data.system_id)) continue;
+          seen.add(item.data.system_id);
+          options.push({
+            id: item.data.system_id,
+            label: systemsById.get(item.data.system_id) ?? item.data.system_id,
+          });
+        }
+        return options;
+      }
+      case "return_empties": {
+        const has12 = customerSearchScopedItems.some(
+          (item) => item.kind === "collection" && item.filterId === "return_empties" && Number(item.data.qty_12kg ?? 0) > 0
+        );
+        const has48 = customerSearchScopedItems.some(
+          (item) => item.kind === "collection" && item.filterId === "return_empties" && Number(item.data.qty_48kg ?? 0) > 0
+        );
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "buy_empty":
+      case "sell_full": {
+        const has12 = customerSearchScopedItems.some(
+          (item) => item.kind === "order" && item.filterId === customerActivityFilter && item.data.gas_type === "12kg"
+        );
+        const has48 = customerSearchScopedItems.some(
+          (item) => item.kind === "order" && item.filterId === customerActivityFilter && item.data.gas_type === "48kg"
+        );
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "adjustment": {
+        const hasMoney = customerSearchScopedItems.some(
+          (item) => item.kind === "adjustment" && Number(item.data.amount_money ?? 0) !== 0
+        );
+        const has12 = customerSearchScopedItems.some(
+          (item) => item.kind === "adjustment" && Number(item.data.count_12kg ?? 0) !== 0
+        );
+        const has48 = customerSearchScopedItems.some(
+          (item) => item.kind === "adjustment" && Number(item.data.count_48kg ?? 0) !== 0
+        );
+        return [
+          hasMoney ? { id: "money", label: "Money" } : null,
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      default:
+        return [];
+    }
+  }, [customerActivityFilter, customerSearchScopedItems, systemsQuery.data]);
+  const customerActivityLevel3Options = useMemo(() => {
+    if (customerActivityFilter !== "replacement") return [] as { id: string; label: string }[];
+    const scope = customerSearchScopedItems.filter(
+      (item) =>
+        item.kind === "order" &&
+        item.filterId === "replacement" &&
+        (customerActivityLevel2 === null || item.data.system_id === customerActivityLevel2)
+    );
+    const check = (id: string, label: string, predicate: (item: any) => boolean) =>
+      scope.some(predicate) ? { id, label } : null;
+    return [
+      check("money_debt", "Money debt", (item) => (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0) > 0),
+      check("money_credit", "Money credit", (item) => (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0) < 0),
+      check("12kg_debt", "12kg debt", (item) => item.data.gas_type === "12kg" && (item.data.cylinders_installed ?? 0) > (item.data.cylinders_received ?? 0)),
+      check("12kg_credit", "12kg credit", (item) => item.data.gas_type === "12kg" && (item.data.cylinders_installed ?? 0) < (item.data.cylinders_received ?? 0)),
+      check("48kg_debt", "48kg debt", (item) => item.data.gas_type === "48kg" && (item.data.cylinders_installed ?? 0) > (item.data.cylinders_received ?? 0)),
+      check("48kg_credit", "48kg credit", (item) => item.data.gas_type === "48kg" && (item.data.cylinders_installed ?? 0) < (item.data.cylinders_received ?? 0)),
+    ].filter((opt): opt is { id: string; label: string } => opt !== null);
+  }, [customerActivityFilter, customerActivityLevel2, customerSearchScopedItems]);
+  const filteredCustomerActivityItems = useMemo(
+    () =>
+      customerSearchScopedItems.filter((item) => {
+        if (customerActivityFilter && item.filterId !== customerActivityFilter) {
+          return false;
+        }
+        if (!customerActivityFilter || !customerActivityLevel2) {
+          if (customerActivityFilter === "replacement" && customerActivityLevel3) {
+            if (item.kind !== "order") return true;
+            const moneyDiff = (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0);
+            const cylDiff = (item.data.cylinders_installed ?? 0) - (item.data.cylinders_received ?? 0);
+            switch (customerActivityLevel3) {
+              case "money_debt": return moneyDiff > 0;
+              case "money_credit": return moneyDiff < 0;
+              case "12kg_debt": return item.data.gas_type === "12kg" && cylDiff > 0;
+              case "12kg_credit": return item.data.gas_type === "12kg" && cylDiff < 0;
+              case "48kg_debt": return item.data.gas_type === "48kg" && cylDiff > 0;
+              case "48kg_credit": return item.data.gas_type === "48kg" && cylDiff < 0;
+              default: return true;
+            }
+          }
+          return true;
+        }
+        switch (customerActivityFilter) {
+          case "replacement": {
+            if (item.kind !== "order" || item.data.system_id !== customerActivityLevel2) return false;
+            if (!customerActivityLevel3) return true;
+            const moneyDiff = (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0);
+            const cylDiff = (item.data.cylinders_installed ?? 0) - (item.data.cylinders_received ?? 0);
+            switch (customerActivityLevel3) {
+              case "money_debt": return moneyDiff > 0;
+              case "money_credit": return moneyDiff < 0;
+              case "12kg_debt": return item.data.gas_type === "12kg" && cylDiff > 0;
+              case "12kg_credit": return item.data.gas_type === "12kg" && cylDiff < 0;
+              case "48kg_debt": return item.data.gas_type === "48kg" && cylDiff > 0;
+              case "48kg_credit": return item.data.gas_type === "48kg" && cylDiff < 0;
+              default: return true;
+            }
+          }
+          case "return_empties":
+            return (
+              item.kind === "collection" &&
+              ((customerActivityLevel2 === "12kg" && Number(item.data.qty_12kg ?? 0) > 0) ||
+                (customerActivityLevel2 === "48kg" && Number(item.data.qty_48kg ?? 0) > 0))
+            );
+          case "buy_empty":
+          case "sell_full":
+            return item.kind === "order" && item.data.gas_type === customerActivityLevel2;
+          case "adjustment":
+            return (
+              item.kind === "adjustment" &&
+              ((customerActivityLevel2 === "money" && Number(item.data.amount_money ?? 0) !== 0) ||
+                (customerActivityLevel2 === "12kg" && Number(item.data.count_12kg ?? 0) !== 0) ||
+                (customerActivityLevel2 === "48kg" && Number(item.data.count_48kg ?? 0) !== 0))
+            );
+          default:
+            return true;
+        }
+      }),
+    [customerActivityFilter, customerActivityLevel2, customerActivityLevel3, customerSearchScopedItems]
+  );
+  const availableCompanyActivityFilters = useMemo(() => {
+    const seen = new Set<CompanyActivityFilter>();
+    const options: { id: CompanyActivityFilter; label: string }[] = [];
+    for (const entry of companyActivityItems) {
+      let filterId: CompanyActivityFilter;
+      if (entry.kind === "company_adjustment") {
+        filterId = "adjustment";
+      } else if (entry.kind === "company_payment") {
+        filterId = (entry.data?.amount ?? 0) < 0 ? "received_from_company" : "company_payment";
+      } else {
+        const totalBuys =
+          Number(entry.data.buy12 ?? 0) +
+          Number(entry.data.buy48 ?? 0) +
+          Number(entry.data.new12 ?? 0) +
+          Number(entry.data.new48 ?? 0);
+        const totalReturns = Number(entry.data.return12 ?? 0) + Number(entry.data.return48 ?? 0);
+        filterId =
+          totalBuys > 0 && totalReturns === 0
+            ? "buy_full"
+            : totalBuys === 0 && totalReturns > 0
+              ? "company_return"
+              : "refill";
+      }
+      if (seen.has(filterId)) continue;
+      seen.add(filterId);
+      const option = companyActivityFilters.find((candidate) => candidate.id === filterId);
+      if (option) options.push(option);
+    }
+    return options;
+  }, [companyActivityItems]);
+  const companyActivityLevel2Options = useMemo(() => {
+    if (!companyActivityFilter) return [] as { id: string; label: string }[];
+    switch (companyActivityFilter) {
+      case "refill":
+      case "buy_full":
+      case "company_return": {
+        const matches = companyActivityItems.filter((entry): entry is Extract<CompanyActivityListItem, { kind: "refill" }> => {
+          if (entry.kind !== "refill") return false;
+          const totalBuys =
+            Number(entry.data.buy12 ?? 0) +
+            Number(entry.data.buy48 ?? 0) +
+            Number(entry.data.new12 ?? 0) +
+            Number(entry.data.new48 ?? 0);
+          const totalReturns = Number(entry.data.return12 ?? 0) + Number(entry.data.return48 ?? 0);
+          if (companyActivityFilter === "buy_full") return totalBuys > 0 && totalReturns === 0;
+          if (companyActivityFilter === "company_return") return totalBuys === 0 && totalReturns > 0;
+          return totalReturns > 0 && totalBuys > 0;
+        });
+        const has12 = matches.some(
+          (entry) =>
+            Number(entry.data.buy12 ?? 0) +
+              Number(entry.data.new12 ?? 0) +
+              Number(entry.data.return12 ?? 0) >
+            0
+        );
+        const has48 = matches.some(
+          (entry) =>
+            Number(entry.data.buy48 ?? 0) +
+              Number(entry.data.new48 ?? 0) +
+              Number(entry.data.return48 ?? 0) >
+            0
+        );
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "adjustment": {
+        const hasMoney = companyActivityItems.some(
+          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_money ?? 0) !== 0
+        );
+        const has12 = companyActivityItems.some(
+          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_cylinder_12 ?? 0) !== 0
+        );
+        const has48 = companyActivityItems.some(
+          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_cylinder_48 ?? 0) !== 0
+        );
+        return [
+          hasMoney ? { id: "money", label: "Money" } : null,
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      default:
+        return [];
+    }
+  }, [companyActivityFilter, companyActivityItems]);
   const filteredCompanyActivityItems = useMemo(
     () =>
       companyActivityItems.filter((entry) => {
-        if (companyActivityFilter === "all") {
+        if (!companyActivityFilter) {
           return true;
         }
         if (entry.kind === "company_adjustment") {
-          return companyActivityFilter === "adjustment";
+          if (companyActivityFilter !== "adjustment") return false;
+          if (!companyActivityLevel2) return true;
+          return (
+            (companyActivityLevel2 === "money" && Number(entry.data.delta_money ?? 0) !== 0) ||
+            (companyActivityLevel2 === "12kg" && Number(entry.data.delta_cylinder_12 ?? 0) !== 0) ||
+            (companyActivityLevel2 === "48kg" && Number(entry.data.delta_cylinder_48 ?? 0) !== 0)
+          );
         }
         if (entry.kind === "company_payment") {
-          return companyActivityFilter === "company_payment";
+          const isIncoming = (entry.data?.amount ?? 0) < 0;
+          if (companyActivityFilter === "company_payment") return !isIncoming;
+          if (companyActivityFilter === "received_from_company") return isIncoming;
+          return false;
         }
         const refill = entry.data;
         const totalBuys =
@@ -514,15 +750,25 @@ const formatDateTime = (value?: string) => {
           Number(refill.new12 ?? 0) +
           Number(refill.new48 ?? 0);
         const totalReturns = Number(refill.return12 ?? 0) + Number(refill.return48 ?? 0);
-        if (companyActivityFilter === "buy_full") {
-          return totalBuys > 0 && totalReturns === 0;
+        const matchesLevel1 =
+          companyActivityFilter === "buy_full"
+            ? totalBuys > 0 && totalReturns === 0
+            : companyActivityFilter === "company_return"
+              ? totalBuys === 0 && totalReturns > 0
+              : companyActivityFilter === "refill"
+                ? totalBuys > 0 && totalReturns > 0
+                : false;
+        if (!matchesLevel1) return false;
+        if (!companyActivityLevel2) return true;
+        if (companyActivityLevel2 === "12kg") {
+          return Number(refill.buy12 ?? 0) + Number(refill.new12 ?? 0) + Number(refill.return12 ?? 0) > 0;
         }
-        if (companyActivityFilter === "refill") {
-          return totalReturns > 0 || (totalBuys > 0 && totalReturns > 0);
+        if (companyActivityLevel2 === "48kg") {
+          return Number(refill.buy48 ?? 0) + Number(refill.new48 ?? 0) + Number(refill.return48 ?? 0) > 0;
         }
-        return false;
+        return true;
       }),
-    [companyActivityFilter, companyActivityItems]
+    [companyActivityFilter, companyActivityItems, companyActivityLevel2]
   );
   const expenseListItems = useMemo<ExpenseListItem[]>(() => {
     const expenseItems = expenses
@@ -562,7 +808,7 @@ const formatDateTime = (value?: string) => {
         if (
           item.kind === "expense" &&
           expensePrimaryFilter === "expense" &&
-          expenseCategoryFilter !== "all_categories"
+          expenseCategoryFilter
         ) {
           return item.data.expense_type === expenseCategoryFilter;
         }
@@ -573,12 +819,34 @@ const formatDateTime = (value?: string) => {
   const filteredLedgerAdjustmentItems = useMemo(
     () =>
       ledgerAdjustmentItems.filter((entry) => {
-        if (ledgerActivityFilter === "all") {
+        if (!ledgerActivityFilter) {
           return true;
         }
         return entry.kind === ledgerActivityFilter;
       }),
     [ledgerActivityFilter, ledgerAdjustmentItems]
+  );
+  const availableExpensePrimaryFilters = useMemo(() => {
+    const options: { id: ExpensePrimaryFilter; label: string }[] = [];
+    if (expenseListItems.some((item) => item.kind === "expense")) {
+      options.push(expensePrimaryFilters.find((option) => option.id === "expense")!);
+    }
+    if (expenseListItems.some((item) => item.kind === "bank_transfer" && item.direction === "wallet_to_bank")) {
+      options.push(expensePrimaryFilters.find((option) => option.id === "wallet_to_bank")!);
+    }
+    if (expenseListItems.some((item) => item.kind === "bank_transfer" && item.direction === "bank_to_wallet")) {
+      options.push(expensePrimaryFilters.find((option) => option.id === "bank_to_wallet")!);
+    }
+    return options;
+  }, [expenseListItems]);
+  const availableLedgerActivityFilters = useMemo(
+    () =>
+      ledgerActivityFilters.filter((option) =>
+        option.id === "inventory_adjustment"
+          ? ledgerAdjustmentItems.some((entry) => entry.kind === "inventory_adjustment")
+          : ledgerAdjustmentItems.some((entry) => entry.kind === "cash_adjustment")
+      ),
+    [ledgerAdjustmentItems]
   );
   const priceSettingsQuery = usePriceSettings();
   const savePrice = useSavePriceSetting();
@@ -701,6 +969,56 @@ const formatDateTime = (value?: string) => {
       }
     }, [])
   );
+
+  useEffect(() => {
+    setCustomerActivityLevel2(null);
+  }, [customerActivityFilter]);
+
+  useEffect(() => {
+    setCompanyActivityLevel2(null);
+  }, [companyActivityFilter]);
+
+  useEffect(() => {
+    if (customerActivityLevel2 && !customerActivityLevel2Options.some((option) => option.id === customerActivityLevel2)) {
+      setCustomerActivityLevel2(null);
+    }
+  }, [customerActivityLevel2, customerActivityLevel2Options]);
+
+  useEffect(() => {
+    if (companyActivityLevel2 && !companyActivityLevel2Options.some((option) => option.id === companyActivityLevel2)) {
+      setCompanyActivityLevel2(null);
+    }
+  }, [companyActivityLevel2, companyActivityLevel2Options]);
+
+  useEffect(() => {
+    if (customerActivityFilter && !availableCustomerActivityFilters.some((option) => option.id === customerActivityFilter)) {
+      setCustomerActivityFilter(null);
+    }
+  }, [availableCustomerActivityFilters, customerActivityFilter, setCustomerActivityFilter]);
+
+  useEffect(() => {
+    if (companyActivityFilter && !availableCompanyActivityFilters.some((option) => option.id === companyActivityFilter)) {
+      setCompanyActivityFilter(null);
+    }
+  }, [availableCompanyActivityFilters, companyActivityFilter, setCompanyActivityFilter]);
+
+  useEffect(() => {
+    if (expensePrimaryFilter && !availableExpensePrimaryFilters.some((option) => option.id === expensePrimaryFilter)) {
+      setExpensePrimaryFilter(null);
+    }
+  }, [availableExpensePrimaryFilters, expensePrimaryFilter, setExpensePrimaryFilter]);
+
+  useEffect(() => {
+    if (expenseCategoryFilter && !expenseCategoryOptions.some((option) => option.id === expenseCategoryFilter)) {
+      setExpenseCategoryFilter(null);
+    }
+  }, [expenseCategoryFilter, expenseCategoryOptions, setExpenseCategoryFilter]);
+
+  useEffect(() => {
+    if (ledgerActivityFilter && !availableLedgerActivityFilters.some((option) => option.id === ledgerActivityFilter)) {
+      setLedgerActivityFilter(null);
+    }
+  }, [availableLedgerActivityFilters, ledgerActivityFilter, setLedgerActivityFilter]);
 
   const confirmDeleteOrder = (id: string) => {
     setConfirm({ type: "order", id });
@@ -907,11 +1225,11 @@ const formatDateTime = (value?: string) => {
   };
 
   const customerActivityEmptyMessage =
-    customerActivityFilter === "all" && !deferredCustomerSearch
+    !customerActivityFilter && !deferredCustomerSearch
       ? "No customer activities yet."
       : "No customer activities match these filters.";
   const expenseEmptyMessage =
-    expensePrimaryFilter === "all" && expenseCategoryFilter === "all_categories"
+    !expensePrimaryFilter && !expenseCategoryFilter
       ? "No expenses yet."
       : "No expenses match these filters.";
 
@@ -966,21 +1284,56 @@ const formatDateTime = (value?: string) => {
             onChangeText={setCustomerSearch}
             placeholder="Search customer by name"
           />
-          <FilterChipRow
-            options={customerActivityFilters}
-            value={customerActivityFilter}
-            onChange={setCustomerActivityFilter}
-          />
+          {availableCustomerActivityFilters.length > 1 ? (
+            <FilterChipRow
+              options={availableCustomerActivityFilters}
+              value={customerActivityFilter}
+              onChange={(next) => {
+                setCustomerActivityFilter(next);
+                setCustomerActivityLevel2(null);
+                setCustomerActivityLevel3(null);
+              }}
+            />
+          ) : null}
+          {customerActivityFilter && customerActivityLevel2Options.length > 1 ? (
+            <FilterChipRow
+              options={customerActivityLevel2Options}
+              value={customerActivityLevel2}
+              onChange={(next) => {
+                setCustomerActivityLevel2(next);
+                setCustomerActivityLevel3(null);
+              }}
+              contentContainerStyle={styles.secondaryFilterRow}
+            />
+          ) : null}
+          {customerActivityFilter === "replacement" && customerActivityLevel3Options.length > 1 ? (
+            <FilterChipRow
+              options={customerActivityLevel3Options}
+              value={customerActivityLevel3}
+              onChange={setCustomerActivityLevel3}
+              contentContainerStyle={styles.secondaryFilterRow}
+            />
+          ) : null}
         </>
       ) : null}
 
       {isCompanyActivities ? (
         <>
-          <FilterChipRow
-            options={companyActivityFilters}
-            value={companyActivityFilter}
-            onChange={setCompanyActivityFilter}
-          />
+          {availableCompanyActivityFilters.length > 1 ? (
+            <FilterChipRow
+              options={availableCompanyActivityFilters}
+              value={companyActivityFilter}
+              onChange={setCompanyActivityFilter}
+            />
+          ) : null}
+          {companyActivityFilter && companyActivityLevel2Options.length > 1 ? (
+            <FilterChipRow
+              options={companyActivityLevel2Options}
+              value={companyActivityLevel2}
+              onChange={setCompanyActivityLevel2}
+              contentContainerStyle={styles.secondaryFilterRow}
+            />
+          ) : null}
           <CompanyBalancesSection
             companySummary={companySummary}
             companyBalancesReady={companyBalancesQuery.isSuccess}
@@ -992,12 +1345,14 @@ const formatDateTime = (value?: string) => {
 
       {isExpenses ? (
         <>
-          <FilterChipRow
-            options={expensePrimaryFilters}
-            value={expensePrimaryFilter}
-            onChange={setExpensePrimaryFilter}
-          />
-          {expensePrimaryFilter === "expense" ? (
+          {availableExpensePrimaryFilters.length > 1 ? (
+            <FilterChipRow
+              options={availableExpensePrimaryFilters}
+              value={expensePrimaryFilter}
+              onChange={setExpensePrimaryFilter}
+            />
+          ) : null}
+          {expensePrimaryFilter === "expense" && expenseCategoryOptions.length > 1 ? (
             <FilterChipRow
               options={expenseCategoryOptions}
               value={expenseCategoryFilter}
@@ -1009,11 +1364,13 @@ const formatDateTime = (value?: string) => {
       ) : null}
 
       {isLedgerAdjustments ? (
-        <FilterChipRow
-          options={ledgerActivityFilters}
-          value={ledgerActivityFilter}
-          onChange={setLedgerActivityFilter}
-        />
+        availableLedgerActivityFilters.length > 1 ? (
+          <FilterChipRow
+            options={availableLedgerActivityFilters}
+            value={ledgerActivityFilter}
+            onChange={setLedgerActivityFilter}
+          />
+        ) : null
       ) : null}
 
       {isCustomerActivities ? (
@@ -1375,12 +1732,12 @@ const formatDateTime = (value?: string) => {
 
 export function AddCustomersSection({
   searchQuery = "",
-  topFilter = "all",
-  subFilter = "all",
+  topFilter = null,
+  subFilter = null,
 }: {
   searchQuery?: string;
-  topFilter?: CustomerListTopFilter;
-  subFilter?: CustomerListSubFilter;
+  topFilter?: CustomerListTopFilter | null;
+  subFilter?: CustomerListSubFilter | null;
 }) {
   const customersQuery = useCustomers();
   const ordersQuery = useOrders();
@@ -1431,7 +1788,7 @@ export function AddCustomersSection({
       const cyl12 = Number(customer.cylinder_balance_12kg ?? 0);
       const cyl48 = Number(customer.cylinder_balance_48kg ?? 0);
       const systems = systemsByCustomer.get(customer.id) ?? [];
-      const hasActive = systems.some((system) => system.is_active);
+      const hasActive = systems.some((system) => system.is_active !== false);
       const requiresCheck = systems.some((system) => system.requires_security_check);
       const inactiveSystems = systems.length === 0 || !hasActive;
 
@@ -1463,7 +1820,7 @@ export function AddCustomersSection({
   }, [customers, deferredSearchQuery, subFilter, systemsByCustomer, topFilter]);
 
   const customerListEmptyMessage =
-    deferredSearchQuery || topFilter !== "all" || subFilter !== "all"
+    deferredSearchQuery || topFilter || subFilter
       ? "No customers match these filters."
       : "No customers yet.";
 
@@ -1512,7 +1869,7 @@ export function AddCustomersSection({
           const cyl12 = Number(item.cylinder_balance_12kg ?? 0);
           const cyl48 = Number(item.cylinder_balance_48kg ?? 0);
           const systems = systemsByCustomer.get(item.id) ?? [];
-          const hasActive = systems.some((system) => system.is_active);
+          const hasActive = systems.some((system) => system.is_active !== false);
           const requiresCheck = systems.some((system) => system.requires_security_check);
           const noCheck = !requiresCheck;
           const dueCheck = systems.some(
@@ -1521,12 +1878,12 @@ export function AddCustomersSection({
           const futureCheck = systems.some(
             (system) => (system.next_security_check_at ?? "") !== "" && (system.next_security_check_at ?? "") > todayKey
           );
-          const activeSystems = systems.filter((system) => system.is_active).length;
-          const showMoney = topFilter === "all" || topFilter === "money";
-          const show12 = topFilter === "all" || topFilter === "cyl12";
-          const show48 = topFilter === "all" || topFilter === "cyl48";
-          const showSystems = topFilter === "all" || topFilter === "systems";
-          const showSecurity = topFilter === "all" || topFilter === "security_check";
+          const activeSystems = systems.filter((system) => system.is_active !== false).length;
+          const showMoney = !topFilter || topFilter === "money";
+          const show12 = !topFilter || topFilter === "cyl12";
+          const show48 = !topFilter || topFilter === "cyl48";
+          const showSystems = !topFilter || topFilter === "systems";
+          const showSecurity = !topFilter || topFilter === "security_check";
 
           const moneyLabel =
             money > 0

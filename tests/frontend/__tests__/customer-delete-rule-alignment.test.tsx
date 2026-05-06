@@ -58,6 +58,7 @@ jest.mock("@/hooks/useCustomers", () => {
       error: null,
       refetch: jest.fn(),
     }),
+    useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
     useDeleteCustomer: () => ({ mutateAsync: mockDeleteCustomerMutateAsync }),
   };
 });
@@ -187,7 +188,7 @@ describe("Customer delete rule alignment", () => {
 
   it("allows the add-screen delete flow to proceed even when order_count is non-zero", async () => {
     const { getByLabelText, getByText, queryByText } = render(
-      <AddCustomersSection searchQuery="" topFilter="all" subFilter="all" />
+      <AddCustomersSection searchQuery="" />
     );
 
     fireEvent(getByLabelText("Remove customer"), "press", { stopPropagation: jest.fn() });
@@ -215,7 +216,7 @@ describe("Customer delete rule alignment", () => {
     };
 
     const { getByLabelText, getByText, queryByText } = render(
-      <AddCustomersSection searchQuery="" topFilter="all" subFilter="all" />
+      <AddCustomersSection searchQuery="" />
     );
 
     fireEvent(getByLabelText("Remove customer"), "press", { stopPropagation: jest.fn() });
