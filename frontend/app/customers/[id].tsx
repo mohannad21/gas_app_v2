@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
+import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
@@ -116,20 +117,18 @@ function DetailBalanceBox({
   label,
   value,
   state,
-  accent,
 }: {
   label: string;
   value: string;
   state: "Debt" | "Credit" | "Balanced";
-  accent?: string;
 }) {
-  const stateColor =
-    state === "Debt" ? "#b42318" : state === "Credit" ? "#0a7ea4" : "#667085";
+  const valueColor =
+    state === "Debt" ? "#b42318" : state === "Credit" ? "#16a34a" : "#0f172a";
   return (
     <View style={styles.balanceBox}>
-      <Text style={[styles.balanceBoxLabel, accent ? { color: accent } : null]}>{label}</Text>
-      <Text style={styles.balanceBoxValue}>{value}</Text>
-      <Text style={[styles.balanceBoxState, { color: stateColor }]}>{state}</Text>
+      <Text style={styles.balanceBoxLabel}>{label}</Text>
+      <Text style={[styles.balanceBoxValue, { color: valueColor }]}>{value}</Text>
+      <Text style={styles.balanceBoxState}>{state}</Text>
     </View>
   );
 }
@@ -580,6 +579,24 @@ export default function CustomerDetailsScreen() {
         </View>
       </View>
 
+      <View style={styles.detailBalancesSection}>
+        <View style={styles.detailBalancesHeader}>
+          <Text style={styles.detailBalancesTitle}>Customer Balances</Text>
+        </View>
+        <View style={styles.detailBalancesContent}>
+          <View style={styles.detailBalancesRow}>
+            {balanceStats.map((stat) => (
+              <DetailBalanceBox
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                state={stat.state}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+
       <View style={styles.actions}>
         <Pressable
           accessibilityLabel="Edit customer"
@@ -708,20 +725,6 @@ export default function CustomerDetailsScreen() {
           contentContainerStyle={styles.secondaryFilterRow}
         />
       ) : null}
-
-      <View style={styles.detailBalancesBlock}>
-        <View style={styles.detailBalancesRow}>
-          {balanceStats.map((stat) => (
-            <DetailBalanceBox
-              key={stat.label}
-              label={stat.label}
-              value={stat.value}
-              state={stat.state}
-              accent={stat.gas ? gasColor(stat.gas) : undefined}
-            />
-          ))}
-        </View>
-      </View>
 
       {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
       {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
@@ -1014,8 +1017,25 @@ const styles = StyleSheet.create({
   secondaryFilterChipTextActive: {
     color: "#0a7ea4",
   },
-  detailBalancesBlock: {
-    gap: 8,
+  detailBalancesSection: {
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  detailBalancesHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  detailBalancesTitle: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  detailBalancesContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   detailBalancesRow: {
     flexDirection: "row",
@@ -1023,31 +1043,33 @@ const styles = StyleSheet.create({
   },
   balanceBox: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 88,
     borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 2,
+    paddingVertical: 10,
+    gap: 4,
   },
   balanceBoxLabel: {
-    fontSize: 12,
     color: "#475569",
     fontWeight: "800",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
   },
   balanceBoxValue: {
-    color: "#0f172a",
-    fontSize: 16,
-    lineHeight: 18,
     fontWeight: "900",
-    marginTop: "auto",
+    fontFamily: FontFamilies.extrabold,
+    fontSize: FontSizes.sm,
+    lineHeight: 18,
   },
   balanceBoxState: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.2,
+    marginTop: "auto",
+    color: "#64748b",
+    fontWeight: "700",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
   },
   activityCard: {
     backgroundColor: "#fff",

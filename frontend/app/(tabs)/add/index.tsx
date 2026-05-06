@@ -10,7 +10,6 @@ import {
   CustomerListSubFilter,
   CustomerListTopFilter,
 } from "@/components/customers/customerListFilters";
-import CompanyBalancesSection from "@/components/reports/CompanyBalancesSection";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import {
   bankDepositToEvent,
@@ -1334,12 +1333,6 @@ const formatDateTime = (value?: string) => {
               contentContainerStyle={styles.secondaryFilterRow}
             />
           ) : null}
-          <CompanyBalancesSection
-            companySummary={companySummary}
-            companyBalancesReady={companyBalancesQuery.isSuccess}
-            formatMoney={(value) => formatDisplayMoney(value)}
-            formatCount={(value) => Number(value || 0).toFixed(0)}
-          />
         </>
       ) : null}
 

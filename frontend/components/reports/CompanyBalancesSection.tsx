@@ -20,6 +20,7 @@ type CompanySummaryBox = {
   label: string;
   value: string;
   direction: string;
+  rawValue: number;
 };
 
 function directionForCompanyMoney(value: number) {
@@ -44,18 +45,26 @@ function buildCompanyBoxes(
       label: "Money balance",
       value: `${formatMoney(Math.abs(moneyNet))} ${getCurrencySymbol()}`,
       direction: directionForCompanyMoney(moneyNet),
+      rawValue: moneyNet,
     },
     {
       label: "12kg balance",
       value: `${formatCount(Math.abs(cyl12Net))} cyl`,
       direction: directionForCompanyCylinders(cyl12Net),
+      rawValue: cyl12Net,
     },
     {
       label: "48kg balance",
       value: `${formatCount(Math.abs(cyl48Net))} cyl`,
       direction: directionForCompanyCylinders(cyl48Net),
+      rawValue: cyl48Net,
     },
   ];
+}
+
+function getCompanyValueColor(box: CompanySummaryBox) {
+  if (box.rawValue === 0) return "#0f172a";
+  return box.direction === "Debts on distributor" ? "#b42318" : "#16a34a";
 }
 
 export default function CompanyBalancesSection({
@@ -83,11 +92,16 @@ export default function CompanyBalancesSection({
           <View style={styles.row}>
             {(companyBalancesReady
               ? companyBoxes
-              : companyBoxes.map((box) => ({ ...box, value: "Unavailable", direction: "Unavailable" }))
+              : companyBoxes.map((box) => ({
+                  ...box,
+                  value: "Unavailable",
+                  direction: "Unavailable",
+                  rawValue: 0,
+                }))
             ).map((box) => (
               <View key={box.label} style={styles.box}>
                 <Text style={styles.label}>{box.label}</Text>
-                <Text style={styles.value}>{box.value}</Text>
+                <Text style={[styles.value, { color: getCompanyValueColor(box) }]}>{box.value}</Text>
                 <Text style={styles.meta}>{box.direction}</Text>
               </View>
             ))}

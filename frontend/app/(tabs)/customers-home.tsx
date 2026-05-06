@@ -11,7 +11,6 @@ import {
   CustomerListTopFilter,
   getCustomerSubFilterOptions,
 } from "@/components/customers/customerListFilters";
-import CustomersTabBalances from "@/components/customers/CustomersTabBalances";
 import { AddCustomerEntryAction, AddCustomersSection } from "./add/index";
 
 export default function CustomersHomeScreen() {
@@ -105,7 +104,6 @@ export default function CustomersHomeScreen() {
           />
         ) : null}
       </View>
-      <CustomersTabBalances />
       <View style={styles.listBlock}>
         <AddCustomersSection
           searchQuery={searchQuery}

@@ -141,7 +141,7 @@ describe("Customer detail balance boxes", () => {
     };
   });
 
-  it("replaces the old balances section with compact boxes below the filters", () => {
+  it("shows the balance card below cylinders ordered", () => {
     const { getByText, getAllByText, queryByText, toJSON } = render(<CustomerDetailsScreen />);
 
     expect(queryByText("Balances")).toBeNull();
@@ -155,7 +155,8 @@ describe("Customer detail balance boxes", () => {
     expect(getAllByText("Credit")).toHaveLength(1);
 
     const tree = JSON.stringify(toJSON());
-    expect(tree.indexOf("Adjustments")).toBeLessThan(tree.indexOf("Money balance"));
+    expect(tree.indexOf("Cylinders Ordered")).toBeLessThan(tree.indexOf("Money balance"));
+    expect(tree.indexOf("Money balance")).toBeLessThan(tree.indexOf("Systems"));
   });
 
   it("does not re-trigger focus refetches on same-customer rerenders", () => {
