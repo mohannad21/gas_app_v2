@@ -20,6 +20,8 @@ type SlimActivityRowProps = {
   showEffectiveAtBottom?: boolean;
 };
 
+const toDateOnly = (value?: string | null) => (value ? value.slice(0, 10) : "");
+
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) =>
   `${formatMoney(amount)} ${getCurrencySymbol()}`;
 
@@ -377,6 +379,8 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
   const createdAtLine = showCreatedAt && event.created_at ? `Created at: ${formatDateTimeYMDHM(event.created_at)}` : "";
   const effectiveAtLine =
     showEffectiveAtBottom && event.effective_at ? `Effective at: ${formatDateTimeYMDHM(event.effective_at)}` : "";
+  const hasDateMismatch =
+    Boolean(createdAtLine && effectiveAtLine) && toDateOnly(event.created_at) !== toDateOnly(event.effective_at);
 
   const transitionPills: TransitionPill[] = formatTransitionPills(buildDisplayTransitions(event), {
     formatMoney: fmtMoney,
@@ -519,8 +523,12 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
             </View>
             {createdAtLine || effectiveAtLine ? (
               <View style={styles.timestampsBlock}>
-                {createdAtLine ? <Text style={styles.contextText}>{createdAtLine}</Text> : null}
-                {effectiveAtLine ? <Text style={styles.contextText}>{effectiveAtLine}</Text> : null}
+                {createdAtLine ? (
+                  <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{createdAtLine}</Text>
+                ) : null}
+                {effectiveAtLine ? (
+                  <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{effectiveAtLine}</Text>
+                ) : null}
               </View>
             ) : null}
             {hasActions ? (
@@ -623,6 +631,9 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Level3Tokens.colors.textMuted,
     fontFamily: FontFamilies.regular,
+  },
+  contextTextAlert: {
+    color: "#dc2626",
   },
   contextSpacer: {
     flex: 1,
