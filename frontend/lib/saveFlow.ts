@@ -3,6 +3,11 @@ import { router } from "expo-router";
 import { toDateKey } from "@/lib/date";
 
 export const ADD_DATA_SOURCE = "add";
+export type ReportHighlightParams = {
+  highlightId?: string | null;
+  highlightEventType?: string | null;
+  highlightEffectiveAt?: string | null;
+};
 
 export function isAddDataSource(source?: string | string[] | null) {
   if (Array.isArray(source)) {
@@ -19,7 +24,10 @@ export function getReportDateParam(value?: string | null) {
   return raw.length >= 10 ? raw.slice(0, 10) : raw;
 }
 
-export function openDailyReportForDate(value?: string | null, extraParams?: Record<string, string | number | undefined>) {
+export function openDailyReportForDate(
+  value?: string | null,
+  extraParams?: Record<string, string | number | undefined> & ReportHighlightParams
+) {
   const date = getReportDateParam(value);
   router.replace({
     pathname: "/(tabs)/reports",

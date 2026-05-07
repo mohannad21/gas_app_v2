@@ -404,8 +404,17 @@ export default function ReportsScreen() {
   const { selectedDate, setSelectedDate, openEventKeys, setOpenEventKeys } = useDaySelection();
 
   // Route handling
-  const params = useLocalSearchParams<{ mode?: string; addExpense?: string; expand?: string; date?: string }>();
-  const [routeHandled, setRouteHandled] = useState(false);
+  const params = useLocalSearchParams<{
+    mode?: string;
+    addExpense?: string;
+    expand?: string;
+    date?: string;
+    highlightId?: string;
+    highlightEventType?: string;
+    highlightEffectiveAt?: string;
+  }>();
+  const [handledRouteKey, setHandledRouteKey] = useState<string | null>(null);
+  const [highlightEventKey, setHighlightEventKey] = useState<string | null>(null);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -499,28 +508,30 @@ export default function ReportsScreen() {
 
   // Route params (FIXED: setExpanded expects string[])
   useEffect(() => {
-    if (routeHandled) return;
-
     const addExpense = Array.isArray(params.addExpense) ? params.addExpense[0] : params.addExpense;
     const expand = Array.isArray(params.expand) ? params.expand[0] : params.expand;
     const dateParam = Array.isArray(params.date) ? params.date[0] : params.date;
+    const highlightId = Array.isArray(params.highlightId) ? params.highlightId[0] : params.highlightId;
+    const highlightEventType = Array.isArray(params.highlightEventType) ? params.highlightEventType[0] : params.highlightEventType;
+    const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
 
     const todayStr = toDateKey(new Date());
     const date = dateParam || todayStr;
+    const routeKey = [addExpense ?? "", expand ?? "", date, highlightId ?? "", highlightEventType ?? "", highlightEffectiveAt ?? ""].join("|");
+    if (routeKey === handledRouteKey) return;
+
+    setSelectedDate(date);
+    setV2Expanded([date]);
 
     if (addExpense === "1") {
       setAllowExpenseInput(true);
-      setV2Expanded([date]);
       openExpenseModal(date);
-      setRouteHandled(true);
+      setHandledRouteKey(routeKey);
       return;
     }
 
-    if (expand === "1") {
-      setV2Expanded([date]);
-      setRouteHandled(true);
-    }
-  }, [params, routeHandled, openExpenseModal]);
+    setHandledRouteKey(routeKey);
+  }, [handledRouteKey, openExpenseModal, params, setSelectedDate, setV2Expanded]);
 
   useFocusEffect(
     useCallback(() => {
@@ -636,6 +647,35 @@ export default function ReportsScreen() {
     });
   }, [activityGroupFilter, activitySubtypeFilter, activityLevel3Filter, rawSelectedEvents]);
   const keepTabsVisible = selectedEvents.length < 5;
+
+  useEffect(() => {
+    const highlightId = Array.isArray(params.highlightId) ? params.highlightId[0] : params.highlightId;
+    const highlightEventType = Array.isArray(params.highlightEventType) ? params.highlightEventType[0] : params.highlightEventType;
+    const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
+    if (!highlightId && !highlightEventType && !highlightEffectiveAt) {
+      setHighlightEventKey(null);
+      return;
+    }
+    const match = rawSelectedEvents.find((event) => {
+      if (highlightId) {
+        return String(event?.id ?? event?.source_id ?? "") === highlightId;
+      }
+      if (highlightEventType && String(event?.event_type ?? "") !== highlightEventType) {
+        return false;
+      }
+      if (highlightEffectiveAt && String(event?.effective_at ?? "") !== highlightEffectiveAt) {
+        return false;
+      }
+      return Boolean(highlightEventType || highlightEffectiveAt);
+    });
+    if (!match) return;
+    const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
+    setHighlightEventKey(eventKey);
+    const timer = setTimeout(() => {
+      setHighlightEventKey((current) => (current === eventKey ? null : current));
+    }, 1100);
+    return () => clearTimeout(timer);
+  }, [params.highlightEffectiveAt, params.highlightEventType, params.highlightId, rawSelectedEvents]);
 
   useEffect(() => {
     setActivityGroupFilter(null);
@@ -955,7 +995,7 @@ export default function ReportsScreen() {
             return (
               <View key={eventKey}>
                 <Pressable onPress={() => toggleEventKey(eventKey)}>
-                  <SlimActivityRow event={item} formatMoney={formatMoney} />
+                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} />
                 </Pressable>
                 {isOpen ? <EventExpandedPanel ev={item} formatMoney={formatMoney} formatCount={formatCount} /> : null}
               </View>

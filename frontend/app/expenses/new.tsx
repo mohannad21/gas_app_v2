@@ -289,9 +289,13 @@ export default function NewExpenseScreen() {
         onSaveSuccess={
           expenseIdParam
             ? undefined
-            : ({ effectiveAt }) => {
+            : ({ effectiveAt, highlightId, highlightEventType }) => {
                 if (isAddFlow) {
-                  openDailyReportForDate(effectiveAt);
+                  openDailyReportForDate(effectiveAt, {
+                    highlightId,
+                    highlightEventType,
+                    highlightEffectiveAt: effectiveAt,
+                  });
                   return;
                 }
                 router.back();

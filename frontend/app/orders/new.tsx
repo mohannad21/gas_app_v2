@@ -855,14 +855,22 @@ export default function NewOrderScreen() {
     );
   };
 
-  const finishAddFlowSave = (effectiveAt?: string, resetAfter?: boolean) => {
+  const finishAddFlowSave = (
+    effectiveAt?: string,
+    resetAfter?: boolean,
+    highlight?: { id?: string | null; eventType?: string | null }
+  ) => {
     showSuccessPulse();
     if (resetAfter) {
       resetOrderForm({ preserveSelection: true, nextAction: "replacement" });
       setPendingSaveAction(null);
       return;
     }
-    openDailyReportForDate(effectiveAt);
+    openDailyReportForDate(effectiveAt, {
+      highlightId: highlight?.id ?? undefined,
+      highlightEventType: highlight?.eventType ?? undefined,
+      highlightEffectiveAt: effectiveAt ?? undefined,
+    });
   };
 
   const runOrderSubmit = async (
@@ -1003,7 +1011,10 @@ export default function NewOrderScreen() {
       try {
         const created = await createOrder.mutateAsync(orderPayload);
         if (isAddFlow) {
-          finishAddFlowSave(values.delivered_at, options.resetAfter);
+          finishAddFlowSave(values.delivered_at, options.resetAfter, {
+            id: created.id,
+            eventType: "order",
+          });
           return;
         }
         if (options.showWhatsapp) {
@@ -1097,7 +1108,7 @@ ${cylLine}
     try {
       const effectiveAt = buildActivityHappenedAt({ date: collectionDate, time: collectionTime });
       const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await createCollection.mutateAsync({
+      const created = await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: paymentDirection === "payout" ? "payout" : "payment",
         amount_money: paid,
@@ -1109,7 +1120,10 @@ ${cylLine}
         request_id: requestId,
       });
       if (isAddFlow) {
-        finishAddFlowSave(effectiveAt, resetAfter);
+        finishAddFlowSave(effectiveAt, resetAfter, {
+          id: created.id,
+          eventType: paymentDirection === "payout" ? "collection_payout" : "collection_money",
+        });
         return;
       }
       if (resetAfter) {
@@ -1163,7 +1177,7 @@ ${cylLine}
     try {
       const effectiveAt = buildActivityHappenedAt({ date: collectionDate, time: collectionTime });
       const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await createCollection.mutateAsync({
+      const created = await createCollection.mutateAsync({
         customer_id: selectedCustomer,
         action_type: "return",
         qty_12kg: gasType === "12kg" ? receivedCount : 0,
@@ -1176,7 +1190,10 @@ ${cylLine}
         request_id: requestId,
       });
       if (isAddFlow) {
-        finishAddFlowSave(effectiveAt, resetAfter);
+        finishAddFlowSave(effectiveAt, resetAfter, {
+          id: created.id,
+          eventType: "collection_empty",
+        });
         return;
       }
       if (resetAfter) {

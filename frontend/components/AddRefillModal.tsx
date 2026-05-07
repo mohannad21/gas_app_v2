@@ -62,8 +62,8 @@ type AddRefillModalProps = {
   visible: boolean;
   onClose: () => void;
   onSaved: (entry: SavedRefillEntry) => void;
-  onSaveSuccess?: (details: { effectiveAt: string; entry: SavedRefillEntry }) => void;
-  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: "refill" | "buy" | "return" }) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; entry: SavedRefillEntry; highlightEventType?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: "refill" | "buy" | "return"; highlightEventType?: string }) => void;
   accessoryId?: string;
   editEntry?: EditRefillEntry | null;
 };
@@ -522,10 +522,18 @@ export function RefillForm({
       };
       if (resetAfter && !editEntry?.refill_id) {
         formState.resetFormForCurrentMode();
-        onSaveAndAddSuccess?.({ effectiveAt, mode });
+        onSaveAndAddSuccess?.({
+          effectiveAt,
+          mode,
+          highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+        });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, entry: savedEntry });
+          onSaveSuccess({
+            effectiveAt,
+            entry: savedEntry,
+            highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+          });
         } else {
           onSaved(savedEntry);
           onClose();

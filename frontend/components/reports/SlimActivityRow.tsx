@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useRef } from "react";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
@@ -18,6 +19,7 @@ type SlimActivityRowProps = {
   isDeleted?: boolean;
   showCreatedAt?: boolean;
   showEffectiveAtBottom?: boolean;
+  highlight?: boolean;
 };
 
 const toDateOnly = (value?: string | null) => (value ? value.slice(0, 10) : "");
@@ -261,8 +263,18 @@ const buildDisplayTransitions = (event: DailyReportEvent) => {
   return transitions.length > 0 ? transitions : event.balance_transitions ?? [];
 };
 
-export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted, showCreatedAt, showEffectiveAtBottom }: SlimActivityRowProps) {
+export default function SlimActivityRow({
+  event,
+  formatMoney,
+  onEdit,
+  onDelete,
+  isDeleted,
+  showCreatedAt,
+  showEffectiveAtBottom,
+  highlight,
+}: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
+  const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
   const label = event?.event_type === "order" ? (event?.label ?? "Replacement") : event?.label ?? eventType;
   const counterparty = event?.counterparty;
@@ -393,8 +405,30 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
 
   const hasActions = !!(onEdit || onDelete);
 
+  useEffect(() => {
+    if (!highlight) {
+      highlightAnim.setValue(0);
+      return;
+    }
+    highlightAnim.setValue(1);
+    Animated.timing(highlightAnim, {
+      toValue: 0,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+  }, [highlight, highlightAnim]);
+
   return (
     <View style={[styles.row, isDeleted && styles.rowDeleted]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.highlightOverlay,
+          {
+            opacity: highlightAnim,
+          },
+        ]}
+      />
       <View style={styles.railCol}>
         <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
@@ -571,6 +605,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Level3Tokens.colors.border,
     flexDirection: "row",
     gap: 10,
+    position: "relative",
+    overflow: "hidden",
+  },
+  highlightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#dcfce7",
   },
   railCol: {
     width: 28,

@@ -91,8 +91,8 @@ type CashExpensesViewProps = {
   }>;
   styles: Record<string, any>;
   onManageCategories?: () => void;
-  onSaveSuccess?: (details: { effectiveAt: string }) => void;
-  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: ExpenseMode }) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; highlightId?: string; highlightEventType?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: ExpenseMode; highlightId?: string; highlightEventType?: string }) => void;
 };
 
 const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -202,7 +202,7 @@ export default function CashExpensesView({
           Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
           return;
         }
-        await createExpense.mutateAsync({
+        const created = await createExpense.mutateAsync({
           date: expenseDate,
           expense_type: expenseType.trim(),
           amount,
@@ -213,12 +213,21 @@ export default function CashExpensesView({
         if (resetAfter) {
           setExpenseAmount("0");
           setExpenseNote("");
-          onSaveAndAddSuccess?.({ effectiveAt: happened_at ?? expenseDate, mode: expenseMode });
+          onSaveAndAddSuccess?.({
+            effectiveAt: happened_at ?? expenseDate,
+            mode: expenseMode,
+            highlightId: (created as { id?: string } | null)?.id,
+            highlightEventType: "expense",
+          });
         }
         onRefreshCash?.();
         if (!resetAfter) {
           if (onSaveSuccess) {
-            onSaveSuccess({ effectiveAt: happened_at ?? expenseDate });
+            onSaveSuccess({
+              effectiveAt: happened_at ?? expenseDate,
+              highlightId: (created as { id?: string } | null)?.id,
+              highlightEventType: "expense",
+            });
           } else {
             onClose?.();
           }
@@ -236,7 +245,7 @@ export default function CashExpensesView({
         Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
         return;
       }
-      await createBankDeposit.mutateAsync({
+      const created = await createBankDeposit.mutateAsync({
         date: expenseDate,
         time: expenseTime,
         amount,
@@ -247,12 +256,21 @@ export default function CashExpensesView({
       if (resetAfter) {
         setTransferAmount("0");
         setTransferNote("");
-        onSaveAndAddSuccess?.({ effectiveAt: happened_at ?? expenseDate, mode: expenseMode });
+        onSaveAndAddSuccess?.({
+          effectiveAt: happened_at ?? expenseDate,
+          mode: expenseMode,
+          highlightId: (created as { id?: string } | null)?.id,
+          highlightEventType: "bank_deposit",
+        });
       }
       onRefreshCash?.();
       if (!resetAfter) {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt: happened_at ?? expenseDate });
+          onSaveSuccess({
+            effectiveAt: happened_at ?? expenseDate,
+            highlightId: (created as { id?: string } | null)?.id,
+            highlightEventType: "bank_deposit",
+          });
         } else {
           onClose?.();
         }
