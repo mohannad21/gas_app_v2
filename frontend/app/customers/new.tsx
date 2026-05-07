@@ -189,7 +189,7 @@ export default function NewCustomerScreen() {
         });
       }
       showToast("Customer created");
-      router.replace({ pathname: "/", params: { flash: "customer-created" } });
+      router.replace({ pathname: "/(tabs)/customers-home", params: { flash: "customer-created" } });
     } catch (err) {
       logApiError("[new customer submit] error", err);
       Alert.alert("Error", getUserFacingApiError(err, "Failed to create customer."));
