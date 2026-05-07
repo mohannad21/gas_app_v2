@@ -280,7 +280,17 @@ export default function SlimActivityRow({
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
-  const label = formatEventType(eventType, event?.order_mode);
+  const label = (() => {
+    if (eventType === "company_payment")
+      return event?.money_direction === "in"
+        ? EVENT_LABELS.COMPANY_PAYMENT_IN
+        : EVENT_LABELS.COMPANY_PAYMENT_OUT;
+    if (eventType === "bank_deposit")
+      return event?.transfer_direction === "bank_to_wallet"
+        ? EVENT_LABELS.BANK_TO_WALLET
+        : EVENT_LABELS.WALLET_TO_BANK;
+    return formatEventType(eventType, event?.order_mode);
+  })();
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
