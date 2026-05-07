@@ -7,6 +7,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useSystems } from "@/hooks/useSystems";
 import { gasColor } from "@/constants/gas";
 import { calcMoneyUiResult } from "@/lib/ledgerMath";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,8 +46,8 @@ export default function OrderDetailsScreen() {
   const remaining = calcMoneyUiResult(order.price_total ?? 0, netPaid);
   const formatBalance = (value?: number | null) => {
     const amount = value ?? 0;
-    if (amount < 0) return `Credit ${Math.abs(amount).toFixed(0)}`;
-    if (amount > 0) return `Debt ${amount.toFixed(0)}`;
+    if (amount < 0) return `Credit ${formatDisplayMoney(Math.abs(amount))}`;
+    if (amount > 0) return `Debt ${formatDisplayMoney(amount)}`;
     return "Settled";
   };
   const hasMoneyBalanceSnapshot =
@@ -83,10 +84,10 @@ export default function OrderDetailsScreen() {
       <Text style={styles.meta}>
         Cylinders: Installed {order.cylinders_installed} / Received {order.cylinders_received}
       </Text>
-      <Text style={styles.meta}>Total: ${order.price_total}</Text>
-      <Text style={styles.meta}>Paid: ${netPaid}</Text>
+      <Text style={styles.meta}>Total: {getCurrencySymbol()}{formatDisplayMoney(order.price_total)}</Text>
+      <Text style={styles.meta}>Paid: {getCurrencySymbol()}{formatDisplayMoney(netPaid)}</Text>
       {typeof order.applied_credit === "number" ? (
-        <Text style={styles.meta}>Applied credit: ${order.applied_credit.toFixed(0)}</Text>
+        <Text style={styles.meta}>Applied credit: {getCurrencySymbol()}{formatDisplayMoney(order.applied_credit)}</Text>
       ) : null}
       {hasMoneyBalanceSnapshot ? (
         <Text style={styles.meta}>
@@ -104,7 +105,7 @@ export default function OrderDetailsScreen() {
         </Text>
       ) : null}
       <Text style={[styles.meta, remaining > 0 ? styles.unpaid : styles.paid]}>
-        {remaining > 0 ? `Unpaid $${remaining}` : "Paid"}
+        {remaining > 0 ? `Unpaid ${getCurrencySymbol()}${formatDisplayMoney(remaining)}` : "Paid"}
       </Text>
       {order.note ? <Text style={styles.meta}>Note: {order.note}</Text> : null}
 

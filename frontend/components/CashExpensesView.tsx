@@ -18,8 +18,10 @@ import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import { logApiError } from "@/lib/apiErrors";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildActivityHappenedAt } from "@/lib/date";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 const MODE_LABELS = {
@@ -98,33 +100,16 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   other: "ellipsis-horizontal",
 };
 const MONEY_STEPPERS: FieldStepper[] = [
+  { delta: -100, label: "-100", position: "extra-top-left" },
+  { delta: 100, label: "+100", position: "extra-top-right" },
   { delta: -20, label: "-20", position: "top-left" },
   { delta: 20, label: "+20", position: "top-right" },
   { delta: -5, label: "-5", position: "left" },
   { delta: 5, label: "+5", position: "right" },
 ];
 
-function formatTransferHelperText(mode: Exclude<ExpenseMode, "expense">, wallet: number, amount: number) {
-  if (mode === "bank_to_wallet") {
-    if (amount <= 0) {
-      return `You have ${wallet.toFixed(0)} shekels in the wallet.`;
-    }
-    const projected = wallet + amount;
-    return `You will have ${projected.toFixed(0)} shekels in the wallet after moving ${amount.toFixed(
-      0
-    )} from bank. (was ${wallet.toFixed(0)})`;
-  }
-
-  if (amount <= 0) {
-    return `You have ${wallet.toFixed(0)} shekels in the wallet. You can move up to ${wallet.toFixed(
-      0
-    )} to bank.`;
-  }
-
-  const projected = Math.max(wallet - amount, 0);
-  return `You can move up to ${wallet.toFixed(0)} shekels from the wallet. You will have ${projected.toFixed(
-    0
-  )} shekels in the wallet after moving ${amount.toFixed(0)} to bank. (was ${wallet.toFixed(0)})`;
+function formatMoneyTransitionComment(before: number, after: number) {
+  return `${formatDisplayMoney(before)}->${formatDisplayMoney(after)}`;
 }
 
 export default function CashExpensesView({
@@ -178,6 +163,7 @@ export default function CashExpensesView({
     : isBankToWallet
       ? walletValue + transferAmountValue
       : walletValue - transferAmountValue;
+  const walletComment = formatMoneyTransitionComment(walletValue, walletAfter);
   const canSaveExpense =
     isExpense
       ? Boolean(expenseType.trim()) && expenseAmountValue > 0
@@ -202,55 +188,59 @@ export default function CashExpensesView({
 
   const handleSave = async (resetAfter: boolean) => {
     const happened_at = buildActivityHappenedAt({ date: expenseDate, time: expenseTime });
-    if (isExpense) {
-      const amount = expenseAmountValue;
-      if (!amount || amount <= 0 || !expenseType.trim()) {
-        Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
+    try {
+      if (isExpense) {
+        const amount = expenseAmountValue;
+        if (!amount || amount <= 0 || !expenseType.trim()) {
+          Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
+          return;
+        }
+        await createExpense.mutateAsync({
+          date: expenseDate,
+          expense_type: expenseType.trim(),
+          amount,
+          note: expenseNote.trim() ? expenseNote.trim() : undefined,
+          happened_at,
+        });
+        if (resetAfter) {
+          setExpenseAmount("");
+          setExpenseNote("");
+        }
+        onRefreshCash?.();
+        if (!resetAfter) {
+          onClose?.();
+          Keyboard.dismiss();
+        }
         return;
       }
-      await createExpense.mutateAsync({
+
+      const amount = transferAmountValue;
+      if (!amount || amount <= 0) {
+        Alert.alert("Missing amount", "Enter a valid amount.");
+        return;
+      }
+      if (transferDisabled) {
+        Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
+        return;
+      }
+      await createBankDeposit.mutateAsync({
         date: expenseDate,
-        expense_type: expenseType.trim(),
+        time: expenseTime,
         amount,
-        note: expenseNote.trim() ? expenseNote.trim() : undefined,
-        happened_at,
+        direction: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
+        note: transferNote.trim() ? transferNote.trim() : undefined,
       });
       if (resetAfter) {
-        setExpenseAmount("");
-        setExpenseNote("");
+        setTransferAmount("");
+        setTransferNote("");
       }
       onRefreshCash?.();
       if (!resetAfter) {
         onClose?.();
         Keyboard.dismiss();
       }
-      return;
-    }
-
-    const amount = transferAmountValue;
-    if (!amount || amount <= 0) {
-      Alert.alert("Missing amount", "Enter a valid amount.");
-      return;
-    }
-    if (transferDisabled) {
-      Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
-      return;
-    }
-    await createBankDeposit.mutateAsync({
-      date: expenseDate,
-      time: expenseTime,
-      amount,
-      direction: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
-      note: transferNote.trim() ? transferNote.trim() : undefined,
-    });
-    if (resetAfter) {
-      setTransferAmount("");
-      setTransferNote("");
-    }
-    onRefreshCash?.();
-    if (!resetAfter) {
-      onClose?.();
-      Keyboard.dismiss();
+    } catch (err) {
+      logApiError("[cash expenses save] error", err);
     }
   };
 
@@ -338,13 +328,14 @@ export default function CashExpensesView({
                 ) : null}
                 <BigBox
                   title="Amount"
-                  statusLine={`Wallet ${walletValue.toFixed(0)} to ${walletAfter.toFixed(0)}`}
-                  statusIsAlert={walletAfter < 0}
+                  defaultExpanded
                 >
                   <StandaloneField>
                     <FieldCell
                       title="Amount"
+                      comment={walletComment}
                       value={expenseAmountValue}
+                      valueMode="decimal"
                       onIncrement={() => setExpenseAmount(String(Math.max(expenseAmountValue + 5, 0)))}
                       onDecrement={() => setExpenseAmount(String(Math.max(expenseAmountValue - 5, 0)))}
                       onChangeText={setExpenseAmount}
@@ -369,14 +360,14 @@ export default function CashExpensesView({
               <View style={styles.fieldBlock}>
                 <BigBox
                   title={CUSTOMER_WORDING.money}
-                  statusLine={formatTransferHelperText(expenseMode, walletValue, transferAmountValue)}
-                  statusIsAlert={isWalletToBank && transferDisabled}
                   defaultExpanded
                 >
                   <StandaloneField>
                     <FieldCell
                       title="Amount"
+                      comment={walletComment}
                       value={transferAmountValue}
+                      valueMode="decimal"
                       onIncrement={() => stepTransferAmount(5)}
                       onDecrement={() => stepTransferAmount(-5)}
                       onChangeText={setTransferAmount}

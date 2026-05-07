@@ -8,7 +8,7 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(react-native|@react-native|expo|@expo|expo-router|@react-navigation|@tanstack|expo-modules-core)/)",
+    "node_modules/(?!(react-native|@react-native|expo|@expo|expo-router|expo-secure-store|@react-navigation|@tanstack|expo-modules-core)/)",
   ],
 };
 

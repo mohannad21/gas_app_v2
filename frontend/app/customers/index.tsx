@@ -7,7 +7,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { useSystems } from "@/hooks/useSystems";
 import { formatDateLocale } from "@/lib/date";
-import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
+import { formatDisplayMoney, getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 
 export default function CustomersListScreen() {
   const [unpaidOnly, setUnpaidOnly] = useState(false);
@@ -26,6 +26,10 @@ export default function CustomersListScreen() {
   const latestOrdersByCustomer = useMemo(() => {
     const map: Record<string, Date> = {};
     (ordersQuery.data ?? []).forEach((o) => {
+      const mode = o.order_mode ?? "replacement";
+      if (mode !== "replacement" && mode !== "sell_iron") {
+        return;
+      }
       const orderDate = new Date(o.delivered_at);
       if (Number.isNaN(orderDate.getTime())) return;
       const existing = map[o.customer_id];
@@ -185,7 +189,9 @@ export default function CustomersListScreen() {
             </View>
             <View style={styles.rowBetween}>
               <Text style={styles.meta}>{item.order_count} orders</Text>
-              <Text style={[styles.meta, item.money_balance > 0 && styles.unpaid]}>Unpaid: ${item.money_balance}</Text>
+              <Text style={[styles.meta, item.money_balance > 0 && styles.unpaid]}>
+                Unpaid: {getCurrencySymbol()}{formatDisplayMoney(item.money_balance)}
+              </Text>
             </View>
             <View style={styles.actions}>
               <Pressable

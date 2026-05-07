@@ -1,8 +1,32 @@
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import type { ComponentProps } from "react";
+import { StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/useColorScheme";
+
+type TabIconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
+function BottomTabIcon({
+  name,
+  color,
+  size,
+  focused,
+  accent = false,
+}: {
+  name: TabIconName;
+  color: string;
+  size: number;
+  focused: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <View style={[styles.iconShell, focused && styles.iconShellActive, accent && styles.iconShellAccent]}>
+      <MaterialCommunityIcons name={name} size={accent ? size + 3 : size} color={color} />
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? "light";
@@ -14,7 +38,13 @@ export default function TabsLayout() {
       initialRouteName="dashboard"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "#fff", borderTopColor: "#e5e7eb", height: 64, paddingBottom: 8, paddingTop: 8 },
+        tabBarStyle: {
+          backgroundColor: "#fff",
+          borderTopColor: "#e5e7eb",
+          height: 68,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
         tabBarShowLabel: false,
         tabBarActiveTintColor: tint,
         tabBarInactiveTintColor: inactive,
@@ -25,15 +55,17 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="chart-bar" size={size} color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <BottomTabIcon name="chart-box-outline" color={color} size={size} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="customers-home"
         options={{
           title: "Customers",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-multiple-plus-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <BottomTabIcon name="account-group-outline" color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -41,22 +73,26 @@ export default function TabsLayout() {
         name="add/index"
         options={{
           title: "New",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cylinder" size={size} color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <BottomTabIcon name="note-plus-outline" color={color} size={size} focused={focused} accent />
+          ),
         }}
       />
       <Tabs.Screen
         name="reports/index"
         options={{
           title: "Daily",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <BottomTabIcon name="calendar-month-outline" color={color} size={size} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="account/index"
         options={{
           title: "Account",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-circle-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <BottomTabIcon name="account-outline" color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -111,3 +147,19 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconShell: {
+    minWidth: 38,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconShellActive: {
+    backgroundColor: "rgba(10, 126, 164, 0.12)",
+  },
+  iconShellAccent: {
+    minWidth: 42,
+  },
+});

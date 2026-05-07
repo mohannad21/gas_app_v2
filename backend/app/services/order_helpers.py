@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut
+from app.services.ledger import boundary_for_source, snapshot_customer_debts
 
 
 def resolve_value(payload_data: dict, field: str, current):
@@ -149,8 +150,35 @@ def resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTr
   return current
 
 
-def order_out(txn: CustomerTransaction) -> OrderOut:
+def order_out(txn: CustomerTransaction, session: Session) -> OrderOut:
   """Serialize order transaction to OrderOut schema."""
+  after_boundary = boundary_for_source(session, source_type="customer_txn", source_id=txn.id)
+  if after_boundary is not None:
+    live = snapshot_customer_debts(session, customer_id=txn.customer_id, boundary=after_boundary)
+  else:
+    live = {
+      "debt_cash": txn.debt_cash,
+      "debt_cylinders_12": txn.debt_cylinders_12,
+      "debt_cylinders_48": txn.debt_cylinders_48,
+    }
+
+  money_after = live["debt_cash"]
+  cyl12_after = live["debt_cylinders_12"]
+  cyl48_after = live["debt_cylinders_48"]
+
+  mode = txn.mode or "replacement"
+  money_delta = money_delta_for_mode(mode, txn.total, txn.paid)
+  money_before = money_after - money_delta
+
+  cyl12_before = cyl12_after
+  cyl48_before = cyl48_after
+  if mode == "replacement":
+    cyl_delta = txn.installed - txn.received
+    if txn.gas_type == "12kg":
+      cyl12_before = cyl12_after - cyl_delta
+    elif txn.gas_type == "48kg":
+      cyl48_before = cyl48_after - cyl_delta
+
   return OrderOut(
     id=txn.group_id or txn.id,
     customer_id=txn.customer_id,
@@ -168,10 +196,10 @@ def order_out(txn: CustomerTransaction) -> OrderOut:
     debt_cylinders_12=txn.debt_cylinders_12,
     debt_cylinders_48=txn.debt_cylinders_48,
     note=txn.note,
-    money_balance_before=None,
-    money_balance_after=None,
-    cyl_balance_before=None,
-    cyl_balance_after=None,
+    money_balance_before=money_before,
+    money_balance_after=money_after,
+    cyl_balance_before={"12kg": cyl12_before, "48kg": cyl48_before},
+    cyl_balance_after={"12kg": cyl12_after, "48kg": cyl48_after},
     is_deleted=txn.deleted_at is not None,
   )
 

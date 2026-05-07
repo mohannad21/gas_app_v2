@@ -18,13 +18,14 @@ import { useCreateBankDeposit } from "@/hooks/useBankDeposits";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useExpenseCategories } from "@/hooks/useExpenseCategories";
 import { formatDateLocale, getCurrentLocalDate, getCurrentLocalTime, getTimeHMSFromIso } from "@/lib/date";
+import { formatDisplayMoney } from "@/lib/money";
 
 function getTodayDate(): string {
   return getCurrentLocalDate();
 }
 
 function getNowTime(): string {
-  return getCurrentLocalTime({ includeSeconds: true });
+  return getCurrentLocalTime();
 }
 
 function getTimeFromIso(value?: string | null): string {
@@ -247,7 +248,7 @@ export default function NewExpenseScreen() {
         onClose={() => router.back()}
         onTransferNow={(shortfall) => {
           setExpenseMode("bank_to_wallet");
-          setTransferAmount(shortfall.toFixed(0));
+          setTransferAmount(formatDisplayMoney(shortfall));
         }}
         expenseDate={expenseDate}
         setExpenseDate={setExpenseDate}

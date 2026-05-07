@@ -5,13 +5,12 @@ Stay on the current branch — do NOT create a new branch.
 
 ---
 
-## Rules for Codex — Read These First
+## Rules — Read These First
 
 - **Read every file before modifying it.**
-- **Do not change any business logic, form behavior, or UI layout** beyond exactly what is described in each step.
-- **Do not rename, refactor, or reformat** anything outside the scope of each step.
-- Run `cd frontend && npm run build` at the end and confirm 0 TypeScript errors.
-- Run `cd backend && python -c "from app.routers.system_global import router; print('OK')"` to confirm no import errors.
+- **No improvisation.** If anything is unclear, stop and ask.
+- No logic changes beyond what is described. Do not touch unrelated code.
+- Run the verification commands at the end and confirm they pass.
 
 ---
 
@@ -26,8 +25,9 @@ reads at render time via `getCurrencyCode()` / `getCurrencySymbol()`.
 **The gap:** there is no endpoint to update these settings after initialization, and no UI to
 change currency. This ticket adds both.
 
-There is also one remaining bug: `balanceTransitions.ts` calls `getCurrencyCode()` (returns `"USD"`)
-in one place where it should call `getCurrencySymbol()` (returns `"$"`).
+There is also one remaining bug: `balanceTransitions.ts` calls `getCurrencyCode()` in one place
+where it should call `getCurrencySymbol()`, causing preview text in order/inventory screens to
+show "70 USD" instead of "70 $".
 
 ---
 
@@ -37,7 +37,8 @@ in one place where it should call `getCurrencySymbol()` (returns `"$"`).
 
 Read the file first.
 
-Find the `SystemSettingsOut` class:
+`Optional` is already imported at the top of this file. Find the `SystemSettingsOut` class
+(currently at line 63):
 
 ```python
 class SystemSettingsOut(SQLModel):
@@ -66,13 +67,13 @@ class SystemSettingsUpdate(SQLModel):
 
 Read the file first.
 
-Find the line that imports `SystemSettingsOut` from `.system`. It currently looks something like:
+Find the line that imports from `.system`. It currently looks like:
 
 ```python
-from .system import ..., SystemSettingsOut, ...
+from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, SystemHealthCheckOut, SystemInitialize, SystemOut, SystemSettingsOut, SystemTypeOptionCreate, SystemTypeOptionOut, SystemTypeOptionUpdate, SystemUpdate
 ```
 
-Add `SystemSettingsUpdate` to that same import.
+Add `SystemSettingsUpdate` to that same import line (keep alphabetical order within the list).
 
 **Do not change anything else in this file.**
 
@@ -109,7 +110,9 @@ from app.schemas import (
 
 ### 3b — Add the endpoint
 
-Add the following function **between** `get_system_settings` and `initialize_system` (after the closing of `get_system_settings`, before the `@router.post("/initialize"...`)`:
+`get_system_settings` ends at line ~60 and `initialize_system` starts at line 62 with
+`@router.post("/initialize", ...)`. Add the following function **between** them — after the
+closing of `get_system_settings`, before the `@router.post("/initialize"` decorator:
 
 ```python
 @router.patch("/settings", response_model=SystemSettingsOut)
@@ -178,7 +181,25 @@ export async function updateSystemSettings(payload: {
 
 ---
 
-## Step 5 — Add `useUpdateSystemSettings` hook
+## Step 5 — Export `updateSystemSettings` from the API barrel
+
+**File:** `frontend/lib/api/index.ts`
+
+Read the file first.
+
+Find the line that re-exports from `./company`. It currently looks like:
+
+```ts
+export { getSystemSettings, getCompanyBalances, createCompanyBalanceAdjustment, createCompanyPayment, listCompanyPayments, deleteCompanyPayment, createCompanyBuyIron, initializeSystem, getSystemHealthCheck } from "./company";
+```
+
+Add `updateSystemSettings` to that same export line.
+
+**Do not change anything else in this file.**
+
+---
+
+## Step 6 — Add `useUpdateSystemSettings` hook
 
 **File:** `frontend/hooks/useSystemSettings.ts`
 
@@ -196,7 +217,7 @@ Replace with:
 import { getSystemSettings, initializeSystem, updateSystemSettings } from "@/lib/api";
 ```
 
-Then find the export of `useInitializeSystem`. Add the following new hook **after** `useInitializeSystem`:
+Then find the export of `useInitializeSystem`. Add the following new hook **directly after** `useInitializeSystem`:
 
 ```ts
 export function useUpdateSystemSettings() {
@@ -220,24 +241,6 @@ export function useUpdateSystemSettings() {
 
 ---
 
-## Step 6 — Export `updateSystemSettings` from the API barrel
-
-**File:** `frontend/lib/api/index.ts`
-
-Read the file first.
-
-Find the line that re-exports from `./company`. It will look something like:
-
-```ts
-export { getSystemSettings, ... } from "./company";
-```
-
-Add `updateSystemSettings` to that same export line.
-
-**Do not change anything else in this file.**
-
----
-
 ## Step 7 — Create the Currency Settings screen
 
 **File:** `frontend/app/(tabs)/account/configuration/currency-settings.tsx`
@@ -245,12 +248,11 @@ Add `updateSystemSettings` to that same export line.
 Create this new file with the following content exactly:
 
 ```tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { useSystemSettings } from "@/hooks/useSystemSettings";
-import { useUpdateSystemSettings } from "@/hooks/useSystemSettings";
+import { useSystemSettings, useUpdateSystemSettings } from "@/hooks/useSystemSettings";
 import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
 
 const SUPPORTED_CURRENCIES = [
@@ -274,12 +276,18 @@ export default function CurrencySettingsScreen() {
   const settingsQuery = useSystemSettings();
   const updateMutation = useUpdateSystemSettings();
 
+  const [selectedCode, setSelectedCode] = useState<string>(getCurrencyCode());
+  const [selectedDecimals, setSelectedDecimals] = useState<number>(getMoneyDecimals());
+
+  useEffect(() => {
+    if (settingsQuery.data) {
+      setSelectedCode(settingsQuery.data.currency_code);
+      setSelectedDecimals(settingsQuery.data.money_decimals);
+    }
+  }, [settingsQuery.data]);
+
   const currentCode = settingsQuery.data?.currency_code ?? getCurrencyCode();
   const currentDecimals = settingsQuery.data?.money_decimals ?? getMoneyDecimals();
-
-  const [selectedCode, setSelectedCode] = useState(currentCode);
-  const [selectedDecimals, setSelectedDecimals] = useState(currentDecimals);
-
   const isDirty = selectedCode !== currentCode || selectedDecimals !== currentDecimals;
 
   async function handleSave() {
@@ -403,13 +411,46 @@ const styles = StyleSheet.create({
 
 ---
 
-## Step 8 — Add Currency row to Account menu
+## Step 8 — Register the route in `_layout.tsx`
+
+**File:** `frontend/app/(tabs)/_layout.tsx`
+
+Read the file first.
+
+Every screen under `account/configuration/` must be explicitly registered with `href: null` to
+hide it from the tab bar. Find the existing `expense-categories` Tabs.Screen block:
+
+```tsx
+      <Tabs.Screen
+        name="account/configuration/expense-categories"
+        options={{
+          href: null,
+        }}
+      />
+```
+
+Add a new `Tabs.Screen` block **directly after** it:
+
+```tsx
+      <Tabs.Screen
+        name="account/configuration/currency-settings"
+        options={{
+          href: null,
+        }}
+      />
+```
+
+**Do not change anything else in this file.**
+
+---
+
+## Step 9 — Add Currency row to the Account menu
 
 **File:** `frontend/app/(tabs)/account/index.tsx`
 
 Read the file first.
 
-Find the Configuration section. It currently ends with the Expense Categories row:
+Find the Expense Categories row in the Configuration section:
 
 ```tsx
         <Pressable style={styles.row} onPress={() => router.push("/(tabs)/account/configuration/expense-categories")}>
@@ -431,7 +472,7 @@ Add a new row **directly after** it:
 
 ---
 
-## Step 9 — Fix `getCurrencyCode` → `getCurrencySymbol` in `balanceTransitions.ts`
+## Step 10 — Fix `getCurrencyCode` → `getCurrencySymbol` in `balanceTransitions.ts`
 
 **File:** `frontend/lib/balanceTransitions.ts`
 
@@ -453,7 +494,9 @@ function formatMoneyValue(value: number, formatMoney: FormatMoney) {
 }
 ```
 
-`getCurrencyCode` is still imported for other use — do NOT remove it from the import line unless it has no other usages. Check: if `getCurrencyCode` no longer appears anywhere else in the file after this change, remove it from the import. If it still appears elsewhere, leave the import untouched.
+After making this change, check whether `getCurrencyCode` appears anywhere else in the file.
+If it no longer appears anywhere else, remove it from the import line at the top. If it still
+appears elsewhere, leave the import untouched.
 
 **Do not change anything else in this file.**
 
@@ -475,10 +518,11 @@ Expected: 0 TypeScript errors.
 
 ### Manual checks
 
-1. Open Account → Configuration → **Currency** (new row).
-2. Screen shows a list of 8 currencies and 2 decimal options; current values are pre-selected.
+1. Open Account → Configuration — a **Currency** row should appear below Expense Categories.
+2. Tap Currency — screen shows 8 currency options and 2 decimal options; current values are pre-selected.
 3. Select a different currency (e.g. ILS) and tap Save.
 4. Toast shows "Settings saved" and screen goes back.
-5. Navigate to any activity card — amounts now show `₪` instead of `$`.
-6. Change back to USD — amounts show `$` again.
-7. Save button is disabled when nothing has changed (no unsaved changes).
+5. Navigate to any activity card — amounts show `₪` instead of `$`.
+6. Open a new order or inventory screen — preview text shows `₪` (not `ILS`).
+7. Change back to USD — amounts show `$` again.
+8. Save button is disabled when nothing has changed.

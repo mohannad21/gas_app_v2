@@ -16,12 +16,36 @@ function invalidateCustomerBalance(
   queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
+function invalidateCustomerAdjustmentHistory(
+  queryClient: ReturnType<typeof useQueryClient>,
+  customerId?: string
+) {
+  if (customerId) {
+    queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", customerId] });
+  }
+  queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
+}
+
+export function pickBetter(a: Order, b: Order): Order {
+  if (a.is_deleted && !b.is_deleted) return b;
+  if (!a.is_deleted && b.is_deleted) return a;
+  const aTime = new Date(a.delivered_at).getTime();
+  const bTime = new Date(b.delivered_at).getTime();
+  if (bTime !== aTime) return bTime > aTime ? b : a;
+  return new Date(b.created_at).getTime() >= new Date(a.created_at).getTime() ? b : a;
+}
+
 export function useOrders(includeDeleted?: boolean) {
   return useQuery<Order[]>({
     queryKey: ["orders", includeDeleted ?? false],
     queryFn: async () => {
       const data = await listOrders(includeDeleted);
-      const deduped = Array.from(new Map(data.map((o) => [o.id, o])).values());
+      const byId = new Map<string, Order>();
+      for (const order of data) {
+        const existing = byId.get(order.id);
+        byId.set(order.id, existing ? pickBetter(existing, order) : order);
+      }
+      const deduped = Array.from(byId.values());
       return deduped.sort(
         (a, b) => new Date(b.delivered_at).getTime() - new Date(a.delivered_at).getTime()
       );
@@ -45,6 +69,7 @@ export function useCreateOrder() {
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, variables.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, variables.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -70,6 +95,7 @@ export function useUpdateOrder() {
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, variables.payload.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, variables.payload.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -97,6 +123,7 @@ export function useDeleteOrder() {
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, existing?.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });

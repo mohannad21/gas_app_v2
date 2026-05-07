@@ -2,6 +2,7 @@ import { StyleSheet } from "react-native";
 
 import CustomerBalancesSection from "@/components/reports/CustomerBalancesSection";
 import { useBalancesSummary } from "@/hooks/useBalancesSummary";
+import { formatDisplayMoney } from "@/lib/money";
 
 export default function CustomersTabBalances() {
   const { balanceSummary } = useBalancesSummary();
@@ -9,7 +10,7 @@ export default function CustomersTabBalances() {
   return (
     <CustomerBalancesSection
       balanceSummary={balanceSummary}
-      formatMoney={(value) => Number(value || 0).toFixed(0)}
+      formatMoney={(value) => formatDisplayMoney(value)}
       formatCustomerCount={(count) => `${count} cust`}
       containerStyle={styles.card}
     />

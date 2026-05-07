@@ -386,10 +386,15 @@ class Expense(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
+  # `happened_at` is the business/event time used for timeline/report ordering.
+  # Hidden microseconds may be auto-assigned by allocate_happened_at(...) when
+  # several events share the same visible second.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # `created_at` is the audit insertion timestamp. It should not be treated as
+  # the primary business-time sort key for activity feeds.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -427,10 +432,14 @@ class CustomerTransaction(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
+  # Business/event time chosen by the user. Daily reporting sorts primarily by
+  # this field, not by created_at.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # Audit timestamp for row creation. Useful for debugging and fallback tie
+  # breaks, but not the intended source of truth for business ordering.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -475,10 +484,14 @@ class CompanyTransaction(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
+  # Business/event time chosen by the user. Hidden microseconds may be
+  # allocated automatically so same-second company activities keep a stable
+  # order in reports.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # Audit insertion timestamp only.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -523,10 +536,12 @@ class InventoryAdjustment(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
+  # Business/event time for inventory changes.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # Audit insertion timestamp only.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -568,10 +583,12 @@ class LedgerEntry(SQLModel, table=True):
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  # Mirrors the source event's business/event time.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # Audit timestamp for the ledger row itself.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True),
@@ -598,10 +615,12 @@ class CashAdjustment(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.String, unique=True, nullable=True),
   )
+  # Business/event time for the wallet adjustment.
   happened_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
   )
+  # Audit insertion timestamp only.
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),

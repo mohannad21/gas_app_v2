@@ -76,6 +76,8 @@ export async function listInventoryRefills(includeDeleted?: boolean): Promise<In
   });
   return parseArray(InventoryRefillSummarySchema, data).map((row) => ({
     ...row,
+    total_cost: fromMinorUnits(row.total_cost ?? 0),
+    paid_now: fromMinorUnits(row.paid_now ?? 0),
     debt_cash: row.debt_cash != null ? fromMinorUnits(row.debt_cash) : row.debt_cash,
     live_debt_cash: row.live_debt_cash != null ? fromMinorUnits(row.live_debt_cash) : row.live_debt_cash,
   }));

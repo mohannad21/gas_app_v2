@@ -26,7 +26,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "collection_empty") return "Returned empties";
   if (type === "refill") return "Refill";
   if (type === "company_payment") return "Paid company";
-  if (type === "company_buy_iron") return "Bought full cylinders";
+  if (type === "company_buy_iron") return "Bought full";
   if (type === "cash_adjust") return "Wallet adjustment";
   if (type === "adjust") return "Inventory adjustment";
   if (type === "customer_adjust") return "Balance adjustment";

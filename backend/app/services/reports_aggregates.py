@@ -10,7 +10,7 @@ from typing import Optional
 from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
-from app.models import LedgerEntry
+from app.models import Expense, LedgerEntry
 from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportEvent, ReportInventoryState, ReportInventoryTotals
 from app.services.ledger import sum_ledger
 
@@ -429,6 +429,52 @@ def _sold_full_by_day(
     .group_by(LedgerEntry.day, LedgerEntry.gas_type)
   ).all()
   return {(day, gas_type): -int(qty or 0) for day, gas_type, qty in rows}
+
+
+def _net_by_day(
+  session: Session,
+  *,
+  date_start: date,
+  date_end: date,
+) -> dict[date, int]:
+  """Operational net by day.
+
+  Includes only user-facing business events that should count toward the date
+  card's net figure:
+  - customer transactions (orders, payments, payouts, returns as they affect cash)
+  - normal expenses
+
+  Excludes:
+  - system initialization opening balances
+  - company transactions
+  - cash / wallet adjustments
+  - wallet/bank transfers (Expense.kind == "deposit")
+  """
+  expense_ids = (
+    select(Expense.id)
+    .where(Expense.kind == "expense")
+  )
+  rows = session.exec(
+    select(
+      LedgerEntry.day,
+      func.coalesce(func.sum(LedgerEntry.amount), 0),
+    )
+    .where(LedgerEntry.account == "cash")
+    .where(LedgerEntry.unit == "money")
+    .where(LedgerEntry.day >= date_start)
+    .where(LedgerEntry.day <= date_end)
+    .where(
+      or_(
+        LedgerEntry.source_type == "customer_txn",
+        and_(
+          LedgerEntry.source_type == "expense",
+          LedgerEntry.source_id.in_(expense_ids),
+        ),
+      )
+    )
+    .group_by(LedgerEntry.day)
+  ).all()
+  return {day: int(delta or 0) for day, delta in rows}
 
 
 def _cash_math_by_day(

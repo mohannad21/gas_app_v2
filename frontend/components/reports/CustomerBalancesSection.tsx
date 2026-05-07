@@ -18,6 +18,7 @@ type CustomerSummaryBox = {
   label: string;
   countLabel: string;
   value: string;
+  rawValue: number;
 };
 
 function buildCustomerBoxes(
@@ -30,37 +31,49 @@ function buildCustomerBoxes(
       label: "Money debt",
       count: balanceSummary.money.receivable.count,
       value: formatMoney(balanceSummary.money.receivable.total),
+      rawValue: balanceSummary.money.receivable.total,
     },
     {
       label: "12kg debt",
       count: balanceSummary.cyl12.receivable.count,
       value: String(balanceSummary.cyl12.receivable.total),
+      rawValue: balanceSummary.cyl12.receivable.total,
     },
     {
       label: "48kg debt",
       count: balanceSummary.cyl48.receivable.count,
       value: String(balanceSummary.cyl48.receivable.total),
+      rawValue: balanceSummary.cyl48.receivable.total,
     },
     {
       label: "Money credit",
       count: balanceSummary.money.payable.count,
       value: formatMoney(balanceSummary.money.payable.total),
+      rawValue: balanceSummary.money.payable.total,
     },
     {
       label: "12kg credit",
       count: balanceSummary.cyl12.payable.count,
       value: String(balanceSummary.cyl12.payable.total),
+      rawValue: balanceSummary.cyl12.payable.total,
     },
     {
       label: "48kg credit",
       count: balanceSummary.cyl48.payable.count,
       value: String(balanceSummary.cyl48.payable.total),
+      rawValue: balanceSummary.cyl48.payable.total,
     },
   ].map((entry) => ({
     value: entry.label.startsWith("Money") ? `${entry.value} ${getCurrencySymbol()}` : `${entry.value} cyl`,
     countLabel: formatCustomerCount(entry.count),
     label: entry.label,
+    rawValue: entry.rawValue,
   }));
+}
+
+function getCustomerValueColor(box: CustomerSummaryBox) {
+  if (box.rawValue === 0) return "#0f172a";
+  return box.label.includes("debt") ? "#b42318" : "#16a34a";
 }
 
 export default function CustomerBalancesSection({
@@ -90,7 +103,7 @@ export default function CustomerBalancesSection({
               {row.map((box) => (
                 <View key={box.label} style={styles.box}>
                   <Text style={styles.label}>{box.label}</Text>
-                  <Text style={styles.value}>{box.value}</Text>
+                  <Text style={[styles.value, { color: getCustomerValueColor(box) }]}>{box.value}</Text>
                   <Text style={styles.meta}>{box.countLabel}</Text>
                 </View>
               ))}

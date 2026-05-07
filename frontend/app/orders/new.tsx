@@ -41,8 +41,10 @@ import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
+import { formatDisplayMoney } from "@/lib/money";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
@@ -68,9 +70,34 @@ function getTodayDate() {
   return `${year}-${month}-${day}`;
 }
 
-function formatLedgerNumber(value: number | null | undefined) {
+function formatMoneyDisplay(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
-  return Number(value).toFixed(0);
+  return formatDisplayMoney(value);
+}
+
+function formatCountDisplay(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return String(Math.trunc(value));
+}
+
+function getTradeValueSizeStyle(value: string) {
+  if (value.length >= 8) return styles.tradeValueTight;
+  if (value.length >= 6) return styles.tradeValueCompact;
+  return null;
+}
+
+function TradeValueText({ value }: { value: string | number }) {
+  const textValue = String(value);
+  return (
+    <Text
+      style={[styles.tradeStatValue, getTradeValueSizeStyle(textValue)]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.68}
+    >
+      {textValue}
+    </Text>
+  );
 }
 
 type ReplacementToggleState = "matched" | "with_old" | "none" | "custom";
@@ -219,8 +246,8 @@ export default function NewOrderScreen() {
         ? inventoryLatest.data?.empty12 ?? null
         : null;
 
-  const installed = Number(watch("cylinders_installed")) || 0;
-  const received = Number(watch("cylinders_received")) || 0;
+  const installed = parseCountValue(watch("cylinders_installed"));
+  const received = parseCountValue(watch("cylinders_received"));
   const totalAmount = Number(watch("price_total")) || 0;
   const paidInput = Number(watch("paid_amount")) || 0;
   const inventoryFullAfterInstalled =
@@ -349,7 +376,7 @@ export default function NewOrderScreen() {
     selectedGas === "48kg" ? cylinder48Before + orderCylinderDelta : cylinder48Before;
   const collectionBusy = createCollection.isPending;
   const previousCustomerRef = useRef<string | undefined>(undefined);
-  const formatMoneyAmount = useCallback((value: number) => Math.abs(value).toFixed(0), []);
+  const formatMoneyAmount = useCallback((value: number) => formatDisplayMoney(Math.abs(value)), []);
   const refreshCustomerPreview = useCallback(async () => {
     if (!selectedCustomer) return;
     await customerBalanceQuery.refetch();
@@ -857,8 +884,8 @@ export default function NewOrderScreen() {
       return;
     }
     const gasType = values.gas_type as GasType;
-    const installedCount = Number(values.cylinders_installed) || 0;
-    const receivedCount = Number(values.cylinders_received) || 0;
+    const installedCount = parseCountValue(values.cylinders_installed);
+    const receivedCount = parseCountValue(values.cylinders_received);
     if (orderMode !== "buy_iron" && installedCount <= 0) {
       Alert.alert(
         "Invalid installed count",
@@ -928,8 +955,8 @@ export default function NewOrderScreen() {
       ...(orderMode === "replacement" || orderMode === "sell_iron" ? { system_id: values.system_id } : {}),
       delivered_at: values.delivered_at,
       gas_type: gasType,
-      cylinders_installed: Number(values.cylinders_installed) || 0,
-      cylinders_received: Number(values.cylinders_received) || 0,
+      cylinders_installed: parseCountValue(values.cylinders_installed),
+      cylinders_received: parseCountValue(values.cylinders_received),
       price_total: total,
       order_mode: orderMode,
       paid_amount: paid,
@@ -962,7 +989,7 @@ export default function NewOrderScreen() {
     if (guardrailLines.length > 0 || balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
       const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
         0
-      )} + ${moneyDeltaValue.toFixed(0)} = ${balanceAfterValue.toFixed(0)}`;
+      )} + ${formatDisplayMoney(moneyDeltaValue)} = ${formatDisplayMoney(balanceAfterValue)}`;
       const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
         0
       )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
@@ -1072,7 +1099,7 @@ ${cylLine}
       return;
     }
     const gasType = values.gas_type as GasType;
-    const receivedCount = Number(values.cylinders_received) || 0;
+    const receivedCount = parseCountValue(values.cylinders_received);
     if (receivedCount <= 0) {
       Alert.alert("Missing counts", "Enter at least one cylinder count.");
       return;
@@ -1143,7 +1170,7 @@ ${cylLine}
 
   const adjustInstalled = (delta: number) => {
     if (!(currentAction === "replacement" || isSellIron)) return;
-    const current = Number(watch("cylinders_installed")) || 0;
+    const current = parseCountValue(watch("cylinders_installed"));
     const next = Math.max(0, current + delta);
     setValue("cylinders_installed", String(next), { shouldDirty: true, shouldValidate: true });
     if (currentAction === "replacement") {
@@ -1154,7 +1181,7 @@ ${cylLine}
 
   const adjustReceived = (delta: number) => {
     if (!(currentAction === "replacement" || isBuyIron || isReturn)) return;
-    const current = Number(watch("cylinders_received")) || 0;
+    const current = parseCountValue(watch("cylinders_received"));
     const next = Math.max(0, current + delta);
     setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
   };
@@ -1359,7 +1386,22 @@ ${cylLine}
         onLayout={(event) => setScrollViewHeight(event.nativeEvent.layout.height)}
       >
       <View style={styles.sectionCard}>
-        <FieldLabel>Customer</FieldLabel>
+        <View style={styles.sectionHeaderRow}>
+          <FieldLabel>Customer</FieldLabel>
+          {hasCustomer ? (
+            <Pressable
+              style={styles.sectionHeaderButton}
+              onPress={() => {
+                if (!selectedCustomer) return;
+                router.push(`/customers/${selectedCustomer}/edit?tab=balances`);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Adjust customer balances"
+            >
+              <Text style={styles.sectionHeaderButtonText}>Adjust balances</Text>
+            </Pressable>
+          ) : null}
+        </View>
         <Pressable
           style={styles.inputRow}
           onPress={() => {
@@ -1777,13 +1819,14 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.installed}
-                          comment={`Full ${formatLedgerNumber(inventoryBaseFullForGas)} -> ${formatLedgerNumber(inventoryFullAfterInstalled)}`}
-                          value={Number(field.value) || 0}
+                          comment={`Full ${formatCountDisplay(inventoryBaseFullForGas)} -> ${formatCountDisplay(inventoryFullAfterInstalled)}`}
+                          value={parseCountValue(field.value)}
                           onIncrement={() => adjustInstalled(1)}
                           onDecrement={() => adjustInstalled(-1)}
                           onChangeText={(text) => {
-                            field.onChange(text);
-                            setValue("cylinders_received", text);
+                            const sanitized = sanitizeCountInput(text);
+                            field.onChange(sanitized);
+                            setValue("cylinders_received", sanitized);
                             setManualPrice(false);
                           }}
                           error={Boolean(errors.cylinders_installed)}
@@ -1809,11 +1852,11 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.received}
-                          comment={`Empty ${formatLedgerNumber(inventoryBaseEmptyForGas)} -> ${formatLedgerNumber(inventoryEmptyAfterReceived)}`}
-                          value={Number(field.value) || 0}
+                          comment={`Empty ${formatCountDisplay(inventoryBaseEmptyForGas)} -> ${formatCountDisplay(inventoryEmptyAfterReceived)}`}
+                          value={parseCountValue(field.value)}
                           onIncrement={() => adjustReceived(1)}
                           onDecrement={() => adjustReceived(-1)}
-                          onChangeText={field.onChange}
+                          onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
                           error={Boolean(errors.cylinders_received)}
                           inputRef={(node) => {
                             inputRefs.current.cylinders_received = node;
@@ -1879,6 +1922,7 @@ ${cylLine}
                           title={CUSTOMER_WORDING.total}
                           comment=" "
                           value={Number(field.value) || 0}
+                          valueMode="decimal"
                           onIncrement={() => adjustPriceTotal(5)}
                           onDecrement={() => adjustPriceTotal(-5)}
                           onChangeText={(text) => {
@@ -1910,8 +1954,9 @@ ${cylLine}
                       render={({ field }) => (
                         <FieldCell
                           title={CUSTOMER_WORDING.paid}
-                          comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerInflow)}`}
+                          comment={`Wallet ${formatMoneyDisplay(walletBalance)} -> ${formatMoneyDisplay(walletAfterCustomerInflow)}`}
                           value={Number(field.value) || 0}
+                          valueMode="decimal"
                           onIncrement={() => adjustPaidAmount(5)}
                           onDecrement={() => adjustPaidAmount(-5)}
                           onChangeText={(text) => {
@@ -1984,8 +2029,9 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
-                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterPayment)}`}
+                        comment={`Wallet ${formatMoneyDisplay(walletBalance)} -> ${formatMoneyDisplay(walletAfterPayment)}`}
                         value={Number(field.value) || 0}
+                        valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
                         onChangeText={(text) => {
@@ -2050,10 +2096,10 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.received}
-                        value={Number(field.value) || 0}
+                        value={parseCountValue(field.value)}
                         onIncrement={() => adjustReceived(1)}
                         onDecrement={() => adjustReceived(-1)}
-                        onChangeText={field.onChange}
+                        onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
                         error={Boolean(errors.cylinders_received)}
                         inputRef={(node) => {
                           inputRefs.current.cylinders_received = node;
@@ -2102,7 +2148,7 @@ ${cylLine}
                         pathname: "/expenses/new",
                         params: {
                           tab: "bank_to_wallet",
-                          amount: payoutWalletShortfall.toFixed(0),
+                          amount: formatDisplayMoney(payoutWalletShortfall),
                         },
                       })
                   : undefined
@@ -2128,11 +2174,11 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.installed}
-                        comment={`Full ${formatLedgerNumber(inventoryBaseFullForGas)} -> ${formatLedgerNumber(inventoryFullAfterInstalled)}`}
-                        value={Number(field.value) || 0}
+                        comment={`Full ${formatCountDisplay(inventoryBaseFullForGas)} -> ${formatCountDisplay(inventoryFullAfterInstalled)}`}
+                        value={parseCountValue(field.value)}
                         onIncrement={() => adjustInstalled(1)}
                         onDecrement={() => adjustInstalled(-1)}
-                        onChangeText={field.onChange}
+                        onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
                         error={Boolean(errors.cylinders_installed)}
                         inputRef={(node) => { inputRefs.current.cylinders_installed = node; }}
                         onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
@@ -2150,7 +2196,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{installed}</Text>
+                      <TradeValueText value={installed} />
                     </View>
                   </View>
                   <View style={styles.tradeOperatorCell}>
@@ -2162,6 +2208,7 @@ ${cylLine}
                   <FieldCell
                     title="Iron Price"
                     value={Number(ironPriceInput) || 0}
+                    valueMode="decimal"
                     onIncrement={() => adjustIronPrice(5)}
                     onDecrement={() => adjustIronPrice(-5)}
                     onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
@@ -2178,7 +2225,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                      <TradeValueText value={ironLineTotal} />
                     </View>
                   </View>
                 </View>
@@ -2190,7 +2237,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{installed}</Text>
+                      <TradeValueText value={installed} />
                     </View>
                   </View>
                   <View style={styles.tradeOperatorCell}>
@@ -2202,6 +2249,7 @@ ${cylLine}
                   <FieldCell
                     title="Gas Price"
                     value={Number(gasPriceInput) || 0}
+                    valueMode="decimal"
                     onIncrement={() => adjustGasPrice(5)}
                     onDecrement={() => adjustGasPrice(-5)}
                     onChangeText={(t) => { setGasPriceDirty(true); setGasPriceInput(t); }}
@@ -2218,7 +2266,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{gasLineTotal}</Text>
+                      <TradeValueText value={gasLineTotal} />
                     </View>
                   </View>
                 </View>
@@ -2237,6 +2285,7 @@ ${cylLine}
                     title={CUSTOMER_WORDING.total}
                     comment=" "
                     value={computedTradeTotal}
+                    valueMode="decimal"
                     onIncrement={() => {}}
                     onDecrement={() => {}}
                     editable={false}
@@ -2250,8 +2299,9 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
-                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerInflow)}`}
+                        comment={`Wallet ${formatMoneyDisplay(walletBalance)} -> ${formatMoneyDisplay(walletAfterCustomerInflow)}`}
                         value={Number(field.value) || 0}
+                        valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
                         onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
@@ -2284,11 +2334,11 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.received}
-                        comment={`Empty ${formatLedgerNumber(inventoryBaseEmptyForGas)} -> ${formatLedgerNumber(inventoryEmptyAfterReceived)}`}
-                        value={Number(field.value) || 0}
+                        comment={`Empty ${formatCountDisplay(inventoryBaseEmptyForGas)} -> ${formatCountDisplay(inventoryEmptyAfterReceived)}`}
+                        value={parseCountValue(field.value)}
                         onIncrement={() => adjustReceived(1)}
                         onDecrement={() => adjustReceived(-1)}
-                        onChangeText={field.onChange}
+                        onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
                         error={Boolean(errors.cylinders_received)}
                         inputRef={(node) => { inputRefs.current.cylinders_received = node; }}
                         onFocus={() => { setAvoidKeyboard(true); setFocusTarget("amounts"); scrollToAmountsAndTotals(); }}
@@ -2306,7 +2356,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{received}</Text>
+                      <TradeValueText value={received} />
                     </View>
                   </View>
                   <View style={styles.tradeOperatorCell}>
@@ -2318,6 +2368,7 @@ ${cylLine}
                   <FieldCell
                     title="Iron Price"
                     value={Number(ironPriceInput) || 0}
+                    valueMode="decimal"
                     onIncrement={() => adjustIronPrice(5)}
                     onDecrement={() => adjustIronPrice(-5)}
                     onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
@@ -2334,7 +2385,7 @@ ${cylLine}
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>TOTAL</Text>
                     <View style={styles.tradeStatValueWrap}>
-                      <Text style={styles.tradeStatValue}>{ironLineTotal}</Text>
+                      <TradeValueText value={ironLineTotal} />
                     </View>
                   </View>
                 </View>
@@ -2353,6 +2404,7 @@ ${cylLine}
                     title={CUSTOMER_WORDING.total}
                     comment=" "
                     value={computedTradeTotal}
+                    valueMode="decimal"
                     onIncrement={() => {}}
                     onDecrement={() => {}}
                     editable={false}
@@ -2366,8 +2418,9 @@ ${cylLine}
                     render={({ field }) => (
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
-                        comment={`Wallet ${formatLedgerNumber(walletBalance)} -> ${formatLedgerNumber(walletAfterCustomerOutflow)}`}
+                        comment={`Wallet ${formatMoneyDisplay(walletBalance)} -> ${formatMoneyDisplay(walletAfterCustomerOutflow)}`}
                         value={Number(field.value) || 0}
+                        valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
                         onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
@@ -2463,7 +2516,7 @@ ${cylLine}
                   inputMode="numeric"
                   placeholder="0"
                   value={initCounts.full12}
-                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full12: t }))}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full12: sanitizeCountInput(t) }))}
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
@@ -2478,7 +2531,7 @@ ${cylLine}
                   inputMode="numeric"
                   placeholder="0"
                   value={initCounts.empty12}
-                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty12: t }))}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty12: sanitizeCountInput(t) }))}
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
@@ -2495,7 +2548,7 @@ ${cylLine}
                   inputMode="numeric"
                   placeholder="0"
                   value={initCounts.full48}
-                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full48: t }))}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, full48: sanitizeCountInput(t) }))}
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
@@ -2510,7 +2563,7 @@ ${cylLine}
                   inputMode="numeric"
                   placeholder="0"
                   value={initCounts.empty48}
-                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty48: t }))}
+                  onChangeText={(t) => setInitCounts((s) => ({ ...s, empty48: sanitizeCountInput(t) }))}
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
@@ -2532,10 +2585,10 @@ ${cylLine}
                 onPress={async () => {
                   const payload = {
                     date: initDate,
-                    full12: Number(initCounts.full12) || 0,
-                    empty12: Number(initCounts.empty12) || 0,
-                    full48: Number(initCounts.full48) || 0,
-                    empty48: Number(initCounts.empty48) || 0,
+                    full12: parseCountValue(initCounts.full12),
+                    empty12: parseCountValue(initCounts.empty12),
+                    full48: parseCountValue(initCounts.full48),
+                    empty48: parseCountValue(initCounts.empty48),
                     reason: "initial",
                   };
                   await initInventory.mutateAsync(payload);
@@ -3070,6 +3123,8 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: 4,
   },
   tradeStatLabel: {
     fontSize: 11,
@@ -3083,6 +3138,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
+    width: "100%",
+  },
+  tradeValueCompact: {
+    fontSize: 17,
+  },
+  tradeValueTight: {
+    fontSize: 15,
   },
   tradeOperatorCell: {
     width: 20,

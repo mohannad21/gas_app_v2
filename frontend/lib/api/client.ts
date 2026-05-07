@@ -8,9 +8,10 @@ import axios from "axios";
 import { z } from "zod";
 
 import { clearTokens, getStoredAccessToken, getStoredRefreshToken, storeTokens } from "@/lib/auth-storage";
+import { API_BASE_URL } from "@/lib/api/baseUrl";
 import { fromMinorUnits } from "@/lib/money";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const BASE_URL = API_BASE_URL;
 
 export const api = axios.create({
   baseURL: BASE_URL,

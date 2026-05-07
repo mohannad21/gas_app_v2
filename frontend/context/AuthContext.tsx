@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+import { API_BASE_URL } from "@/lib/api/baseUrl";
 import {
   clearTokens,
   clearMustChangePassword,
@@ -24,7 +25,7 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const BASE_URL = API_BASE_URL;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);

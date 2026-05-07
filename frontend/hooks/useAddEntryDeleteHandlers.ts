@@ -68,6 +68,31 @@ export function useAddEntryDeleteHandlers(args: DeleteHandlersArgs) {
     ]);
   };
 
+  const handleDeleteInventoryAdjustmentGroup = (entries: InventoryAdjustment[]) => {
+    if (entries.length === 0) return;
+    Alert.alert("Remove adjustment?", "This will delete the adjustment entry.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          const ids = entries.map((entry) => entry.id);
+          ids.forEach(markDeleting);
+          try {
+            for (const id of ids) {
+              await deleteInventoryAdjust.mutateAsync(id);
+            }
+          } catch (error) {
+            console.error("[add] delete inventory adjustment group failed", error);
+            Alert.alert("Failed to delete", "Try again later.");
+          } finally {
+            ids.forEach(unmarkDeleting);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleDeleteCashAdjustment = (entry: CashAdjustment) => {
     Alert.alert("Remove adjustment?", "This will delete the wallet adjustment.", [
       { text: "Cancel", style: "cancel" },
@@ -135,6 +160,7 @@ export function useAddEntryDeleteHandlers(args: DeleteHandlersArgs) {
   return {
     handleRemoveRefill,
     handleDeleteInventoryAdjustment,
+    handleDeleteInventoryAdjustmentGroup,
     handleDeleteCashAdjustment,
     handleDeleteExpense,
     handleDeleteBankTransfer,

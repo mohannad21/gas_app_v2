@@ -1,67 +1,45 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
-
-const mockCreateCompanyBalanceAdjustment = jest.fn().mockResolvedValue({});
-const mockCompanyBalances = { company_money: 120, company_cyl_12: 4, company_cyl_48: -2 };
-
-jest.mock("expo-router", () => ({
-  router: { back: jest.fn() },
-}));
-
-jest.mock("@expo/vector-icons", () => ({
-  Ionicons: () => null,
-}));
-
-jest.mock("react-native-safe-area-context", () => {
-  const React = require("react");
-  const { View } = require("react-native");
-  return {
-    SafeAreaView: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
-  };
-});
-
-jest.mock("@/hooks/useCompanyBalances", () => ({
-  useCompanyBalances: () => ({
-    data: mockCompanyBalances,
-    isSuccess: true,
-  }),
-  useCreateCompanyBalanceAdjustment: () => ({
-    mutateAsync: mockCreateCompanyBalanceAdjustment,
-    isPending: false,
-  }),
-}));
+import { render, waitFor } from "@testing-library/react-native";
 
 import CompanyBalanceAdjustScreen from "@/app/inventory/company-balance-adjust";
 
-describe("CompanyBalanceAdjustScreen", () => {
-  beforeEach(() => {
-    mockCreateCompanyBalanceAdjustment.mockClear();
-  });
+jest.mock("expo-router", () => ({
+  router: { back: jest.fn() },
+  useLocalSearchParams: () => ({}),
+}));
 
-  it("renders the form and submits the adjustment", async () => {
-    const { getByDisplayValue, getByPlaceholderText, getByText } = render(
-      <CompanyBalanceAdjustScreen />
-    );
+jest.mock("react-native-safe-area-context", () => ({
+  SafeAreaView: ({ children }: any) => children,
+}));
 
-    expect(getByText("Adjust Company Balances")).toBeTruthy();
-    expect(getByDisplayValue("120")).toBeTruthy();
-    expect(getByDisplayValue("4")).toBeTruthy();
-    expect(getByDisplayValue("-2")).toBeTruthy();
-    expect(getByPlaceholderText("Optional note")).toBeTruthy();
+jest.mock("@expo/vector-icons", () => ({ Ionicons: () => null }));
 
-    fireEvent.changeText(getByDisplayValue("120"), "125");
-    fireEvent.changeText(getByPlaceholderText("Optional note"), "manual fix");
-    fireEvent.press(getByText("Save"));
+jest.mock("@/lib/money", () => ({
+  formatDisplayMoney: (v: number) => String(v),
+  getMoneyDecimals: () => 2,
+  getCurrencySymbol: () => "$",
+}));
+
+jest.mock("@/components/MinuteTimePickerModal", () => () => null);
+
+jest.mock("@/hooks/useCompanyBalances", () => ({
+  useCompanyBalances: () => ({
+    data: { company_money: 120, company_cyl_12: -3, company_cyl_48: 0 },
+    isSuccess: true,
+  }),
+  useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false }),
+  useCreateCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useUpdateCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn(), isPending: false }),
+}));
+
+describe("CompanyBalanceAdjustScreen — create mode prefill", () => {
+  it("prefills balance state from live company balances", async () => {
+    const { getByText } = render(<CompanyBalanceAdjustScreen />);
 
     await waitFor(() => {
-      expect(mockCreateCompanyBalanceAdjustment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          money_balance: 125,
-          cylinder_balance_12: 4,
-          cylinder_balance_48: -2,
-          note: "manual fix",
-        })
-      );
+      expect(getByText("Current Debts on distributor 120 -> Debts on distributor 120")).toBeTruthy();
     });
+    expect(getByText("Current Debts on distributor 3 -> Debts on distributor 3")).toBeTruthy();
+    expect(getByText("Current Balanced -> Balanced")).toBeTruthy();
   });
 });

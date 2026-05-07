@@ -78,6 +78,40 @@ def _safe_int(value: Optional[int]) -> int:
   return int(value)
 
 
+def _format_signed_money_major(value_minor: int, money_decimals: int, currency_symbol: str) -> str:
+  sign = "+" if value_minor >= 0 else "-"
+  amount_text = _format_money_major(abs(value_minor), money_decimals, currency_symbol)
+  return f"{sign}{amount_text}"
+
+
+def _inventory_adjustment_summary_lines(event: DailyReportEvent) -> list[str]:
+  before = event.inventory_before
+  after = event.inventory_after
+  if before is None or after is None:
+    return []
+
+  lines: list[str] = []
+  for gas_label, full_key, empty_key in (
+    ("12kg", "full12", "empty12"),
+    ("48kg", "full48", "empty48"),
+  ):
+    full_before = getattr(before, full_key, None)
+    full_after = getattr(after, full_key, None)
+    empty_before = getattr(before, empty_key, None)
+    empty_after = getattr(after, empty_key, None)
+
+    parts: list[str] = []
+    if full_before is not None and full_after is not None and full_before != full_after:
+      full_delta = int(full_after - full_before)
+      parts.append(f"full {full_delta:+d}")
+    if empty_before is not None and empty_after is not None and empty_before != empty_after:
+      empty_delta = int(empty_after - empty_before)
+      parts.append(f"empty {empty_delta:+d}")
+    if parts:
+      lines.append(f"{gas_label}: {' | '.join(parts)}")
+  return lines
+
+
 def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
   if event.event_type != "refill":
     return False
@@ -435,7 +469,7 @@ def _event_kind(event: DailyReportEvent) -> str:
 
 
 def _time_display(value) -> str:
-  return business_local_datetime_from_utc(value).strftime("%H:%M")
+  return business_local_datetime_from_utc(value).strftime("%H:%M:%S")
 
 
 def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_symbol: str) -> str:
@@ -522,8 +556,14 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to bank"
     return "Transferred to bank"
   if event.event_type == "cash_adjust":
+    amount = _safe_int(event.total_cost)
+    if amount:
+      return f"Wallet change: {_format_signed_money_major(amount, money_decimals, currency_symbol)}"
     return "Wallet adjustment"
   if event.event_type == "adjust":
+    lines = _inventory_adjustment_summary_lines(event)
+    if lines:
+      return "\n".join(lines)
     return "Inventory adjustment"
   return event.hero.text if event.hero else (event.label or "Activity")
 
@@ -610,6 +650,18 @@ def _apply_ui_fields(
     event.money_amount = 0
     event.money_direction = "none"
     event.money_delta = 0
+
+  if event.event_type == "bank_deposit":
+    amount_minor = abs(_safe_int(event.total_cost))
+    event.money_amount = amount_minor
+    event.money_direction = "in" if event.transfer_direction == "bank_to_wallet" else "out"
+    event.money_delta = round(amount_minor / (10 ** money_decimals), money_decimals)
+
+  if event.event_type == "cash_adjust":
+    amount_minor = _safe_int(event.total_cost)
+    event.money_amount = abs(amount_minor)
+    event.money_direction = "in" if amount_minor >= 0 else "out"
+    event.money_delta = round(abs(amount_minor) / (10 ** money_decimals), money_decimals)
 
   event.hero_text = _hero_text_for_event(event, money_decimals, currency_symbol)
   event.hero_primary = event.hero_text

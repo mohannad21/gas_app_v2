@@ -64,6 +64,7 @@ export const CustomerAdjustmentSchema = z
     live_debt_cash: z.number().nullish(),
     live_debt_cylinders_12: z.number().nullish(),
     live_debt_cylinders_48: z.number().nullish(),
+    is_deleted: z.boolean().optional(),
   })
   .passthrough();
 export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;

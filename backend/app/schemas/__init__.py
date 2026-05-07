@@ -20,7 +20,7 @@ from .price import PriceCreate, PriceOut
 from .profile import TenantProfileOut, TenantProfileUpdate
 from .report import ActivityNote, BalanceTransition, DailyAuditSummary, DailyReportCard, DailyReportCashMath, DailyReportDay, DailyReportEvent, DailyReportMath, DailyReportMathCompany, DailyReportMathCustomers, DailyReportMathResult, Level3Action, Level3Counterparty, Level3Hero, Level3Money, Level3Settlement, Level3SettlementComponents, Level3System, ReportInventoryState, ReportInventoryTotals
 from .system import CustomerOpeningBalance, LedgerHealthIssue, SystemCreate, SystemHealthCheckOut, SystemInitialize, SystemOut, SystemSettingsOut, SystemSettingsUpdate, SystemTypeOptionCreate, SystemTypeOptionOut, SystemTypeOptionUpdate, SystemUpdate
-from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCreate, ExpenseOut, ExpenseUpdate
+from .transaction import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustmentRow, CashAdjustUpdate, CompanyBalanceAdjustmentCreate, CompanyBalanceAdjustmentOut, CompanyBalanceAdjustmentUpdate, CompanyBalancesOut, CompanyBuyIronCreate, CompanyBuyIronOut, CompanyCylinderSettleCreate, CompanyCylinderSettleOut, CompanyPaymentCreate, CompanyPaymentOut, ExpenseCreate, ExpenseOut, ExpenseUpdate
 from .workers import InviteActivateRequest, PendingInviteOut, WorkerInviteCreate, WorkerInviteOut, WorkerMemberOut
 
 __all__ = [
@@ -99,6 +99,7 @@ __all__ = [
     "CompanyBuyIronOut",
     "CompanyBalanceAdjustmentCreate",
     "CompanyBalanceAdjustmentOut",
+    "CompanyBalanceAdjustmentUpdate",
     "CompanyBalancesOut",
     "BankDepositCreate",
     "BankDepositOut",

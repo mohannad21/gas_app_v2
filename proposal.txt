@@ -273,6 +273,159 @@ Each event in day_v2 should provide enough structured fields to render:
 
 Every user-facing event row in the report feed is expandable.
 
+5.8 Activity Consistency & Rebuild Contract
+
+This project must follow one strict consistency rule:
+- add = insert the new activity, then rebuild all affected UI truth from time t onward
+- delete = reverse the old activity, then rebuild all affected UI truth from time t onward
+- update = reverse old + create new, then rebuild all affected UI truth from the earlier affected time onward
+
+This is not just a list-management rule.
+- later cards may change
+- later wording may change
+- later expanded before/after boxes may change
+- day-card values may change
+- balances may change
+- carry-forward opening / ending values may change
+- icons and stats may change if they depend on that history
+
+Shared ordering rules
+- Daily Report orders cards by business time, newest first
+- Add Entry orders cards by creation time, newest first
+- Customer Review orders cards by business time, newest first
+
+Immediate refresh rule
+- after add / delete / update, affected screens must refresh immediately and show the new truth without requiring the user to reopen the page
+- this includes:
+  - Daily Report
+  - Add Entry pages
+  - Add Customer pages -> Customer balances section if relevant
+  - Add Customer pages -> Customer cards
+  - Customer Review if relevant
+  - Daily Report -> Customers tab if relevant
+  - Daily Report -> Company tab if relevant
+  - Daily Report -> Ledger tab
+  - Daily Report -> day box:
+    - Net
+    - 12kg
+    - 48kg
+  - Daily Report -> day box refill icon if relevant
+
+Same-day rebuild rule
+- if an activity changes at time t, all later same-day activities after t must be recalculated
+- this includes collapsed wording, pills, and expanded before/after values wherever those later activities are shown
+
+Later-day carry-forward rule
+- if an activity changes on a past day, later days must also be recalculated wherever wallet, inventory, customer balances, or company balances carry forward
+- later days do not inherit same-day-only badges or icons unless that later day independently satisfies the rule
+
+Activity family effects
+
+Customer operational activities
+- includes:
+  - Replacement
+  - Sell Full
+  - Buy Empty
+  - Payment / Late Pay
+  - Payout to Customer
+  - Return Empties / Late Return
+- appear on:
+  - Add Entry
+  - Daily Report
+  - Customer Review
+- may change:
+  - customer balances
+  - later customer wording
+  - wallet and/or inventory depending on type
+  - day-card Net for:
+    - Replacement
+    - Sell Full
+    - Buy Empty
+    - Payment
+    - Payout to Customer
+  - day-card 12kg / 48kg sold for:
+    - Replacement
+    - Sell Full
+- Return Empties must not change:
+  - day-card Net
+  - day-card 12kg sold
+  - day-card 48kg sold
+- customer stats on Customer Review update only for:
+  - Replacement
+  - Sell Full
+  - this applies to:
+    - Last order date
+    - Cylinders ordered
+
+Company operational activities
+- includes:
+  - Refill
+  - Company Payment
+  - Buy Full
+- appear on:
+  - Add Entry
+  - Daily Report
+- may change:
+  - company balances
+  - later company wording
+  - wallet and/or inventory depending on type
+- must not change:
+  - day-card Net
+  - day-card 12kg sold
+  - day-card 48kg sold
+- the refill icon is same-day only:
+  - it appears if that day has at least one refill
+  - it disappears if that day no longer has a refill
+  - later days do not inherit it
+
+Expenses
+- appear on:
+  - Add Entry
+  - Daily Report
+- may change:
+  - wallet
+  - day-card Net
+- must not change:
+  - day-card 12kg sold
+  - day-card 48kg sold
+- Wallet to Bank and Bank to Wallet are separate operational transfer events and must not change day-card Net
+
+Ledger adjustments
+- includes:
+  - Inventory Adjustment
+  - Wallet Adjustment
+- appear on:
+  - Add Entry
+  - Daily Report
+- Inventory Adjustment may change:
+  - later inventory before/after
+  - later-day inventory carry-forward
+- Wallet Adjustment may change:
+  - later wallet before/after
+  - later-day wallet carry-forward
+- both must not change:
+  - day-card Net
+  - day-card 12kg sold
+  - day-card 48kg sold
+
+Balance adjustments
+- Customer Balance Adjustment appears on:
+  - Add Entry -> Add Customer Activity
+  - Customer Review
+- Company Balance Adjustment appears on:
+  - Add Entry -> Add Company Activity
+- balance adjustments do not appear on:
+  - Daily Report
+- balance adjustments may change only the relevant balance story for that owner
+- balance adjustments must not change:
+  - day-card Net
+  - day-card 12kg sold
+  - day-card 48kg sold
+
+Removal visibility rule
+- when an activity is deleted, it disappears completely from active history on every screen where that activity family appears
+- deletion still requires the same rebuild behavior as add/update because later truth may change even after the removed card disappears
+
 6) Core Workflows (End-to-End)
 
 Below is the business workflow view from user action -> backend posting -> derived effects -> collapsed emphasis -> expanded detail.
@@ -314,6 +467,9 @@ Replacement
   - customer 12kg or 48kg relationship balance
   - inventory
   - cash
+- Canonical deltas:
+  - customer money delta = total - paid
+  - customer cylinder delta = installed - received
 - Collapsed UI emphasizes:
   - installed / received / paid
   - resulting customer state if unresolved or cross-zero
@@ -330,6 +486,11 @@ Sell Full
   - customer money
   - inventory full
   - cash
+- Does not change:
+  - customer 12kg relationship balance
+  - customer 48kg relationship balance
+- Canonical deltas:
+  - customer money delta = total - paid
 - Collapsed UI emphasizes sold quantity, paid, and resulting money state
 - Expanded detail shows customer money, cash, and relevant full-inventory deltas
 
@@ -340,6 +501,11 @@ Buy Empty
   - customer money
   - empty inventory
   - cash
+- Does not change:
+  - customer 12kg relationship balance
+  - customer 48kg relationship balance
+- Canonical deltas:
+  - customer money delta = paid - total
 - Collapsed UI emphasizes bought quantity, paid, and resulting money state
 - Expanded detail shows customer money, cash, and relevant empty-inventory deltas
 
@@ -377,6 +543,10 @@ Customer Adjustment
   - customer money
   - customer 12kg
   - customer 48kg
+- Does not change:
+  - cash
+  - bank
+  - inventory
 - Collapsed UI emphasizes who was adjusted and the resulting state
 - Expanded detail shows the relationship balances that changed
 
@@ -422,6 +592,10 @@ Refill
   - company 48kg
   - inventory
   - cash
+- Canonical deltas:
+  - company money delta = total - paid
+  - company 12kg delta = return12 - buy12
+  - company 48kg delta = return48 - buy48
 - Collapsed UI emphasizes refill quantities and any unresolved company state
 - Expanded detail shows company money/cylinder before/after plus inventory and cash
 
@@ -441,6 +615,11 @@ Buy Full
   - company money
   - inventory
   - cash
+- Does not change:
+  - company 12kg relationship balance
+  - company 48kg relationship balance
+- Canonical deltas:
+  - company money delta = total - paid
 - Collapsed UI emphasizes the purchase and any unpaid remainder
 - Expanded detail shows company money, cash, and relevant inventory before/after
 
@@ -459,6 +638,8 @@ Wallet to Bank
 - Changes:
   - cash
   - bank
+- Must not change:
+  - day Net
 - Collapsed UI emphasizes transfer semantics
 - Expanded detail shows cash before/after and bank before/after
 
@@ -468,6 +649,8 @@ Bank to Wallet
 - Changes:
   - bank
   - cash
+- Must not change:
+  - day Net
 - Collapsed UI emphasizes transfer semantics
 - Expanded detail shows bank before/after and cash before/after
 
@@ -612,6 +795,7 @@ Examples
 A. Current Balances
 - top summary section
 - shows current aggregate customer balances and current company balances
+- these are live current totals, not values filtered to the selected report day
 - uses current-state wording only
 
 B. Day Card
@@ -720,6 +904,12 @@ Header / summary direction
   - Last activity can be reconsidered later if product direction changes
 - balances remain customer-level summaries
 - Cylinders Ordered is a customer-level lifetime summary of installed / sold cylinders by gas type
+- Last order is determined by the latest delivered_at among the customer's orders
+- Cylinders Ordered includes installed cylinders from:
+  - Replacement
+  - Sell Full
+- completed replacements count includes only:
+  - Replacement events where received > 0
 
 Activity behavior
 - the customer activity list is the primary operational history for that customer
@@ -742,6 +932,7 @@ Company Activities
 - Current
   - show 3 compact company summary boxes
   - place company balances below the filter row and above the first list item
+  - these boxes are live current company totals, not values filtered to the selected report day
 - Next
   - keep company sign wording short and consistent without changing placement
 - Later

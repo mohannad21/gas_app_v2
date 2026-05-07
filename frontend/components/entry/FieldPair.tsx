@@ -9,6 +9,8 @@ export type FieldStepper = {
   position?:
     | "extra-top-left"
     | "extra-top-right"
+    | "extra-bottom-left"
+    | "extra-bottom-right"
     | "left"
     | "right"
     | "top"
@@ -24,6 +26,7 @@ export type FieldCellProps = {
   comment?: string;
   value: number;
   valueMode?: "integer" | "decimal";
+  allowNegative?: boolean;
   onIncrement: () => void;
   onDecrement: () => void;
   onChangeText?: (text: string) => void;
@@ -43,23 +46,26 @@ type FieldPairProps = {
 const REPEAT_INTERVAL_MS = 75;
 const DECIMAL_SCALE = 100;
 
-function normalizeValue(value: number, valueMode: "integer" | "decimal") {
-  const clamped = Math.max(0, value);
+function normalizeValue(value: number, valueMode: "integer" | "decimal", allowNegative = false) {
+  const bounded = allowNegative ? value : Math.max(0, value);
   if (valueMode === "decimal") {
-    return Math.round(clamped * DECIMAL_SCALE) / DECIMAL_SCALE;
+    return Math.round(bounded * DECIMAL_SCALE) / DECIMAL_SCALE;
   }
-  return Math.round(clamped);
+  return Math.round(bounded);
 }
 
-function formatValue(value: number, valueMode: "integer" | "decimal") {
-  const normalized = normalizeValue(value, valueMode);
+function formatValue(value: number, valueMode: "integer" | "decimal", allowNegative = false) {
+  const normalized = normalizeValue(value, valueMode, allowNegative);
   if (valueMode === "integer") {
     return String(normalized);
   }
-  if (Number.isInteger(normalized)) {
-    return String(normalized);
-  }
-  return normalized.toFixed(getMoneyDecimals()).replace(/\.?0+$/, "");
+  return normalized.toFixed(getMoneyDecimals());
+}
+
+function getFieldValueSizeStyle(displayValue: string) {
+  if (displayValue.length >= 9) return styles.fieldCellValueTight;
+  if (displayValue.length >= 7) return styles.fieldCellValueCompact;
+  return null;
 }
 
 function useRepeatablePress(action: () => void) {
@@ -124,6 +130,7 @@ export function FieldCell({
   comment,
   value,
   valueMode = "integer",
+  allowNegative = false,
   onIncrement,
   onDecrement,
   onChangeText,
@@ -136,6 +143,8 @@ export function FieldCell({
 }: FieldCellProps) {
   const extraTopLeft = steppers?.find((stepper) => stepper.position === "extra-top-left") ?? null;
   const extraTopRight = steppers?.find((stepper) => stepper.position === "extra-top-right") ?? null;
+  const extraBottomLeft = steppers?.find((stepper) => stepper.position === "extra-bottom-left") ?? null;
+  const extraBottomRight = steppers?.find((stepper) => stepper.position === "extra-bottom-right") ?? null;
   const topLeft = steppers?.find((stepper) => stepper.position === "top-left") ?? null;
   const topRight =
     steppers?.find((stepper) => stepper.position === "top-right") ??
@@ -148,34 +157,51 @@ export function FieldCell({
     null;
   const left = steppers?.find((stepper) => stepper.position === "left") ?? { delta: -1, label: "-" };
   const right = steppers?.find((stepper) => stepper.position === "right") ?? { delta: 1, label: "+" };
-  const displayValue = formatValue(value, valueMode);
+  const displayValue = formatValue(value, valueMode, allowNegative);
+  const valueSizeStyle = getFieldValueSizeStyle(displayValue);
 
   const handleLeft = () =>
-    left.delta === -1 ? onDecrement() : onChangeText?.(formatValue(value + left.delta, valueMode));
+    left.delta === -1 ? onDecrement() : onChangeText?.(formatValue(value + left.delta, valueMode, allowNegative));
   const handleRight = () =>
-    right.delta === 1 ? onIncrement() : onChangeText?.(formatValue(value + right.delta, valueMode));
-  const handleTopLeft = () => onChangeText?.(formatValue(value + (topLeft?.delta ?? 0), valueMode));
-  const handleTopRight = () => onChangeText?.(formatValue(value + (topRight?.delta ?? 0), valueMode));
+    right.delta === 1 ? onIncrement() : onChangeText?.(formatValue(value + right.delta, valueMode, allowNegative));
+  const handleTopLeft = () => onChangeText?.(formatValue(value + (topLeft?.delta ?? 0), valueMode, allowNegative));
+  const handleTopRight = () => onChangeText?.(formatValue(value + (topRight?.delta ?? 0), valueMode, allowNegative));
   const handleExtraTopLeft = () =>
-    onChangeText?.(formatValue(value + (extraTopLeft?.delta ?? 0), valueMode));
+    onChangeText?.(formatValue(value + (extraTopLeft?.delta ?? 0), valueMode, allowNegative));
   const handleExtraTopRight = () =>
-    onChangeText?.(formatValue(value + (extraTopRight?.delta ?? 0), valueMode));
+    onChangeText?.(formatValue(value + (extraTopRight?.delta ?? 0), valueMode, allowNegative));
+  const handleExtraBottomLeft = () =>
+    onChangeText?.(formatValue(value + (extraBottomLeft?.delta ?? 0), valueMode, allowNegative));
+  const handleExtraBottomRight = () =>
+    onChangeText?.(formatValue(value + (extraBottomRight?.delta ?? 0), valueMode, allowNegative));
   const handleBottomLeft = () =>
-    onChangeText?.(formatValue(value + (bottomLeft?.delta ?? 0), valueMode));
+    onChangeText?.(formatValue(value + (bottomLeft?.delta ?? 0), valueMode, allowNegative));
   const handleBottomRight = () =>
-    onChangeText?.(formatValue(value + (bottomRight?.delta ?? 0), valueMode));
+    onChangeText?.(formatValue(value + (bottomRight?.delta ?? 0), valueMode, allowNegative));
   const showExtraTopRow = extraTopLeft !== null || extraTopRight !== null;
   const showTopRow = topLeft !== null || topRight !== null;
   const showBottomRow = bottomLeft !== null || bottomRight !== null;
+  const showExtraBottomRow = extraBottomLeft !== null || extraBottomRight !== null;
 
   return (
     <View style={styles.fieldCell}>
       <Text style={styles.fieldCellTitle}>{title}</Text>
-      {comment ? <Text style={styles.fieldCellComment}>{comment}</Text> : null}
+      {comment ? (
+        <Text
+          style={styles.fieldCellComment}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          ellipsizeMode="tail"
+        >
+          {comment}
+        </Text>
+      ) : null}
 
       <TextInput
         style={[
           styles.fieldCellValue,
+          valueSizeStyle,
           error ? styles.fieldCellValueError : null,
           !editable ? styles.fieldCellValueReadOnly : null,
         ]}
@@ -235,6 +261,21 @@ export function FieldCell({
           )}
         </View>
       ) : null}
+
+      {editable && showExtraBottomRow ? (
+        <View style={styles.btnRow}>
+          {extraBottomLeft ? (
+            <StepperButton label={extraBottomLeft.label} onPress={handleExtraBottomLeft} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
+          {extraBottomRight ? (
+            <StepperButton label={extraBottomRight.label} onPress={handleExtraBottomRight} />
+          ) : (
+            <View style={styles.btnSpacer} />
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -287,6 +328,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#d7dde4",
     color: "#0f172a",
+    paddingHorizontal: 6,
+  },
+  fieldCellValueCompact: {
+    fontSize: 18,
+  },
+  fieldCellValueTight: {
+    fontSize: 16,
   },
   fieldCellValueError: {
     borderColor: "#b00020",

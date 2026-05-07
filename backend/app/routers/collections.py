@@ -10,7 +10,7 @@ from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
 from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_cylinders, sum_customer_money
-from app.services.posting import derive_day, normalize_happened_at, post_customer_transaction, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction, reverse_source
 from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -252,7 +252,7 @@ def create_collection(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CollectionEvent:
-  happened_at = normalize_happened_at(payload.happened_at)
+  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   try:
     acquire_customer_locks(session, [payload.customer_id])
     acquire_inventory_locks(
@@ -363,7 +363,7 @@ def update_collection(
       ),
     )
     happened_at_raw = payload_data["happened_at"] if payload_data.get("happened_at") is not None else base.happened_at
-    happened_at = normalize_happened_at(happened_at_raw)
+    happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=happened_at_raw)
     note = payload_data.get("note") if payload_data.get("note") is not None else base.note
 
     for txn in txns:

@@ -19,12 +19,12 @@ export function useOrderDateTimeState(setValue: UseFormSetValue<OrderFormValues>
   const [deliveryDateOpen, setDeliveryDateOpen] = useState(false);
   const [deliveryTimeOpen, setDeliveryTimeOpen] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState(getCurrentLocalDate());
-  const [deliveryTime, setDeliveryTime] = useState(getCurrentLocalTime({ includeSeconds: true }));
+  const [deliveryTime, setDeliveryTime] = useState(getCurrentLocalTime());
 
   const [collectionDateOpen, setCollectionDateOpen] = useState(false);
   const [collectionTimeOpen, setCollectionTimeOpen] = useState(false);
   const [collectionDate, setCollectionDate] = useState(getCurrentLocalDate());
-  const [collectionTime, setCollectionTime] = useState(getCurrentLocalTime({ includeSeconds: true }));
+  const [collectionTime, setCollectionTime] = useState(getCurrentLocalTime());
 
   // Sync deliveryDate + deliveryTime to form field "delivered_at"
   useEffect(() => {

@@ -46,10 +46,17 @@ export function useDailyReportScreen(rangeDays = 30, selectedDate?: string | nul
   }, [selectedDate, v2Expanded]);
 
   useEffect(() => {
+    if (!v2Query.data) return;
+    requestedDatesRef.current = new Set();
+    setV2DayByDate({});
+    setV2DayStatusByDate({});
+  }, [v2Query.data, v2Query.dataUpdatedAt]);
+
+  useEffect(() => {
     if (wantedDates.length === 0) return;
 
     const missing = wantedDates.filter(
-      (date) => !requestedDatesRef.current.has(date) && !(date in v2DayStatusByDate)
+      (date) => !requestedDatesRef.current.has(date)
     );
     if (missing.length === 0) return;
 
@@ -84,13 +91,6 @@ export function useDailyReportScreen(rangeDays = 30, selectedDate?: string | nul
       cancelled = true;
     };
   }, [v2Query.dataUpdatedAt, wantedDates]);
-
-  useEffect(() => {
-    if (!v2Query.data) return;
-    requestedDatesRef.current = new Set();
-    setV2DayByDate({});
-    setV2DayStatusByDate({});
-  }, [v2Query.data, v2Query.dataUpdatedAt]);
 
   useEffect(() => {
     setV2DayByDate((prev) => {

@@ -107,6 +107,7 @@ class CompanyPaymentCreate(SQLModel):
 class CompanyPaymentOut(SQLModel):
   id: str
   happened_at: datetime
+  created_at: Optional[datetime] = None
   amount: int
   note: Optional[str] = None
   is_deleted: bool = False
@@ -155,13 +156,33 @@ class CompanyBalanceAdjustmentCreate(SQLModel):
   at: Optional[str] = None
 
 
+class CompanyBalanceAdjustmentUpdate(SQLModel):
+  money_balance: Optional[int] = None
+  cylinder_balance_12: Optional[int] = None
+  cylinder_balance_48: Optional[int] = None
+  note: Optional[str] = None
+  happened_at: Optional[datetime] = None
+  date: Optional[str] = None
+  time: Optional[str] = None
+  time_of_day: Optional[Literal["morning", "evening"]] = None
+  at: Optional[str] = None
+
+
 class CompanyBalanceAdjustmentOut(SQLModel):
   id: str
   happened_at: datetime
+  created_at: Optional[datetime] = None
   money_balance: int
   cylinder_balance_12: int
   cylinder_balance_48: int
+  delta_money: int = 0
+  delta_cylinder_12: int = 0
+  delta_cylinder_48: int = 0
+  live_debt_cash: Optional[int] = None
+  live_debt_cylinders_12: Optional[int] = None
+  live_debt_cylinders_48: Optional[int] = None
   note: Optional[str] = None
+  is_deleted: bool = False
 
 
 class CompanyBalancesOut(SQLModel):
@@ -190,6 +211,7 @@ class BankDepositCreate(SQLModel):
 class BankDepositOut(SQLModel):
   id: str
   happened_at: datetime
+  created_at: Optional[datetime] = None
   amount: int
   direction: TransferDirection
   note: Optional[str] = None

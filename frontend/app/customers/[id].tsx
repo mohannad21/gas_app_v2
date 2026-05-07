@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
+import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,62 +16,37 @@ import {
   useCustomerBalance,
   useCustomers,
   useDeleteCustomer,
+  useDeleteCustomerAdjustment,
 } from "@/hooks/useCustomers";
 import { useDeleteOrder, useOrders } from "@/hooks/useOrders";
 import { useSystems, useDeleteSystem } from "@/hooks/useSystems";
-import { CollectionEvent, CustomerAdjustment, Order } from "@/types/domain";
+import { Order } from "@/types/domain";
+import FilterChipRow from "@/components/add/FilterChipRow";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import {
   collectionToEvent,
   customerAdjustmentToEvent,
   orderToEvent,
 } from "@/lib/activityAdapter";
+import { DailyReportEvent } from "@/types/report";
 
 type ActivityFilter =
-  | "all"
   | "replacement"
   | "late_payment"
+  | "payout"
   | "return_empties"
   | "buy_empty"
   | "sell_full"
   | "adjustment";
 
-type ActivityKind =
-  | "replacement"
-  | "late_payment"
-  | "return_empties"
-  | "buy_empty"
-  | "sell_full"
-  | "adjustment"
-  | "payout";
-
-type CustomerActivityItem = {
-  id: string;
-  kind: ActivityKind;
-  title: string;
-  summary: string;
-  effectiveAt: string;
-  createdAt?: string;
-  systemId?: string | null;
-  systemName?: string | null;
-  note?: string | null;
-  moneyBefore: number;
-  moneyAfter: number;
-  cyl12Before: number;
-  cyl12After: number;
-  cyl48Before: number;
-  cyl48After: number;
-  orderId?: string;
-};
-
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Late payment" },
-  { id: "return_empties", label: "Return empties" },
+  { id: "late_payment", label: "Received payment" },
+  { id: "payout", label: "Paid customer" },
+  { id: "return_empties", label: "Returned empties" },
   { id: "buy_empty", label: "Buy empty" },
   { id: "sell_full", label: "Sell full" },
-  { id: "adjustment", label: "Adjustments" },
+  { id: "adjustment", label: "Balance adjustment" },
 ];
 
 const formatCurrency = (value: number) => {
@@ -96,230 +72,98 @@ const formatProfileField = (value?: string | null, fallback = "Not provided") =>
   return trimmed ? trimmed : fallback;
 };
 
-const formatSignedValue = (value: number, format: (v: number) => string) => {
-  if (value === 0) return "No change";
-  return `${value > 0 ? "+" : ""}${format(value)}`;
-};
-
-const formatQtySummary = (qty12?: number | null, qty48?: number | null, suffix = "") => {
-  const parts: string[] = [];
-  if (qty12) parts.push(`${qty12} x 12kg${suffix}`);
-  if (qty48) parts.push(`${qty48} x 48kg${suffix}`);
-  return parts.join(" | ");
-};
-
 const toTimeValue = (value?: string | null) => {
   if (!value) return 0;
   const ms = new Date(value).getTime();
   return Number.isNaN(ms) ? 0 : ms;
 };
 
+export function getLastActiveOrder(orders: Order[]): Order | undefined {
+  return orders
+    .filter((order) => !order.is_deleted)
+    .filter((order) => {
+      const mode = order.order_mode ?? "replacement";
+      return mode === "replacement" || mode === "sell_iron";
+    })
+    .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
+}
+
+export function getOrderCylinders(orders: Order[]): Record<"12kg" | "48kg", number> {
+  const totals: Record<"12kg" | "48kg", number> = {
+    "12kg": 0,
+    "48kg": 0,
+  };
+  orders.filter((order) => !order.is_deleted).forEach((order) => {
+    const mode = order.order_mode ?? "replacement";
+    if (mode !== "replacement" && mode !== "sell_iron") {
+      return;
+    }
+    const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
+    totals[gas] += order.cylinders_installed ?? 0;
+  });
+  return totals;
+}
+
+export function sortCustomerActivityEvents(events: DailyReportEvent[]): DailyReportEvent[] {
+  return [...events].sort(
+    (a, b) =>
+      new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime() ||
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
 
 function DetailBalanceBox({
   label,
   value,
-  accent,
+  state,
 }: {
   label: string;
   value: string;
-  accent?: string;
+  state: "Debt" | "Credit" | "Balanced";
 }) {
+  const valueColor =
+    state === "Debt" ? "#b42318" : state === "Credit" ? "#16a34a" : "#0f172a";
   return (
     <View style={styles.balanceBox}>
-      <Text style={[styles.balanceBoxLabel, accent ? { color: accent } : null]}>{label}</Text>
-      <Text style={styles.balanceBoxValue}>{value}</Text>
+      <Text style={styles.balanceBoxLabel}>{label}</Text>
+      <Text style={[styles.balanceBoxValue, { color: valueColor }]}>{value}</Text>
+      <Text style={styles.balanceBoxState}>{state}</Text>
     </View>
   );
 }
 
-function buildOrderActivity(order: Order, systemsById: Map<string, string>): CustomerActivityItem {
-  const mode = order.order_mode ?? "replacement";
-  const gas = order.gas_type ?? "12kg";
-  const installed = order.cylinders_installed ?? 0;
-  const received = order.cylinders_received ?? 0;
-  const totalAmount = order.price_total ?? 0;
-  const paidAmount = order.paid_amount ?? 0;
-  const moneyDelta = mode === "buy_iron" ? paidAmount - totalAmount : totalAmount - paidAmount;
-  const cylinderDelta = mode === "replacement" ? installed - received : 0;
-  const delta12 = gas === "12kg" ? cylinderDelta : 0;
-  const delta48 = gas === "48kg" ? cylinderDelta : 0;
-  const moneyAfter = order.debt_cash ?? 0;
-  const cyl12After = order.debt_cylinders_12 ?? 0;
-  const cyl48After = order.debt_cylinders_48 ?? 0;
-
-  if (mode === "replacement") {
-    return {
-      id: `order-${order.id}`,
-      kind: "replacement",
-      title: "Replacement",
-      summary: `Installed ${installed} x ${gas}${received > 0 ? ` | Received ${received} empties` : ""}`,
-      effectiveAt: order.delivered_at,
-      createdAt: order.created_at,
-      systemId: order.system_id || null,
-      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-      note: order.note,
-      moneyBefore: moneyAfter - moneyDelta,
-      moneyAfter,
-      cyl12Before: cyl12After - delta12,
-      cyl12After,
-      cyl48Before: cyl48After - delta48,
-      cyl48After,
-      orderId: order.id,
-    };
-  }
-
-  if (mode === "sell_iron") {
-    return {
-      id: `order-${order.id}`,
-      kind: "sell_full",
-      title: "Sell full",
-      summary: `Sold ${installed} x ${gas}`,
-      effectiveAt: order.delivered_at,
-      createdAt: order.created_at,
-      systemId: order.system_id || null,
-      systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-      note: order.note,
-      moneyBefore: moneyAfter - moneyDelta,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-      orderId: order.id,
-    };
-  }
-
-  const boughtQty = received > 0 ? received : installed;
-  return {
-    id: `order-${order.id}`,
-    kind: "buy_empty",
-    title: "Buy empty",
-    summary: `Bought ${boughtQty} x ${gas} empties`,
-    effectiveAt: order.delivered_at,
-    createdAt: order.created_at,
-    systemId: order.system_id || null,
-    systemName: order.system_id ? systemsById.get(order.system_id) ?? "System" : null,
-    note: order.note,
-    moneyBefore: moneyAfter - moneyDelta,
-    moneyAfter,
-    cyl12Before: cyl12After,
-    cyl12After,
-    cyl48Before: cyl48After,
-    cyl48After,
-    orderId: order.id,
-  };
+function getCustomerBalanceState(value: number): "Debt" | "Credit" | "Balanced" {
+  if (value > 0) return "Debt";
+  if (value < 0) return "Credit";
+  return "Balanced";
 }
 
-function buildCollectionActivity(collection: CollectionEvent): CustomerActivityItem {
-  const moneyAfter = collection.debt_cash ?? 0;
-  const cyl12After = collection.debt_cylinders_12 ?? 0;
-  const cyl48After = collection.debt_cylinders_48 ?? 0;
-
-  if (collection.action_type === "payment") {
-    const amount = collection.amount_money ?? 0;
-    return {
-      id: `collection-${collection.id}`,
-      kind: "late_payment",
-      title: "Late payment",
-      summary: amount > 0 ? `Collected ${formatCurrency(amount)}` : "Collected payment",
-      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-      createdAt: collection.created_at ?? collection.effective_at ?? "",
-      note: collection.note,
-      moneyBefore: moneyAfter + amount,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-    };
-  }
-
-  if (collection.action_type === "payout") {
-    const amount = collection.amount_money ?? 0;
-    return {
-      id: `collection-${collection.id}`,
-      kind: "payout",
-      title: "Payout",
-      summary: amount > 0 ? `Paid customer ${formatCurrency(amount)}` : "Customer payout",
-      effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-      createdAt: collection.created_at ?? collection.effective_at ?? "",
-      note: collection.note,
-      moneyBefore: moneyAfter - amount,
-      moneyAfter,
-      cyl12Before: cyl12After,
-      cyl12After,
-      cyl48Before: cyl48After,
-      cyl48After,
-    };
-  }
-
-  const qty12 = collection.qty_12kg ?? 0;
-  const qty48 = collection.qty_48kg ?? 0;
-  return {
-    id: `collection-${collection.id}`,
-    kind: "return_empties",
-    title: "Return empties",
-    summary: formatQtySummary(qty12, qty48, " empties") || "Returned empties",
-    effectiveAt: collection.effective_at ?? collection.created_at ?? "",
-    createdAt: collection.created_at ?? collection.effective_at ?? "",
-    note: collection.note,
-    moneyBefore: moneyAfter,
-    moneyAfter,
-    cyl12Before: cyl12After + qty12,
-    cyl12After,
-    cyl48Before: cyl48After + qty48,
-    cyl48After,
-  };
+function formatAbsoluteCurrency(value: number) {
+  return `${Math.abs(value).toFixed(getMoneyDecimals())} ${getCurrencySymbol()}`;
 }
 
-function buildAdjustmentActivity(adjustment: CustomerAdjustment): CustomerActivityItem {
-  const moneyDelta = adjustment.amount_money ?? 0;
-  const delta12 = adjustment.count_12kg ?? 0;
-  const delta48 = adjustment.count_48kg ?? 0;
-  const moneyAfter = adjustment.debt_cash ?? 0;
-  const cyl12After = adjustment.debt_cylinders_12 ?? 0;
-  const cyl48After = adjustment.debt_cylinders_48 ?? 0;
-  const summaryParts = [
-    moneyDelta ? `Money ${formatSignedValue(moneyDelta, formatCurrency)}` : null,
-    delta12 ? `12kg ${formatSignedValue(delta12, formatCylinder)}` : null,
-    delta48 ? `48kg ${formatSignedValue(delta48, formatCylinder)}` : null,
-  ].filter(Boolean);
-
-  return {
-    id: `adjustment-${adjustment.id}`,
-    kind: "adjustment",
-    title: "Adjustment",
-    summary: summaryParts.length > 0 ? summaryParts.join(" | ") : "Manual correction",
-    effectiveAt: adjustment.effective_at,
-    createdAt: adjustment.created_at,
-    note: adjustment.reason,
-    moneyBefore: moneyAfter - moneyDelta,
-    moneyAfter,
-    cyl12Before: cyl12After - delta12,
-    cyl12After,
-    cyl48Before: cyl48After - delta48,
-    cyl48After,
-  };
+function formatAbsoluteCylinder(value: number) {
+  return `${Math.abs(value)}`;
 }
 
 export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
-  const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>("all");
-  const [selectedSystemId, setSelectedSystemId] = useState("all");
+  const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
+  const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
+  const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
-  const collectionsQuery = useCollections(true);
+  const collectionsQuery = useCollections(false);
   const systemsQuery = useSystems(id, { enabled: !!id });
-  const ordersQuery = useOrders(true);
+  const ordersQuery = useOrders(false);
   const adjustmentsQuery = useCustomerAdjustments(customerId);
   const deleteCustomer = useDeleteCustomer();
   const deleteSystem = useDeleteSystem();
   const deleteOrder = useDeleteOrder();
   const deleteCollection = useDeleteCollection();
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const markDeleting = (id: string) => setDeletingIds((prev) => new Set([...prev, id]));
-  const unmarkDeleting = (id: string) => setDeletingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+  const deleteAdjustment = useDeleteCustomerAdjustment();
   const focusRefetchers = useRef({
     orders: ordersQuery.refetch,
     collections: collectionsQuery.refetch,
@@ -358,9 +202,6 @@ export default function CustomerDetailsScreen() {
   );
   const adjustments = useMemo(() => adjustmentsQuery.data ?? [], [adjustmentsQuery.data]);
 
-  const ordersById = useMemo(() => new Map(orders.map((o) => [o.id, o])), [orders]);
-  const collectionsById = useMemo(() => new Map(collections.map((c) => [c.id, c])), [collections]);
-
   useFocusEffect(
     useCallback(() => {
       focusRefetchers.current.orders();
@@ -369,51 +210,196 @@ export default function CustomerDetailsScreen() {
     }, [customerId])
   );
 
-  const orderCylinders = useMemo(() => {
-    const totals: Record<"12kg" | "48kg", number> = {
-      "12kg": 0,
-      "48kg": 0,
-    };
-    orders.forEach((order) => {
-      const mode = order.order_mode ?? "replacement";
-      if (mode !== "replacement" && mode !== "sell_iron") {
-        return;
+  const orderCylinders = useMemo(() => getOrderCylinders(orders), [orders]);
+
+  const activities = useMemo((): DailyReportEvent[] => {
+    const orderEvents = (orders ?? []).map((o) =>
+      orderToEvent(o, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+        systemName: o.system_id ? systemsById.get(o.system_id) : undefined,
+      })
+    );
+    const collectionEvents = (collections ?? []).map((c) =>
+      collectionToEvent(c, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+      })
+    );
+    const adjustmentEvents = (adjustments ?? []).map((a) =>
+      customerAdjustmentToEvent(a, {
+        customerName: customer?.name,
+        customerDescription: customer?.note ?? null,
+      })
+    );
+    return sortCustomerActivityEvents([...orderEvents, ...collectionEvents, ...adjustmentEvents]);
+  }, [orders, collections, adjustments, customer, systemsById]);
+
+  const availableActivityFilters = useMemo(() => {
+    const visible = new Set<ActivityFilter>();
+    for (const event of activities) {
+      if (event.event_type === "order" && event.order_mode === "replacement") visible.add("replacement");
+      if (event.event_type === "collection_money") visible.add("late_payment");
+      if (event.event_type === "collection_payout") visible.add("payout");
+      if (event.event_type === "collection_empty") visible.add("return_empties");
+      if (event.event_type === "order" && event.order_mode === "buy_iron") visible.add("buy_empty");
+      if (event.event_type === "order" && event.order_mode === "sell_iron") visible.add("sell_full");
+      if (event.event_type === "customer_adjust") visible.add("adjustment");
+    }
+    return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
+  }, [activities]);
+
+  const level2Options = useMemo(() => {
+    if (!selectedFilter) return [] as { id: string; label: string }[];
+    switch (selectedFilter) {
+      case "replacement": {
+        const options: { id: string; label: string }[] = [];
+        for (const system of systems) {
+          const hasReplacement = orders.some(
+            (order) => !order.is_deleted && order.order_mode === "replacement" && order.system_id === system.id
+          );
+          if (hasReplacement) {
+            options.push({ id: system.id, label: system.name });
+          }
+        }
+        return options;
       }
-      const gas = (order.gas_type ?? "12kg") as "12kg" | "48kg";
-      totals[gas] += order.cylinders_installed ?? 0;
-    });
-    return totals;
-  }, [orders]);
+      case "return_empties": {
+        const has12 = collections.some((item) => item.action_type === "return" && Number(item.qty_12kg ?? 0) > 0);
+        const has48 = collections.some((item) => item.action_type === "return" && Number(item.qty_48kg ?? 0) > 0);
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "buy_empty":
+      case "sell_full": {
+        const mode = selectedFilter === "buy_empty" ? "buy_iron" : "sell_iron";
+        const has12 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "12kg");
+        const has48 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "48kg");
+        return [
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      case "adjustment": {
+        const hasMoney = adjustments.some((item) => Number(item.amount_money ?? 0) !== 0);
+        const has12 = adjustments.some((item) => Number(item.count_12kg ?? 0) !== 0);
+        const has48 = adjustments.some((item) => Number(item.count_48kg ?? 0) !== 0);
+        return [
+          hasMoney ? { id: "money", label: "Money" } : null,
+          has12 ? { id: "12kg", label: "12kg" } : null,
+          has48 ? { id: "48kg", label: "48kg" } : null,
+        ].filter(Boolean) as { id: string; label: string }[];
+      }
+      default:
+        return [];
+    }
+  }, [adjustments, collections, orders, selectedFilter, systems]);
 
-  const activities = useMemo(() => {
-    const items: CustomerActivityItem[] = [
-      ...orders.map((order) => buildOrderActivity(order, systemsById)),
-      ...collections.map((collection) => buildCollectionActivity(collection)),
-      ...adjustments.map((adjustment) => buildAdjustmentActivity(adjustment)),
-    ];
-
-    return items.sort((left, right) => {
-      const createdGap = toTimeValue(right.createdAt) - toTimeValue(left.createdAt);
-      if (createdGap !== 0) return createdGap;
-      return toTimeValue(right.effectiveAt) - toTimeValue(left.effectiveAt);
-    });
-  }, [adjustments, collections, orders, systemsById]);
+  const level3Options = useMemo(() => {
+    if (selectedFilter !== "replacement") return [] as { id: string; label: string }[];
+    const scope = orders.filter(
+      (o) => !o.is_deleted && o.order_mode === "replacement" && (selectedLevel2 === null || o.system_id === selectedLevel2)
+    );
+    const check = (id: string, label: string, predicate: (o: any) => boolean) =>
+      scope.some(predicate) ? { id, label } : null;
+    return [
+      check("money_debt", "Money debt", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) > 0),
+      check("money_credit", "Money credit", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) < 0),
+      check("12kg_debt", "12kg debt", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
+      check("12kg_credit", "12kg credit", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
+      check("48kg_debt", "48kg debt", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
+      check("48kg_credit", "48kg credit", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
+    ].filter((opt): opt is { id: string; label: string } => opt !== null);
+  }, [selectedFilter, selectedLevel2, orders]);
 
   const filteredActivities = useMemo(() => {
     let next = activities;
-    if (selectedFilter !== "all") {
-      next = next.filter((activity) => activity.kind === selectedFilter);
+    if (selectedFilter) {
+      next = next.filter((e) => {
+        switch (selectedFilter) {
+          case "replacement":
+            return e.event_type === "order" && e.order_mode === "replacement";
+          case "late_payment":
+            return e.event_type === "collection_money";
+          case "payout":
+            return e.event_type === "collection_payout";
+          case "return_empties":
+            return e.event_type === "collection_empty";
+          case "buy_empty":
+            return e.event_type === "order" && e.order_mode === "buy_iron";
+          case "sell_full":
+            return e.event_type === "order" && e.order_mode === "sell_iron";
+          case "adjustment":
+            return e.event_type === "customer_adjust";
+          default:
+            return true;
+        }
+      });
     }
-    if (selectedFilter === "replacement" && selectedSystemId !== "all") {
-      next = next.filter((activity) => activity.systemId === selectedSystemId);
+    if (!selectedFilter || !selectedLevel2) {
+      if (selectedFilter === "replacement" && selectedLevel3) {
+        return next.filter((event) => {
+          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
+          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
+          switch (selectedLevel3) {
+            case "money_debt": return moneyDiff > 0;
+            case "money_credit": return moneyDiff < 0;
+            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
+            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
+            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
+            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
+            default: return true;
+          }
+        });
+      }
+      return next;
     }
-    return next;
-  }, [activities, selectedFilter, selectedSystemId]);
-
-  const replacementSystemOptions = useMemo(
-    () => [{ id: "all", label: "All systems" }, ...systems.map((system) => ({ id: system.id, label: system.name }))],
-    [systems]
-  );
+    switch (selectedFilter) {
+      case "replacement": {
+        const l2Filtered = next.filter((event) => {
+          const matchingOrder = orders.find((order) => order.id === event.id);
+          return matchingOrder?.system_id === selectedLevel2;
+        });
+        if (!selectedLevel3) return l2Filtered;
+        return l2Filtered.filter((event) => {
+          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
+          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
+          switch (selectedLevel3) {
+            case "money_debt": return moneyDiff > 0;
+            case "money_credit": return moneyDiff < 0;
+            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
+            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
+            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
+            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
+            default: return true;
+          }
+        });
+      }
+      case "return_empties":
+        return next.filter(
+          (event) =>
+            (selectedLevel2 === "12kg" && Number(event.return12 ?? 0) > 0) ||
+            (selectedLevel2 === "48kg" && Number(event.return48 ?? 0) > 0)
+        );
+      case "buy_empty":
+      case "sell_full":
+        return next.filter((event) => event.gas_type === selectedLevel2);
+      case "adjustment":
+        return next.filter(
+          (event) =>
+            (selectedLevel2 === "money" &&
+              Number((event.customer_money_after ?? 0) - (event.customer_money_before ?? 0)) !== 0) ||
+            (selectedLevel2 === "12kg" &&
+              Number((event.customer_12kg_after ?? 0) - (event.customer_12kg_before ?? 0)) !== 0) ||
+            (selectedLevel2 === "48kg" &&
+              Number((event.customer_48kg_after ?? 0) - (event.customer_48kg_before ?? 0)) !== 0)
+        );
+      default:
+        return next;
+    }
+  }, [activities, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
 
   if (customersQuery.isLoading) {
     return (
@@ -438,16 +424,19 @@ export default function CustomerDetailsScreen() {
   const balanceStats = [
     {
       label: "Money balance",
-      value: formatCurrency(moneyBalance),
+      value: formatAbsoluteCurrency(moneyBalance),
+      state: getCustomerBalanceState(moneyBalance),
     },
     {
       label: "12kg balance",
-      value: formatCylinder(cylBalance12),
+      value: formatAbsoluteCylinder(cylBalance12),
+      state: getCustomerBalanceState(cylBalance12),
       gas: "12kg" as const,
     },
     {
       label: "48kg balance",
-      value: formatCylinder(cylBalance48),
+      value: formatAbsoluteCylinder(cylBalance48),
+      state: getCustomerBalanceState(cylBalance48),
       gas: "48kg" as const,
     },
   ];
@@ -465,9 +454,7 @@ export default function CustomerDetailsScreen() {
     },
   ];
 
-  const lastOrder = orders
-    .slice()
-    .sort((a, b) => toTimeValue(b.delivered_at) - toTimeValue(a.delivered_at))[0];
+  const lastOrder = getLastActiveOrder(orders);
   const lastOrderLabel = lastOrder ? formatDeliveredAt(lastOrder.delivered_at) : "No orders yet";
   const activeSystems = systems.filter((system) => system.is_active !== false).length;
   const activitiesLoading =
@@ -517,11 +504,25 @@ export default function CustomerDetailsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          markDeleting(orderId);
-          deleteOrder.mutate(orderId, { onSettled: () => unmarkDeleting(orderId) });
+          deleteOrder.mutate(orderId);
         },
       },
     ]);
+  };
+
+  const handleDeleteAdjustment = (adjustmentId: string) => {
+    Alert.alert(
+      "Delete adjustment?",
+      "This will reverse the balance adjustment and update the customer's ledger.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteAdjustment.mutate({ id: adjustmentId, customerId }),
+        },
+      ]
+    );
   };
 
   const handleDeleteCollection = (collectionId: string) => {
@@ -531,18 +532,10 @@ export default function CustomerDetailsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          markDeleting(collectionId);
-          deleteCollection.mutate(collectionId, { onSettled: () => unmarkDeleting(collectionId) });
+          deleteCollection.mutate(collectionId);
         },
       },
     ]);
-  };
-
-  const handleFilterPress = (nextFilter: ActivityFilter) => {
-    setSelectedFilter(nextFilter);
-    if (nextFilter !== "replacement") {
-      setSelectedSystemId("all");
-    }
   };
 
   return (
@@ -581,6 +574,24 @@ export default function CustomerDetailsScreen() {
                 <Text style={[styles.statLabel, { color: gasColor(stat.gas) }]}>{stat.label}</Text>
                 <Text style={styles.statValue}>{stat.value}</Text>
               </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.detailBalancesSection}>
+        <View style={styles.detailBalancesHeader}>
+          <Text style={styles.detailBalancesTitle}>Customer Balances</Text>
+        </View>
+        <View style={styles.detailBalancesContent}>
+          <View style={styles.detailBalancesRow}>
+            {balanceStats.map((stat) => (
+              <DetailBalanceBox
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                state={stat.state}
+              />
             ))}
           </View>
         </View>
@@ -678,69 +689,42 @@ export default function CustomerDetailsScreen() {
         </Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-        style={styles.filterScroll}
-      >
-        {ACTIVITY_FILTER_OPTIONS.map((option) => {
-          const active = selectedFilter === option.id;
-          return (
-            <Pressable
-              key={option.id}
-              onPress={() => handleFilterPress(option.id)}
-              style={[styles.filterChip, active && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {selectedFilter === "replacement" ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.secondaryFilterRow}
+      {availableActivityFilters.length > 1 ? (
+        <FilterChipRow
+          options={availableActivityFilters}
+          value={selectedFilter}
+          onChange={(next) => {
+            setSelectedFilter(next);
+            setSelectedLevel2(null);
+            setSelectedLevel3(null);
+          }}
           style={styles.filterScroll}
-        >
-          {replacementSystemOptions.map((option) => {
-            const active = selectedSystemId === option.id;
-            return (
-              <Pressable
-                key={option.id}
-                onPress={() => {
-                  setSelectedSystemId(option.id);
-                }}
-                style={[styles.secondaryFilterChip, active && styles.secondaryFilterChipActive]}
-              >
-                <Text
-                  style={[
-                    styles.secondaryFilterChipText,
-                    active && styles.secondaryFilterChipTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          contentContainerStyle={styles.filterRow}
+        />
       ) : null}
 
-      <View style={styles.detailBalancesBlock}>
-        <View style={styles.detailBalancesRow}>
-          {balanceStats.map((stat) => (
-            <DetailBalanceBox
-              key={stat.label}
-              label={stat.label}
-              value={stat.value}
-              accent={stat.gas ? gasColor(stat.gas) : undefined}
-            />
-          ))}
-        </View>
-      </View>
+      {selectedFilter && level2Options.length > 1 ? (
+        <FilterChipRow
+          options={level2Options}
+          value={selectedLevel2}
+          onChange={(next) => {
+            setSelectedLevel2(next);
+            setSelectedLevel3(null);
+          }}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.secondaryFilterRow}
+        />
+      ) : null}
+
+      {selectedFilter === "replacement" && level3Options.length > 1 ? (
+        <FilterChipRow
+          options={level3Options}
+          value={selectedLevel3}
+          onChange={setSelectedLevel3}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.secondaryFilterRow}
+        />
+      ) : null}
 
       {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
       {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
@@ -750,58 +734,32 @@ export default function CustomerDetailsScreen() {
 
       {!activitiesLoading &&
         !activitiesError &&
-        filteredActivities.map((activity) => {
+        filteredActivities.map((event) => {
           const fmtMoney = (v: number) => Number(v || 0).toFixed(getMoneyDecimals());
-          const customerName = customer.name;
-          const customerDescription = customer.note ?? null;
+          const isOrder = event.event_type === "order";
+          const isCollection =
+            event.event_type === "collection_money" ||
+            event.event_type === "collection_empty" ||
+            event.event_type === "collection_payout";
 
-          if (activity.kind === "adjustment") {
-            const rawAdj = adjustments.find((a) => `adjustment-${a.id}` === activity.id);
-            if (!rawAdj) return null;
-            return (
-              <SlimActivityRow
-                key={activity.id}
-                event={customerAdjustmentToEvent(rawAdj, { customerName, customerDescription })}
-                formatMoney={fmtMoney}
-                showCreatedAt
-                showEffectiveAtBottom
-              />
-            );
-          }
+          const isAdjustment = event.event_type === "customer_adjust";
 
-          if (activity.kind === "late_payment" || activity.kind === "return_empties" || activity.kind === "payout") {
-            const rawCol = collections.find((c) => `collection-${c.id}` === activity.id);
-            if (!rawCol) return null;
-            return (
-              <SlimActivityRow
-                key={activity.id}
-                event={collectionToEvent(rawCol, { customerName, customerDescription })}
-                formatMoney={fmtMoney}
-                showCreatedAt
-                showEffectiveAtBottom
-                onEdit={undefined}
-                isDeleted={rawCol.is_deleted || deletingIds.has(rawCol.id)}
-                onDelete={() => handleDeleteCollection(rawCol.id)}
-              />
-            );
-          }
-
-          const rawOrder = activity.orderId ? ordersById.get(activity.orderId) : undefined;
-          if (!rawOrder) return null;
           return (
             <SlimActivityRow
-              key={activity.id}
-              isDeleted={rawOrder.is_deleted || deletingIds.has(rawOrder.id)}
-              event={orderToEvent(rawOrder, {
-                customerName,
-                customerDescription,
-                systemName: rawOrder.system_id ? systemsById.get(rawOrder.system_id) : undefined,
-              })}
+              key={event.id}
+              event={event}
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom
-              onEdit={activity.orderId ? () => router.push(`/orders/${activity.orderId}/edit`) : undefined}
-              onDelete={activity.orderId ? () => handleDeleteOrder(activity.orderId!) : undefined}
+              onDelete={
+                isOrder
+                  ? () => handleDeleteOrder(event.id!)
+                  : isCollection
+                    ? () => handleDeleteCollection(event.id!)
+                    : isAdjustment
+                      ? () => handleDeleteAdjustment(event.id!)
+                      : undefined
+              }
             />
           );
         })}
@@ -1059,8 +1017,25 @@ const styles = StyleSheet.create({
   secondaryFilterChipTextActive: {
     color: "#0a7ea4",
   },
-  detailBalancesBlock: {
-    gap: 8,
+  detailBalancesSection: {
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  detailBalancesHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  detailBalancesTitle: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  detailBalancesContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   detailBalancesRow: {
     flexDirection: "row",
@@ -1068,26 +1043,33 @@ const styles = StyleSheet.create({
   },
   balanceBox: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 88,
     borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 2,
+    paddingVertical: 10,
+    gap: 4,
   },
   balanceBoxLabel: {
-    fontSize: 12,
     color: "#475569",
     fontWeight: "800",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
   },
   balanceBoxValue: {
-    color: "#0f172a",
-    fontSize: 16,
-    lineHeight: 18,
     fontWeight: "900",
+    fontFamily: FontFamilies.extrabold,
+    fontSize: FontSizes.sm,
+    lineHeight: 18,
+  },
+  balanceBoxState: {
     marginTop: "auto",
+    color: "#64748b",
+    fontWeight: "700",
+    fontFamily: FontFamilies.regular,
+    fontSize: FontSizes.xs,
   },
   activityCard: {
     backgroundColor: "#fff",

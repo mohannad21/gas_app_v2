@@ -30,7 +30,7 @@ const dayRow = {
   recalculated: false,
 };
 
-const dayDetail = {
+const mockDayDetail = {
   date: "2025-01-01",
   cash_start: 1000,
   cash_end: 900,
@@ -40,21 +40,19 @@ const dayDetail = {
   inventory_end: { full12: 9, empty12: 3, full48: 6, empty48: 1 },
   audit_summary: { cash_in: 0, new_debt: 0, inv_delta_12: 0, inv_delta_48: 0 },
   recalculated: false,
-  events: [
-    {
-      event_type: "expense",
-      effective_at: "2025-01-01T14:09:00Z",
-      created_at: "2025-01-01T14:09:00Z",
-      source_id: "expense-1",
-      expense_type: "fuel",
-      label: "Expense",
-      display_name: "Expense",
-      hero_text: "Paid 100",
-      cash_before: 900,
-      cash_after: 800,
-      balance_transitions: [],
-    },
-  ],
+  events: Array.from({ length: 6 }, (_, index) => ({
+    event_type: "expense",
+    effective_at: `2025-01-01T14:0${index}:00Z`,
+    created_at: `2025-01-01T14:0${index}:00Z`,
+    source_id: `expense-${index + 1}`,
+    expense_type: "fuel",
+    label: "Expense",
+    display_name: "Expense",
+    hero_text: `Paid ${100 + index}`,
+    cash_before: 900 - index * 10,
+    cash_after: 800 - index * 10,
+    balance_transitions: [],
+  })),
 };
 
 const mockGetDailyReport = jest.fn();
@@ -65,7 +63,7 @@ jest.mock("@/hooks/useDailyReportScreen", () => ({
     v2Rows: [dayRow],
     v2Expanded: [],
     setV2Expanded: jest.fn(),
-    v2DayByDate: { "2025-01-01": dayDetail },
+    v2DayByDate: { "2025-01-01": mockDayDetail },
     v2DayStatusByDate: { "2025-01-01": "success" },
     refetchV2: jest.fn(),
   }),
@@ -129,7 +127,7 @@ describe("ReportsScreen reveal controls", () => {
     jest.useFakeTimers();
     mockRouter.push.mockReset();
     mockGetDailyReport.mockReset();
-    mockGetDailyReport.mockResolvedValue(dayDetail);
+    mockGetDailyReport.mockResolvedValue(mockDayDetail);
     jest.spyOn(Animated, "timing").mockImplementation(
       ((value: Animated.Value, config: { toValue: number }) =>
         ({

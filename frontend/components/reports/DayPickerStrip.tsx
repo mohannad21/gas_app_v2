@@ -26,9 +26,9 @@ const DayCard = memo(function DayCard({
   const month = d.toLocaleDateString("en-US", { month: "short" });
   const net = typeof item.net_today === "number" ? item.net_today : 0;
   const netStr = `${net >= 0 ? "+" : ""}${getCurrencySymbol()}${Math.abs(net)}`;
-  const netColor = selected ? "#fff" : net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
-  const metricLabelStyle = selected ? styles.metricLabelSelected : styles.metricLabel;
-  const metricValueStyle = selected ? styles.metricValueSelected : styles.metricValue;
+  const netColor = net > 0 ? "#0f766e" : net < 0 ? "#b91c1c" : "#64748b";
+  const dayNumStyle = selected ? [styles.dayNum, styles.textAccent] : styles.dayNum;
+  const monthStyle = selected ? [styles.monthText, styles.textAccentSoft] : styles.monthText;
 
   return (
     <Pressable
@@ -38,11 +38,11 @@ const DayCard = memo(function DayCard({
     >
       <View style={styles.topRow} testID={`day-card-top-${item.date}`}>
         <View style={styles.topBlock}>
-          <Text style={[styles.dayNum, selected && styles.textWhite]}>{dayNum}</Text>
-          <Text style={[styles.monthText, selected && styles.textWhite]}>{month}</Text>
+          <Text style={dayNumStyle}>{dayNum}</Text>
+          <Text style={monthStyle}>{month}</Text>
         </View>
         {item.has_refill ? (
-          <MaterialCommunityIcons name="truck-delivery" size={16} color={selected ? "#fff" : "#f59e0b"} />
+          <MaterialCommunityIcons name="truck-delivery" size={16} color={selected ? "#0a7ea4" : "#f59e0b"} />
         ) : (
           <View style={styles.truckPlaceholder} />
         )}
@@ -53,16 +53,16 @@ const DayCard = memo(function DayCard({
       <View style={styles.bottomBlock} testID={`day-card-bottom-${item.date}`}>
         <View style={styles.metricsColumn}>
           <View style={styles.metricRow}>
-            <Text style={metricLabelStyle}>12kg</Text>
-            <Text style={metricValueStyle}>{item.sold_12kg ?? 0}</Text>
+            <Text style={styles.metricLabel}>12kg</Text>
+            <Text style={styles.metricValue}>{item.sold_12kg ?? 0}</Text>
           </View>
           <View style={styles.metricRow}>
-            <Text style={metricLabelStyle}>48kg</Text>
-            <Text style={metricValueStyle}>{item.sold_48kg ?? 0}</Text>
+            <Text style={styles.metricLabel}>48kg</Text>
+            <Text style={styles.metricValue}>{item.sold_48kg ?? 0}</Text>
           </View>
           <View style={styles.metricRow}>
-            <Text style={metricLabelStyle}>Net</Text>
-            <Text style={[metricValueStyle, { color: netColor }]} numberOfLines={1}>
+            <Text style={styles.metricLabel}>Net</Text>
+            <Text style={[styles.metricValue, { color: netColor }]} numberOfLines={1}>
               {netStr}
             </Text>
           </View>
@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardSelected: {
-    backgroundColor: "#0a7ea4",
     borderColor: "#0a7ea4",
+    borderWidth: 2,
   },
   topRow: {
     flexDirection: "row",
@@ -160,20 +160,17 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontFamily: FontFamilies.semibold,
   },
-  metricLabelSelected: {
-    color: "rgba(255,255,255,0.78)",
-  },
   metricValue: {
     fontSize: 11,
     lineHeight: 11,
     color: "#0f172a",
     fontFamily: FontFamilies.extrabold,
   },
-  metricValueSelected: {
-    color: "#fff",
+  textAccent: {
+    color: "#0a7ea4",
   },
-  textWhite: {
-    color: "#fff",
+  textAccentSoft: {
+    color: "#0369a1",
   },
   truckPlaceholder: {
     width: 16,

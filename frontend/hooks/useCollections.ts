@@ -16,6 +16,16 @@ function invalidateCustomerBalance(
   queryClient.invalidateQueries({ queryKey: customerBalanceQueryKey(), exact: false });
 }
 
+function invalidateCustomerAdjustmentHistory(
+  queryClient: ReturnType<typeof useQueryClient>,
+  customerId?: string
+) {
+  if (customerId) {
+    queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", customerId] });
+  }
+  queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
+}
+
 export function useCreateCollection() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -30,6 +40,7 @@ export function useCreateCollection() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, variables.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, variables.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -59,8 +70,10 @@ export function useUpdateCollection() {
         .getQueryData<CollectionEvent[]>(["collections"])
         ?.find((collection) => collection.id === variables.id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, variables.payload.customer_id ?? existing?.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, variables.payload.customer_id ?? existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });
@@ -82,8 +95,10 @@ export function useDeleteCollection() {
         .getQueryData<CollectionEvent[]>(["collections"])
         ?.find((collection) => collection.id === id);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       invalidateCustomerBalance(queryClient, existing?.customer_id);
+      invalidateCustomerAdjustmentHistory(queryClient, existing?.customer_id);
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["inventory"], exact: false });

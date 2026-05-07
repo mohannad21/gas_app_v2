@@ -1,4 +1,5 @@
 import React from "react";
+import { StyleSheet } from "react-native";
 import { render, within } from "@testing-library/react-native";
 
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
@@ -66,6 +67,16 @@ describe("DayPickerStrip", () => {
     expect(within(card).getByText("Net")).toBeTruthy();
     expect(within(card).getByText("4")).toBeTruthy();
     expect(within(card).getByText("2")).toBeTruthy();
-    expect(within(card).getByText("+₪120")).toBeTruthy();
+    expect(within(card).getByText("+$120")).toBeTruthy();
+  });
+
+  it("highlights the selected day with a blue border instead of a filled card", () => {
+    const { getByTestId } = render(<DayPickerStrip rows={rows} selectedDate="2026-03-22" onSelect={() => {}} />);
+    const card = getByTestId("day-card-2026-03-22");
+    const styles = StyleSheet.flatten(card.props.style);
+
+    expect(styles.borderColor).toBe("#0a7ea4");
+    expect(styles.backgroundColor).toBe("#fff");
+    expect(styles.borderWidth).toBe(2);
   });
 });

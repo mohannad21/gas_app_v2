@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 
 import { usePlanBillingStatus } from "@/hooks/usePlanBilling";
 import { formatDateMedium, formatDateTimeMedium } from "@/lib/date";
-import { getCurrencyCode, getMoneyDecimals } from "@/lib/money";
+import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 function statusColors(status: string) {
   if (status === "active" || status === "trial") {
@@ -16,7 +16,7 @@ function statusColors(status: string) {
 }
 
 function formatMoney(value: number) {
-  return `${value.toFixed(getMoneyDecimals())} ${getCurrencyCode()}`;
+  return `${formatDisplayMoney(value)} ${getCurrencySymbol()}`;
 }
 
 function formatEventKind(kind: string) {

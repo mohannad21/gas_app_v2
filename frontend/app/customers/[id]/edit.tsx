@@ -13,6 +13,7 @@ import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import { useCreateCustomerAdjustment, useCustomers, useUpdateCustomer } from "@/hooks/useCustomers";
 import { useCreateSystem, useSystems, useUpdateSystem } from "@/hooks/useSystems";
 import { useSystemTypes } from "@/hooks/useSystemTypes";
+import { parseCountValue } from "@/lib/countInput";
 
 
 type BalanceState = "balanced" | "customer_owes" | "you_owe";
@@ -108,23 +109,28 @@ export default function EditCustomerScreen() {
   };
   const renderBalanceAmountField = (
     fieldName: "balance_money_amount" | "balance_12kg_amount" | "balance_48kg_amount",
-    steppers: FieldStepper[]
+    steppers: FieldStepper[],
+    valueMode: "integer" | "decimal" = "integer"
   ) => (
     <Controller
       control={control}
       name={fieldName}
-      render={({ field: { onChange, value } }) => (
-        <View style={styles.balanceFieldWrap}>
-          <FieldCell
-            title="Amount"
-            value={Number(value ?? 0)}
-            onIncrement={() => onChange(Math.max(0, Number(value ?? 0) + 1))}
-            onDecrement={() => onChange(Math.max(0, Number(value ?? 0) - 1))}
-            onChangeText={(text) => onChange(toPositiveNumber(text))}
-            steppers={steppers}
-          />
-        </View>
-      )}
+      render={({ field: { onChange, value } }) => {
+        const normalizedValue = valueMode === "decimal" ? Number(value ?? 0) : parseCountValue(value);
+        return (
+          <View style={styles.balanceFieldWrap}>
+            <FieldCell
+              title="Amount"
+              value={normalizedValue}
+              valueMode={valueMode}
+              onIncrement={() => onChange(Math.max(0, normalizedValue + 1))}
+              onDecrement={() => onChange(Math.max(0, normalizedValue - 1))}
+              onChangeText={(text) => onChange(valueMode === "decimal" ? toPositiveNumber(text) : parseCountValue(text))}
+              steppers={steppers}
+            />
+          </View>
+        );
+      }}
     />
   );
   const hasIncompleteSystem = systems.some((system) => !systemRowIsComplete(system));
@@ -367,7 +373,9 @@ export default function EditCustomerScreen() {
               </View>
             )}
           />
-          {moneyState !== "balanced" ? renderBalanceAmountField("balance_money_amount", CUSTOMER_MONEY_STEPPERS) : null}
+          {moneyState !== "balanced"
+            ? renderBalanceAmountField("balance_money_amount", CUSTOMER_MONEY_STEPPERS, "decimal")
+            : null}
 
           <FieldLabel>12kg balance</FieldLabel>
           <Controller

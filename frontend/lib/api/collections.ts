@@ -20,6 +20,7 @@ export async function createCollection(payload: CollectionCreateInput): Promise<
     ...parsed,
     amount_money: parsed.amount_money != null ? fromMinorUnits(parsed.amount_money) : parsed.amount_money,
     debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
+    live_debt_cash: parsed.live_debt_cash != null ? fromMinorUnits(parsed.live_debt_cash) : parsed.live_debt_cash,
   };
 }
 
@@ -29,6 +30,7 @@ export async function listCollections(includeDeleted?: boolean): Promise<Collect
     ...ev,
     amount_money: ev.amount_money != null ? fromMinorUnits(ev.amount_money) : ev.amount_money,
     debt_cash: ev.debt_cash != null ? fromMinorUnits(ev.debt_cash) : ev.debt_cash,
+    live_debt_cash: ev.live_debt_cash != null ? fromMinorUnits(ev.live_debt_cash) : ev.live_debt_cash,
   }));
 }
 
@@ -44,6 +46,7 @@ export async function updateCollection(id: string, payload: CollectionUpdateInpu
     ...parsed,
     amount_money: parsed.amount_money != null ? fromMinorUnits(parsed.amount_money) : parsed.amount_money,
     debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
+    live_debt_cash: parsed.live_debt_cash != null ? fromMinorUnits(parsed.live_debt_cash) : parsed.live_debt_cash,
   };
 }
 

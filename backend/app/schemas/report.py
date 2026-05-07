@@ -185,6 +185,12 @@ class ActivityNote(SQLModel):
 
 
 class DailyReportEvent(SQLModel):
+  # Timestamp semantics for report events:
+  # - effective_at: report-facing alias of the source row's business/event time
+  #   (`happened_at` in the database). This is the primary ordering key for the
+  #   daily report.
+  # - created_at: audit insertion time of the source row. This is useful as a
+  #   secondary tiebreaker and for debugging, but it is not the business time.
   event_type: str
   id: Optional[str] = None
   effective_at: datetime

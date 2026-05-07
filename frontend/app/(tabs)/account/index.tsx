@@ -1,4 +1,4 @@
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/context/AuthContext";
@@ -22,7 +22,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Account</Text>
 
       <View style={styles.section}>
@@ -80,15 +80,18 @@ export default function AccountScreen() {
       <Pressable style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Sign Out</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     backgroundColor: "#f7f7f8",
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 32,
   },
   title: {
     fontSize: 26,

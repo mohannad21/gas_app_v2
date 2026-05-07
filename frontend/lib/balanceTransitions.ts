@@ -1,6 +1,6 @@
 import type { BalanceTransition } from "@/types/domain";
 import { getBalanceDirectionLabel, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
-import { getCurrencySymbol } from "@/lib/money";
+import { getCurrencySymbol, formatDisplayMoney } from "@/lib/money";
 
 type BalanceScope = BalanceTransition["scope"];
 type BalanceComponent = BalanceTransition["component"];
@@ -30,7 +30,7 @@ type TransitionInput = Partial<BalanceTransition> & {
   after: number;
 };
 
-const defaultFormatMoney: FormatMoney = (value) => String(Number(value || 0));
+const defaultFormatMoney: FormatMoney = (value) => formatDisplayMoney(value);
 
 function formatMoneyValue(value: number, formatMoney: FormatMoney) {
   return `${formatMoney(Math.abs(value))} ${getCurrencySymbol()}`;
@@ -113,6 +113,7 @@ export function formatCurrentBalanceState(
   const numeric = Number(amount || 0);
   if (numeric === 0) return PAYMENT_DIRECTION_WORDING.settled;
   const formatMoney = options.formatMoney ?? defaultFormatMoney;
+  if (isDisplayZero(component, numeric, formatMoney)) return PAYMENT_DIRECTION_WORDING.settled;
   const label = buildDirectionLabel(scope, component, numeric);
   const value = formatComponentValue(scope, component, numeric, formatMoney);
   return `${label} ${value}`;
@@ -143,16 +144,29 @@ function formatCompactAmount(component: BalanceComponent, value: number, formatM
   return String(Math.abs(value));
 }
 
+function isDisplayZero(
+  component: BalanceComponent,
+  value: number,
+  formatMoney: FormatMoney
+): boolean {
+  if (Math.abs(value) < 0.01) return true;
+  if (component !== "money") return false;
+  const formatted = formatMoney(Math.abs(value));
+  return formatted === "0" || formatted === "0.00" || formatted === "0.0";
+}
+
 function formatTransitionRow(
   transition: TransitionInput,
   formatMoney: FormatMoney
 ) : string | null {
   const before = Number(transition.before ?? 0);
   const after = Number(transition.after ?? 0);
-  if (Math.abs(before) < 0.01 && Math.abs(after) < 0.01) return null;
+  if (isDisplayZero(transition.component, before, formatMoney) &&
+      isDisplayZero(transition.component, after, formatMoney)) return null;
   const label = getComponentLabel(transition.component);
   const scope = getScopeLabel(transition.scope, transition.component, after);
   if (Math.abs(before - after) < 0.01) {
+    if (isDisplayZero(transition.component, after, formatMoney)) return null;
     const dir = getCompactDirectionLabel(transition.scope, transition.component, after);
     const val = formatCompactAmount(transition.component, after, formatMoney);
     const balancePart = dir ? `${dir} ${val}` : val;
@@ -163,7 +177,11 @@ function formatTransitionRow(
   const valBefore = formatCompactAmount(transition.component, before, formatMoney);
   const valAfter = formatCompactAmount(transition.component, after, formatMoney);
   const beforePart = dirBefore ? `${dirBefore} ${valBefore}` : valBefore;
-  if (Math.abs(after) < 0.01) {
+  if (isDisplayZero(transition.component, before, formatMoney)) {
+    const afterPart = dirAfter ? `${valAfter} ${dirAfter}` : valAfter;
+    return `${label}: Settled → ${afterPart} ${scope}`;
+  }
+  if (isDisplayZero(transition.component, after, formatMoney)) {
     return `${label}: ${beforePart} → Settled`;
   }
   const afterPart = dirAfter ? `${valAfter} ${dirAfter}` : valAfter;

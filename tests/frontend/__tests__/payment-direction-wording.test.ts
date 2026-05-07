@@ -10,16 +10,16 @@ describe("payment direction wording", () => {
 
   it("formats customer and company balance directions clearly", () => {
     expect(formatCurrentBalanceState("customer", "money", 150, { formatMoney })).toBe(
-      "Customer owes you EUR 150"
+      "Debts on customer 150 $"
     );
     expect(formatCurrentBalanceState("customer", "money", -150, { formatMoney })).toBe(
-      "You owe customer EUR 150"
+      "Credit for customer 150 $"
     );
     expect(formatCurrentBalanceState("company", "money", 150, { formatMoney })).toBe(
-      "You owe company EUR 150"
+      "Debts on distributor 150 $"
     );
     expect(formatCurrentBalanceState("company", "money", -150, { formatMoney })).toBe(
-      "Company owes you EUR 150"
+      "Credit for distributor 150 $"
     );
   });
 
@@ -28,12 +28,13 @@ describe("payment direction wording", () => {
       formatBalanceTransitions([makeBalanceTransition("customer", "money", 100, -50)], {
         formatMoney,
       })
-    ).toEqual(["You owe customer EUR 50 (was Customer owes you EUR 100)"]);
+    ).toEqual(["Credit for customer 50 $ (was Debts on customer 100 $)"]);
   });
 
   it("uses updated report shorthand labels for payment directions", () => {
-    expect(formatEventType("collection_money")).toBe("From Customer");
-    expect(formatEventType("collection_payout")).toBe("To Customer");
-    expect(formatEventType("company_payment")).toBe("Company Payment");
+    expect(formatEventType("collection_money")).toBe("Received payment");
+    expect(formatEventType("collection_payout")).toBe("Paid customer");
+    expect(formatEventType("company_payment")).toBe("Paid company");
+    expect(formatEventType("company_buy_iron")).toBe("Bought full");
   });
 });

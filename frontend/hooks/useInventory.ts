@@ -69,6 +69,8 @@ export function useCreateRefill() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -85,6 +87,8 @@ export function useCreateCompanyBuyIron() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -100,7 +104,6 @@ export function useAdjustInventory() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -124,7 +127,6 @@ export function useUpdateInventoryAdjustment() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -140,7 +142,6 @@ export function useDeleteInventoryAdjustment() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -173,6 +174,8 @@ export function useUpdateRefill() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },
@@ -189,6 +192,8 @@ export function useDeleteRefill() {
       queryClient.invalidateQueries({ queryKey: ["inventory", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "snapshot"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["reports-day-v2"], exact: false });
     },

@@ -100,12 +100,15 @@ class InventoryRefillSummary(SQLModel):
   date: str
   time_of_day: Optional[Literal["morning", "evening"]] = None
   effective_at: datetime
+  created_at: Optional[datetime] = None
   buy12: int
   return12: int
   buy48: int
   return48: int
   new12: int = 0
   new48: int = 0
+  total_cost: int = 0
+  paid_now: int = 0
   debt_cash: int = 0
   debt_cylinders_12: int = 0
   debt_cylinders_48: int = 0

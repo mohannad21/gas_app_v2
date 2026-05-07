@@ -90,7 +90,7 @@ export const buildActivityHappenedAt = (input?: Pick<HappenedAtInput, "date" | "
   if (!input) return undefined;
   if (input.at) return input.at;
   if (!input.date) return undefined;
-  const normalizedTime = normalizeClockTime(input.time ?? getCurrentLocalTime({ includeSeconds: true }));
+  const normalizedTime = normalizeClockTime(input.time ?? getCurrentLocalTime());
   if (!normalizedTime) return undefined;
   const dt = new Date(`${input.date}T${normalizedTime}`);
   return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
