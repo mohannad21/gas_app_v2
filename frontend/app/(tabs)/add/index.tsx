@@ -1229,15 +1229,15 @@ const formatDateTime = (value?: string) => {
       : "No customer activities match these filters.";
   const expenseEmptyMessage =
     !expensePrimaryFilter && !expenseCategoryFilter
-      ? "No expenses yet."
-      : "No expenses match these filters.";
+      ? "No money activities yet."
+      : "No money activities match these filters.";
 
   const primaryCtaLabel = isCustomerActivities
     ? "+ New Customer Activity"
     : isCompanyActivities
       ? "+ New Company Activity"
       : isExpenses
-        ? "+ Add Expense"
+        ? "+ Add Money Activity"
         : "+ New Ledger Adjustment";
 
   return (
@@ -1260,7 +1260,7 @@ const formatDateTime = (value?: string) => {
           </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Expenses</Text>
+          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Money{"\n"}Activities</Text>
         </Pressable>
         <Pressable
           onPress={() => setMode("ledger_adjustments")}
@@ -1443,7 +1443,7 @@ const formatDateTime = (value?: string) => {
           {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
           {expensesQuery.error || bankDepositsQuery.error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load expenses.</Text>
+              <Text style={styles.error}>Failed to load money activities.</Text>
               <Pressable style={styles.retryBtn} onPress={handleRetryExpenses}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>

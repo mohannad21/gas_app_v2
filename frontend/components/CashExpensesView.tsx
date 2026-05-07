@@ -116,7 +116,7 @@ function formatMoneyTransitionComment(before: number, after: number) {
 }
 
 export default function CashExpensesView({
-  title = "Add Expense",
+  title = "Add Money Activity",
   cashBalance,
   onRefreshCash,
   onClose,
