@@ -31,7 +31,7 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
-import { getInitInventoryAfter } from "@/lib/reports/utils";
+import { formatEventType, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
@@ -180,7 +180,7 @@ const getEventSubtype = (event: any): ActivitySubtypeOption => {
     case "adjust":
       return { key: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT };
     default:
-      return { key: String(event?.event_type ?? "activity"), label: String(event?.label ?? event?.event_type ?? "Activity") };
+      return { key: String(event?.event_type ?? "activity"), label: formatEventType(String(event?.event_type ?? "activity")) };
   }
 };
 

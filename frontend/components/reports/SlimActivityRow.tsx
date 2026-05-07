@@ -7,6 +7,7 @@ import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
 import { DailyReportEvent } from "@/types/domain";
@@ -195,9 +196,11 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     return null;
   }
   if (event.event_type === "bank_deposit") {
-    return event.label ?? event.display_name ?? "Wallet Transfer";
+    return event.transfer_direction === "bank_to_wallet"
+      ? EVENT_LABELS.BANK_TO_WALLET
+      : EVENT_LABELS.WALLET_TO_BANK;
   }
-  return event.label ?? null;
+  return null;
 };
 
 const splitDisplayName = (value: string | null | undefined) => {
@@ -302,7 +305,7 @@ export default function SlimActivityRow({
       ? heroActionBase
       : null;
   const bankTransferText = String(
-    event.hero_primary ?? event.hero_text ?? event.label ?? event.display_name ?? event.context_line ?? ""
+    event.hero_primary ?? event.hero_text ?? event.context_line ?? ""
   );
   const bankTransferDirection =
     event.event_type === "bank_deposit"
@@ -388,7 +391,7 @@ export default function SlimActivityRow({
               .replace(/[·•\s]+$/, "")
           : label
       )
-    : event.context_line ?? label;
+    : label;
   const createdAtLine = showCreatedAt && event.created_at ? `Created at: ${formatDateTimeYMDHM(event.created_at)}` : "";
   const effectiveAtLine =
     showEffectiveAtBottom && event.effective_at ? `Effective at: ${formatDateTimeYMDHM(event.effective_at)}` : "";
