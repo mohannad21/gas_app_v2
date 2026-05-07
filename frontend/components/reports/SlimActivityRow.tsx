@@ -8,6 +8,7 @@ import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } 
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
 import { getEventColor } from "@/lib/reports/eventColors";
+import { formatEventType } from "@/lib/reports/utils";
 import { DailyReportEvent } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
@@ -276,7 +277,7 @@ export default function SlimActivityRow({
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
-  const label = event?.event_type === "order" ? (event?.label ?? "Replacement") : event?.label ?? eventType;
+  const label = formatEventType(eventType, event?.order_mode);
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
