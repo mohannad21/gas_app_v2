@@ -155,7 +155,7 @@ export function orderToEvent(
 ): DailyReportEvent {
   const mode = order.order_mode ?? "replacement";
   const modeLabel =
-    mode === "sell_iron" ? "Sell Full" : mode === "buy_iron" ? "Buy Empty" : "Replacement";
+    mode === "sell_iron" ? EVENT_LABELS.ORDER_SELL_FULL : mode === "buy_iron" ? EVENT_LABELS.ORDER_BUY_EMPTY : EVENT_LABELS.ORDER_REPLACEMENT;
   const installed = order.cylinders_installed ?? 0;
   const received = order.cylinders_received ?? 0;
   const gas = order.gas_type ?? "12kg";
@@ -252,7 +252,7 @@ export function collectionToEvent(
 
   if (actionType === "payment") {
     eventType = "collection_money";
-    contextLine = "Received payment";
+    contextLine = EVENT_LABELS.COLLECTION_MONEY;
     if (amount > 0) {
       heroText = `Payment ${formatDisplayMoney(amount)}`;
       moneyDirection = "in";
@@ -260,7 +260,7 @@ export function collectionToEvent(
     }
   } else if (actionType === "payout") {
     eventType = "collection_payout";
-    contextLine = "Paid customer";
+    contextLine = EVENT_LABELS.COLLECTION_PAYOUT;
     if (amount > 0) {
       heroText = `Payout ${formatDisplayMoney(amount)}`;
       moneyDirection = "out";
@@ -268,11 +268,11 @@ export function collectionToEvent(
     }
   } else {
     eventType = "collection_empty";
-    contextLine = "Returned empties";
+    contextLine = EVENT_LABELS.COLLECTION_EMPTY;
     const parts: string[] = [];
     if (qty12 > 0) parts.push(`${qty12}x12kg`);
     if (qty48 > 0) parts.push(`${qty48}x48kg`);
-    heroText = parts.length > 0 ? `Returned ${parts.join(" | ")} empties` : "Returned empties";
+    heroText = parts.length > 0 ? `Returned ${parts.join(" | ")} empties` : EVENT_LABELS.COLLECTION_EMPTY;
   }
 
   const moneyAfter =
@@ -360,7 +360,7 @@ export function customerAdjustmentToEvent(
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,
-    context_line: "Balance adjustment",
+    context_line: EVENT_LABELS.CUSTOMER_ADJUSTMENT,
     display_name: opts?.customerName ?? null,
     display_description: opts?.customerDescription ?? null,
     customer_name: opts?.customerName ?? null,
@@ -378,7 +378,7 @@ export function customerAdjustmentToEvent(
       ? { type: "customer", display_name: opts.customerName, description: opts.customerDescription ?? null, display: null }
       : null,
     balance_transitions: transitions,
-    label: "Balance adjustment",
+    label: EVENT_LABELS.CUSTOMER_ADJUSTMENT,
   };
 }
 
@@ -415,8 +415,8 @@ export function companyBalanceAdjustmentToEvent(adj: CompanyBalanceAdjustment): 
     id: adj.id,
     effective_at: adj.happened_at,
     created_at: adj.created_at ?? adj.happened_at,
-    context_line: "Balance adjustment",
-    label: "Balance adjustment",
+    context_line: EVENT_LABELS.COMPANY_ADJUSTMENT,
+    label: EVENT_LABELS.COMPANY_ADJUSTMENT,
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
     note: adj.note ?? null,
     company_before: moneyBefore,
@@ -507,7 +507,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent {
   const amount = payment.amount ?? 0;
   const direction = amount >= 0 ? ("out" as const) : ("in" as const);
-  const label = direction === "out" ? "Paid company" : "Received from company";
+  const label = direction === "out" ? EVENT_LABELS.COMPANY_PAYMENT_OUT : EVENT_LABELS.COMPANY_PAYMENT_IN;
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   let companyMoneyBefore: number | null = null;
   let companyMoneyAfter: number | null = null;
@@ -546,8 +546,8 @@ export function expenseToEvent(expense: Expense): DailyReportEvent {
     id: expense.id,
     effective_at: expense.created_at ?? expense.date,
     created_at: expense.created_at ?? expense.date,
-    context_line: "Expense",
-    label: "Expense",
+    context_line: EVENT_LABELS.EXPENSE,
+    label: EVENT_LABELS.EXPENSE,
     expense_type: expense.expense_type,
     money_amount: expense.amount,
     money_direction: "out",
@@ -593,8 +593,8 @@ export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyRepor
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,
-    context_line: "Inventory adjustment",
-    label: "Inventory adjustment",
+    context_line: EVENT_LABELS.INVENTORY_ADJUSTMENT,
+    label: EVENT_LABELS.INVENTORY_ADJUSTMENT,
     gas_type: gas,
     reason: adj.reason ?? null,
     hero_text: heroText,
@@ -611,8 +611,8 @@ export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,
-    context_line: "Wallet adjustment",
-    label: "Wallet adjustment",
+    context_line: EVENT_LABELS.WALLET_ADJUSTMENT,
+    label: EVENT_LABELS.WALLET_ADJUSTMENT,
     money_amount: Math.abs(delta),
     money_direction: delta >= 0 ? "in" : "out",
     money_delta: Math.abs(delta),
@@ -630,8 +630,8 @@ export function inventoryAdjustmentGroupToEvent(adjustments: InventoryAdjustment
       id: "inventory-adjustment-group",
       effective_at: new Date(0).toISOString(),
       created_at: new Date(0).toISOString(),
-      context_line: "Inventory adjustment",
-      label: "Inventory adjustment",
+      context_line: EVENT_LABELS.INVENTORY_ADJUSTMENT,
+      label: EVENT_LABELS.INVENTORY_ADJUSTMENT,
       hero_text: null,
       note: null,
     };
@@ -660,8 +660,8 @@ export function inventoryAdjustmentGroupToEvent(adjustments: InventoryAdjustment
     id: primary.group_id ?? primary.id,
     effective_at: primary.effective_at,
     created_at: primary.created_at,
-    context_line: "Inventory adjustment",
-    label: "Inventory adjustment",
+    context_line: EVENT_LABELS.INVENTORY_ADJUSTMENT,
+    label: EVENT_LABELS.INVENTORY_ADJUSTMENT,
     reason,
     hero_text: lines.length > 0 ? lines.join("\n") : null,
     note: reason,
