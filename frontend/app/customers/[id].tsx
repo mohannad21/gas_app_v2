@@ -38,6 +38,7 @@ type ActivityFilter =
   | "buy_empty"
   | "sell_full"
   | "adjustment";
+type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
   { id: "replacement", label: "Replacement" },
@@ -105,12 +106,41 @@ export function getOrderCylinders(orders: Order[]): Record<"12kg" | "48kg", numb
 }
 
 export function sortCustomerActivityEvents(events: DailyReportEvent[]): DailyReportEvent[] {
-  return [...events].sort(
-    (a, b) =>
-      new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime() ||
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  return sortCustomerActivityEventsByMode(events, "created_desc");
 }
+
+function sortCustomerActivityEventsByMode(events: DailyReportEvent[], mode: ActivitySortMode) {
+  const getTime = (value?: string | null) => {
+    const parsed = Date.parse(String(value ?? ""));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  return [...events].sort((a, b) => {
+    const primaryA = mode.startsWith("created") ? getTime(a.created_at) : getTime(a.effective_at);
+    const primaryB = mode.startsWith("created") ? getTime(b.created_at) : getTime(b.effective_at);
+    if (primaryA !== primaryB) {
+      return mode.endsWith("_asc") ? primaryA - primaryB : primaryB - primaryA;
+    }
+    const secondaryA = mode.startsWith("created") ? getTime(a.effective_at) : getTime(a.created_at);
+    const secondaryB = mode.startsWith("created") ? getTime(b.effective_at) : getTime(b.created_at);
+    if (secondaryA !== secondaryB) {
+      return secondaryB - secondaryA;
+    }
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+  });
+}
+
+const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
+  "created_desc",
+  "created_asc",
+  "effective_desc",
+  "effective_asc",
+];
+const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
+  created_desc: "Created ↓",
+  created_asc: "Created ↑",
+  effective_desc: "Effective ↓",
+  effective_asc: "Effective ↑",
+};
 
 
 function DetailBalanceBox({
@@ -153,6 +183,8 @@ export default function CustomerDetailsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
   const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
   const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections(false);
@@ -340,7 +372,7 @@ export default function CustomerDetailsScreen() {
     }
     if (!selectedFilter || !selectedLevel2) {
       if (selectedFilter === "replacement" && selectedLevel3) {
-        return next.filter((event) => {
+        return sortCustomerActivityEventsByMode(next.filter((event) => {
           const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
           const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
           switch (selectedLevel3) {
@@ -352,9 +384,9 @@ export default function CustomerDetailsScreen() {
             case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
             default: return true;
           }
-        });
+        }), activitySortMode);
       }
-      return next;
+      return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
     switch (selectedFilter) {
       case "replacement": {
@@ -362,8 +394,8 @@ export default function CustomerDetailsScreen() {
           const matchingOrder = orders.find((order) => order.id === event.id);
           return matchingOrder?.system_id === selectedLevel2;
         });
-        if (!selectedLevel3) return l2Filtered;
-        return l2Filtered.filter((event) => {
+        if (!selectedLevel3) return sortCustomerActivityEventsByMode(l2Filtered, activitySortMode);
+        return sortCustomerActivityEventsByMode(l2Filtered.filter((event) => {
           const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
           const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
           switch (selectedLevel3) {
@@ -375,19 +407,19 @@ export default function CustomerDetailsScreen() {
             case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
             default: return true;
           }
-        });
+        }), activitySortMode);
       }
       case "return_empties":
-        return next.filter(
+        return sortCustomerActivityEventsByMode(next.filter(
           (event) =>
             (selectedLevel2 === "12kg" && Number(event.return12 ?? 0) > 0) ||
             (selectedLevel2 === "48kg" && Number(event.return48 ?? 0) > 0)
-        );
+        ), activitySortMode);
       case "buy_empty":
       case "sell_full":
-        return next.filter((event) => event.gas_type === selectedLevel2);
+        return sortCustomerActivityEventsByMode(next.filter((event) => event.gas_type === selectedLevel2), activitySortMode);
       case "adjustment":
-        return next.filter(
+        return sortCustomerActivityEventsByMode(next.filter(
           (event) =>
             (selectedLevel2 === "money" &&
               Number((event.customer_money_after ?? 0) - (event.customer_money_before ?? 0)) !== 0) ||
@@ -395,11 +427,17 @@ export default function CustomerDetailsScreen() {
               Number((event.customer_12kg_after ?? 0) - (event.customer_12kg_before ?? 0)) !== 0) ||
             (selectedLevel2 === "48kg" &&
               Number((event.customer_48kg_after ?? 0) - (event.customer_48kg_before ?? 0)) !== 0)
-        );
+        ), activitySortMode);
       default:
-        return next;
+        return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
-  }, [activities, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
+  }, [activities, activitySortMode, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
+  const cycleActivitySort = () => {
+    setActivitySortMode((current) => {
+      const currentIndex = ACTIVITY_SORT_ORDER.indexOf(current);
+      return ACTIVITY_SORT_ORDER[(currentIndex + 1) % ACTIVITY_SORT_ORDER.length];
+    });
+  };
 
   if (customersQuery.isLoading) {
     return (
@@ -683,13 +721,24 @@ export default function CustomerDetailsScreen() {
       ))}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Activities</Text>
-        <Text style={styles.sectionMeta}>
-          {activitiesRefreshing && !activitiesLoading ? "Refreshing..." : `${filteredActivities.length} shown`}
-        </Text>
+        <View>
+          <Text style={styles.sectionTitle}>Activities</Text>
+          <Text style={styles.sectionMeta}>
+            {activitiesRefreshing && !activitiesLoading ? "Refreshing..." : `${filteredActivities.length} shown`}
+          </Text>
+        </View>
+        <View style={styles.activityToolbar}>
+          <Pressable style={styles.toolbarIconButton} onPress={() => setFiltersVisible((current) => !current)}>
+            <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
+          </Pressable>
+          <Pressable style={styles.toolbarSortButton} onPress={cycleActivitySort}>
+            <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
+            <Text style={styles.toolbarSortText}>{ACTIVITY_SORT_LABELS[activitySortMode]}</Text>
+          </Pressable>
+        </View>
       </View>
 
-      {availableActivityFilters.length > 1 ? (
+      {filtersVisible && availableActivityFilters.length > 1 ? (
         <FilterChipRow
           options={availableActivityFilters}
           value={selectedFilter}
@@ -703,7 +752,7 @@ export default function CustomerDetailsScreen() {
         />
       ) : null}
 
-      {selectedFilter && level2Options.length > 1 ? (
+      {filtersVisible && selectedFilter && level2Options.length > 1 ? (
         <FilterChipRow
           options={level2Options}
           value={selectedLevel2}
@@ -716,7 +765,7 @@ export default function CustomerDetailsScreen() {
         />
       ) : null}
 
-      {selectedFilter === "replacement" && level3Options.length > 1 ? (
+      {filtersVisible && selectedFilter === "replacement" && level3Options.length > 1 ? (
         <FilterChipRow
           options={level3Options}
           value={selectedLevel3}
@@ -854,6 +903,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 4,
   },
+  activityToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   sectionTitle: {
     color: "#0f172a",
     fontSize: 18,
@@ -984,6 +1038,32 @@ const styles = StyleSheet.create({
   secondaryFilterRow: {
     paddingHorizontal: 20,
     gap: 8,
+  },
+  toolbarIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+  },
+  toolbarSortButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+    paddingHorizontal: 12,
+  },
+  toolbarSortText: {
+    color: "#0a7ea4",
+    fontWeight: "700",
+    fontSize: 12,
   },
   filterChip: {
     paddingVertical: 8,
