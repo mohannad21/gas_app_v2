@@ -198,6 +198,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#dcfce7",
     borderRadius: 14,
-    zIndex: 1,
   },
 });

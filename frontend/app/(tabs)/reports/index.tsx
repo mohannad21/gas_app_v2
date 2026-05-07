@@ -417,6 +417,7 @@ export default function ReportsScreen() {
   const [handledRouteKey, setHandledRouteKey] = useState<string | null>(null);
   const [highlightEventKey, setHighlightEventKey] = useState<string | null>(null);
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
+  const lastHighlightParamKey = useRef<string | null>(null);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -541,6 +542,7 @@ export default function ReportsScreen() {
       return () => {
         setHighlightEventKey(null);
         setHighlightDate(null);
+        lastHighlightParamKey.current = null;
       };
     }, [refetchV2])
   );
@@ -660,8 +662,12 @@ export default function ReportsScreen() {
     const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
     if (!highlightId && !highlightEventType && !highlightEffectiveAt) {
       setHighlightEventKey(null);
+      setHighlightDate(null);
+      lastHighlightParamKey.current = null;
       return;
     }
+    const paramKey = [highlightId, highlightEventType, highlightEffectiveAt].filter(Boolean).join("|");
+    if (lastHighlightParamKey.current === paramKey) return;
     const match = rawSelectedEvents.find((event) => {
       if (highlightId) {
         return String(event?.id ?? event?.source_id ?? "") === highlightId;
@@ -675,6 +681,7 @@ export default function ReportsScreen() {
       return Boolean(highlightEventType || highlightEffectiveAt);
     });
     if (!match) return;
+    lastHighlightParamKey.current = paramKey;
     const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
     const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
     setHighlightEventKey(eventKey);
@@ -682,6 +689,7 @@ export default function ReportsScreen() {
     const timer = setTimeout(() => {
       setHighlightEventKey((current) => (current === eventKey ? null : current));
       setHighlightDate((current) => (current === eventDate ? null : current));
+      lastHighlightParamKey.current = null;
     }, 5000);
     return () => clearTimeout(timer);
   }, [params.highlightEffectiveAt, params.highlightEventType, params.highlightId, rawSelectedEvents]);

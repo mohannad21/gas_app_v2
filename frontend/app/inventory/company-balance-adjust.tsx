@@ -317,13 +317,16 @@ export default function CompanyBalanceAdjustScreen() {
         cylinder_balance_48: next48,
         note: note.trim() || undefined,
       };
+      let savedId: string;
       if (adjustmentId) {
         await updateAdjustment.mutateAsync({ id: adjustmentId, payload });
+        savedId = adjustmentId;
       } else {
-        await createAdjustment.mutateAsync(payload);
+        const created = await createAdjustment.mutateAsync(payload);
+        savedId = created.id;
       }
       Keyboard.dismiss();
-      router.back();
+      router.replace({ pathname: "/(tabs)/add", params: { highlightId: savedId } });
     } catch (err: any) {
       logApiError("[company balance adjustment save] error", err);
       Alert.alert(
