@@ -995,7 +995,7 @@ export default function ReportsScreen() {
             return (
               <View key={eventKey}>
                 <Pressable onPress={() => toggleEventKey(eventKey)}>
-                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} />
+                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} showCreatedAt showEffectiveAtBottom />
                 </Pressable>
                 {isOpen ? <EventExpandedPanel ev={item} formatMoney={formatMoney} formatCount={formatCount} /> : null}
               </View>
@@ -1589,7 +1589,7 @@ function V2Timeline({
         return (
           <View key={eventKey}>
             <Pressable onPress={() => toggleEvent(eventKey)}>
-              <SlimActivityRow event={ev} formatMoney={formatMoney} />
+              <SlimActivityRow event={ev} formatMoney={formatMoney} showCreatedAt showEffectiveAtBottom />
             </Pressable>
             {isOpen ? <EventExpandedPanel ev={ev} formatMoney={formatMoney} formatCount={formatCount} /> : null}
           </View>
