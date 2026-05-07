@@ -669,7 +669,7 @@ export default function ReportsScreen() {
       if (highlightEventType && String(event?.event_type ?? "") !== highlightEventType) {
         return false;
       }
-      if (highlightEffectiveAt && String(event?.effective_at ?? "") !== highlightEffectiveAt) {
+      if (highlightEffectiveAt && String(event?.effective_at ?? "").slice(0, 10) !== highlightEffectiveAt.slice(0, 10)) {
         return false;
       }
       return Boolean(highlightEventType || highlightEffectiveAt);

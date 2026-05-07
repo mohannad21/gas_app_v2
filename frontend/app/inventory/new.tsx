@@ -40,7 +40,7 @@ import {
   useUpdateInventoryAdjustment,
 } from "@/hooks/useInventory";
 import { useDailyReportsV2 } from "@/hooks/useReports";
-import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
+import { CashAdjustment, CompanyPayment, InventoryAdjustment } from "@/types/domain";
 import { buildActivityHappenedAt, formatDateLocale, formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime, toDateKey } from "@/lib/date";
 import { isAddDataSource, openDailyReportForDate } from "@/lib/saveFlow";
 import { showSuccessPulse } from "@/lib/successPulse";
@@ -235,8 +235,8 @@ function InventoryAdjustForm({
   }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
-  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
 }) {
   const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
   const [full12, setFull12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
@@ -329,12 +329,13 @@ function InventoryAdjustForm({
       }
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
+      const highlightId = entry?.id;
       if (resetAfter && !entry) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust" });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust", highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "adjust" });
+          onSaveSuccess({ effectiveAt, highlightEventType: "adjust", highlightId });
         } else {
           onSaved();
         }
@@ -514,11 +515,11 @@ function CashAdjustForm({
   accessoryId?: string;
   cashBefore: number | null;
   isSubmitting?: boolean;
-  onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<void>;
+  onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<CashAdjustment>;
   onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
-  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
-  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
 }) {
   const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
   const [reason, setReason] = useState(entry?.reason ?? "");
@@ -558,19 +559,22 @@ function CashAdjustForm({
     setPendingAction(resetAfter ? "saveAndAdd" : "save");
     const trimmedReason = reason.trim();
     try {
+      let highlightId: string | undefined;
       if (entry) {
         await onUpdate(entry.id, { delta_cash: deltaValue, reason: trimmedReason || undefined });
+        highlightId = entry.id;
       } else {
-        await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason || undefined });
+        const created = await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason || undefined });
+        highlightId = created?.id;
       }
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
       if (resetAfter && !entry) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "cash_adjust" });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "cash_adjust", highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "cash_adjust" });
+          onSaveSuccess({ effectiveAt, highlightEventType: "cash_adjust", highlightId });
         } else {
           onSaved();
         }
@@ -671,10 +675,10 @@ function CompanyPaymentForm({
   walletBalance: number;
   balanceReady: boolean;
   isSubmitting?: boolean;
-  onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
+  onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<CompanyPayment>;
   onSaved: () => void;
-  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
-  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string }) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -740,7 +744,7 @@ function CompanyPaymentForm({
       return;
     }
     try {
-      await onCreate({
+      const created = await onCreate({
         date: payDate,
         time: payTime,
         amount: normalizedAmount,
@@ -748,12 +752,13 @@ function CompanyPaymentForm({
       });
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: payDate, time: payTime }) ?? payDate;
+      const highlightId = created?.id;
       if (resetAfter) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "company_payment" });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "company_payment", highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "company_payment" });
+          onSaveSuccess({ effectiveAt, highlightEventType: "company_payment", highlightId });
         } else {
           onSaved();
         }
@@ -1062,11 +1067,12 @@ export default function InventoryNewScreen() {
     router.replace({ pathname: "/(tabs)/add" });
   }, []);
   const handleSaveSuccess = useCallback(
-    (effectiveAt: string, highlightEventType?: string) => {
+    (effectiveAt: string, highlightEventType?: string, highlightId?: string) => {
       if (isAddFlow) {
         openDailyReportForDate(effectiveAt, {
           highlightEventType,
           highlightEffectiveAt: effectiveAt,
+          ...(highlightId ? { highlightId } : {}),
         });
         return;
       }
@@ -1192,10 +1198,10 @@ export default function InventoryNewScreen() {
               balanceReady={companyBalanceReady}
               isSubmitting={createCompanyPayment.isPending}
               onCreate={async (payload) => {
-                await createCompanyPayment.mutateAsync(payload);
+                return await createCompanyPayment.mutateAsync(payload);
               }}
               onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
+              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
               onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           ) : activeTab === "cash" ? (
@@ -1207,13 +1213,13 @@ export default function InventoryNewScreen() {
               cashBefore={dailyReportQuery.data?.[0]?.cash_end ?? null}
               isSubmitting={editingCashAdjust ? updateCashAdjust.isPending : createCashAdjust.isPending}
               onCreate={async (payload) => {
-                await createCashAdjust.mutateAsync(payload);
+                return await createCashAdjust.mutateAsync(payload);
               }}
               onUpdate={async (id, payload) => {
                 await updateCashAdjust.mutateAsync({ id, payload });
               }}
               onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
+              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
               onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           ) : (
@@ -1231,7 +1237,7 @@ export default function InventoryNewScreen() {
                 await updateInventoryAdjust.mutateAsync({ id, payload });
               }}
               onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
+              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
               onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           )
