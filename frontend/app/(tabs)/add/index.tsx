@@ -1209,18 +1209,18 @@ const formatDateTime = (value?: string) => {
 
   const handlePrimaryAction = () => {
     if (isCustomerActivities) {
-      router.push("/orders/new");
+      router.push({ pathname: "/orders/new", params: { source: "add" } });
       return;
     }
     if (isCompanyActivities) {
-      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
+      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill", source: "add" } });
       return;
     }
     if (isExpenses) {
-      router.push("/expenses/new");
+      router.push({ pathname: "/expenses/new", params: { source: "add" } });
       return;
     }
-    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
+    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory", source: "add" } });
   };
 
   const customerActivityEmptyMessage =

@@ -45,6 +45,8 @@ import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale } from "@/lib/date";
 import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } from "@/lib/ledgerMath";
 import { formatDisplayMoney } from "@/lib/money";
+import { openDailyReportForDate, isAddDataSource } from "@/lib/saveFlow";
+import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
 import { gasColor } from "@/constants/gas";
@@ -103,12 +105,15 @@ function TradeValueText({ value }: { value: string | number }) {
 type ReplacementToggleState = "matched" | "with_old" | "none" | "custom";
 
 export default function NewOrderScreen() {
-  const { customerId, systemId } = useLocalSearchParams<{
+  const { customerId, systemId, source } = useLocalSearchParams<{
     customerId?: string | string[];
     systemId?: string | string[];
+    source?: string | string[];
   }>();
   const initialCustomerId = Array.isArray(customerId) ? customerId[0] : customerId;
   const initialSystemId = Array.isArray(systemId) ? systemId[0] : systemId;
+  const sourceParam = Array.isArray(source) ? source[0] : source;
+  const isAddFlow = isAddDataSource(sourceParam);
 
   const {
     control,
@@ -142,11 +147,12 @@ export default function NewOrderScreen() {
   const pricesQuery = usePriceSettings();
   const dailyReportQuery = useDailyReportsV2(getTodayDate(), getTodayDate());
   const pricesConfigured = (pricesQuery.data ?? []).length > 0;
-  const createOrder = useCreateOrder();
-  const createCollection = useCreateCollection();
+  const createOrder = useCreateOrder({ suppressSuccessToast: isAddFlow });
+  const createCollection = useCreateCollection({ suppressSuccessToast: isAddFlow });
   const initInventory = useInitInventory();
 
   const [submitting, setSubmitting] = useState(false);
+  const [pendingSaveAction, setPendingSaveAction] = useState<"save" | "saveAndAdd" | null>(null);
   const [entryMode, setEntryMode] = useState<"order" | "payment" | "return">("order");
   const [orderMode, setOrderMode] = useState<"replacement" | "sell_iron" | "buy_iron">("replacement");
   const [paymentDirection, setPaymentDirection] = useState<"receive" | "payout">("receive");
@@ -171,6 +177,7 @@ export default function NewOrderScreen() {
   } = useOrderPriceOverride();
 
   const [whatsappOrderId, setWhatsappOrderId] = useState<string | null>(null);
+  const [whatsappReportDate, setWhatsappReportDate] = useState<string | null>(null);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
@@ -808,17 +815,23 @@ export default function NewOrderScreen() {
 
   /* -------------------- submit -------------------- */
 
-  const resetOrderForm = () => {
-    setValue("customer_id", "");
-    setValue("system_id", "");
-    setValue("gas_type", "");
-    setValue("cylinders_installed", "");
-    setValue("cylinders_received", "");
-    setValue("price_total", "");
-    setValue("paid_amount", "");
+  const resetOrderForm = (options?: { preserveSelection?: boolean; nextAction?: ActionMode }) => {
+    const preserveSelection = options?.preserveSelection ?? false;
+    if (!preserveSelection) {
+      setValue("customer_id", "");
+      setValue("system_id", "");
+      setValue("gas_type", "");
+      setCustomerSearch("");
+    }
+    if (options?.nextAction) {
+      setActionMode(options.nextAction);
+    }
+    setValue("cylinders_installed", "0");
+    setValue("cylinders_received", "0");
+    setValue("price_total", "0");
+    setValue("paid_amount", "0");
     setValue("note", "");
     setManualPrice(false);
-    setCustomerSearch("");
     setGasPriceInput("");
     setGasPriceDirty(false);
     setIronPriceInput("");
@@ -842,11 +855,22 @@ export default function NewOrderScreen() {
     );
   };
 
+  const finishAddFlowSave = (effectiveAt?: string, resetAfter?: boolean) => {
+    showSuccessPulse();
+    if (resetAfter) {
+      resetOrderForm({ preserveSelection: true, nextAction: "replacement" });
+      setPendingSaveAction(null);
+      return;
+    }
+    openDailyReportForDate(effectiveAt);
+  };
+
   const runOrderSubmit = async (
     values: OrderFormValues,
     options: { showWhatsapp: boolean; resetAfter: boolean }
   ) => {
     if (inventoryInitBlocked) {
+      setPendingSaveAction(null);
       Alert.alert(
         "Initialize inventory",
         "Please add your initial inventory before creating the first order.",
@@ -861,6 +885,7 @@ export default function NewOrderScreen() {
     }
 
     if (!pricesConfigured) {
+      setPendingSaveAction(null);
       Alert.alert(
         "Set prices first",
         "Selling prices are not configured yet. Please add prices before creating orders.",
@@ -876,10 +901,12 @@ export default function NewOrderScreen() {
     }
 
     if (!values.gas_type) {
+      setPendingSaveAction(null);
       Alert.alert("Missing gas type", "Please select a gas type.");
       return;
     }
     if ((orderMode === "replacement" || orderMode === "sell_iron") && !values.system_id) {
+      setPendingSaveAction(null);
       Alert.alert("Missing system", "Please add a system for this customer.");
       return;
     }
@@ -887,6 +914,7 @@ export default function NewOrderScreen() {
     const installedCount = parseCountValue(values.cylinders_installed);
     const receivedCount = parseCountValue(values.cylinders_received);
     if (orderMode !== "buy_iron" && installedCount <= 0) {
+      setPendingSaveAction(null);
       Alert.alert(
         "Invalid installed count",
         "Orders must have at least 1 installed cylinder. For money-only or return-only actions, use the Payment or Return actions."
@@ -896,10 +924,12 @@ export default function NewOrderScreen() {
     if (orderMode === "sell_iron" || orderMode === "buy_iron") {
       const tradeCount = orderMode === "buy_iron" ? receivedCount : installedCount;
       if (tradeCount <= 0) {
+        setPendingSaveAction(null);
         Alert.alert("Missing quantity", "Enter a quantity greater than 0.");
         return;
       }
       if (ironUnitPriceValue <= 0) {
+        setPendingSaveAction(null);
         Alert.alert("Missing price", "Enter a price per unit.");
         return;
       }
@@ -968,10 +998,16 @@ export default function NewOrderScreen() {
     };
 
     const finalizeCreate = async () => {
+      setPendingSaveAction(options.resetAfter ? "saveAndAdd" : "save");
       setSubmitting(true);
       try {
         const created = await createOrder.mutateAsync(orderPayload);
+        if (isAddFlow) {
+          finishAddFlowSave(values.delivered_at, options.resetAfter);
+          return;
+        }
         if (options.showWhatsapp) {
+          setWhatsappReportDate(values.delivered_at);
           setWhatsappOrderId(created.id);
           setWhatsappOpen(true);
         }
@@ -982,6 +1018,9 @@ export default function NewOrderScreen() {
         logApiError("[new order submit] error", err);
         Alert.alert("Error", getUserFacingApiError(err, "Failed to create order. Please try again."));
       } finally {
+        if (!isAddFlow) {
+          setPendingSaveAction(null);
+        }
         setSubmitting(false);
       }
     };
@@ -1003,9 +1042,13 @@ ${cylLine}
 `,
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: () => void finalizeCreate() },
+          {
+            text: "Confirm",
+            onPress: () => void finalizeCreate(),
+          },
         ]
       );
+      setPendingSaveAction(null);
       return;
     }
 
@@ -1013,6 +1056,7 @@ ${cylLine}
   };
 
   const handleInvalid = (formErrors: Record<string, unknown>) => {
+    setPendingSaveAction(null);
     if (formErrors.cylinders_installed) {
       Alert.alert(
         "Invalid installed count",
@@ -1026,28 +1070,27 @@ ${cylLine}
     }
   };
 
-  const handleSaveOrder = handleSubmit(
+  const submitSaveOrder = handleSubmit(
     (values) => runOrderSubmit(values, { showWhatsapp: true, resetAfter: false }),
     handleInvalid
   );
 
-  const handleSaveAndAddAnother = handleSubmit(
+  const submitSaveAndAddAnother = handleSubmit(
     (values) => runOrderSubmit(values, { showWhatsapp: false, resetAfter: true }),
     handleInvalid
   );
 
-  const navigateToTodayReport = () => {
-    router.replace({ pathname: "/(tabs)/reports", params: { date: getTodayDate() } });
-  };
-
   const runSavePayment = async (resetAfter = false) => {
+    setPendingSaveAction(resetAfter ? "saveAndAdd" : "save");
     if (!selectedCustomer) {
+      setPendingSaveAction(null);
       Alert.alert("Missing customer", "Please select a customer.");
       return;
     }
     const values = getValues();
     const paid = Number(values.paid_amount) || 0;
     if (paid <= 0) {
+      setPendingSaveAction(null);
       Alert.alert("Missing amount", "Enter a payment amount.");
       return;
     }
@@ -1065,27 +1108,38 @@ ${cylLine}
         note: values.note || undefined,
         request_id: requestId,
       });
+      if (isAddFlow) {
+        finishAddFlowSave(effectiveAt, resetAfter);
+        return;
+      }
       if (resetAfter) {
-        setValue("paid_amount", "");
+        setValue("paid_amount", "0");
         setValue("note", "");
         setPaidDirty(false);
         await refreshCustomerPreview();
       } else {
-        navigateToTodayReport();
+        openDailyReportForDate(effectiveAt);
       }
     } catch (err) {
       const axiosError = err as AxiosError;
       logApiError("[new order payment] error", err);
       Alert.alert("Payment failed", getUserFacingApiError(axiosError, "Failed to save payment."));
+    } finally {
+      if (!isAddFlow) {
+        setPendingSaveAction(null);
+      }
     }
   };
 
   const runSaveReturn = async (resetAfter = false) => {
+    setPendingSaveAction(resetAfter ? "saveAndAdd" : "save");
     if (!selectedCustomer) {
+      setPendingSaveAction(null);
       Alert.alert("Missing customer", "Please select a customer.");
       return;
     }
     if (inventoryInitBlocked) {
+      setPendingSaveAction(null);
       Alert.alert(
         "Initialize inventory",
         "Please add your initial inventory before recording returns.",
@@ -1095,12 +1149,14 @@ ${cylLine}
     }
     const values = getValues();
     if (!values.gas_type) {
+      setPendingSaveAction(null);
       Alert.alert("Missing gas type", "Please select a gas type.");
       return;
     }
     const gasType = values.gas_type as GasType;
     const receivedCount = parseCountValue(values.cylinders_received);
     if (receivedCount <= 0) {
+      setPendingSaveAction(null);
       Alert.alert("Missing counts", "Enter at least one cylinder count.");
       return;
     }
@@ -1119,18 +1175,34 @@ ${cylLine}
         note: values.note || undefined,
         request_id: requestId,
       });
+      if (isAddFlow) {
+        finishAddFlowSave(effectiveAt, resetAfter);
+        return;
+      }
       if (resetAfter) {
-        setValue("cylinders_received", "");
+        setValue("cylinders_received", "0");
         setValue("note", "");
         await refreshCustomerPreview();
       } else {
-        navigateToTodayReport();
+        openDailyReportForDate(effectiveAt);
       }
     } catch (err) {
       const axiosError = err as AxiosError;
       logApiError("[new order return] error", err);
       Alert.alert("Return failed", getUserFacingApiError(axiosError, "Failed to save return."));
+    } finally {
+      if (!isAddFlow) {
+        setPendingSaveAction(null);
+      }
     }
+  };
+
+  const handleSaveOrder = () => {
+    void submitSaveOrder();
+  };
+
+  const handleSaveAndAddAnother = () => {
+    void submitSaveAndAddAnother();
   };
 
   const handleSavePayment = () => runSavePayment(false);
@@ -1234,7 +1306,7 @@ ${cylLine}
   const exitAfterWhatsApp = () => {
     setWhatsappOpen(false);
     setWhatsappOrderId(null);
-    navigateToTodayReport();
+    openDailyReportForDate(whatsappReportDate ?? getTodayDate());
   };
 
   const openWhatsAppConfirmation = async () => {
@@ -2655,6 +2727,8 @@ ${cylLine}
           saveLabel={savePrimaryLabel}
           saveDisabled={saveDisabled}
           saving={saveBusy}
+          saveLoading={saveBusy && pendingSaveAction === "save"}
+          saveAndAddLoading={saveBusy && pendingSaveAction === "saveAndAdd"}
         />
       ) : null}
       {hasCustomer ? (

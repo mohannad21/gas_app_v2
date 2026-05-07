@@ -41,7 +41,9 @@ import {
 } from "@/hooks/useInventory";
 import { useDailyReportsV2 } from "@/hooks/useReports";
 import { CashAdjustment, InventoryAdjustment } from "@/types/domain";
-import { formatDateLocale, formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime, toDateKey } from "@/lib/date";
+import { buildActivityHappenedAt, formatDateLocale, formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime, toDateKey } from "@/lib/date";
+import { isAddDataSource, openDailyReportForDate } from "@/lib/saveFlow";
+import { showSuccessPulse } from "@/lib/successPulse";
 
 type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
 type InventorySection = "company" | "ledger";
@@ -213,6 +215,8 @@ function InventoryAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
+  onSaveSuccess,
+  onSaveAndAddSuccess,
 }: {
   visible: boolean;
   entry: InventoryAdjustment | null;
@@ -231,6 +235,8 @@ function InventoryAdjustForm({
   }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_full?: number; delta_empty?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
+  onSaveSuccess?: (details: { effectiveAt: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string }) => void;
 }) {
   const [gasType, setGasType] = useState<"12kg" | "48kg">(entry?.gas_type ?? "12kg");
   const [full12, setFull12] = useState(String(entry?.gas_type === "12kg" ? entry?.delta_full ?? 0 : 0));
@@ -286,8 +292,10 @@ function InventoryAdjustForm({
     setAdjustDate(date);
     setAdjustTime(getNowTime());
   };
+  const [pendingAction, setPendingAction] = useState<"save" | "saveAndAdd" | null>(null);
 
   const save = async (resetAfter = false) => {
+    setPendingAction(resetAfter ? "saveAndAdd" : "save");
     const trimmedReason = reason.trim();
     try {
       if (entry) {
@@ -319,14 +327,23 @@ function InventoryAdjustForm({
           });
         }
       }
+      showSuccessPulse();
+      const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
       if (resetAfter && !entry) {
         resetForm();
+        onSaveAndAddSuccess?.({ effectiveAt });
       } else {
-        onSaved();
+        if (onSaveSuccess) {
+          onSaveSuccess({ effectiveAt });
+        } else {
+          onSaved();
+        }
       }
     } catch (err: any) {
       logApiError("[inventory adjustment save] error", err);
       Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save adjustment."));
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -453,6 +470,8 @@ function InventoryAdjustForm({
         onSaveAndAdd={() => save(!entry)}
         saveDisabled={Boolean(isSubmitting)}
         saving={Boolean(isSubmitting)}
+        saveLoading={Boolean(isSubmitting) && pendingAction === "save"}
+        saveAndAddLoading={Boolean(isSubmitting) && pendingAction === "saveAndAdd"}
       />
       <CalendarModal
         visible={calendarOpen}
@@ -486,6 +505,8 @@ function CashAdjustForm({
   onCreate,
   onUpdate,
   onSaved,
+  onSaveSuccess,
+  onSaveAndAddSuccess,
 }: {
   visible: boolean;
   entry: CashAdjustment | null;
@@ -496,6 +517,8 @@ function CashAdjustForm({
   onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<void>;
   onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
   onSaved: () => void;
+  onSaveSuccess?: (details: { effectiveAt: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string }) => void;
 }) {
   const [deltaCash, setDeltaCash] = useState(String(entry?.delta_cash ?? 0));
   const [reason, setReason] = useState(entry?.reason ?? "");
@@ -529,8 +552,10 @@ function CashAdjustForm({
     setAdjustDate(date);
     setAdjustTime(getNowTime());
   };
+  const [pendingAction, setPendingAction] = useState<"save" | "saveAndAdd" | null>(null);
 
   const save = async (resetAfter = false) => {
+    setPendingAction(resetAfter ? "saveAndAdd" : "save");
     const trimmedReason = reason.trim();
     try {
       if (entry) {
@@ -538,14 +563,23 @@ function CashAdjustForm({
       } else {
         await onCreate({ date: adjustDate, time: adjustTime, delta_cash: deltaValue, reason: trimmedReason || undefined });
       }
+      showSuccessPulse();
+      const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
       if (resetAfter && !entry) {
         resetForm();
+        onSaveAndAddSuccess?.({ effectiveAt });
       } else {
-        onSaved();
+        if (onSaveSuccess) {
+          onSaveSuccess({ effectiveAt });
+        } else {
+          onSaved();
+        }
       }
     } catch (err: any) {
       logApiError("[cash adjustment save] error", err);
       Alert.alert("Adjustment failed", getUserFacingApiError(err, "Failed to save adjustment."));
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -592,6 +626,8 @@ function CashAdjustForm({
         onSaveAndAdd={() => save(!entry)}
         saveDisabled={Boolean(isSubmitting)}
         saving={Boolean(isSubmitting)}
+        saveLoading={Boolean(isSubmitting) && pendingAction === "save"}
+        saveAndAddLoading={Boolean(isSubmitting) && pendingAction === "saveAndAdd"}
       />
       <CalendarModal
         visible={calendarOpen}
@@ -625,6 +661,8 @@ function CompanyPaymentForm({
   isSubmitting,
   onCreate,
   onSaved,
+  onSaveSuccess,
+  onSaveAndAddSuccess,
 }: {
   visible: boolean;
   date: string;
@@ -635,6 +673,8 @@ function CompanyPaymentForm({
   isSubmitting?: boolean;
   onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<void>;
   onSaved: () => void;
+  onSaveSuccess?: (details: { effectiveAt: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string }) => void;
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -690,9 +730,12 @@ function CompanyPaymentForm({
     setPayDate(date);
     setPayTime(getNowTime());
   };
+  const [pendingAction, setPendingAction] = useState<"save" | "saveAndAdd" | null>(null);
 
   const save = async (resetAfter = false) => {
+    setPendingAction(resetAfter ? "saveAndAdd" : "save");
     if (amountValue <= 0) {
+      setPendingAction(null);
       Alert.alert("Missing amount", "Enter a payment amount.");
       return;
     }
@@ -703,14 +746,23 @@ function CompanyPaymentForm({
         amount: normalizedAmount,
         note: note.trim() || undefined,
       });
+      showSuccessPulse();
+      const effectiveAt = buildActivityHappenedAt({ date: payDate, time: payTime }) ?? payDate;
       if (resetAfter) {
         resetForm();
+        onSaveAndAddSuccess?.({ effectiveAt });
       } else {
-        onSaved();
+        if (onSaveSuccess) {
+          onSaveSuccess({ effectiveAt });
+        } else {
+          onSaved();
+        }
       }
     } catch (err: any) {
       logApiError("[company payment save] error", err);
       Alert.alert("Payment failed", getUserFacingApiError(err, "Failed to save payment."));
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -877,6 +929,8 @@ function CompanyPaymentForm({
         onSaveAndAdd={() => save(true)}
         saveDisabled={tableDisabled || Boolean(isSubmitting)}
         saving={Boolean(isSubmitting)}
+        saveLoading={Boolean(isSubmitting) && pendingAction === "save"}
+        saveAndAddLoading={Boolean(isSubmitting) && pendingAction === "saveAndAdd"}
       />
       <CalendarModal
         visible={calendarOpen}
@@ -907,12 +961,15 @@ export default function InventoryNewScreen() {
     refillId?: string | string[];
     adjustId?: string | string[];
     cashId?: string | string[];
+    source?: string | string[];
   }>();
   const sectionParam = Array.isArray(params.section) ? params.section[0] : params.section;
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const refillId = Array.isArray(params.refillId) ? params.refillId[0] : params.refillId;
   const adjustId = Array.isArray(params.adjustId) ? params.adjustId[0] : params.adjustId;
   const cashId = Array.isArray(params.cashId) ? params.cashId[0] : params.cashId;
+  const sourceParam = Array.isArray(params.source) ? params.source[0] : params.source;
+  const isAddFlow = isAddDataSource(sourceParam);
 
   const section = useMemo<InventorySection>(() => {
     if (sectionParam === "company" || sectionParam === "ledger") {
@@ -989,7 +1046,7 @@ export default function InventoryNewScreen() {
   const updateInventoryAdjust = useUpdateInventoryAdjustment();
   const createCashAdjust = useCreateCashAdjustment();
   const updateCashAdjust = useUpdateCashAdjustment();
-  const createCompanyPayment = useCreateCompanyPayment();
+  const createCompanyPayment = useCreateCompanyPayment({ suppressSuccessToast: true });
   const companyBalances = companyBalancesQuery.data ?? null;
   const companyBalanceReady = companyBalancesQuery.isSuccess;
   const companyBalance = companyBalances?.company_money ?? 0;
@@ -1004,6 +1061,24 @@ export default function InventoryNewScreen() {
     }
     router.replace({ pathname: "/(tabs)/add" });
   }, []);
+  const handleSaveSuccess = useCallback(
+    (effectiveAt: string) => {
+      if (isAddFlow) {
+        openDailyReportForDate(effectiveAt);
+        return;
+      }
+      closeScreen();
+    },
+    [closeScreen, isAddFlow]
+  );
+  const handleSaveAndAddReturn = useCallback(() => {
+    if (!isAddFlow) return;
+    if (section === "company") {
+      setActiveTab("refill");
+      return;
+    }
+    setActiveTab("inventory");
+  }, [isAddFlow, section]);
 
   useEffect(() => {
     setActiveTab(resolveTab(section));
@@ -1092,6 +1167,8 @@ export default function InventoryNewScreen() {
             visible
             onClose={closeScreen}
             onSaved={closeScreen}
+            onSaveSuccess={({ effectiveAt }) => handleSaveSuccess(effectiveAt)}
+            onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             accessoryId={accessoryId}
             editEntry={activeTab === "refill" ? editRefill : null}
             showHeader={false}
@@ -1115,6 +1192,8 @@ export default function InventoryNewScreen() {
                 await createCompanyPayment.mutateAsync(payload);
               }}
               onSaved={closeScreen}
+              onSaveSuccess={({ effectiveAt }) => handleSaveSuccess(effectiveAt)}
+              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           ) : activeTab === "cash" ? (
             <CashAdjustForm
@@ -1131,6 +1210,8 @@ export default function InventoryNewScreen() {
                 await updateCashAdjust.mutateAsync({ id, payload });
               }}
               onSaved={closeScreen}
+              onSaveSuccess={({ effectiveAt }) => handleSaveSuccess(effectiveAt)}
+              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           ) : (
             <InventoryAdjustForm
@@ -1147,6 +1228,8 @@ export default function InventoryNewScreen() {
                 await updateInventoryAdjust.mutateAsync({ id, payload });
               }}
               onSaved={closeScreen}
+              onSaveSuccess={({ effectiveAt }) => handleSaveSuccess(effectiveAt)}
+              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             />
           )
         )}

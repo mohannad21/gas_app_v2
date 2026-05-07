@@ -19,6 +19,7 @@ import { useDailyReportsV2 } from "@/hooks/useReports";
 import { useExpenseCategories } from "@/hooks/useExpenseCategories";
 import { formatDateLocale, getCurrentLocalDate, getCurrentLocalTime, getTimeHMSFromIso } from "@/lib/date";
 import { formatDisplayMoney } from "@/lib/money";
+import { isAddDataSource, openDailyReportForDate } from "@/lib/saveFlow";
 
 function getTodayDate(): string {
   return getCurrentLocalDate();
@@ -157,10 +158,12 @@ function TimePickerModal({
 }
 
 export default function NewExpenseScreen() {
-  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[]; expenseId?: string | string[] }>();
+  const params = useLocalSearchParams<{ tab?: string | string[]; amount?: string | string[]; expenseId?: string | string[]; source?: string | string[] }>();
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const amountParam = Array.isArray(params.amount) ? params.amount[0] : params.amount;
   const expenseIdParam = Array.isArray(params.expenseId) ? params.expenseId[0] : params.expenseId;
+  const sourceParam = Array.isArray(params.source) ? params.source[0] : params.source;
+  const isAddFlow = isAddDataSource(sourceParam);
   const [expenseMode, setExpenseMode] = useState<"expense" | "wallet_to_bank" | "bank_to_wallet">(
     tabParam === "wallet_to_bank" || tabParam === "bank_to_wallet" ? tabParam : "expense"
   );
@@ -175,9 +178,9 @@ export default function NewExpenseScreen() {
   const [expenseCalendarOpen, setExpenseCalendarOpen] = useState(false);
   const accessoryId = Platform.OS === "ios" ? "expenseAccessory" : undefined;
 
-  const createExpense = useCreateExpense();
+  const createExpense = useCreateExpense({ suppressSuccessToast: true });
   const updateExpense = useUpdateExpense();
-  const createBankDeposit = useCreateBankDeposit();
+  const createBankDeposit = useCreateBankDeposit({ suppressSuccessToast: true });
   const todayDate = getTodayDate();
   const dailyReportQuery = useDailyReportsV2(todayDate, todayDate);
   const expensesQuery = useExpenses(undefined, { enabled: Boolean(expenseIdParam) });
@@ -283,6 +286,26 @@ export default function NewExpenseScreen() {
         TimePickerModal={TimePickerModal}
         styles={styles}
         onManageCategories={() => router.push("/(tabs)/account/configuration/expense-categories")}
+        onSaveSuccess={
+          expenseIdParam
+            ? undefined
+            : ({ effectiveAt }) => {
+                if (isAddFlow) {
+                  openDailyReportForDate(effectiveAt);
+                  return;
+                }
+                router.back();
+              }
+        }
+        onSaveAndAddSuccess={
+          expenseIdParam
+            ? undefined
+            : () => {
+                if (isAddFlow) {
+                  setExpenseMode("expense");
+                }
+              }
+        }
       />
       {Platform.OS === "ios" && accessoryId ? (
         <InputAccessoryView nativeID={accessoryId}>

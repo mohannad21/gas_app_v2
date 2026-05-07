@@ -53,7 +53,7 @@ export function useOrders(includeDeleted?: boolean) {
   });
 }
 
-export function useCreateOrder() {
+export function useCreateOrder(options?: { suppressSuccessToast?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createOrder,
@@ -62,7 +62,9 @@ export function useCreateOrder() {
       showToast(getUserFacingApiError(err, "Failed to create order."));
     },
     onSuccess: (_, variables) => {
-      showToast("Order created");
+      if (!options?.suppressSuccessToast) {
+        showToast("Order created");
+      }
 
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "day"] });
