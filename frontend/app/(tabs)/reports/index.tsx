@@ -690,7 +690,7 @@ export default function ReportsScreen() {
       setHighlightEventKey((current) => (current === eventKey ? null : current));
       setHighlightDate((current) => (current === eventDate ? null : current));
       lastHighlightParamKey.current = null;
-    }, 10200);
+    }, 7200);
     return () => clearTimeout(timer);
   }, [params.highlightEffectiveAt, params.highlightEventType, params.highlightId, rawSelectedEvents]);
 

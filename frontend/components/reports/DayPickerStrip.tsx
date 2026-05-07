@@ -35,9 +35,9 @@ const DayCard = memo(function DayCard({
     Animated.loop(
       Animated.sequence([
         Animated.timing(highlightAnim, { toValue: 1, duration: 200, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 0, duration: 3100, useNativeDriver: false }),
+        Animated.timing(highlightAnim, { toValue: 0, duration: 1200, useNativeDriver: false }),
       ]),
-      { iterations: 3 }
+      { iterations: 5 }
     ).start();
   }, [highlight, highlightAnim]);
   const d = new Date(item.date + "T00:00:00");
