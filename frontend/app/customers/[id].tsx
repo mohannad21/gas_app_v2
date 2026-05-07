@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, Modal } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
@@ -137,10 +137,10 @@ const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "effective_asc",
 ];
 const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
-  created_desc: "Created ↓",
-  created_asc: "Created ↑",
-  effective_desc: "Effective ↓",
-  effective_asc: "Effective ↑",
+  created_desc: "created date (recent on top)",
+  created_asc: "created date (recent on bottom)",
+  effective_desc: "Effective date (recent on top)",
+  effective_asc: "Effective date (recent on bottom)",
 };
 
 
@@ -186,6 +186,7 @@ export default function CustomerDetailsScreen() {
   const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
+  const [sortPickerVisible, setSortPickerVisible] = useState(false);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections(false);
@@ -433,12 +434,7 @@ export default function CustomerDetailsScreen() {
         return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
   }, [activities, activitySortMode, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
-  const cycleActivitySort = () => {
-    setActivitySortMode((current) => {
-      const currentIndex = ACTIVITY_SORT_ORDER.indexOf(current);
-      return ACTIVITY_SORT_ORDER[(currentIndex + 1) % ACTIVITY_SORT_ORDER.length];
-    });
-  };
+  const openSortPicker = () => setSortPickerVisible(true);
 
   if (customersQuery.isLoading) {
     return (
@@ -578,6 +574,7 @@ export default function CustomerDetailsScreen() {
   };
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
         <View style={styles.heroHeader}>
@@ -732,9 +729,8 @@ export default function CustomerDetailsScreen() {
           <Pressable style={styles.toolbarIconButton} onPress={() => setFiltersVisible((current) => !current)}>
             <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
           </Pressable>
-          <Pressable style={styles.toolbarSortButton} onPress={cycleActivitySort}>
+          <Pressable style={styles.toolbarIconButton} onPress={openSortPicker}>
             <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
-            <Text style={styles.toolbarSortText}>{ACTIVITY_SORT_LABELS[activitySortMode]}</Text>
           </Pressable>
         </View>
       </View>
@@ -814,6 +810,34 @@ export default function CustomerDetailsScreen() {
           );
         })}
     </ScrollView>
+
+    <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
+      <Pressable style={styles.sortPickerOverlay} onPress={() => setSortPickerVisible(false)}>
+        <View style={styles.sortPickerCard}>
+          <Text style={styles.sortPickerTitle}>Sort by</Text>
+          {ACTIVITY_SORT_ORDER.map((sortMode) => (
+            <Pressable
+              key={sortMode}
+              style={styles.sortPickerOption}
+              onPress={() => { setActivitySortMode(sortMode); setSortPickerVisible(false); }}
+            >
+              <View style={styles.sortPickerOptionContent}>
+                <Text style={[styles.sortPickerOptionText, sortMode === activitySortMode && styles.sortPickerOptionActive]}>
+                  {ACTIVITY_SORT_LABELS[sortMode]}
+                </Text>
+                {sortMode === "created_desc" ? (
+                  <Text style={styles.sortPickerRecommended}>recommended</Text>
+                ) : null}
+              </View>
+              {sortMode === activitySortMode ? (
+                <Ionicons name="checkmark" size={16} color="#0a7ea4" />
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -1050,21 +1074,63 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#d7dde4",
   },
-  toolbarSortButton: {
+  sortPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sortPickerCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  sortPickerTitle: {
+    fontSize: 13,
+    fontFamily: FontFamilies.semibold,
+    color: "#64748b",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sortPickerOption: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-    paddingHorizontal: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  toolbarSortText: {
+  sortPickerOptionContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sortPickerOptionText: {
+    fontSize: 14,
+    fontFamily: FontFamilies.regular,
+    color: "#1e293b",
+  },
+  sortPickerOptionActive: {
+    fontFamily: FontFamilies.semibold,
     color: "#0a7ea4",
-    fontWeight: "700",
-    fontSize: 12,
+  },
+  sortPickerRecommended: {
+    fontSize: 11,
+    fontFamily: FontFamilies.regular,
+    color: "#64748b",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   filterChip: {
     paddingVertical: 8,

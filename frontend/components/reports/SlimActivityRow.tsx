@@ -562,23 +562,19 @@ export default function SlimActivityRow({
           </View>
         ) : null}
 
-        {createdAtLine || effectiveAtLine || hasActions ? (
+        {createdAtLine || effectiveAtLine || hasActions || isDeleted ? (
           <View style={styles.actionsRow}>
-            <View style={styles.actionsLeft}>
+            <View style={styles.timestampsBlock}>
               {isDeleted ? (
                 <Text style={styles.deletedLabel}>Deleted</Text>
               ) : null}
+              {createdAtLine ? (
+                <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{createdAtLine}</Text>
+              ) : null}
+              {effectiveAtLine ? (
+                <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{effectiveAtLine}</Text>
+              ) : null}
             </View>
-            {createdAtLine || effectiveAtLine ? (
-              <View style={styles.timestampsBlock}>
-                {createdAtLine ? (
-                  <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{createdAtLine}</Text>
-                ) : null}
-                {effectiveAtLine ? (
-                  <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{effectiveAtLine}</Text>
-                ) : null}
-              </View>
-            ) : null}
             {hasActions ? (
               <View style={styles.actionBtns}>
                 {onEdit ? (
@@ -769,20 +765,14 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     marginTop: 6,
     gap: 12,
   },
-  actionsLeft: {
+  timestampsBlock: {
     flex: 1,
     alignItems: "flex-start",
-    justifyContent: "center",
-    minHeight: 32,
-  },
-  timestampsBlock: {
-    minWidth: 160,
-    alignItems: "flex-end",
     gap: 2,
   },
   deletedLabel: {
