@@ -374,10 +374,9 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           : label
       )
     : event.context_line ?? label;
-  const createdAtLine = showCreatedAt && event.created_at ? formatDateTimeYMDHM(event.created_at) : "";
-  const effectiveAtBottomLine =
-    showEffectiveAtBottom && event.effective_at ? formatDateTimeYMDHM(event.effective_at) : "";
-  const topLine = createdAtLine ? `${displayContextLine} · ${createdAtLine}` : displayContextLine;
+  const createdAtLine = showCreatedAt && event.created_at ? `Created at: ${formatDateTimeYMDHM(event.created_at)}` : "";
+  const effectiveAtLine =
+    showEffectiveAtBottom && event.effective_at ? `Effective at: ${formatDateTimeYMDHM(event.effective_at)}` : "";
 
   const transitionPills: TransitionPill[] = formatTransitionPills(buildDisplayTransitions(event), {
     formatMoney: fmtMoney,
@@ -399,7 +398,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.actionText} numberOfLines={1}>
-            {topLine}
+            {displayContextLine}
           </Text>
           {showPaymentRatio ? (
             <Text style={styles.moneyText} numberOfLines={1}>
@@ -511,35 +510,43 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           </View>
         ) : null}
 
-        {effectiveAtBottomLine ? <Text style={styles.contextText}>{effectiveAtBottomLine}</Text> : null}
-
-        {hasActions ? (
+        {createdAtLine || effectiveAtLine || hasActions ? (
           <View style={styles.actionsRow}>
-            {isDeleted ? (
-              <Text style={styles.deletedLabel}>Deleted</Text>
-            ) : null}
-            <View style={styles.actionBtns}>
-              {onEdit ? (
-                <Pressable
-                  onPress={isDeleted ? undefined : onEdit}
-                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                  accessibilityLabel="Edit"
-                >
-                  <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                  <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
-                </Pressable>
-              ) : null}
-              {onDelete ? (
-                <Pressable
-                  onPress={isDeleted ? undefined : onDelete}
-                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                  accessibilityLabel="Delete"
-                >
-                  <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
-                  <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
-                </Pressable>
+            <View style={styles.actionsLeft}>
+              {isDeleted ? (
+                <Text style={styles.deletedLabel}>Deleted</Text>
               ) : null}
             </View>
+            {createdAtLine || effectiveAtLine ? (
+              <View style={styles.timestampsBlock}>
+                {createdAtLine ? <Text style={styles.contextText}>{createdAtLine}</Text> : null}
+                {effectiveAtLine ? <Text style={styles.contextText}>{effectiveAtLine}</Text> : null}
+              </View>
+            ) : null}
+            {hasActions ? (
+              <View style={styles.actionBtns}>
+                {onEdit ? (
+                  <Pressable
+                    onPress={isDeleted ? undefined : onEdit}
+                    style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                    accessibilityLabel="Edit"
+                  >
+                    <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                    <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
+                  </Pressable>
+                ) : null}
+                {onDelete ? (
+                  <Pressable
+                    onPress={isDeleted ? undefined : onDelete}
+                    style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                    accessibilityLabel="Delete"
+                  >
+                    <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
+                    <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -616,7 +623,6 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Level3Tokens.colors.textMuted,
     fontFamily: FontFamilies.regular,
-    flex: 1,
   },
   contextSpacer: {
     flex: 1,
@@ -698,9 +704,21 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginTop: 6,
+    gap: 12,
+  },
+  actionsLeft: {
+    flex: 1,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    minHeight: 32,
+  },
+  timestampsBlock: {
+    minWidth: 160,
+    alignItems: "flex-end",
+    gap: 2,
   },
   deletedLabel: {
     fontSize: FontSizes.sm,
@@ -711,6 +729,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginLeft: "auto",
+    minHeight: 32,
+    alignItems: "center",
   },
   actionBtn: {
     flexDirection: "row",
