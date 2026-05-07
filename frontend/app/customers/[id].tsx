@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef, useState } from "react";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ScrollView, Modal } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
@@ -179,7 +179,7 @@ function formatAbsoluteCylinder(value: number) {
 }
 
 export default function CustomerDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, highlightId } = useLocalSearchParams<{ id: string; highlightId?: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
   const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
@@ -187,6 +187,7 @@ export default function CustomerDetailsScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections(false);
@@ -241,8 +242,17 @@ export default function CustomerDetailsScreen() {
       focusRefetchers.current.orders();
       focusRefetchers.current.collections();
       focusRefetchers.current.adjustments();
+      return () => setHighlightItemId(null);
     }, [customerId])
   );
+
+  useEffect(() => {
+    const rawId = Array.isArray(highlightId) ? highlightId[0] : highlightId;
+    if (!rawId) return;
+    setHighlightItemId(rawId);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 5000);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
 
   const orderCylinders = useMemo(() => getOrderCylinders(orders), [orders]);
 
@@ -797,6 +807,7 @@ export default function CustomerDetailsScreen() {
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom
+              highlight={String(event.id) === highlightItemId}
               onDelete={
                 isOrder
                   ? () => handleDeleteOrder(event.id!)

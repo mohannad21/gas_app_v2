@@ -427,7 +427,7 @@ export default function SlimActivityRow({
     highlightAnim.setValue(1);
     Animated.timing(highlightAnim, {
       toValue: 0,
-      duration: 1000,
+      duration: 4800,
       useNativeDriver: false,
     }).start();
   }, [highlight, highlightAnim]);

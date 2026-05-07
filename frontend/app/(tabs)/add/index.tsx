@@ -227,7 +227,7 @@ const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
 };
 
 export default function AddChooserScreen() {
-  const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
+  const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string }>();
   // Extract activity filters state into custom hook
   const {
     mode,
@@ -249,6 +249,7 @@ export default function AddChooserScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
 
   const [customerSearch, setCustomerSearch] = useState("");
   const isCustomerActivities = mode === "customer_activities";
@@ -1013,6 +1014,20 @@ const formatDateTime = (value?: string) => {
   );
 
   useEffect(() => {
+    const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
+    if (!rawId) return;
+    setHighlightItemId(rawId);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 5000);
+    return () => clearTimeout(timer);
+  }, [addParams.highlightId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => setHighlightItemId(null);
+    }, [])
+  );
+
+  useEffect(() => {
     setCustomerActivityLevel2(null);
   }, [customerActivityFilter]);
 
@@ -1453,6 +1468,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(item.data.id) === highlightItemId}
                     onDelete={() => handleDeleteCustomerAdjustment(item.data)}
                   />
                 );
@@ -1468,6 +1484,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(collection.id) === highlightItemId}
                       onDelete={() => confirmDeleteCollection(collection.id)}
                     />
                 );
@@ -1484,6 +1501,7 @@ const formatDateTime = (value?: string) => {
                   formatMoney={fmtMoney}
                   showCreatedAt
                   showEffectiveAtBottom
+                  highlight={String(order.id) === highlightItemId}
                   onDelete={() => confirmDeleteOrder(order.id)}
                 />
               );
@@ -1518,6 +1536,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(item.data.id) === highlightItemId}
                       isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
@@ -1529,6 +1548,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(item.data.id) === highlightItemId}
                     isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
@@ -1556,6 +1576,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(entry.data.id) === highlightItemId}
                       isDeleted={deletingIds.has(entry.data.id)}
                       onDelete={() => handleDeleteCompanyPayment(entry.data)}
                     />
@@ -1568,6 +1589,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(entry.data.id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
                     onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
                   />
@@ -1580,6 +1602,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(refill.refill_id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
                     onDelete={() => handleRemoveRefill(refill.refill_id)}
                   />
@@ -1614,6 +1637,7 @@ const formatDateTime = (value?: string) => {
                         formatMoney={fmtMoney}
                         showCreatedAt
                         showEffectiveAtBottom
+                        highlight={String(adjustment.id) === highlightItemId}
                         isDeleted={entry.is_deleted || deletingGroup}
                         onDelete={() =>
                           entry.isGrouped
@@ -1630,6 +1654,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(adjustment.id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                     onDelete={() => handleDeleteCashAdjustment(adjustment)}
                   />

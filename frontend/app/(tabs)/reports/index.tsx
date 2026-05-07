@@ -416,6 +416,7 @@ export default function ReportsScreen() {
   }>();
   const [handledRouteKey, setHandledRouteKey] = useState<string | null>(null);
   const [highlightEventKey, setHighlightEventKey] = useState<string | null>(null);
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -537,6 +538,10 @@ export default function ReportsScreen() {
   useFocusEffect(
     useCallback(() => {
       refetchV2();
+      return () => {
+        setHighlightEventKey(null);
+        setHighlightDate(null);
+      };
     }, [refetchV2])
   );
 
@@ -671,10 +676,13 @@ export default function ReportsScreen() {
     });
     if (!match) return;
     const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
+    const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
     setHighlightEventKey(eventKey);
+    setHighlightDate(eventDate);
     const timer = setTimeout(() => {
       setHighlightEventKey((current) => (current === eventKey ? null : current));
-    }, 1100);
+      setHighlightDate((current) => (current === eventDate ? null : current));
+    }, 5000);
     return () => clearTimeout(timer);
   }, [params.highlightEffectiveAt, params.highlightEventType, params.highlightId, rawSelectedEvents]);
 
@@ -935,7 +943,7 @@ export default function ReportsScreen() {
               <Animated.View style={{ height: spacerAnim }} />
               {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
               {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
-              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} />
+              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} highlightDate={highlightDate} />
               {rawSelectedEvents.length > 0 ? (
                 <View style={styles.filterPanel}>
                   {availableGroupOptions.length > 1 ? (
