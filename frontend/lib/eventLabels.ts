@@ -4,9 +4,9 @@
 export const EVENT_LABELS = {
   // Customer activities
   ORDER_REPLACEMENT: "Replacement",
-  ORDER_SELL_FULL: "Sell full",
-  ORDER_BUY_EMPTY: "Buy empty",
-  COLLECTION_MONEY: "Received payment",
+  ORDER_SELL_FULL: "Sold full",
+  ORDER_BUY_EMPTY: "Bought empty",
+  COLLECTION_MONEY: "customer paid",
   COLLECTION_PAYOUT: "Paid customer",
   COLLECTION_EMPTY: "Returned empties",
   CUSTOMER_ADJUSTMENT: "Balance adjustment",
@@ -14,8 +14,8 @@ export const EVENT_LABELS = {
   // Company activities
   REFILL: "Refill",
   COMPANY_PAYMENT_OUT: "Paid company",
-  COMPANY_PAYMENT_IN: "Received from company",
-  COMPANY_BUY_FULL: "Buy full",
+  COMPANY_PAYMENT_IN: "company paid",
+  COMPANY_BUY_FULL: "Bought full",
   COMPANY_RETURN: "Returned empties",
   COMPANY_ADJUSTMENT: "Balance adjustment",
 
