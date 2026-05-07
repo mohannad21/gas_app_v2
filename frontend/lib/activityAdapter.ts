@@ -12,6 +12,7 @@ import {
   Order,
 } from "@/types/domain";
 import { makeBalanceTransition } from "@/lib/balanceTransitions";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 const BASE: Pick<DailyReportEvent, "cash_before" | "cash_after"> = {
@@ -440,10 +441,10 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
   const contextLine =
     eventType === "company_buy_iron"
-      ? "Bought full"
+      ? EVENT_LABELS.COMPANY_BUY_FULL
       : eventType === "company_return_empties"
-        ? "Returned empties"
-        : "Refill";
+        ? EVENT_LABELS.COMPANY_RETURN
+        : EVENT_LABELS.REFILL;
 
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   const moneyAfter = refill.live_debt_cash != null ? refill.live_debt_cash : Number(refill.debt_cash ?? 0);

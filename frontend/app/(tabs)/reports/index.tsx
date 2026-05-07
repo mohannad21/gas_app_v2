@@ -33,6 +33,7 @@ import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
 import { getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
@@ -142,42 +143,42 @@ const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> =>
 const getEventSubtype = (event: any): ActivitySubtypeOption => {
   switch (event?.event_type) {
     case "order": {
-      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: "Sell full" };
-      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: "Buy empty" };
-      return { key: "replacement", label: "Replacement" };
+      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL };
+      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY };
+      return { key: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT };
     }
     case "collection_money":
-      return { key: "customer_payment", label: "Received payment" };
+      return { key: "customer_payment", label: EVENT_LABELS.COLLECTION_MONEY };
     case "collection_payout":
-      return { key: "customer_payout", label: "Paid customer" };
+      return { key: "customer_payout", label: EVENT_LABELS.COLLECTION_PAYOUT };
     case "collection_empty":
-      return { key: "customer_return", label: "Returned empties" };
+      return { key: "customer_return", label: EVENT_LABELS.COLLECTION_EMPTY };
     case "company_payment":
       return event?.money_direction === "in"
-        ? { key: "received_from_company", label: "Received from company" }
-        : { key: "company_payment", label: "Paid company" };
+        ? { key: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN }
+        : { key: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT };
     case "company_buy_iron":
-      return { key: "company_buy_full", label: "Bought full" };
+      return { key: "company_buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL };
     case "refill": {
       const isReturnOnly =
         (!(event?.buy12 ?? 0) && !(event?.buy48 ?? 0) && ((event?.return12 ?? 0) > 0 || (event?.return48 ?? 0) > 0)) ||
-        event?.label === "Returned empties";
+        event?.label === EVENT_LABELS.COMPANY_RETURN;
       return isReturnOnly
-        ? { key: "company_return", label: "Returned empties" }
-        : { key: "company_refill", label: "Refill" };
+        ? { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN }
+        : { key: "company_refill", label: EVENT_LABELS.REFILL };
     }
     case "company_return_empties":
-      return { key: "company_return", label: "Returned empties" };
+      return { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN };
     case "expense":
-      return { key: "expense", label: "Expense" };
+      return { key: "expense", label: EVENT_LABELS.EXPENSE };
     case "bank_deposit":
       return event?.transfer_direction === "bank_to_wallet"
-        ? { key: "bank_to_wallet", label: "Bank to wallet" }
-        : { key: "wallet_to_bank", label: "Wallet to bank" };
+        ? { key: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET }
+        : { key: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK };
     case "cash_adjust":
-      return { key: "wallet_adjustment", label: "Wallet adjustment" };
+      return { key: "wallet_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT };
     case "adjust":
-      return { key: "inventory_adjustment", label: "Inventory adjustment" };
+      return { key: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT };
     default:
       return { key: String(event?.event_type ?? "activity"), label: String(event?.label ?? event?.event_type ?? "Activity") };
   }
@@ -995,7 +996,7 @@ export default function ReportsScreen() {
             return (
               <View key={eventKey}>
                 <Pressable onPress={() => toggleEventKey(eventKey)}>
-                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} showCreatedAt showEffectiveAtBottom />
+                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} />
                 </Pressable>
                 {isOpen ? <EventExpandedPanel ev={item} formatMoney={formatMoney} formatCount={formatCount} /> : null}
               </View>
@@ -1589,7 +1590,7 @@ function V2Timeline({
         return (
           <View key={eventKey}>
             <Pressable onPress={() => toggleEvent(eventKey)}>
-              <SlimActivityRow event={ev} formatMoney={formatMoney} showCreatedAt showEffectiveAtBottom />
+              <SlimActivityRow event={ev} formatMoney={formatMoney} />
             </Pressable>
             {isOpen ? <EventExpandedPanel ev={ev} formatMoney={formatMoney} formatCount={formatCount} /> : null}
           </View>

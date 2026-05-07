@@ -24,6 +24,7 @@ import {
     orderToEvent,
     refillSummaryToEvent,
   } from "@/lib/activityAdapter";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
@@ -183,33 +184,33 @@ function formatPriceGasList(items: string[]) {
 }
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
-  { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Received payment" },
-  { id: "payout", label: "Paid customer" },
-  { id: "return_empties", label: "Returned empties" },
-  { id: "sell_full", label: "Sell full" },
-  { id: "buy_empty", label: "Buy empty" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
+  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
+  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
+  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
+  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
+  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
+  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
 ];
 
 const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
-  { id: "refill", label: "Refill" },
-  { id: "company_payment", label: "Paid company" },
-  { id: "received_from_company", label: "Received from company" },
-  { id: "buy_full", label: "Bought full" },
-  { id: "company_return", label: "Returned empties" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "refill", label: EVENT_LABELS.REFILL },
+  { id: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT },
+  { id: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN },
+  { id: "buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL },
+  { id: "company_return", label: EVENT_LABELS.COMPANY_RETURN },
+  { id: "adjustment", label: EVENT_LABELS.COMPANY_ADJUSTMENT },
 ];
 
 const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
-  { id: "expense", label: "Expense" },
-  { id: "wallet_to_bank", label: "Wallet to bank" },
-  { id: "bank_to_wallet", label: "Bank to wallet" },
+  { id: "expense", label: EVENT_LABELS.EXPENSE },
+  { id: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK },
+  { id: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET },
 ];
 
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
-  { id: "inventory_adjustment", label: "Inventory adjustment" },
-  { id: "cash_adjustment", label: "Wallet adjustment" },
+  { id: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT },
+  { id: "cash_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT },
 ];
 const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "created_desc",

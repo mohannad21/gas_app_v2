@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
@@ -41,13 +42,13 @@ type ActivityFilter =
 type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
-  { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Received payment" },
-  { id: "payout", label: "Paid customer" },
-  { id: "return_empties", label: "Returned empties" },
-  { id: "buy_empty", label: "Buy empty" },
-  { id: "sell_full", label: "Sell full" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
+  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
+  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
+  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
+  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
+  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
+  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
 ];
 
 const formatCurrency = (value: number) => {

@@ -968,25 +968,6 @@ export default function NewOrderScreen() {
         guardrailLines.push(`Paid exceeds total by ${formatMoneyAmount(overpay)}â‚ª`);
       }
     }
-    const alertLines = formatBalanceTransitions(
-      [
-        makeBalanceTransition("customer", "money", balanceBeforeValue, balanceAfterValue),
-        makeBalanceTransition(
-          "customer",
-          gasType === "12kg" ? "cyl_12" : "cyl_48",
-          balanceBeforeCyl,
-          balanceAfterCyl
-        ),
-      ],
-      {
-        mode: "transition",
-        collapseAllSettled: true,
-        intent: "customer_order",
-        formatMoney: formatMoneyAmount,
-      }
-    );
-    const alertMessage = alertLines.join("\n");
-
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const orderPayload: OrderCreateInput = {
       customer_id: values.customer_id,
@@ -1035,33 +1016,6 @@ export default function NewOrderScreen() {
         setSubmitting(false);
       }
     };
-
-    if (guardrailLines.length > 0 || balanceAfterValue !== 0 || balanceAfterCyl !== 0) {
-      const moneyLine = `Money balance (before + this order = after): ${balanceBeforeValue.toFixed(
-        0
-      )} + ${formatDisplayMoney(moneyDeltaValue)} = ${formatDisplayMoney(balanceAfterValue)}`;
-      const cylLine = `Cylinder balance (before + this order = after): ${balanceBeforeCyl.toFixed(
-        0
-      )} + ${cylDelta.toFixed(0)} = ${balanceAfterCyl.toFixed(0)}`;
-      const headerBlock = guardrailLines.length ? `${guardrailLines.join("\n")}\n\n` : "";
-      Alert.alert(
-        "Confirm settlement",
-        `${headerBlock}${alertMessage}
-
-${moneyLine}
-${cylLine}
-`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Confirm",
-            onPress: () => void finalizeCreate(),
-          },
-        ]
-      );
-      setPendingSaveAction(null);
-      return;
-    }
 
     await finalizeCreate();
   };
