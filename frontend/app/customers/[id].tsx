@@ -250,7 +250,7 @@ export default function CustomerDetailsScreen() {
     const rawId = Array.isArray(highlightId) ? highlightId[0] : highlightId;
     if (!rawId) return;
     setHighlightItemId(rawId);
-    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 5000);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 10200);
     return () => clearTimeout(timer);
   }, [highlightId]);
 

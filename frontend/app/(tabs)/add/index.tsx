@@ -1017,7 +1017,7 @@ const formatDateTime = (value?: string) => {
     const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
     if (!rawId) return;
     setHighlightItemId(rawId);
-    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 5000);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 10200);
     return () => clearTimeout(timer);
   }, [addParams.highlightId]);
 

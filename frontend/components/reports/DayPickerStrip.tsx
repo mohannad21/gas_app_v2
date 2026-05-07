@@ -31,12 +31,14 @@ const DayCard = memo(function DayCard({
       highlightAnim.setValue(0);
       return;
     }
-    highlightAnim.setValue(1);
-    Animated.timing(highlightAnim, {
-      toValue: 0,
-      duration: 4800,
-      useNativeDriver: false,
-    }).start();
+    highlightAnim.setValue(0);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(highlightAnim, { toValue: 1, duration: 200, useNativeDriver: false }),
+        Animated.timing(highlightAnim, { toValue: 0, duration: 3100, useNativeDriver: false }),
+      ]),
+      { iterations: 3 }
+    ).start();
   }, [highlight, highlightAnim]);
   const d = new Date(item.date + "T00:00:00");
   const dayNum = d.getDate();
