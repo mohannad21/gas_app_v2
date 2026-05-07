@@ -154,7 +154,7 @@ export default function WorkersScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={() => router.replace("/(tabs)/account")} style={styles.backButton}>
             <Text style={styles.backButtonText}>{"<"}</Text>
           </Pressable>
           <Text style={styles.title}>Workers</Text>
