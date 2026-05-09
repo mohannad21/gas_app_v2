@@ -119,4 +119,42 @@ describe("activity adapter wording", () => {
       } as any).label
     ).toBe("Bought full");
   });
+
+  it("uses created_at from refill when present", () => {
+    const event = refillSummaryToEvent({
+      refill_id: "ref-1",
+      date: "2026-01-10",
+      effective_at: "2026-01-10T08:00:00Z",
+      created_at: "2026-01-10T07:30:00Z",
+      buy12: 1,
+      buy48: 0,
+      return12: 0,
+      return48: 0,
+      total_cost: 100,
+      paid_now: 100,
+      debt_cash: 0,
+      debt_cylinders_12: 0,
+      debt_cylinders_48: 0,
+    } as any);
+    expect(event.created_at).toBe("2026-01-10T07:30:00Z");
+    expect(event.effective_at).toBe("2026-01-10T08:00:00Z");
+  });
+
+  it("falls back to effective_at when created_at is absent", () => {
+    const event = refillSummaryToEvent({
+      refill_id: "ref-2",
+      date: "2026-01-10",
+      effective_at: "2026-01-10T08:00:00Z",
+      buy12: 1,
+      buy48: 0,
+      return12: 0,
+      return48: 0,
+      total_cost: 100,
+      paid_now: 100,
+      debt_cash: 0,
+      debt_cylinders_12: 0,
+      debt_cylinders_48: 0,
+    } as any);
+    expect(event.created_at).toBe("2026-01-10T08:00:00Z");
+  });
 });

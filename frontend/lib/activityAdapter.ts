@@ -483,7 +483,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
     event_type: eventType,
     id: refill.refill_id,
     effective_at: refill.effective_at,
-    created_at: refill.effective_at,
+    created_at: refill.created_at ?? refill.effective_at,
     context_line: contextLine,
     label: contextLine,
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
