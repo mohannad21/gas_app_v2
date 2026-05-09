@@ -38,6 +38,7 @@ jest.mock("@/components/AddRefillModal", () => ({
 }));
 
 jest.mock("@/components/InlineWalletFundingPrompt", () => () => null);
+jest.mock("@/components/MinuteTimePickerModal", () => () => null);
 
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({
@@ -65,6 +66,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     isSuccess: true,
     refetch: jest.fn(),
   }),
+  useCreateCustomerAdjustment: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
 jest.mock("@/hooks/useOrders", () => ({
@@ -124,8 +126,11 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalances: () => ({
     data: { company_money: 0, company_cyl_12: 0, company_cyl_48: 0 },
     isSuccess: true,
+    refetch: jest.fn(),
   }),
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, refetch: jest.fn() }),
+  useCreateCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useUpdateCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
 jest.mock("@/hooks/useCompanyPayments", () => ({
@@ -145,23 +150,26 @@ import { router as expoRouter } from "expo-router";
 describe("balance adjustment entry points", () => {
   beforeEach(() => {
     (expoRouter.push as jest.Mock).mockClear();
+    (expoRouter.replace as jest.Mock).mockClear();
   });
 
-  it("opens customer balance adjustment from the add-customer flow", () => {
+  it("renders customer balance adjustment inline from the add-customer flow", () => {
     mockParams = { customerId: "cust-1", systemId: "sys-1" };
     const { getByText } = render(<NewOrderScreen />);
 
-    fireEvent.press(getByText("Adjust balances"));
+    fireEvent.press(getByText("Adjust balance"));
 
-    expect(expoRouter.push).toHaveBeenCalledWith("/customers/cust-1/edit?tab=balances");
+    expect(getByText("Money balance")).toBeTruthy();
+    expect(expoRouter.push).not.toHaveBeenCalled();
   });
 
-  it("opens company balance adjustment from the add-company flow", () => {
+  it("renders company balance adjustment inline from the add-company flow", () => {
     mockParams = { section: "company", tab: "refill" };
     const { getByText } = render(<InventoryNewScreen />);
 
-    fireEvent.press(getByText("Adjust balances"));
+    fireEvent.press(getByText("Adjust balance"));
 
-    expect(expoRouter.push).toHaveBeenCalledWith("/inventory/company-balance-adjust");
+    expect(getByText("Money balance")).toBeTruthy();
+    expect(expoRouter.push).not.toHaveBeenCalled();
   });
 });

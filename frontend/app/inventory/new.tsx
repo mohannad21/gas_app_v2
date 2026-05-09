@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
+import CompanyAdjustInlineForm from "@/components/entry/CompanyAdjustInlineForm";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
@@ -45,12 +46,12 @@ import { buildActivityHappenedAt, formatDateLocale, formatTimeHMS, getCurrentLoc
 import { isAddDataSource, openDailyReportForDate } from "@/lib/saveFlow";
 import { showSuccessPulse } from "@/lib/successPulse";
 
-type InventoryTab = "refill" | "return" | "payment" | "buy" | "cash" | "inventory";
+type InventoryTab = "refill" | "return" | "payment" | "buy" | "adjust" | "cash" | "inventory";
 type InventorySection = "company" | "ledger";
-type CompanyInventoryTab = Extract<InventoryTab, "refill" | "return" | "payment" | "buy">;
+type CompanyInventoryTab = Extract<InventoryTab, "refill" | "return" | "payment" | "buy"> | "adjust";
 type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
 
-const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy"];
+const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy", "adjust"];
 const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
 const CASH_ADJUST_STEPPERS: FieldStepper[] = [
   { delta: -100, label: "-100", position: "extra-top-left" },
@@ -994,7 +995,8 @@ export default function InventoryNewScreen() {
           tabParam === "refill" ||
           tabParam === "buy" ||
           tabParam === "return" ||
-          tabParam === "payment"
+          tabParam === "payment" ||
+          tabParam === "adjust"
         ) {
           return tabParam;
         }
@@ -1080,6 +1082,9 @@ export default function InventoryNewScreen() {
     },
     [closeScreen, isAddFlow]
   );
+  const handleCompanyAdjustSaveSuccess = useCallback((highlightId: string) => {
+    router.replace({ pathname: "/(tabs)/add", params: { highlightId } });
+  }, []);
   const handleSaveAndAddReturn = useCallback(() => {
     if (!isAddFlow) return;
     if (section === "company") {
@@ -1117,31 +1122,22 @@ export default function InventoryNewScreen() {
           <Text style={styles.hubTitle}>
             {section === "company" ? "Company Activities" : "Ledger Adjustments"}
           </Text>
-          {section === "company" ? (
-            <Pressable
-              style={styles.hubHeaderButton}
-              onPress={() => router.push("/inventory/company-balance-adjust")}
-              accessibilityRole="button"
-              accessibilityLabel="Adjust company balances"
-            >
-              <Text style={styles.hubHeaderButtonText}>Adjust balances</Text>
-            </Pressable>
-          ) : null}
         </View>
         <View style={styles.modeRow}>
           {visibleTabs.map((tab) => {
-            const label =
-              tab === "refill"
-                ? "Refill"
-                : tab === "return"
-                  ? "Return"
-                  : tab === "payment"
-                    ? "Payment"
-              : tab === "buy"
-                  ? "Buy Full"
-                : tab === "cash"
-                    ? "Adjust Wallet"
-                    : "Adjust Inventory";
+            const label = tab === "refill"
+              ? "Refill"
+              : tab === "return"
+                ? "Return"
+                : tab === "payment"
+                  ? "Payment"
+                  : tab === "buy"
+                    ? "Buy Full"
+                    : tab === "adjust"
+                      ? "Adjust balance"
+                      : tab === "cash"
+                        ? "Adjust Wallet"
+                        : "Adjust Inventory";
             const disabled =
               tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled : false;
             return (
@@ -1203,6 +1199,13 @@ export default function InventoryNewScreen() {
               onSaved={closeScreen}
               onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
               onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
+            />
+          ) : activeTab === "adjust" ? (
+            <CompanyAdjustInlineForm
+              date={businessDate}
+              accessoryId={accessoryId}
+              onSaveSuccess={({ highlightId }) => handleCompanyAdjustSaveSuccess(highlightId)}
+              onSaveAndAddSuccess={() => setActiveTab("adjust")}
             />
           ) : activeTab === "cash" ? (
             <CashAdjustForm

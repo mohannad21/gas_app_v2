@@ -34,6 +34,7 @@ import { useOrderPriceOverride } from "@/hooks/useOrderPriceOverride";
 import { useOrderKeyboardLayout } from "@/hooks/useOrderKeyboardLayout";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import BigBox from "@/components/entry/BigBox";
+import CustomerAdjustInlineForm from "@/components/entry/CustomerAdjustInlineForm";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
@@ -62,7 +63,7 @@ type OrderFormValues = {
   paid_amount: string;
   note?: string;
 };
-type ActionMode = "replacement" | "payment" | "return" | "sell_iron" | "buy_iron";
+type ActionMode = "replacement" | "payment" | "return" | "sell_iron" | "buy_iron" | "adjustment";
 
 function getTodayDate() {
   const now = new Date();
@@ -153,7 +154,7 @@ export default function NewOrderScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<"save" | "saveAndAdd" | null>(null);
-  const [entryMode, setEntryMode] = useState<"order" | "payment" | "return">("order");
+  const [entryMode, setEntryMode] = useState<"order" | "payment" | "return" | "adjustment">("order");
   const [orderMode, setOrderMode] = useState<"replacement" | "sell_iron" | "buy_iron">("replacement");
   const [paymentDirection, setPaymentDirection] = useState<"receive" | "payout">("receive");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -228,6 +229,10 @@ export default function NewOrderScreen() {
       setEntryMode(mode);
       return;
     }
+    if (mode === "adjustment") {
+      setEntryMode("adjustment");
+      return;
+    }
     setEntryMode("order");
     setOrderMode(mode);
   };
@@ -237,6 +242,7 @@ export default function NewOrderScreen() {
   const isBuyIron = currentAction === "buy_iron";
   const isPayment = currentAction === "payment";
   const isReturn = currentAction === "return";
+  const isAdjustment = currentAction === "adjustment";
   const showStickyPayment =
     focusTarget === "amounts" && effectiveKeyboardHeight > 0 && currentAction === "replacement";
   const walletBalance = dailyReportQuery.data?.[0]?.cash_end ?? 0;
@@ -1360,6 +1366,225 @@ export default function NewOrderScreen() {
     </View>
   );
 
+  const customerSection = (
+    <View style={styles.sectionCard}>
+      <FieldLabel>Customer</FieldLabel>
+      <Pressable
+        style={styles.inputRow}
+        onPress={() => {
+          if (!customerInputArmed) {
+            setIsCustomerSearchOpen(true);
+            setCustomerInputArmed(true);
+            setCustomerTyping(false);
+            setAvoidKeyboard(false);
+            Keyboard.dismiss();
+            return;
+          }
+          setCustomerTyping(true);
+          setAvoidKeyboard(true);
+          setIsCustomerSearchOpen(true);
+          setTimeout(() => searchInputRef.current?.focus(), 10);
+        }}
+      >
+        <View style={styles.inputFlex} pointerEvents={customerInputArmed ? "auto" : "none"}>
+          <TextInput
+            style={[styles.input, styles.inputFlex]}
+            placeholder="Search customer"
+            value={customerSearch}
+            onChangeText={(text) => {
+              setCustomerTyping(true);
+              setIsCustomerSearchOpen(true);
+              setCustomerSearch(text);
+            }}
+            ref={searchInputRef}
+            onFocus={() => {
+              setCustomerTyping(true);
+              setIsCustomerSearchOpen(true);
+              setAvoidKeyboard(true);
+            }}
+            onBlur={() => {
+              setCustomerTyping(false);
+              setCustomerInputArmed(false);
+              if (!customerSearchTerm) {
+                setTimeout(() => setIsCustomerSearchOpen(false), 150);
+              }
+            }}
+            {...doneInputProps}
+          />
+        </View>
+        {selectedCustomerEntry ? (
+          <Pressable
+            style={styles.clearButton}
+            onPress={() => {
+              setValue("customer_id", "");
+              setCustomerSearch("");
+              setIsCustomerSearchOpen(false);
+              setCustomerInputArmed(false);
+              setCustomerTyping(false);
+              setAvoidKeyboard(false);
+              Keyboard.dismiss();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear customer"
+          >
+            <Ionicons name="close" size={16} color="#0f172a" />
+          </Pressable>
+        ) : null}
+      </Pressable>
+
+      <Controller
+        control={control}
+        name="customer_id"
+        rules={{ required: "Select a customer" }}
+        render={({ field: { onChange, value } }) =>
+          isCustomerSearchOpen ? (
+            <View style={styles.customerList}>
+              {customerSearchTerm && !hasExactCustomerMatch ? (
+                <Pressable
+                  style={styles.addCustomerButton}
+                  onPress={() => {
+                    setIsCustomerSearchOpen(false);
+                    setCustomerInputArmed(false);
+                    setCustomerTyping(false);
+                    setAvoidKeyboard(false);
+                    Keyboard.dismiss();
+                    router.push("/customers/new");
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add a new customer"
+                >
+                  <Text style={styles.addCustomerButtonText}>+ Add a new customer</Text>
+                </Pressable>
+              ) : null}
+              {customerOptions.map((c) => {
+                const selected = value === c.id;
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => {
+                      onChange(c.id);
+                      setCustomerSearch(c.name);
+                      setIsCustomerSearchOpen(false);
+                      setCustomerInputArmed(false);
+                      setCustomerTyping(false);
+                      setAvoidKeyboard(false);
+                      Keyboard.dismiss();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Customer ${c.name}`}
+                    accessibilityHint="Select customer"
+                    ref={(node) => {
+                      if (node && selected) inputRefs.current.customer_id = node as unknown as TextInput;
+                    }}
+                    style={[styles.customerOption, selected && styles.customerOptionActive]}
+                  >
+                    <View style={styles.customerOptionRow}>
+                      <Text style={[styles.customerOptionName, selected && styles.customerOptionNameActive]}>
+                        {c.name}
+                      </Text>
+                      {c.note ? (
+                        <Text
+                          style={[styles.customerOptionNote, selected && styles.customerOptionNoteActive]}
+                          numberOfLines={1}
+                        >
+                          {c.note}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <></>
+          )
+        }
+      />
+      <FieldError message={errors.customer_id?.message} />
+    </View>
+  );
+
+  if (isAdjustment) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === "ios" ? (avoidKeyboard ? "padding" : undefined) : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 0}
+      >
+        <View style={styles.headerBlock}>
+          <Text style={styles.title}>Add Order</Text>
+          {showOrderTabs ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeRow}>
+              {(["replacement", "payment", "return", "sell_iron", "buy_iron", "adjustment"] as const).map((mode) => {
+                const isDisabled =
+                  mode === "payment"
+                    ? !paymentTabEnabled
+                    : mode === "return"
+                      ? !returnTabEnabled
+                      : mode === "adjustment"
+                        ? !hasCustomer
+                        : false;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => {
+                      if (isDisabled) return;
+                      setActionMode(mode);
+                    }}
+                    disabled={isDisabled}
+                    style={[
+                      styles.modeButton,
+                      currentAction === mode && styles.modeButtonActive,
+                      isDisabled && styles.modeButtonDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.modeText,
+                        currentAction === mode && styles.modeTextActive,
+                        isDisabled && styles.modeTextDisabled,
+                      ]}
+                    >
+                      {mode === "replacement"
+                        ? "Replacement"
+                        : mode === "sell_iron"
+                          ? "Sell Full"
+                          : mode === "buy_iron"
+                            ? "Buy Empty"
+                            : mode === "payment"
+                              ? "Payment"
+                              : mode === "return"
+                                ? "Return"
+                                : "Adjust balance"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+        </View>
+        <CustomerAdjustInlineForm
+          customerId={selectedCustomer}
+          customerSection={customerSection}
+          date={collectionDate}
+          accessoryId={orderAccessoryId}
+          currentMoneyBalance={balanceBefore}
+          current12Balance={cylinder12Before}
+          current48Balance={cylinder48Before}
+          balanceReady={customerPreviewReady}
+          onRefreshPreview={refreshCustomerPreview}
+          onSaveSuccess={({ highlightId }) => {
+            router.replace({ pathname: "/(tabs)/add", params: { highlightId } });
+          }}
+          onSaveAndAddSuccess={() => {
+            setActionMode("adjustment");
+          }}
+        />
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.keyboardAvoider}
@@ -1374,10 +1599,11 @@ export default function NewOrderScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.modeRow}
           >
-            {(["replacement", "payment", "return", "sell_iron", "buy_iron"] as const).map((mode) => {
+            {(["replacement", "payment", "return", "sell_iron", "buy_iron", "adjustment"] as const).map((mode) => {
               const isDisabled =
                 (mode === "payment" && !paymentTabEnabled) ||
-                (mode === "return" && !returnTabEnabled);
+                (mode === "return" && !returnTabEnabled) ||
+                (mode === "adjustment" && !hasCustomer);
               return (
                 <Pressable
                   key={mode}
@@ -1407,7 +1633,9 @@ export default function NewOrderScreen() {
                           ? "Buy Empty"
                           : mode === "payment"
                             ? "Payment"
-                            : "Return"}
+                            : mode === "return"
+                              ? "Return"
+                              : "Adjust balance"}
                   </Text>
                 </Pressable>
               );
@@ -1428,157 +1656,7 @@ export default function NewOrderScreen() {
         alwaysBounceVertical
         onLayout={(event) => setScrollViewHeight(event.nativeEvent.layout.height)}
       >
-      <View style={styles.sectionCard}>
-        <View style={styles.sectionHeaderRow}>
-          <FieldLabel>Customer</FieldLabel>
-          {hasCustomer ? (
-            <Pressable
-              style={styles.sectionHeaderButton}
-              onPress={() => {
-                if (!selectedCustomer) return;
-                router.push(`/customers/${selectedCustomer}/edit?tab=balances`);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Adjust customer balances"
-            >
-              <Text style={styles.sectionHeaderButtonText}>Adjust balances</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <Pressable
-          style={styles.inputRow}
-          onPress={() => {
-            if (!customerInputArmed) {
-              setIsCustomerSearchOpen(true);
-              setCustomerInputArmed(true);
-              setCustomerTyping(false);
-              setAvoidKeyboard(false);
-              Keyboard.dismiss();
-              return;
-            }
-            setCustomerTyping(true);
-            setAvoidKeyboard(true);
-            setIsCustomerSearchOpen(true);
-            setTimeout(() => searchInputRef.current?.focus(), 10);
-          }}
-        >
-          <View style={styles.inputFlex} pointerEvents={customerInputArmed ? "auto" : "none"}>
-            <TextInput
-              style={[styles.input, styles.inputFlex]}
-              placeholder="Search customer"
-              value={customerSearch}
-              onChangeText={(text) => {
-                setCustomerTyping(true);
-                setIsCustomerSearchOpen(true);
-                setCustomerSearch(text);
-              }}
-              ref={searchInputRef}
-              onFocus={() => {
-                setCustomerTyping(true);
-                setIsCustomerSearchOpen(true);
-                setAvoidKeyboard(true);
-              }}
-              onBlur={() => {
-                setCustomerTyping(false);
-                setCustomerInputArmed(false);
-                if (!customerSearchTerm) {
-                  setTimeout(() => setIsCustomerSearchOpen(false), 150);
-                }
-              }}
-              {...doneInputProps}
-            />
-          </View>
-          {selectedCustomerEntry ? (
-            <Pressable
-              style={styles.clearButton}
-              onPress={() => {
-                setValue("customer_id", "");
-                setCustomerSearch("");
-                setIsCustomerSearchOpen(false);
-                setCustomerInputArmed(false);
-                setCustomerTyping(false);
-                setAvoidKeyboard(false);
-                Keyboard.dismiss();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Clear customer"
-            >
-              <Ionicons name="close" size={16} color="#0f172a" />
-            </Pressable>
-          ) : null}
-        </Pressable>
-
-        <Controller
-          control={control}
-          name="customer_id"
-          rules={{ required: "Select a customer" }}
-          render={({ field: { onChange, value } }) =>
-            isCustomerSearchOpen ? (
-              <View style={styles.customerList}>
-                {customerSearchTerm && !hasExactCustomerMatch ? (
-                  <Pressable
-                    style={styles.addCustomerButton}
-                    onPress={() => {
-                      setIsCustomerSearchOpen(false);
-                      setCustomerInputArmed(false);
-                      setCustomerTyping(false);
-                      setAvoidKeyboard(false);
-                      Keyboard.dismiss();
-                      router.push("/customers/new");
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add a new customer"
-                  >
-                    <Text style={styles.addCustomerButtonText}>+ Add a new customer</Text>
-                  </Pressable>
-                ) : null}
-                {customerOptions.map((c) => {
-                  const selected = value === c.id;
-                  return (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => {
-                        onChange(c.id);
-                        setCustomerSearch(c.name);
-                        setIsCustomerSearchOpen(false);
-                        setCustomerInputArmed(false);
-                        setCustomerTyping(false);
-                        setAvoidKeyboard(false);
-                        Keyboard.dismiss();
-                      }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={`Customer ${c.name}`}
-                      accessibilityHint="Select customer"
-                      ref={(node) => {
-                        if (node && selected) inputRefs.current.customer_id = node as unknown as TextInput;
-                      }}
-                      style={[styles.customerOption, selected && styles.customerOptionActive]}
-                    >
-                      <View style={styles.customerOptionRow}>
-                        <Text style={[styles.customerOptionName, selected && styles.customerOptionNameActive]}>
-                          {c.name}
-                        </Text>
-                        {c.note ? (
-                          <Text
-                            style={[styles.customerOptionNote, selected && styles.customerOptionNoteActive]}
-                            numberOfLines={1}
-                          >
-                            {c.note}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <></>
-            )
-          }
-        />
-        <FieldError message={errors.customer_id?.message} />
-      </View>
+      {customerSection}
       {(currentAction === "replacement" || currentAction === "sell_iron") && hasCustomer ? dateTimeSection : null}
 
       {showSystemSection ? (
