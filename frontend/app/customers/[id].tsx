@@ -1,11 +1,12 @@
-import { useMemo, useCallback, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, Modal } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
@@ -38,15 +39,16 @@ type ActivityFilter =
   | "buy_empty"
   | "sell_full"
   | "adjustment";
+type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
-  { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Received payment" },
-  { id: "payout", label: "Paid customer" },
-  { id: "return_empties", label: "Returned empties" },
-  { id: "buy_empty", label: "Buy empty" },
-  { id: "sell_full", label: "Sell full" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
+  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
+  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
+  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
+  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
+  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
+  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
 ];
 
 const formatCurrency = (value: number) => {
@@ -105,12 +107,41 @@ export function getOrderCylinders(orders: Order[]): Record<"12kg" | "48kg", numb
 }
 
 export function sortCustomerActivityEvents(events: DailyReportEvent[]): DailyReportEvent[] {
-  return [...events].sort(
-    (a, b) =>
-      new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime() ||
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  return sortCustomerActivityEventsByMode(events, "created_desc");
 }
+
+function sortCustomerActivityEventsByMode(events: DailyReportEvent[], mode: ActivitySortMode) {
+  const getTime = (value?: string | null) => {
+    const parsed = Date.parse(String(value ?? ""));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  return [...events].sort((a, b) => {
+    const primaryA = mode.startsWith("created") ? getTime(a.created_at) : getTime(a.effective_at);
+    const primaryB = mode.startsWith("created") ? getTime(b.created_at) : getTime(b.effective_at);
+    if (primaryA !== primaryB) {
+      return mode.endsWith("_asc") ? primaryA - primaryB : primaryB - primaryA;
+    }
+    const secondaryA = mode.startsWith("created") ? getTime(a.effective_at) : getTime(a.created_at);
+    const secondaryB = mode.startsWith("created") ? getTime(b.effective_at) : getTime(b.created_at);
+    if (secondaryA !== secondaryB) {
+      return secondaryB - secondaryA;
+    }
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+  });
+}
+
+const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
+  "created_desc",
+  "created_asc",
+  "effective_desc",
+  "effective_asc",
+];
+const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
+  created_desc: "created date (recent on top)",
+  created_asc: "created date (recent on bottom)",
+  effective_desc: "Effective date (recent on top)",
+  effective_asc: "Effective date (recent on bottom)",
+};
 
 
 function DetailBalanceBox({
@@ -148,11 +179,15 @@ function formatAbsoluteCylinder(value: number) {
 }
 
 export default function CustomerDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, highlightId } = useLocalSearchParams<{ id: string; highlightId?: string }>();
   const customerId = Array.isArray(id) ? id[0] : id;
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
   const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
   const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
+  const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
   const customersQuery = useCustomers();
   const balancesQuery = useCustomerBalance(customerId);
   const collectionsQuery = useCollections(false);
@@ -207,8 +242,17 @@ export default function CustomerDetailsScreen() {
       focusRefetchers.current.orders();
       focusRefetchers.current.collections();
       focusRefetchers.current.adjustments();
+      return () => setHighlightItemId(null);
     }, [customerId])
   );
+
+  useEffect(() => {
+    const rawId = Array.isArray(highlightId) ? highlightId[0] : highlightId;
+    if (!rawId) return;
+    setHighlightItemId(rawId);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 7200);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
 
   const orderCylinders = useMemo(() => getOrderCylinders(orders), [orders]);
 
@@ -340,7 +384,7 @@ export default function CustomerDetailsScreen() {
     }
     if (!selectedFilter || !selectedLevel2) {
       if (selectedFilter === "replacement" && selectedLevel3) {
-        return next.filter((event) => {
+        return sortCustomerActivityEventsByMode(next.filter((event) => {
           const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
           const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
           switch (selectedLevel3) {
@@ -352,9 +396,9 @@ export default function CustomerDetailsScreen() {
             case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
             default: return true;
           }
-        });
+        }), activitySortMode);
       }
-      return next;
+      return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
     switch (selectedFilter) {
       case "replacement": {
@@ -362,8 +406,8 @@ export default function CustomerDetailsScreen() {
           const matchingOrder = orders.find((order) => order.id === event.id);
           return matchingOrder?.system_id === selectedLevel2;
         });
-        if (!selectedLevel3) return l2Filtered;
-        return l2Filtered.filter((event) => {
+        if (!selectedLevel3) return sortCustomerActivityEventsByMode(l2Filtered, activitySortMode);
+        return sortCustomerActivityEventsByMode(l2Filtered.filter((event) => {
           const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
           const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
           switch (selectedLevel3) {
@@ -375,19 +419,19 @@ export default function CustomerDetailsScreen() {
             case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
             default: return true;
           }
-        });
+        }), activitySortMode);
       }
       case "return_empties":
-        return next.filter(
+        return sortCustomerActivityEventsByMode(next.filter(
           (event) =>
             (selectedLevel2 === "12kg" && Number(event.return12 ?? 0) > 0) ||
             (selectedLevel2 === "48kg" && Number(event.return48 ?? 0) > 0)
-        );
+        ), activitySortMode);
       case "buy_empty":
       case "sell_full":
-        return next.filter((event) => event.gas_type === selectedLevel2);
+        return sortCustomerActivityEventsByMode(next.filter((event) => event.gas_type === selectedLevel2), activitySortMode);
       case "adjustment":
-        return next.filter(
+        return sortCustomerActivityEventsByMode(next.filter(
           (event) =>
             (selectedLevel2 === "money" &&
               Number((event.customer_money_after ?? 0) - (event.customer_money_before ?? 0)) !== 0) ||
@@ -395,11 +439,12 @@ export default function CustomerDetailsScreen() {
               Number((event.customer_12kg_after ?? 0) - (event.customer_12kg_before ?? 0)) !== 0) ||
             (selectedLevel2 === "48kg" &&
               Number((event.customer_48kg_after ?? 0) - (event.customer_48kg_before ?? 0)) !== 0)
-        );
+        ), activitySortMode);
       default:
-        return next;
+        return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
-  }, [activities, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
+  }, [activities, activitySortMode, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
+  const openSortPicker = () => setSortPickerVisible(true);
 
   if (customersQuery.isLoading) {
     return (
@@ -539,6 +584,7 @@ export default function CustomerDetailsScreen() {
   };
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
         <View style={styles.heroHeader}>
@@ -683,13 +729,23 @@ export default function CustomerDetailsScreen() {
       ))}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Activities</Text>
-        <Text style={styles.sectionMeta}>
-          {activitiesRefreshing && !activitiesLoading ? "Refreshing..." : `${filteredActivities.length} shown`}
-        </Text>
+        <View>
+          <Text style={styles.sectionTitle}>Activities</Text>
+          <Text style={styles.sectionMeta}>
+            {activitiesRefreshing && !activitiesLoading ? "Refreshing..." : `${filteredActivities.length} shown`}
+          </Text>
+        </View>
+        <View style={styles.activityToolbar}>
+          <Pressable style={styles.toolbarIconButton} onPress={() => setFiltersVisible((current) => !current)}>
+            <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
+          </Pressable>
+          <Pressable style={styles.toolbarIconButton} onPress={openSortPicker}>
+            <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
+          </Pressable>
+        </View>
       </View>
 
-      {availableActivityFilters.length > 1 ? (
+      {filtersVisible && availableActivityFilters.length > 1 ? (
         <FilterChipRow
           options={availableActivityFilters}
           value={selectedFilter}
@@ -703,7 +759,7 @@ export default function CustomerDetailsScreen() {
         />
       ) : null}
 
-      {selectedFilter && level2Options.length > 1 ? (
+      {filtersVisible && selectedFilter && level2Options.length > 1 ? (
         <FilterChipRow
           options={level2Options}
           value={selectedLevel2}
@@ -716,7 +772,7 @@ export default function CustomerDetailsScreen() {
         />
       ) : null}
 
-      {selectedFilter === "replacement" && level3Options.length > 1 ? (
+      {filtersVisible && selectedFilter === "replacement" && level3Options.length > 1 ? (
         <FilterChipRow
           options={level3Options}
           value={selectedLevel3}
@@ -751,6 +807,7 @@ export default function CustomerDetailsScreen() {
               formatMoney={fmtMoney}
               showCreatedAt
               showEffectiveAtBottom
+              highlight={String(event.id) === highlightItemId}
               onDelete={
                 isOrder
                   ? () => handleDeleteOrder(event.id!)
@@ -764,6 +821,34 @@ export default function CustomerDetailsScreen() {
           );
         })}
     </ScrollView>
+
+    <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
+      <Pressable style={styles.sortPickerOverlay} onPress={() => setSortPickerVisible(false)}>
+        <View style={styles.sortPickerCard}>
+          <Text style={styles.sortPickerTitle}>Sort by</Text>
+          {ACTIVITY_SORT_ORDER.map((sortMode) => (
+            <Pressable
+              key={sortMode}
+              style={styles.sortPickerOption}
+              onPress={() => { setActivitySortMode(sortMode); setSortPickerVisible(false); }}
+            >
+              <View style={styles.sortPickerOptionContent}>
+                <Text style={[styles.sortPickerOptionText, sortMode === activitySortMode && styles.sortPickerOptionActive]}>
+                  {ACTIVITY_SORT_LABELS[sortMode]}
+                </Text>
+                {sortMode === "created_desc" ? (
+                  <Text style={styles.sortPickerRecommended}>recommended</Text>
+                ) : null}
+              </View>
+              {sortMode === activitySortMode ? (
+                <Ionicons name="checkmark" size={16} color="#0a7ea4" />
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -853,6 +938,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 4,
+  },
+  activityToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   sectionTitle: {
     color: "#0f172a",
@@ -984,6 +1074,74 @@ const styles = StyleSheet.create({
   secondaryFilterRow: {
     paddingHorizontal: 20,
     gap: 8,
+  },
+  toolbarIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+  },
+  sortPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sortPickerCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  sortPickerTitle: {
+    fontSize: 13,
+    fontFamily: FontFamilies.semibold,
+    color: "#64748b",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sortPickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sortPickerOptionContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sortPickerOptionText: {
+    fontSize: 14,
+    fontFamily: FontFamilies.regular,
+    color: "#1e293b",
+  },
+  sortPickerOptionActive: {
+    fontFamily: FontFamilies.semibold,
+    color: "#0a7ea4",
+  },
+  sortPickerRecommended: {
+    fontSize: 11,
+    fontFamily: FontFamilies.regular,
+    color: "#64748b",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   filterChip: {
     paddingVertical: 8,

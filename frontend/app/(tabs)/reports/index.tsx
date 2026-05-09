@@ -31,8 +31,9 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatBalanceTransitions } from "@/lib/balanceTransitions";
-import { getInitInventoryAfter } from "@/lib/reports/utils";
+import { formatEventType, getInitInventoryAfter } from "@/lib/reports/utils";
 import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
@@ -142,44 +143,44 @@ const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> =>
 const getEventSubtype = (event: any): ActivitySubtypeOption => {
   switch (event?.event_type) {
     case "order": {
-      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: "Sell full" };
-      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: "Buy empty" };
-      return { key: "replacement", label: "Replacement" };
+      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL };
+      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY };
+      return { key: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT };
     }
     case "collection_money":
-      return { key: "customer_payment", label: "Received payment" };
+      return { key: "customer_payment", label: EVENT_LABELS.COLLECTION_MONEY };
     case "collection_payout":
-      return { key: "customer_payout", label: "Paid customer" };
+      return { key: "customer_payout", label: EVENT_LABELS.COLLECTION_PAYOUT };
     case "collection_empty":
-      return { key: "customer_return", label: "Returned empties" };
+      return { key: "customer_return", label: EVENT_LABELS.COLLECTION_EMPTY };
     case "company_payment":
       return event?.money_direction === "in"
-        ? { key: "received_from_company", label: "Received from company" }
-        : { key: "company_payment", label: "Paid company" };
+        ? { key: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN }
+        : { key: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT };
     case "company_buy_iron":
-      return { key: "company_buy_full", label: "Bought full" };
+      return { key: "company_buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL };
     case "refill": {
       const isReturnOnly =
         (!(event?.buy12 ?? 0) && !(event?.buy48 ?? 0) && ((event?.return12 ?? 0) > 0 || (event?.return48 ?? 0) > 0)) ||
-        event?.label === "Returned empties";
+        event?.label === EVENT_LABELS.COMPANY_RETURN;
       return isReturnOnly
-        ? { key: "company_return", label: "Returned empties" }
-        : { key: "company_refill", label: "Refill" };
+        ? { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN }
+        : { key: "company_refill", label: EVENT_LABELS.REFILL };
     }
     case "company_return_empties":
-      return { key: "company_return", label: "Returned empties" };
+      return { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN };
     case "expense":
-      return { key: "expense", label: "Expense" };
+      return { key: "expense", label: EVENT_LABELS.EXPENSE };
     case "bank_deposit":
       return event?.transfer_direction === "bank_to_wallet"
-        ? { key: "bank_to_wallet", label: "Bank to wallet" }
-        : { key: "wallet_to_bank", label: "Wallet to bank" };
+        ? { key: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET }
+        : { key: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK };
     case "cash_adjust":
-      return { key: "wallet_adjustment", label: "Wallet adjustment" };
+      return { key: "wallet_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT };
     case "adjust":
-      return { key: "inventory_adjustment", label: "Inventory adjustment" };
+      return { key: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT };
     default:
-      return { key: String(event?.event_type ?? "activity"), label: String(event?.label ?? event?.event_type ?? "Activity") };
+      return { key: String(event?.event_type ?? "activity"), label: formatEventType(String(event?.event_type ?? "activity")) };
   }
 };
 
@@ -404,8 +405,19 @@ export default function ReportsScreen() {
   const { selectedDate, setSelectedDate, openEventKeys, setOpenEventKeys } = useDaySelection();
 
   // Route handling
-  const params = useLocalSearchParams<{ mode?: string; addExpense?: string; expand?: string; date?: string }>();
-  const [routeHandled, setRouteHandled] = useState(false);
+  const params = useLocalSearchParams<{
+    mode?: string;
+    addExpense?: string;
+    expand?: string;
+    date?: string;
+    highlightId?: string;
+    highlightEventType?: string;
+    highlightEffectiveAt?: string;
+  }>();
+  const [handledRouteKey, setHandledRouteKey] = useState<string | null>(null);
+  const [highlightEventKey, setHighlightEventKey] = useState<string | null>(null);
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
+  const lastHighlightParamKey = useRef<string | null>(null);
 
   // Hooks
   const createExpense = useCreateExpense();
@@ -499,32 +511,39 @@ export default function ReportsScreen() {
 
   // Route params (FIXED: setExpanded expects string[])
   useEffect(() => {
-    if (routeHandled) return;
-
     const addExpense = Array.isArray(params.addExpense) ? params.addExpense[0] : params.addExpense;
     const expand = Array.isArray(params.expand) ? params.expand[0] : params.expand;
     const dateParam = Array.isArray(params.date) ? params.date[0] : params.date;
+    const highlightId = Array.isArray(params.highlightId) ? params.highlightId[0] : params.highlightId;
+    const highlightEventType = Array.isArray(params.highlightEventType) ? params.highlightEventType[0] : params.highlightEventType;
+    const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
 
     const todayStr = toDateKey(new Date());
     const date = dateParam || todayStr;
+    const routeKey = [addExpense ?? "", expand ?? "", date, highlightId ?? "", highlightEventType ?? "", highlightEffectiveAt ?? ""].join("|");
+    if (routeKey === handledRouteKey) return;
+
+    setSelectedDate(date);
+    setV2Expanded([date]);
 
     if (addExpense === "1") {
       setAllowExpenseInput(true);
-      setV2Expanded([date]);
       openExpenseModal(date);
-      setRouteHandled(true);
+      setHandledRouteKey(routeKey);
       return;
     }
 
-    if (expand === "1") {
-      setV2Expanded([date]);
-      setRouteHandled(true);
-    }
-  }, [params, routeHandled, openExpenseModal]);
+    setHandledRouteKey(routeKey);
+  }, [handledRouteKey, openExpenseModal, params, setSelectedDate, setV2Expanded]);
 
   useFocusEffect(
     useCallback(() => {
       refetchV2();
+      return () => {
+        setHighlightEventKey(null);
+        setHighlightDate(null);
+        lastHighlightParamKey.current = null;
+      };
     }, [refetchV2])
   );
 
@@ -636,6 +655,44 @@ export default function ReportsScreen() {
     });
   }, [activityGroupFilter, activitySubtypeFilter, activityLevel3Filter, rawSelectedEvents]);
   const keepTabsVisible = selectedEvents.length < 5;
+
+  useEffect(() => {
+    const highlightId = Array.isArray(params.highlightId) ? params.highlightId[0] : params.highlightId;
+    const highlightEventType = Array.isArray(params.highlightEventType) ? params.highlightEventType[0] : params.highlightEventType;
+    const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
+    if (!highlightId && !highlightEventType && !highlightEffectiveAt) {
+      setHighlightEventKey(null);
+      setHighlightDate(null);
+      lastHighlightParamKey.current = null;
+      return;
+    }
+    const paramKey = [highlightId, highlightEventType, highlightEffectiveAt].filter(Boolean).join("|");
+    if (lastHighlightParamKey.current === paramKey) return;
+    const match = rawSelectedEvents.find((event) => {
+      if (highlightId) {
+        return String(event?.id ?? event?.source_id ?? "") === highlightId;
+      }
+      if (highlightEventType && String(event?.event_type ?? "") !== highlightEventType) {
+        return false;
+      }
+      if (highlightEffectiveAt && String(event?.effective_at ?? "").slice(0, 10) !== highlightEffectiveAt.slice(0, 10)) {
+        return false;
+      }
+      return Boolean(highlightEventType || highlightEffectiveAt);
+    });
+    if (!match) return;
+    lastHighlightParamKey.current = paramKey;
+    const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
+    const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
+    setHighlightEventKey(eventKey);
+    setHighlightDate(eventDate);
+    const timer = setTimeout(() => {
+      setHighlightEventKey((current) => (current === eventKey ? null : current));
+      setHighlightDate((current) => (current === eventDate ? null : current));
+      lastHighlightParamKey.current = null;
+    }, 7200);
+    return () => clearTimeout(timer);
+  }, [params.highlightEffectiveAt, params.highlightEventType, params.highlightId, rawSelectedEvents]);
 
   useEffect(() => {
     setActivityGroupFilter(null);
@@ -894,7 +951,7 @@ export default function ReportsScreen() {
               <Animated.View style={{ height: spacerAnim }} />
               {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
               {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
-              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} />
+              <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} highlightDate={highlightDate} />
               {rawSelectedEvents.length > 0 ? (
                 <View style={styles.filterPanel}>
                   {availableGroupOptions.length > 1 ? (
@@ -955,7 +1012,7 @@ export default function ReportsScreen() {
             return (
               <View key={eventKey}>
                 <Pressable onPress={() => toggleEventKey(eventKey)}>
-                  <SlimActivityRow event={item} formatMoney={formatMoney} />
+                  <SlimActivityRow event={item} formatMoney={formatMoney} highlight={eventKey === highlightEventKey} />
                 </Pressable>
                 {isOpen ? <EventExpandedPanel ev={item} formatMoney={formatMoney} formatCount={formatCount} /> : null}
               </View>

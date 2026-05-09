@@ -22,6 +22,7 @@ import { logApiError } from "@/lib/apiErrors";
 import { ExpenseCreateInput } from "@/types/domain";
 import { buildActivityHappenedAt } from "@/lib/date";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
+import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 const MODE_LABELS = {
@@ -90,6 +91,8 @@ type CashExpensesViewProps = {
   }>;
   styles: Record<string, any>;
   onManageCategories?: () => void;
+  onSaveSuccess?: (details: { effectiveAt: string; highlightId?: string; highlightEventType?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: ExpenseMode; highlightId?: string; highlightEventType?: string }) => void;
 };
 
 const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -113,7 +116,7 @@ function formatMoneyTransitionComment(before: number, after: number) {
 }
 
 export default function CashExpensesView({
-  title = "Add Expense",
+  title = "Add Money Activity",
   cashBalance,
   onRefreshCash,
   onClose,
@@ -149,6 +152,8 @@ export default function CashExpensesView({
   TimePickerModal,
   styles,
   onManageCategories,
+  onSaveSuccess,
+  onSaveAndAddSuccess,
 }: CashExpensesViewProps) {
   const walletValue = typeof cashBalance === "number" ? cashBalance : 0;
   const expenseAmountValue = Number(expenseAmount) || 0;
@@ -169,6 +174,7 @@ export default function CashExpensesView({
       ? Boolean(expenseType.trim()) && expenseAmountValue > 0
       : transferAmountValue > 0 && !transferDisabled;
   const isSaving = isExpense ? Boolean(createExpense.isPending) : Boolean(createBankDeposit.isPending);
+  const [pendingAction, setPendingAction] = React.useState<"save" | "saveAndAdd" | null>(null);
 
   const setExpenseNow = () => {
     const now = new Date();
@@ -187,6 +193,7 @@ export default function CashExpensesView({
   };
 
   const handleSave = async (resetAfter: boolean) => {
+    setPendingAction(resetAfter ? "saveAndAdd" : "save");
     const happened_at = buildActivityHappenedAt({ date: expenseDate, time: expenseTime });
     try {
       if (isExpense) {
@@ -195,20 +202,35 @@ export default function CashExpensesView({
           Alert.alert("Missing data", "Select an expense type and enter a valid amount.");
           return;
         }
-        await createExpense.mutateAsync({
+        const created = await createExpense.mutateAsync({
           date: expenseDate,
           expense_type: expenseType.trim(),
           amount,
           note: expenseNote.trim() ? expenseNote.trim() : undefined,
           happened_at,
         });
+        showSuccessPulse();
         if (resetAfter) {
-          setExpenseAmount("");
+          setExpenseAmount("0");
           setExpenseNote("");
+          onSaveAndAddSuccess?.({
+            effectiveAt: happened_at ?? expenseDate,
+            mode: expenseMode,
+            highlightId: (created as { id?: string } | null)?.id,
+            highlightEventType: "expense",
+          });
         }
         onRefreshCash?.();
         if (!resetAfter) {
-          onClose?.();
+          if (onSaveSuccess) {
+            onSaveSuccess({
+              effectiveAt: happened_at ?? expenseDate,
+              highlightId: (created as { id?: string } | null)?.id,
+              highlightEventType: "expense",
+            });
+          } else {
+            onClose?.();
+          }
           Keyboard.dismiss();
         }
         return;
@@ -223,24 +245,41 @@ export default function CashExpensesView({
         Alert.alert("Insufficient wallet", "This transfer is limited by the current wallet balance.");
         return;
       }
-      await createBankDeposit.mutateAsync({
+      const created = await createBankDeposit.mutateAsync({
         date: expenseDate,
         time: expenseTime,
         amount,
         direction: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
         note: transferNote.trim() ? transferNote.trim() : undefined,
       });
+      showSuccessPulse();
       if (resetAfter) {
-        setTransferAmount("");
+        setTransferAmount("0");
         setTransferNote("");
+        onSaveAndAddSuccess?.({
+          effectiveAt: happened_at ?? expenseDate,
+          mode: expenseMode,
+          highlightId: (created as { id?: string } | null)?.id,
+          highlightEventType: "bank_deposit",
+        });
       }
       onRefreshCash?.();
       if (!resetAfter) {
-        onClose?.();
+        if (onSaveSuccess) {
+          onSaveSuccess({
+            effectiveAt: happened_at ?? expenseDate,
+            highlightId: (created as { id?: string } | null)?.id,
+            highlightEventType: "bank_deposit",
+          });
+        } else {
+          onClose?.();
+        }
         Keyboard.dismiss();
       }
     } catch (err) {
       logApiError("[cash expenses save] error", err);
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -393,6 +432,8 @@ export default function CashExpensesView({
         saveLabel={saveLabel}
         saveDisabled={!canSaveExpense || isSaving}
         saving={isSaving}
+        saveLoading={isSaving && pendingAction === "save"}
+        saveAndAddLoading={isSaving && pendingAction === "saveAndAdd"}
       />
     </View>
   );

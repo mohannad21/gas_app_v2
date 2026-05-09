@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { InputAccessoryView, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { SuccessPulse } from "@/components/SuccessPulse";
 import { Toast } from "@/components/Toast";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -41,6 +42,7 @@ export default function RootLayout() {
             <InitializationGuard />
             <Stack screenOptions={{ headerShown: false }} />
             <Toast />
+            <SuccessPulse />
             {Platform.OS === "ios" && (
               <InputAccessoryView nativeID={GLOBAL_ACCESSORY_ID}>
                 <View style={styles.accessoryRow}>

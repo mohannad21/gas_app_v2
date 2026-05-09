@@ -109,7 +109,12 @@
       "Bash(python -m pytest test_activity_visibility.py::test_customer_adjustment_appears_in_day_report_and_customer_review -v -s)",
       "Bash(python -m pytest -q)",
       "Bash(Get-ChildItem -Path 'c:\\\\Users\\\\Mohannad\\\\gas_app_v2' -Recurse -Directory)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\" -Recurse -Name)"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\" -Recurse -Name)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\\\\components\\\\reports\\\\\" -File | ForEach-Object { $_.Name })",
+      "PowerShell(cd \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\"; git add frontend/app/\\(tabs\\)/add/index.tsx frontend/app/customers/[id].tsx frontend/components/reports/SlimActivityRow.tsx)",
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\\\\app\\\\orders\\\\new.tsx\" | Measure-Object -Line\\).Lines)",
+      "Bash(dir \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\backend\\\\app\\\\routers\" /b)"
     ],
     "additionalDirectories": [
       "\\tmp"

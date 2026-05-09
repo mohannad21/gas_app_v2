@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { memo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useRef } from "react";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { getCurrencySymbol } from "@/lib/money";
@@ -10,17 +10,36 @@ type DayPickerStripProps = {
   rows: DailyReportCard[];
   selectedDate: string | null;
   onSelect: (date: string) => void;
+  highlightDate?: string | null;
 };
 
 const DayCard = memo(function DayCard({
   item,
   selected,
+  highlight,
   onSelect,
 }: {
   item: DailyReportCard;
   selected: boolean;
+  highlight: boolean;
   onSelect: (date: string) => void;
 }) {
+  const highlightAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!highlight) {
+      highlightAnim.setValue(0);
+      return;
+    }
+    highlightAnim.setValue(0);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(highlightAnim, { toValue: 1, duration: 200, useNativeDriver: false }),
+        Animated.timing(highlightAnim, { toValue: 0, duration: 1200, useNativeDriver: false }),
+      ]),
+      { iterations: 5 }
+    ).start();
+  }, [highlight, highlightAnim]);
   const d = new Date(item.date + "T00:00:00");
   const dayNum = d.getDate();
   const month = d.toLocaleDateString("en-US", { month: "short" });
@@ -36,6 +55,7 @@ const DayCard = memo(function DayCard({
       style={[styles.card, selected && styles.cardSelected]}
       testID={`day-card-${item.date}`}
     >
+      <Animated.View pointerEvents="none" style={[styles.highlightOverlay, { opacity: highlightAnim }]} />
       <View style={styles.topRow} testID={`day-card-top-${item.date}`}>
         <View style={styles.topBlock}>
           <Text style={dayNumStyle}>{dayNum}</Text>
@@ -72,7 +92,7 @@ const DayCard = memo(function DayCard({
   );
 });
 
-export default function DayPickerStrip({ rows, selectedDate, onSelect }: DayPickerStripProps) {
+export default function DayPickerStrip({ rows, selectedDate, onSelect, highlightDate }: DayPickerStripProps) {
   return (
     <View style={{ height: 180, backgroundColor: "#fff" }}>
       <ScrollView
@@ -82,7 +102,7 @@ export default function DayPickerStrip({ rows, selectedDate, onSelect }: DayPick
         contentContainerStyle={styles.strip}
       >
         {rows.map((item) => (
-          <DayCard key={item.date} item={item} selected={item.date === selectedDate} onSelect={onSelect} />
+          <DayCard key={item.date} item={item} selected={item.date === selectedDate} highlight={item.date === highlightDate} onSelect={onSelect} />
         ))}
       </ScrollView>
     </View>
@@ -175,5 +195,10 @@ const styles = StyleSheet.create({
   truckPlaceholder: {
     width: 16,
     height: 16,
+  },
+  highlightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#dcfce7",
+    borderRadius: 14,
   },
 });

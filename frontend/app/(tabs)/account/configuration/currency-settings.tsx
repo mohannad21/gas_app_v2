@@ -45,7 +45,7 @@ export default function CurrencySettingsScreen() {
       currency_code: selectedCode,
       money_decimals: selectedDecimals,
     });
-    router.back();
+    router.replace("/(tabs)/account");
   }
 
   return (

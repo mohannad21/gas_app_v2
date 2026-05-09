@@ -24,6 +24,8 @@ import {
     orderToEvent,
     refillSummaryToEvent,
   } from "@/lib/activityAdapter";
+import { EVENT_LABELS } from "@/lib/eventLabels";
+import { FontFamilies } from "@/constants/typography";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";
 import { useCashAdjustments, useDeleteCashAdjustment } from "@/hooks/useCash";
@@ -84,6 +86,7 @@ type ExpensePrimaryFilter = "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = string;
 type LedgerActivityFilter = "inventory_adjustment" | "cash_adjustment";
 type PriceSaveStatusTone = "success" | "warning" | "error";
+type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
 type CustomerActivityListItem =
   | {
@@ -182,37 +185,49 @@ function formatPriceGasList(items: string[]) {
 }
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
-  { id: "replacement", label: "Replacement" },
-  { id: "late_payment", label: "Received payment" },
-  { id: "payout", label: "Paid customer" },
-  { id: "return_empties", label: "Returned empties" },
-  { id: "sell_full", label: "Sell full" },
-  { id: "buy_empty", label: "Buy empty" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
+  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
+  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
+  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
+  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
+  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
+  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
 ];
 
 const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
-  { id: "refill", label: "Refill" },
-  { id: "company_payment", label: "Paid company" },
-  { id: "received_from_company", label: "Received from company" },
-  { id: "buy_full", label: "Bought full" },
-  { id: "company_return", label: "Returned empties" },
-  { id: "adjustment", label: "Balance adjustment" },
+  { id: "refill", label: EVENT_LABELS.REFILL },
+  { id: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT },
+  { id: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN },
+  { id: "buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL },
+  { id: "company_return", label: EVENT_LABELS.COMPANY_RETURN },
+  { id: "adjustment", label: EVENT_LABELS.COMPANY_ADJUSTMENT },
 ];
 
 const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
-  { id: "expense", label: "Expense" },
-  { id: "wallet_to_bank", label: "Wallet to bank" },
-  { id: "bank_to_wallet", label: "Bank to wallet" },
+  { id: "expense", label: EVENT_LABELS.EXPENSE },
+  { id: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK },
+  { id: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET },
 ];
 
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
-  { id: "inventory_adjustment", label: "Inventory adjustment" },
-  { id: "cash_adjustment", label: "Wallet adjustment" },
+  { id: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT },
+  { id: "cash_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT },
 ];
+const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
+  "created_desc",
+  "created_asc",
+  "effective_desc",
+  "effective_asc",
+];
+const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
+  created_desc: "created date (recent on top)",
+  created_asc: "created date (recent on bottom)",
+  effective_desc: "Effective date (recent on top)",
+  effective_asc: "Effective date (recent on bottom)",
+};
 
 export default function AddChooserScreen() {
-  const addParams = useLocalSearchParams<{ prices?: string; open?: string }>();
+  const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string }>();
   // Extract activity filters state into custom hook
   const {
     mode,
@@ -231,6 +246,10 @@ export default function AddChooserScreen() {
   const [customerActivityLevel2, setCustomerActivityLevel2] = useState<string | null>(null);
   const [customerActivityLevel3, setCustomerActivityLevel3] = useState<string | null>(null);
   const [companyActivityLevel2, setCompanyActivityLevel2] = useState<string | null>(null);
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
+  const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
 
   const [customerSearch, setCustomerSearch] = useState("");
   const isCustomerActivities = mode === "customer_activities";
@@ -324,6 +343,31 @@ const formatDateTime = (value?: string) => {
     },
     [toSafeTime]
   );
+  const compareBySortMode = useCallback(
+    (
+      left: { id?: string; sortAt?: string; createdAt?: string },
+      right: { id?: string; sortAt?: string; createdAt?: string }
+    ) => {
+      const primaryField = activitySortMode.startsWith("created") ? "createdAt" : "sortAt";
+      const secondaryField = primaryField === "createdAt" ? "sortAt" : "createdAt";
+      const primaryLeft = toSafeTime(left[primaryField]);
+      const primaryRight = toSafeTime(right[primaryField]);
+      if (primaryLeft !== primaryRight) {
+        return activitySortMode.endsWith("_asc") ? primaryLeft - primaryRight : primaryRight - primaryLeft;
+      }
+      const secondaryLeft = toSafeTime(left[secondaryField]);
+      const secondaryRight = toSafeTime(right[secondaryField]);
+      if (secondaryLeft !== secondaryRight) {
+        return secondaryRight - secondaryLeft;
+      }
+      return String(right.id ?? "").localeCompare(String(left.id ?? ""));
+    },
+    [activitySortMode, toSafeTime]
+  );
+  const sortVisibleItems = useCallback(
+    <T extends { id?: string; sortAt?: string; createdAt?: string }>(items: T[]) => [...items].sort(compareBySortMode),
+    [compareBySortMode]
+  );
 
   const customerActivityItems = useMemo<CustomerActivityListItem[]>(() => {
     const orderItems = orders.map<CustomerActivityListItem>((order) => ({
@@ -335,7 +379,7 @@ const formatDateTime = (value?: string) => {
           : order.order_mode === "buy_iron"
             ? ("buy_empty" as const)
             : ("replacement" as const),
-      sortAt: order.created_at || order.delivered_at || new Date().toISOString(),
+      sortAt: order.delivered_at || order.created_at || new Date().toISOString(),
       createdAt: order.created_at || order.delivered_at || "",
       customerName: customersById.get(order.customer_id)?.name ?? order.customer_id,
       data: order,
@@ -349,7 +393,7 @@ const formatDateTime = (value?: string) => {
           : collection.action_type === "payout"
             ? ("payout" as const)
             : ("return_empties" as const),
-      sortAt: collection.created_at || collection.effective_at || new Date().toISOString(),
+      sortAt: collection.effective_at || collection.created_at || new Date().toISOString(),
       createdAt: collection.created_at || collection.effective_at || "",
       customerName: customersById.get(collection.customer_id)?.name ?? collection.customer_id,
       data: collection,
@@ -360,7 +404,7 @@ const formatDateTime = (value?: string) => {
         id: `adjustment-${adjustment.id}`,
         kind: "adjustment" as const,
         filterId: "adjustment" as const,
-        sortAt: adjustment.created_at || adjustment.effective_at || new Date().toISOString(),
+        sortAt: adjustment.effective_at || adjustment.created_at || new Date().toISOString(),
         createdAt: adjustment.created_at || adjustment.effective_at || "",
         customerName: customersById.get(adjustment.customer_id)?.name ?? adjustment.customer_id,
         data: adjustment,
@@ -382,7 +426,7 @@ const formatDateTime = (value?: string) => {
       .map((refill) => ({
         id: `refill-${refill.refill_id}`,
         kind: "refill" as const,
-        sortAt: refill.created_at ?? refill.effective_at,
+        sortAt: refill.effective_at ?? refill.created_at,
         createdAt: refill.created_at ?? refill.effective_at,
         is_deleted: Boolean(refill.is_deleted),
         data: refill,
@@ -390,7 +434,7 @@ const formatDateTime = (value?: string) => {
     const companyPaymentItems = (companyPaymentsQuery.data ?? []).map((payment) => ({
         id: `company-payment-${payment.id}`,
         kind: "company_payment" as const,
-        sortAt: payment.created_at ?? payment.happened_at,
+        sortAt: payment.happened_at ?? payment.created_at,
         createdAt: payment.created_at ?? payment.happened_at,
         is_deleted: Boolean(payment.is_deleted),
         data: payment,
@@ -398,7 +442,7 @@ const formatDateTime = (value?: string) => {
     const companyAdjustmentItems = (companyAdjustmentsQuery.data ?? []).map((adjustment) => ({
       id: `company-adjustment-${adjustment.id}`,
       kind: "company_adjustment" as const,
-      sortAt: adjustment.created_at ?? adjustment.happened_at,
+      sortAt: adjustment.happened_at ?? adjustment.created_at,
       createdAt: adjustment.created_at ?? adjustment.happened_at,
       is_deleted: Boolean(adjustment.is_deleted),
       data: adjustment,
@@ -434,7 +478,7 @@ const formatDateTime = (value?: string) => {
         return {
           id: `inventory-adjustment-${groupKey}`,
           kind: "inventory_adjustment",
-          sortAt: representative.created_at ?? representative.effective_at,
+          sortAt: representative.effective_at ?? representative.created_at,
           createdAt: representative.created_at ?? representative.effective_at,
           is_deleted: sortedEntries.every((entry) => Boolean(entry.is_deleted)),
           data: sortedEntries,
@@ -445,7 +489,7 @@ const formatDateTime = (value?: string) => {
       const cashItems = (allCashAdjustmentsQuery.data ?? []).map<LedgerAdjustmentListItem>((adjustment) => ({
         id: `cash-adjustment-${adjustment.id}`,
         kind: "cash_adjustment",
-        sortAt: adjustment.created_at ?? adjustment.effective_at,
+        sortAt: adjustment.effective_at ?? adjustment.created_at,
         createdAt: adjustment.created_at ?? adjustment.effective_at,
         is_deleted: Boolean(adjustment.is_deleted),
         data: adjustment,
@@ -575,7 +619,7 @@ const formatDateTime = (value?: string) => {
   }, [customerActivityFilter, customerActivityLevel2, customerSearchScopedItems]);
   const filteredCustomerActivityItems = useMemo(
     () =>
-      customerSearchScopedItems.filter((item) => {
+      sortVisibleItems(customerSearchScopedItems.filter((item) => {
         if (customerActivityFilter && item.filterId !== customerActivityFilter) {
           return false;
         }
@@ -631,8 +675,8 @@ const formatDateTime = (value?: string) => {
           default:
             return true;
         }
-      }),
-    [customerActivityFilter, customerActivityLevel2, customerActivityLevel3, customerSearchScopedItems]
+      })),
+    [customerActivityFilter, customerActivityLevel2, customerActivityLevel3, customerSearchScopedItems, sortVisibleItems]
   );
   const availableCompanyActivityFilters = useMemo(() => {
     const seen = new Set<CompanyActivityFilter>();
@@ -723,7 +767,7 @@ const formatDateTime = (value?: string) => {
   }, [companyActivityFilter, companyActivityItems]);
   const filteredCompanyActivityItems = useMemo(
     () =>
-      companyActivityItems.filter((entry) => {
+      sortVisibleItems(companyActivityItems.filter((entry) => {
         if (!companyActivityFilter) {
           return true;
         }
@@ -766,8 +810,8 @@ const formatDateTime = (value?: string) => {
           return Number(refill.buy48 ?? 0) + Number(refill.new48 ?? 0) + Number(refill.return48 ?? 0) > 0;
         }
         return true;
-      }),
-    [companyActivityFilter, companyActivityItems, companyActivityLevel2]
+      })),
+    [companyActivityFilter, companyActivityItems, companyActivityLevel2, sortVisibleItems]
   );
   const expenseListItems = useMemo<ExpenseListItem[]>(() => {
     const expenseItems = expenses
@@ -775,7 +819,7 @@ const formatDateTime = (value?: string) => {
       .map<ExpenseListItem>((item) => ({
         id: `expense-${item.id}`,
         kind: "expense" as const,
-        sortAt: item.created_at ?? item.happened_at ?? item.date,
+        sortAt: item.happened_at ?? item.date ?? item.created_at,
         createdAt: item.created_at ?? item.happened_at ?? item.date,
         data: item,
       }));
@@ -785,7 +829,7 @@ const formatDateTime = (value?: string) => {
         id: `bank-deposit-${item.id}`,
         kind: "bank_transfer" as const,
         direction: item.direction,
-        sortAt: item.created_at ?? item.happened_at,
+        sortAt: item.happened_at ?? item.created_at,
         createdAt: item.created_at ?? item.happened_at,
         data: item,
       }));
@@ -794,7 +838,7 @@ const formatDateTime = (value?: string) => {
   }, [bankDeposits, compareChronology, expenses]);
   const filteredExpenseItems = useMemo(
     () =>
-      expenseListItems.filter((item) => {
+      sortVisibleItems(expenseListItems.filter((item) => {
         if (expensePrimaryFilter === "expense" && item.kind !== "expense") {
           return false;
         }
@@ -812,18 +856,18 @@ const formatDateTime = (value?: string) => {
           return item.data.expense_type === expenseCategoryFilter;
         }
         return true;
-      }),
-    [expenseCategoryFilter, expenseListItems, expensePrimaryFilter]
+      })),
+    [expenseCategoryFilter, expenseListItems, expensePrimaryFilter, sortVisibleItems]
   );
   const filteredLedgerAdjustmentItems = useMemo(
     () =>
-      ledgerAdjustmentItems.filter((entry) => {
+      sortVisibleItems(ledgerAdjustmentItems.filter((entry) => {
         if (!ledgerActivityFilter) {
           return true;
         }
         return entry.kind === ledgerActivityFilter;
-      }),
-    [ledgerActivityFilter, ledgerAdjustmentItems]
+      })),
+    [ledgerActivityFilter, ledgerAdjustmentItems, sortVisibleItems]
   );
   const availableExpensePrimaryFilters = useMemo(() => {
     const options: { id: ExpensePrimaryFilter; label: string }[] = [];
@@ -966,6 +1010,20 @@ const formatDateTime = (value?: string) => {
         setMode("company_activities");
         router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
       }
+    }, [])
+  );
+
+  useEffect(() => {
+    const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
+    if (!rawId) return;
+    setHighlightItemId(rawId);
+    const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 7200);
+    return () => clearTimeout(timer);
+  }, [addParams.highlightId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => setHighlightItemId(null);
     }, [])
   );
 
@@ -1209,19 +1267,20 @@ const formatDateTime = (value?: string) => {
 
   const handlePrimaryAction = () => {
     if (isCustomerActivities) {
-      router.push("/orders/new");
+      router.push({ pathname: "/orders/new", params: { source: "add" } });
       return;
     }
     if (isCompanyActivities) {
-      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill" } });
+      router.push({ pathname: "/inventory/new", params: { section: "company", tab: "refill", source: "add" } });
       return;
     }
     if (isExpenses) {
-      router.push("/expenses/new");
+      router.push({ pathname: "/expenses/new", params: { source: "add" } });
       return;
     }
-    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory" } });
+    router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "inventory", source: "add" } });
   };
+  const openSortPicker = () => setSortPickerVisible(true);
 
   const customerActivityEmptyMessage =
     !customerActivityFilter && !deferredCustomerSearch
@@ -1229,15 +1288,15 @@ const formatDateTime = (value?: string) => {
       : "No customer activities match these filters.";
   const expenseEmptyMessage =
     !expensePrimaryFilter && !expenseCategoryFilter
-      ? "No expenses yet."
-      : "No expenses match these filters.";
+      ? "No money activities yet."
+      : "No money activities match these filters.";
 
   const primaryCtaLabel = isCustomerActivities
     ? "+ New Customer Activity"
     : isCompanyActivities
       ? "+ New Company Activity"
       : isExpenses
-        ? "+ Add Expense"
+        ? "+ Add Money Activity"
         : "+ New Ledger Adjustment";
 
   return (
@@ -1260,7 +1319,7 @@ const formatDateTime = (value?: string) => {
           </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Expenses</Text>
+          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Money{"\n"}Activities</Text>
         </Pressable>
         <Pressable
           onPress={() => setMode("ledger_adjustments")}
@@ -1272,11 +1331,19 @@ const formatDateTime = (value?: string) => {
         </Pressable>
       </View>
 
-      <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
-        <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
-      </Pressable>
+      <View style={styles.primaryActionRow}>
+        <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, styles.primaryActionButton, pressed && styles.pressed]}>
+          <Text style={styles.primaryText}>{primaryCtaLabel}</Text>
+        </Pressable>
+        <Pressable style={styles.utilityIconButton} onPress={() => setFiltersVisible((current) => !current)}>
+          <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
+        </Pressable>
+        <Pressable style={styles.utilityIconButton} onPress={openSortPicker}>
+          <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
+        </Pressable>
+      </View>
 
-      {isCustomerActivities ? (
+      {filtersVisible && isCustomerActivities ? (
         <>
           <NewSectionSearch
             value={customerSearch}
@@ -1316,7 +1383,7 @@ const formatDateTime = (value?: string) => {
         </>
       ) : null}
 
-      {isCompanyActivities ? (
+      {filtersVisible && isCompanyActivities ? (
         <>
           {availableCompanyActivityFilters.length > 1 ? (
             <FilterChipRow
@@ -1336,7 +1403,7 @@ const formatDateTime = (value?: string) => {
         </>
       ) : null}
 
-      {isExpenses ? (
+      {filtersVisible && isExpenses ? (
         <>
           {availableExpensePrimaryFilters.length > 1 ? (
             <FilterChipRow
@@ -1356,7 +1423,7 @@ const formatDateTime = (value?: string) => {
         </>
       ) : null}
 
-      {isLedgerAdjustments ? (
+      {filtersVisible && isLedgerAdjustments ? (
         availableLedgerActivityFilters.length > 1 ? (
           <FilterChipRow
             options={availableLedgerActivityFilters}
@@ -1401,6 +1468,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(item.data.id) === highlightItemId}
                     onDelete={() => handleDeleteCustomerAdjustment(item.data)}
                   />
                 );
@@ -1416,6 +1484,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(collection.id) === highlightItemId}
                       onDelete={() => confirmDeleteCollection(collection.id)}
                     />
                 );
@@ -1432,6 +1501,7 @@ const formatDateTime = (value?: string) => {
                   formatMoney={fmtMoney}
                   showCreatedAt
                   showEffectiveAtBottom
+                  highlight={String(order.id) === highlightItemId}
                   onDelete={() => confirmDeleteOrder(order.id)}
                 />
               );
@@ -1443,7 +1513,7 @@ const formatDateTime = (value?: string) => {
           {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
           {expensesQuery.error || bankDepositsQuery.error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load expenses.</Text>
+              <Text style={styles.error}>Failed to load money activities.</Text>
               <Pressable style={styles.retryBtn} onPress={handleRetryExpenses}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
@@ -1466,6 +1536,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(item.data.id) === highlightItemId}
                       isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                       onDelete={() => handleDeleteBankTransfer(item.data)}
                     />
@@ -1477,6 +1548,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(item.data.id) === highlightItemId}
                     isDeleted={item.data.is_deleted || deletingIds.has(item.data.id)}
                     onDelete={() => handleDeleteExpense(item.data)}
                   />
@@ -1504,6 +1576,7 @@ const formatDateTime = (value?: string) => {
                       formatMoney={fmtMoney}
                       showCreatedAt
                       showEffectiveAtBottom
+                      highlight={String(entry.data.id) === highlightItemId}
                       isDeleted={deletingIds.has(entry.data.id)}
                       onDelete={() => handleDeleteCompanyPayment(entry.data)}
                     />
@@ -1516,6 +1589,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(entry.data.id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(entry.data.id)}
                     onDelete={() => handleDeleteCompanyAdjustment(entry.data)}
                   />
@@ -1528,6 +1602,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(refill.refill_id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(refill.refill_id)}
                     onDelete={() => handleRemoveRefill(refill.refill_id)}
                   />
@@ -1562,6 +1637,7 @@ const formatDateTime = (value?: string) => {
                         formatMoney={fmtMoney}
                         showCreatedAt
                         showEffectiveAtBottom
+                        highlight={String(adjustment.id) === highlightItemId}
                         isDeleted={entry.is_deleted || deletingGroup}
                         onDelete={() =>
                           entry.isGrouped
@@ -1578,6 +1654,7 @@ const formatDateTime = (value?: string) => {
                     formatMoney={fmtMoney}
                     showCreatedAt
                     showEffectiveAtBottom
+                    highlight={String(adjustment.id) === highlightItemId}
                     isDeleted={entry.is_deleted || deletingIds.has(adjustment.id)}
                     onDelete={() => handleDeleteCashAdjustment(adjustment)}
                   />
@@ -1717,6 +1794,33 @@ const formatDateTime = (value?: string) => {
             </View>
           </KeyboardAvoidingView>
         </View>
+      </Modal>
+
+      <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
+        <Pressable style={styles.sortPickerOverlay} onPress={() => setSortPickerVisible(false)}>
+          <View style={styles.sortPickerCard}>
+            <Text style={styles.sortPickerTitle}>Sort by</Text>
+            {ACTIVITY_SORT_ORDER.map((sortMode) => (
+              <Pressable
+                key={sortMode}
+                style={styles.sortPickerOption}
+                onPress={() => { setActivitySortMode(sortMode); setSortPickerVisible(false); }}
+              >
+                <View style={styles.sortPickerOptionContent}>
+                  <Text style={[styles.sortPickerOptionText, sortMode === activitySortMode && styles.sortPickerOptionActive]}>
+                    {ACTIVITY_SORT_LABELS[sortMode]}
+                  </Text>
+                  {sortMode === "created_desc" ? (
+                    <Text style={styles.sortPickerRecommended}>recommended</Text>
+                  ) : null}
+                </View>
+                {sortMode === activitySortMode ? (
+                  <Ionicons name="checkmark" size={16} color="#0a7ea4" />
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
       </Modal>
 
     </View>
@@ -2028,6 +2132,7 @@ export function AddCustomersSection({
           </View>
         </View>
       </Modal>
+
     </>
   );
 }
@@ -2299,10 +2404,86 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+  primaryActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  primaryActionButton: {
+    flex: 1,
+  },
   primaryText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
+  },
+  utilityIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d7dde4",
+  },
+  sortPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sortPickerCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  sortPickerTitle: {
+    fontSize: 13,
+    fontFamily: FontFamilies.semibold,
+    color: "#64748b",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sortPickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sortPickerOptionContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sortPickerOptionText: {
+    fontSize: 14,
+    fontFamily: FontFamilies.regular,
+    color: "#1e293b",
+  },
+  sortPickerOptionActive: {
+    fontFamily: FontFamilies.semibold,
+    color: "#0a7ea4",
+  },
+  sortPickerRecommended: {
+    fontSize: 11,
+    fontFamily: FontFamilies.regular,
+    color: "#64748b",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   listBlock: {
     gap: 10,

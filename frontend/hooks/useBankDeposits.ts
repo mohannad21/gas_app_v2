@@ -13,7 +13,7 @@ export function useBankDeposits(date?: string, options?: { enabled?: boolean; in
   });
 }
 
-export function useCreateBankDeposit() {
+export function useCreateBankDeposit(options?: { suppressSuccessToast?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createBankDeposit,
@@ -23,7 +23,9 @@ export function useCreateBankDeposit() {
     onSuccess: (_, variables) => {
       const directionLabel =
         variables.direction === "bank_to_wallet" ? "Bank to Wallet saved" : "Wallet to Bank saved";
-      showToast(directionLabel);
+      if (!options?.suppressSuccessToast) {
+        showToast(directionLabel);
+      }
       queryClient.invalidateQueries({ queryKey: ["bank_deposits"] });
       queryClient.invalidateQueries({ queryKey: ["bank_deposits", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });

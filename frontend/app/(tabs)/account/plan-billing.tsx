@@ -37,7 +37,7 @@ export default function PlanBillingScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Pressable onPress={() => router.replace("/(tabs)/account")} style={styles.backButton}>
           <Text style={styles.backButtonText}>{"<"}</Text>
         </Pressable>
         <Text style={styles.title}>Plan & Billing</Text>

@@ -35,7 +35,7 @@ export default function ChangePasswordScreen() {
         new_password: newPassword,
       });
       showToast("Password changed successfully");
-      router.back();
+      router.replace("/(tabs)/account");
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       if (detail === "wrong_password") {
@@ -87,7 +87,7 @@ export default function ChangePasswordScreen() {
         {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Update Password</Text>}
       </Pressable>
 
-      <Pressable style={styles.cancelButton} onPress={() => router.back()} disabled={isLoading}>
+      <Pressable style={styles.cancelButton} onPress={() => router.replace("/(tabs)/account")} disabled={isLoading}>
         <Text style={styles.cancelText}>Cancel</Text>
       </Pressable>
     </View>

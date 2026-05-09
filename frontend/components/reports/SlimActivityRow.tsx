@@ -1,12 +1,15 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useRef } from "react";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
+import { formatEventType } from "@/lib/reports/utils";
 import { DailyReportEvent } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
@@ -18,7 +21,10 @@ type SlimActivityRowProps = {
   isDeleted?: boolean;
   showCreatedAt?: boolean;
   showEffectiveAtBottom?: boolean;
+  highlight?: boolean;
 };
+
+const toDateOnly = (value?: string | null) => (value ? value.slice(0, 10) : "");
 
 const formatMoneyValue = (amount: number, formatMoney: (v: number) => string) =>
   `${formatMoney(amount)} ${getCurrencySymbol()}`;
@@ -190,9 +196,11 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     return null;
   }
   if (event.event_type === "bank_deposit") {
-    return event.label ?? event.display_name ?? "Wallet Transfer";
+    return event.transfer_direction === "bank_to_wallet"
+      ? EVENT_LABELS.BANK_TO_WALLET
+      : EVENT_LABELS.WALLET_TO_BANK;
   }
-  return event.label ?? null;
+  return null;
 };
 
 const splitDisplayName = (value: string | null | undefined) => {
@@ -259,10 +267,30 @@ const buildDisplayTransitions = (event: DailyReportEvent) => {
   return transitions.length > 0 ? transitions : event.balance_transitions ?? [];
 };
 
-export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, isDeleted, showCreatedAt, showEffectiveAtBottom }: SlimActivityRowProps) {
+export default function SlimActivityRow({
+  event,
+  formatMoney,
+  onEdit,
+  onDelete,
+  isDeleted,
+  showCreatedAt,
+  showEffectiveAtBottom,
+  highlight,
+}: SlimActivityRowProps) {
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
+  const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
-  const label = event?.event_type === "order" ? (event?.label ?? "Replacement") : event?.label ?? eventType;
+  const label = (() => {
+    if (eventType === "company_payment")
+      return event?.money_direction === "in"
+        ? EVENT_LABELS.COMPANY_PAYMENT_IN
+        : EVENT_LABELS.COMPANY_PAYMENT_OUT;
+    if (eventType === "bank_deposit")
+      return event?.transfer_direction === "bank_to_wallet"
+        ? EVENT_LABELS.BANK_TO_WALLET
+        : EVENT_LABELS.WALLET_TO_BANK;
+    return formatEventType(eventType, event?.order_mode);
+  })();
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
@@ -287,7 +315,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       ? heroActionBase
       : null;
   const bankTransferText = String(
-    event.hero_primary ?? event.hero_text ?? event.label ?? event.display_name ?? event.context_line ?? ""
+    event.hero_primary ?? event.hero_text ?? event.context_line ?? ""
   );
   const bankTransferDirection =
     event.event_type === "bank_deposit"
@@ -373,11 +401,12 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
               .replace(/[·•\s]+$/, "")
           : label
       )
-    : event.context_line ?? label;
-  const createdAtLine = showCreatedAt && event.created_at ? formatDateTimeYMDHM(event.created_at) : "";
-  const effectiveAtBottomLine =
-    showEffectiveAtBottom && event.effective_at ? formatDateTimeYMDHM(event.effective_at) : "";
-  const topLine = createdAtLine ? `${displayContextLine} · ${createdAtLine}` : displayContextLine;
+    : label;
+  const createdAtLine = showCreatedAt && event.created_at ? `Created at: ${formatDateTimeYMDHM(event.created_at)}` : "";
+  const effectiveAtLine =
+    showEffectiveAtBottom && event.effective_at ? `Effective at: ${formatDateTimeYMDHM(event.effective_at)}` : "";
+  const hasDateMismatch =
+    Boolean(createdAtLine && effectiveAtLine) && toDateOnly(event.created_at) !== toDateOnly(event.effective_at);
 
   const transitionPills: TransitionPill[] = formatTransitionPills(buildDisplayTransitions(event), {
     formatMoney: fmtMoney,
@@ -390,8 +419,32 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
 
   const hasActions = !!(onEdit || onDelete);
 
+  useEffect(() => {
+    if (!highlight) {
+      highlightAnim.setValue(0);
+      return;
+    }
+    highlightAnim.setValue(0);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(highlightAnim, { toValue: 1, duration: 200, useNativeDriver: false }),
+        Animated.timing(highlightAnim, { toValue: 0, duration: 1200, useNativeDriver: false }),
+      ]),
+      { iterations: 5 }
+    ).start();
+  }, [highlight, highlightAnim]);
+
   return (
     <View style={[styles.row, isDeleted && styles.rowDeleted]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.highlightOverlay,
+          {
+            opacity: highlightAnim,
+          },
+        ]}
+      />
       <View style={styles.railCol}>
         <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
         <View style={styles.rail} />
@@ -399,7 +452,7 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.actionText} numberOfLines={1}>
-            {topLine}
+            {displayContextLine}
           </Text>
           {showPaymentRatio ? (
             <Text style={styles.moneyText} numberOfLines={1}>
@@ -511,35 +564,43 @@ export default function SlimActivityRow({ event, formatMoney, onEdit, onDelete, 
           </View>
         ) : null}
 
-        {effectiveAtBottomLine ? <Text style={styles.contextText}>{effectiveAtBottomLine}</Text> : null}
-
-        {hasActions ? (
+        {createdAtLine || effectiveAtLine || hasActions || isDeleted ? (
           <View style={styles.actionsRow}>
-            {isDeleted ? (
-              <Text style={styles.deletedLabel}>Deleted</Text>
-            ) : null}
-            <View style={styles.actionBtns}>
-              {onEdit ? (
-                <Pressable
-                  onPress={isDeleted ? undefined : onEdit}
-                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                  accessibilityLabel="Edit"
-                >
-                  <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                  <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
-                </Pressable>
+            <View style={styles.timestampsBlock}>
+              {isDeleted ? (
+                <Text style={styles.deletedLabel}>Deleted</Text>
               ) : null}
-              {onDelete ? (
-                <Pressable
-                  onPress={isDeleted ? undefined : onDelete}
-                  style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                  accessibilityLabel="Delete"
-                >
-                  <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
-                  <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
-                </Pressable>
+              {createdAtLine ? (
+                <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{createdAtLine}</Text>
+              ) : null}
+              {effectiveAtLine ? (
+                <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{effectiveAtLine}</Text>
               ) : null}
             </View>
+            {hasActions ? (
+              <View style={styles.actionBtns}>
+                {onEdit ? (
+                  <Pressable
+                    onPress={isDeleted ? undefined : onEdit}
+                    style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                    accessibilityLabel="Edit"
+                  >
+                    <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
+                    <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
+                  </Pressable>
+                ) : null}
+                {onDelete ? (
+                  <Pressable
+                    onPress={isDeleted ? undefined : onDelete}
+                    style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
+                    accessibilityLabel="Delete"
+                  >
+                    <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
+                    <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -556,6 +617,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Level3Tokens.colors.border,
     flexDirection: "row",
     gap: 10,
+    position: "relative",
+    overflow: "hidden",
+  },
+  highlightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#dcfce7",
   },
   railCol: {
     width: 28,
@@ -616,7 +683,9 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Level3Tokens.colors.textMuted,
     fontFamily: FontFamilies.regular,
-    flex: 1,
+  },
+  contextTextAlert: {
+    color: "#dc2626",
   },
   contextSpacer: {
     flex: 1,
@@ -701,6 +770,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 6,
+    gap: 12,
+  },
+  timestampsBlock: {
+    flex: 1,
+    alignItems: "flex-start",
+    gap: 2,
   },
   deletedLabel: {
     fontSize: FontSizes.sm,
@@ -711,6 +786,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginLeft: "auto",
+    minHeight: 32,
+    alignItems: "center",
   },
   actionBtn: {
     flexDirection: "row",

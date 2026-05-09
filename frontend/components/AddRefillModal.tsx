@@ -43,6 +43,7 @@ import {
 import { usePriceSettings } from "@/hooks/usePrices";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useRefillFormState, type EditRefillEntry } from "@/hooks/useRefillFormState";
+import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 type SavedRefillEntry = {
@@ -61,6 +62,8 @@ type AddRefillModalProps = {
   visible: boolean;
   onClose: () => void;
   onSaved: (entry: SavedRefillEntry) => void;
+  onSaveSuccess?: (details: { effectiveAt: string; entry: SavedRefillEntry; highlightEventType?: string }) => void;
+  onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: "refill" | "buy" | "return"; highlightEventType?: string }) => void;
   accessoryId?: string;
   editEntry?: EditRefillEntry | null;
 };
@@ -159,6 +162,8 @@ export function RefillForm({
   visible,
   onClose,
   onSaved,
+  onSaveSuccess,
+  onSaveAndAddSuccess,
   accessoryId,
   editEntry,
   showHeader = true,
@@ -435,13 +440,17 @@ export function RefillForm({
   const payloadBuy48 = formState.isReturnMode ? 0 : buy48Value;
   const payloadReturn12 = formState.isBuyMode ? 0 : ret12Value;
   const payloadReturn48 = formState.isBuyMode ? 0 : ret48Value;
+  const [pendingAction, setPendingAction] = useState<"save" | "saveAndAdd" | null>(null);
 
   const handleSave = async (resetAfter = false) => {
+    setPendingAction(resetAfter ? "saveAndAdd" : "save");
     if (!base || inventoryNotInitialized) {
+      setPendingAction(null);
       Alert.alert("Inventory not initialized", "Set starting inventory before adding a refill.");
       return;
     }
     if (return12Invalid) {
+      setPendingAction(null);
       Alert.alert(
         "Invalid return",
         `You only have ${availableEmpty12} empty 12kg cylinders. Entered ${ret12Value}.`
@@ -449,6 +458,7 @@ export function RefillForm({
       return;
     }
     if (return48Invalid) {
+      setPendingAction(null);
       Alert.alert(
         "Invalid return",
         `You only have ${availableEmpty48} empty 48kg cylinders. Entered ${ret48Value}.`
@@ -497,6 +507,8 @@ export function RefillForm({
         });
       }
       Keyboard.dismiss();
+      showSuccessPulse();
+      const effectiveAt = buildActivityHappenedAt({ date: formState.date, time: formState.time }) ?? formState.date;
       const savedEntry = {
         id: editEntry?.refill_id ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         date: formState.date,
@@ -510,9 +522,22 @@ export function RefillForm({
       };
       if (resetAfter && !editEntry?.refill_id) {
         formState.resetFormForCurrentMode();
+        onSaveAndAddSuccess?.({
+          effectiveAt,
+          mode,
+          highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+        });
       } else {
-        onSaved(savedEntry);
-        onClose();
+        if (onSaveSuccess) {
+          onSaveSuccess({
+            effectiveAt,
+            entry: savedEntry,
+            highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+          });
+        } else {
+          onSaved(savedEntry);
+          onClose();
+        }
       }
     } catch (err) {
       const detail = (err as AxiosError<{ detail?: InventoryNegativeDetail }>).response?.data?.detail;
@@ -524,6 +549,8 @@ export function RefillForm({
         return;
       }
       Alert.alert("Save failed", "Please try again.");
+    } finally {
+      setPendingAction(null);
     }
   };
   const handleBuy12Change = (value: string) => {
@@ -596,6 +623,8 @@ export function RefillForm({
       onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
       saveDisabled={disableSave}
       saving={formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
+      saveLoading={(formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending) && pendingAction === "save"}
+      saveAndAddLoading={(formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending) && pendingAction === "saveAndAdd"}
     />
   );
 

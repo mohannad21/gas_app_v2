@@ -4,6 +4,7 @@ import {
   calcCustomerMoneyDelta,
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
+import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getCurrencySymbol } from "@/lib/money";
 import { PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 
@@ -16,25 +17,25 @@ export type DaySummaryTotals = {
 export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "order") {
     const resolvedMode = orderMode || "replacement";
-    if (resolvedMode === "replacement") return "Replacement";
-    if (resolvedMode === "sell_iron") return "Sell Full";
-    if (resolvedMode === "buy_iron") return "Buy Empty";
-    return "Replacement";
+    if (resolvedMode === "replacement") return EVENT_LABELS.ORDER_REPLACEMENT;
+    if (resolvedMode === "sell_iron") return EVENT_LABELS.ORDER_SELL_FULL;
+    if (resolvedMode === "buy_iron") return EVENT_LABELS.ORDER_BUY_EMPTY;
+    return EVENT_LABELS.ORDER_REPLACEMENT;
   }
-  if (type === "collection_money") return "Received payment";
-  if (type === "collection_payout") return "Paid customer";
-  if (type === "collection_empty") return "Returned empties";
-  if (type === "refill") return "Refill";
-  if (type === "company_payment") return "Paid company";
-  if (type === "company_buy_iron") return "Bought full";
-  if (type === "cash_adjust") return "Wallet adjustment";
-  if (type === "adjust") return "Inventory adjustment";
-  if (type === "customer_adjust") return "Balance adjustment";
-  if (type === "company_adjustment") return "Balance adjustment";
-  if (type === "init_balance") return "Opening balance";
-  if (type === "init_credit") return "Opening balance";
-  if (type === "init_return") return "Opening balance";
-  if (type === "init") return "Opening balance";
+  if (type === "collection_money") return EVENT_LABELS.COLLECTION_MONEY;
+  if (type === "collection_payout") return EVENT_LABELS.COLLECTION_PAYOUT;
+  if (type === "collection_empty") return EVENT_LABELS.COLLECTION_EMPTY;
+  if (type === "refill") return EVENT_LABELS.REFILL;
+  if (type === "company_payment") return EVENT_LABELS.COMPANY_PAYMENT_OUT;
+  if (type === "company_buy_iron") return EVENT_LABELS.COMPANY_BUY_FULL;
+  if (type === "cash_adjust") return EVENT_LABELS.WALLET_ADJUSTMENT;
+  if (type === "adjust") return EVENT_LABELS.INVENTORY_ADJUSTMENT;
+  if (type === "customer_adjust") return EVENT_LABELS.CUSTOMER_ADJUSTMENT;
+  if (type === "company_adjustment") return EVENT_LABELS.COMPANY_ADJUSTMENT;
+  if (type === "init_balance") return EVENT_LABELS.OPENING_BALANCE;
+  if (type === "init_credit") return EVENT_LABELS.OPENING_BALANCE;
+  if (type === "init_return") return EVENT_LABELS.OPENING_BALANCE;
+  if (type === "init") return EVENT_LABELS.OPENING_BALANCE;
   return type
     .replace(/_/g, " ")
     .split(" ")

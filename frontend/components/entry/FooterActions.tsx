@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 type FooterActionsProps = {
   onSave: () => void;
@@ -7,6 +7,8 @@ type FooterActionsProps = {
   saveAndAddLabel?: string;
   saveDisabled?: boolean;
   saving?: boolean;
+  saveLoading?: boolean;
+  saveAndAddLoading?: boolean;
   [key: string]: unknown;
 };
 
@@ -17,7 +19,10 @@ export default function FooterActions({
   saveAndAddLabel = "Save & Add More",
   saveDisabled = false,
   saving = false,
+  saveLoading,
+  saveAndAddLoading = false,
 }: FooterActionsProps) {
+  const primaryLoading = saveLoading ?? saving;
   return (
     <View style={styles.footer}>
       <View style={styles.row}>
@@ -27,9 +32,12 @@ export default function FooterActions({
             onPress={onSaveAndAdd}
             disabled={saveDisabled}
           >
-            <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {saveAndAddLabel}
-            </Text>
+            <View style={styles.btnContent}>
+              {saveAndAddLoading ? <ActivityIndicator size="small" color="#fff" /> : null}
+              <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {saveAndAddLoading ? "Saving..." : saveAndAddLabel}
+              </Text>
+            </View>
           </Pressable>
         ) : null}
         <Pressable
@@ -37,9 +45,12 @@ export default function FooterActions({
           onPress={onSave}
           disabled={saveDisabled}
         >
-          <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {saving ? "Saving..." : saveLabel}
-          </Text>
+          <View style={styles.btnContent}>
+            {primaryLoading ? <ActivityIndicator size="small" color="#fff" /> : null}
+            <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {primaryLoading ? "Saving..." : saveLabel}
+            </Text>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -78,6 +89,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
     textAlign: "center",
+  },
+  btnContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
   disabledBtn: {
     opacity: 0.6,

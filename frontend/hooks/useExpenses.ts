@@ -13,7 +13,7 @@ export function useExpenses(date?: string, options?: { enabled?: boolean; includ
   });
 }
 
-export function useCreateExpense() {
+export function useCreateExpense(options?: { suppressSuccessToast?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: ExpenseCreateInput) => createExpense(payload),
@@ -21,7 +21,9 @@ export function useCreateExpense() {
       showToast(getUserFacingApiError(err, "Failed to save expense."));
     },
     onSuccess: (_, variables) => {
-      showToast("Expense saved");
+      if (!options?.suppressSuccessToast) {
+        showToast("Expense saved");
+      }
       queryClient.invalidateQueries({ queryKey: ["expenses", "all"] });
       queryClient.invalidateQueries({ queryKey: ["expenses", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["reports-v2"], exact: false });

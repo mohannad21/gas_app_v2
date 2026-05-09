@@ -14,7 +14,7 @@ export function useCompanyPayments(options?: { enabled?: boolean; includeDeleted
   });
 }
 
-export function useCreateCompanyPayment() {
+export function useCreateCompanyPayment(options?: { suppressSuccessToast?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createCompanyPayment,
@@ -23,7 +23,9 @@ export function useCreateCompanyPayment() {
       showToast(getUserFacingApiError(err, "Failed to save company payment."));
     },
     onSuccess: () => {
-      showToast("Company payment saved");
+      if (!options?.suppressSuccessToast) {
+        showToast("Company payment saved");
+      }
       queryClient.invalidateQueries({ queryKey: ["company", "balances"] });
       queryClient.invalidateQueries({ queryKey: ["company", "payments"] });
       queryClient.invalidateQueries({ queryKey: ["company", "adjustments"] });

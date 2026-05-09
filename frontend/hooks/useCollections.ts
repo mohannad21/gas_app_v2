@@ -26,7 +26,7 @@ function invalidateCustomerAdjustmentHistory(
   queryClient.invalidateQueries({ queryKey: ["customers", "adjustments", "all"], exact: false });
 }
 
-export function useCreateCollection() {
+export function useCreateCollection(options?: { suppressSuccessToast?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CollectionCreateInput) => createCollection(payload),
@@ -35,7 +35,9 @@ export function useCreateCollection() {
       showToast(getUserFacingApiError(err, "Failed to save collection."));
     },
     onSuccess: (_, variables) => {
-      showToast("Collection saved");
+      if (!options?.suppressSuccessToast) {
+        showToast("Collection saved");
+      }
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });

@@ -73,7 +73,7 @@ export default function BusinessProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.backButton} onPress={() => router.back()} disabled={updateProfile.isPending}>
+      <Pressable style={styles.backButton} onPress={() => router.replace("/(tabs)/account")} disabled={updateProfile.isPending}>
         <Text style={styles.backText}>Back</Text>
       </Pressable>
 
