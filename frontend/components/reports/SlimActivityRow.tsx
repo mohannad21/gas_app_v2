@@ -161,9 +161,6 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
   }
   if (event.hero_primary) return event.hero_primary;
   if (event.hero_text) return event.hero_text;
-  if (event.event_type === "company_buy_iron") {
-    return `Bought: ${formatGasSummary(event.buy12, event.buy48)}`;
-  }
   if (event.event_type === "collection_money") {
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
     return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
