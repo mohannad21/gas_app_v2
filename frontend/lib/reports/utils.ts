@@ -1,6 +1,6 @@
 import { EVENT_LABELS } from "@/lib/eventLabels";
 
-export function formatEventType(type: string, orderMode?: string | null) {
+export function formatEventType(type: string, orderMode?: string | null, direction?: string | null) {
   if (type === "order") {
     const resolvedMode = orderMode || "replacement";
     if (resolvedMode === "replacement") return EVENT_LABELS.ORDER_REPLACEMENT;
@@ -12,7 +12,7 @@ export function formatEventType(type: string, orderMode?: string | null) {
   if (type === "collection_payout") return EVENT_LABELS.COLLECTION_PAYOUT;
   if (type === "collection_empty") return EVENT_LABELS.COLLECTION_EMPTY;
   if (type === "refill") return EVENT_LABELS.REFILL;
-  if (type === "company_payment") return EVENT_LABELS.COMPANY_PAYMENT_OUT;
+  if (type === "company_payment") return direction === "in" ? EVENT_LABELS.COMPANY_PAYMENT_IN : EVENT_LABELS.COMPANY_PAYMENT_OUT;
   if (type === "company_buy_iron") return EVENT_LABELS.COMPANY_BUY_FULL;
   if (type === "cash_adjust") return EVENT_LABELS.WALLET_ADJUSTMENT;
   if (type === "adjust") return EVENT_LABELS.INVENTORY_ADJUSTMENT;

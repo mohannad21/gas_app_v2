@@ -6,7 +6,7 @@ export const EVENT_LABELS = {
   ORDER_REPLACEMENT: "Replacement",
   ORDER_SELL_FULL: "Sold full",
   ORDER_BUY_EMPTY: "Bought empty",
-  COLLECTION_MONEY: "customer paid",
+  COLLECTION_MONEY: "Customer paid",
   COLLECTION_PAYOUT: "Paid customer",
   COLLECTION_EMPTY: "Returned empties",
   CUSTOMER_ADJUSTMENT: "Balance adjustment",
@@ -14,7 +14,7 @@ export const EVENT_LABELS = {
   // Company activities
   REFILL: "Refill",
   COMPANY_PAYMENT_OUT: "Paid company",
-  COMPANY_PAYMENT_IN: "company paid",
+  COMPANY_PAYMENT_IN: "Company paid",
   COMPANY_BUY_FULL: "Bought full",
   COMPANY_RETURN: "Returned empties",
   COMPANY_ADJUSTMENT: "Balance adjustment",
