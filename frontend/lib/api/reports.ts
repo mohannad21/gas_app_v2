@@ -27,10 +27,6 @@ export async function listDailyReports(params: { from: string; to: string }): Pr
     },
     company_start: row.company_start != null ? fromMinorUnits(row.company_start) : row.company_start,
     company_end: row.company_end != null ? fromMinorUnits(row.company_end) : row.company_end,
-    company_give_start: row.company_give_start != null ? fromMinorUnits(row.company_give_start) : row.company_give_start,
-    company_give_end: row.company_give_end != null ? fromMinorUnits(row.company_give_end) : row.company_give_end,
-    company_receive_start: row.company_receive_start != null ? fromMinorUnits(row.company_receive_start) : row.company_receive_start,
-    company_receive_end: row.company_receive_end != null ? fromMinorUnits(row.company_receive_end) : row.company_receive_end,
     problem_transitions: mapBalanceTransitionAmounts(row.problem_transitions) ?? row.problem_transitions,
   }));
 }
@@ -43,10 +39,6 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
     cash_end: fromMinorUnits(parsed.cash_end),
     company_start: parsed.company_start != null ? fromMinorUnits(parsed.company_start) : parsed.company_start,
     company_end: parsed.company_end != null ? fromMinorUnits(parsed.company_end) : parsed.company_end,
-    company_give_start: parsed.company_give_start != null ? fromMinorUnits(parsed.company_give_start) : parsed.company_give_start,
-    company_give_end: parsed.company_give_end != null ? fromMinorUnits(parsed.company_give_end) : parsed.company_give_end,
-    company_receive_start: parsed.company_receive_start != null ? fromMinorUnits(parsed.company_receive_start) : parsed.company_receive_start,
-    company_receive_end: parsed.company_receive_end != null ? fromMinorUnits(parsed.company_receive_end) : parsed.company_receive_end,
     audit_summary: {
       ...parsed.audit_summary,
       cash_in: fromMinorUnits(parsed.audit_summary.cash_in),

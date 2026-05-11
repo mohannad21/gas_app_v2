@@ -35,33 +35,6 @@ export const DailyReportCashMathSchema = z.object({
 });
 export type DailyReportCashMath = z.infer<typeof DailyReportCashMathSchema>;
 
-export const DailyReportMathCustomersSchema = z.object({
-  sales_cash: z.number(),
-  paid_earlier: z.number(),
-  extra_paid: z.number(),
-});
-export type DailyReportMathCustomers = z.infer<typeof DailyReportMathCustomersSchema>;
-
-export const DailyReportMathCompanySchema = z.object({
-  paid_company: z.number(),
-  extra_company: z.number(),
-});
-export type DailyReportMathCompany = z.infer<typeof DailyReportMathCompanySchema>;
-
-export const DailyReportMathResultSchema = z.object({
-  expenses: z.number(),
-  adjustments: z.number(),
-  pocket_delta: z.number(),
-});
-export type DailyReportMathResult = z.infer<typeof DailyReportMathResultSchema>;
-
-export const DailyReportMathSchema = z.object({
-  customers: DailyReportMathCustomersSchema,
-  company: DailyReportMathCompanySchema,
-  result: DailyReportMathResultSchema,
-});
-export type DailyReportMath = z.infer<typeof DailyReportMathSchema>;
-
 export const BalanceTransitionSchema = z.object({
   scope: z.enum(["customer", "company"]),
   component: z.enum(["money", "cyl_12", "cyl_48"]),
@@ -81,25 +54,8 @@ export const DailyReportCardSchema = z.object({
   net_today: z.number(),
   has_refill: z.boolean().optional().default(false),
   cash_math: DailyReportCashMathSchema,
-  math: DailyReportMathSchema.nullish(),
   company_start: z.number().nullish(),
   company_end: z.number().nullish(),
-  company_12kg_start: z.number().nullish(),
-  company_12kg_end: z.number().nullish(),
-  company_48kg_start: z.number().nullish(),
-  company_48kg_end: z.number().nullish(),
-  company_give_start: z.number().nullish(),
-  company_give_end: z.number().nullish(),
-  company_receive_start: z.number().nullish(),
-  company_receive_end: z.number().nullish(),
-  company_12kg_give_start: z.number().nullish(),
-  company_12kg_give_end: z.number().nullish(),
-  company_12kg_receive_start: z.number().nullish(),
-  company_12kg_receive_end: z.number().nullish(),
-  company_48kg_give_start: z.number().nullish(),
-  company_48kg_give_end: z.number().nullish(),
-  company_48kg_receive_start: z.number().nullish(),
-  company_48kg_receive_end: z.number().nullish(),
   inventory_end: ReportInventoryTotalsSchema,
   problems: z.array(z.string()),
   problem_transitions: z
@@ -218,7 +174,6 @@ export const DailyReportEventSchema = z.object({
   source_id: z.string().nullish(),
   display_name: z.string().nullish(),
   display_description: z.string().nullish(),
-  time_display: z.string().nullish(),
   event_kind: z.string().nullish(),
   activity_type: z.string().nullish(),
   hero_primary: z.string().nullish(),
@@ -228,12 +183,8 @@ export const DailyReportEventSchema = z.object({
   notes: z.array(ActivityNoteSchema).nullish(),
   label: z.string().nullish(),
   label_short: z.string().nullish(),
-  is_balanced: z.boolean().nullish(),
-  action_lines: z.array(z.string()).nullish(),
-  status_mode: z.enum(["atomic", "settlement"]).nullish(),
   is_ok: z.boolean().nullish(),
   is_atomic_ok: z.boolean().nullish(),
-  status_badge: z.enum(["OK", "Balance settled"]).nullish(),
   action_pills: z.array(Level3ActionSchema).nullish(),
   remaining_actions: z.array(Level3ActionSchema).nullish(),
   has_other_outstanding_cylinders: z.boolean().nullish(),
@@ -272,8 +223,6 @@ export const DailyReportEventSchema = z.object({
   order_received: z.number().nullish(),
   cash_before: z.number().nullish(),
   cash_after: z.number().nullish(),
-  bank_before: z.number().nullish(),
-  bank_after: z.number().nullish(),
   customer_money_before: z.number().nullish(),
   customer_money_after: z.number().nullish(),
   customer_12kg_before: z.number().nullish(),
@@ -297,22 +246,6 @@ export const DailyReportDaySchema = z.object({
   cash_end: z.number(),
   company_start: z.number().nullish(),
   company_end: z.number().nullish(),
-  company_12kg_start: z.number().nullish(),
-  company_12kg_end: z.number().nullish(),
-  company_48kg_start: z.number().nullish(),
-  company_48kg_end: z.number().nullish(),
-  company_give_start: z.number().nullish(),
-  company_give_end: z.number().nullish(),
-  company_receive_start: z.number().nullish(),
-  company_receive_end: z.number().nullish(),
-  company_12kg_give_start: z.number().nullish(),
-  company_12kg_give_end: z.number().nullish(),
-  company_12kg_receive_start: z.number().nullish(),
-  company_12kg_receive_end: z.number().nullish(),
-  company_48kg_give_start: z.number().nullish(),
-  company_48kg_give_end: z.number().nullish(),
-  company_48kg_receive_start: z.number().nullish(),
-  company_48kg_receive_end: z.number().nullish(),
   inventory_end: ReportInventoryTotalsSchema,
   recalculated: z.boolean().optional(),
   audit_summary: DailyAuditSummarySchema,
