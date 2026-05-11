@@ -101,9 +101,7 @@ def test_cash_carryover_daily(client, monkeypatch) -> None:
     resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     assert resp.status_code == 200
     rows = {row["date"]: row for row in resp.json()}
-    assert rows[day1.isoformat()]["cash_start"] == 1000
     assert rows[day1.isoformat()]["cash_end"] == 1070
-    assert rows[day2.isoformat()]["cash_start"] == 1070
 
 
 def test_daily_bookends_match_inventory_summary(client, monkeypatch) -> None:
@@ -116,15 +114,10 @@ def test_daily_bookends_match_inventory_summary(client, monkeypatch) -> None:
     assert report_resp.status_code == 200
     row = report_resp.json()[0]
 
-    assert row["inventory_start"]["full12"] == 12
-    assert row["inventory_start"]["empty12"] == 3
-    assert row["inventory_start"]["full48"] == 6
-    assert row["inventory_start"]["empty48"] == 2
     assert row["inventory_end"]["full12"] == 12
     assert row["inventory_end"]["empty12"] == 3
     assert row["inventory_end"]["full48"] == 6
     assert row["inventory_end"]["empty48"] == 2
-    assert row["cash_start"] == 500
     assert row["cash_end"] == 500
 
 
@@ -259,7 +252,6 @@ def test_option_b_cascade_delete_order(client, monkeypatch) -> None:
     after_by_date = {row["date"]: row for row in after_daily}
 
     assert after_by_date[day1.isoformat()]["cash_end"] == before_by_date[day1.isoformat()]["cash_end"] - 100
-    assert after_by_date[day2.isoformat()]["cash_start"] == before_by_date[day2.isoformat()]["cash_start"] - 100
     assert after_order_c["cash_before"] == before_order_c["cash_before"] - 100
     assert after_order_c["cash_after"] == before_order_c["cash_after"] - 100
 
@@ -312,7 +304,7 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
 
     daily_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     daily = {row["date"]: row for row in daily_resp.json()}
-    assert daily[day2.isoformat()]["cash_start"] == 650
+    assert daily[day1.isoformat()]["cash_end"] == 650
 
 
 def test_expense_ordering_by_created_at(client, monkeypatch) -> None:

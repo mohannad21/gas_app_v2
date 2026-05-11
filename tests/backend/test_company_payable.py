@@ -212,7 +212,6 @@ def test_company_buy_iron_unpaid_remainder_visible_in_report(client) -> None:
     day_report = client.get("/reports/day", params={"date": day.isoformat()}).json()
     event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_iron")
 
-    assert event["status"] == "needs_action"
     assert event["company_before"] == 0
     assert event["company_after"] == 80
     money_transition = next(row for row in event["balance_transitions"] if row["component"] == "money")

@@ -108,7 +108,6 @@ def test_replacement_add_as_last_activity_updates_reports_and_customer_state(cli
     assert daily["sold_12kg"] == 2
 
     report = _day_report(client, day)
-    assert report["cash_start"] == 1000
     assert report["cash_end"] == 1100
     assert report["inventory_end"]["full12"] == 8
     assert report["inventory_end"]["empty12"] == 3
@@ -153,7 +152,6 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
     )
 
     before_day1_row = get_daily_row(client, day1.isoformat())
-    before_day2_row = get_daily_row(client, day2.isoformat())
     before_day1 = _day_report(client, day1)
     before_day2 = _day_report(client, day2)
     before_expense = _event_by_type(before_day1, "expense")
@@ -172,7 +170,6 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
     )
 
     after_day1_row = get_daily_row(client, day1.isoformat())
-    after_day2_row = get_daily_row(client, day2.isoformat())
     after_day1 = _day_report(client, day1)
     after_day2 = _day_report(client, day2)
     after_expense = _event_by_type(after_day1, "expense")
@@ -180,7 +177,6 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
 
     assert after_day1_row["net_today"] == before_day1_row["net_today"] + 100
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] + 2
-    assert after_day2_row["cash_start"] == before_day2_row["cash_start"] + 100
 
     assert after_expense["cash_before"] == before_expense["cash_before"] + 100
     assert after_expense["cash_after"] == before_expense["cash_after"] + 100
@@ -230,7 +226,6 @@ def test_replacement_delete_last_activity_reverses_reports_and_active_visibility
 
     report = _day_report(client, day)
     assert not any(event.get("source_id") == order_id for event in report["events"])
-    assert report["cash_start"] == 1000
     assert report["cash_end"] == 1000
     assert report["inventory_end"]["full12"] == 10
     assert report["inventory_end"]["empty12"] == 2
@@ -285,7 +280,6 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
     )
 
     before_day1_row = get_daily_row(client, day1.isoformat())
-    before_day2_row = get_daily_row(client, day2.isoformat())
     before_day1 = _day_report(client, day1)
     before_day2 = _day_report(client, day2)
     before_expense = _event_by_type(before_day1, "expense")
@@ -295,7 +289,6 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
     assert delete_resp.status_code == 204
 
     after_day1_row = get_daily_row(client, day1.isoformat())
-    after_day2_row = get_daily_row(client, day2.isoformat())
     after_day1 = _day_report(client, day1)
     after_day2 = _day_report(client, day2)
     after_expense = _event_by_type(after_day1, "expense")
@@ -304,7 +297,6 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
     assert not any(event.get("source_id") == earlier_order_id for event in after_day1["events"])
     assert after_day1_row["net_today"] == before_day1_row["net_today"] - 100
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] - 2
-    assert after_day2_row["cash_start"] == before_day2_row["cash_start"] - 100
 
     assert after_expense["cash_before"] == before_expense["cash_before"] - 100
     assert after_expense["cash_after"] == before_expense["cash_after"] - 100
@@ -423,7 +415,6 @@ def test_replacement_update_in_past_recomputes_later_events_and_next_day_opening
     )
 
     before_day1_row = get_daily_row(client, day1.isoformat())
-    before_day2_row = get_daily_row(client, day2.isoformat())
     before_day1 = _day_report(client, day1)
     before_day2 = _day_report(client, day2)
     before_expense = _event_by_type(before_day1, "expense")
@@ -442,7 +433,6 @@ def test_replacement_update_in_past_recomputes_later_events_and_next_day_opening
     new_order_id = update_resp.json()["id"]
 
     after_day1_row = get_daily_row(client, day1.isoformat())
-    after_day2_row = get_daily_row(client, day2.isoformat())
     after_day1 = _day_report(client, day1)
     after_day2 = _day_report(client, day2)
     after_expense = _event_by_type(after_day1, "expense")
@@ -451,7 +441,6 @@ def test_replacement_update_in_past_recomputes_later_events_and_next_day_opening
     assert any(event.get("source_id") == new_order_id for event in after_day1["events"])
     assert after_day1_row["net_today"] == before_day1_row["net_today"] + 50
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] + 1
-    assert after_day2_row["cash_start"] == before_day2_row["cash_start"] + 50
 
     assert after_expense["cash_before"] == before_expense["cash_before"] + 50
     assert after_expense["cash_after"] == before_expense["cash_after"] + 50

@@ -72,8 +72,6 @@ def test_level3_replacement_settled_fields(client) -> None:
     assert event["hero_primary"].startswith("Installed")
     assert event["money_delta"] == _major(100)
     assert event["notes"] == []
-    assert event["status"] == "atomic_ok"
-    assert event["settlement"]["is_settled"] is True
 
 
 def test_level3_replacement_unsettled_actions(client) -> None:
@@ -98,8 +96,6 @@ def test_level3_replacement_unsettled_actions(client) -> None:
     assert report.status_code == 200
     event = _get_event(report.json(), order_id)
 
-    assert event["settlement"]["is_settled"] is False
-    assert event["status"] == "needs_action"
     notes = event["notes"]
     assert any(note["direction"] == "customer_pays_you" for note in notes)
     assert any(note["direction"] == "customer_returns_you" and note["kind"] == "cyl_12" for note in notes)
@@ -164,12 +160,9 @@ def test_level3_late_pay_not_settled_with_cylinders(client) -> None:
     event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
 
     assert event["event_type"] == "collection_money"
-    assert event["settlement"]["is_settled"] is False
-    assert event["status"] == "needs_action"
     notes = event["notes"]
     assert len(notes) == 1
     assert notes[0]["direction"] == "customer_pays_you"
-    assert event["has_other_outstanding_cylinders"] is True
 
 
 def test_level3_company_refill_unsettled_actions(client) -> None:
@@ -195,7 +188,6 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
     assert event["event_type"] == "refill"
-    assert event["settlement"]["is_settled"] is False
     assert event["notes"] == [
         {
             "kind": "money",
@@ -210,9 +202,6 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
             "remaining_after": 3,
         },
     ]
-    actions = event["action_pills"]
-    assert any(action["direction"] == "dist->company" and action["kind"] == "money" for action in actions)
-    assert any(action["direction"] == "dist->company" and action["kind"] == "empty_12" for action in actions)
 
 
 def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
@@ -235,11 +224,7 @@ def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
     assert event["label"] == "Returned empties"
-    assert event["hero"]["text"] == "Returned empties"
     assert event["hero_text"] == "Received 3x12kg full from company"
-    assert event["event_kind"] == "company_settle_receive_full"
-    assert event["activity_type"] == "company_settle_receive_full"
-    assert event["status_mode"] == "settlement"
 
 
 def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
@@ -262,11 +247,7 @@ def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
     assert event["label"] == "Returned empties"
-    assert event["hero"]["text"] == "Returned empties"
     assert event["hero_text"] == "Returned 2x48kg empties to company"
-    assert event["event_kind"] == "company_settle_return_empty"
-    assert event["activity_type"] == "company_settle_return_empty"
-    assert event["status_mode"] == "settlement"
 
 
 def test_level3_system_only_for_replacement(client) -> None:

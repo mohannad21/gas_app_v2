@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
   Animated,
@@ -30,9 +30,8 @@ import { useBalancesSummary } from "@/hooks/useBalancesSummary";
 import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
-import { formatBalanceTransitions } from "@/lib/balanceTransitions";
-import { formatEventType, getInitInventoryAfter } from "@/lib/reports/utils";
-import { buildHappenedAt, formatDateLocale, formatWeekdayShort, toDateKey } from "@/lib/date";
+import { formatEventType } from "@/lib/reports/utils";
+import { buildHappenedAt, toDateKey } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
@@ -46,25 +45,6 @@ type ActivitySubtypeOption = { key: string; label: string };
 
 const formatMoney = (value: number) => formatDisplayMoney(value);
 const formatCount = (value: number) => Number(value || 0).toFixed(0);
-const formatMoneySigned = (value: number) => {
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${getCurrencySymbol()}${formatMoney(Math.abs(value))}`;
-};
-const buildCashMathLines = (cashMath?: any) => {
-  if (!cashMath) return [];
-  const lines: { label: string; value: number }[] = [];
-  const pushLine = (label: string, value: number | null | undefined) => {
-    if (typeof value !== "number" || value === 0) return;
-    lines.push({ label, value });
-  };
-  pushLine("Sales", cashMath.sales);
-  pushLine("Late", cashMath.late);
-  pushLine("Expenses", cashMath.expenses);
-  pushLine("Company", cashMath.company);
-  pushLine("Adjust", cashMath.adjust);
-  pushLine("Other", cashMath.other);
-  return lines;
-};
 
 const ISO_TS_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -183,194 +163,6 @@ const getEventSubtype = (event: any): ActivitySubtypeOption => {
       return { key: String(event?.event_type ?? "activity"), label: formatEventType(String(event?.event_type ?? "activity")) };
   }
 };
-
-type ReportDayCardProps = {
-  item: any;
-  isOpen: boolean;
-  dayInfo: any;
-  onToggle: (date: string) => void;
-  onShowSyncInfo: (date: string | null) => void;
-};
-
-const ReportDayCard = memo(function ReportDayCard({
-  item,
-  isOpen,
-  dayInfo,
-  onToggle,
-  onShowSyncInfo,
-}: ReportDayCardProps) {
-  const weekday = formatWeekdayShort(item.date);
-  const problems = Array.isArray(item.problems) ? item.problems : [];
-  const problemTransitions = Array.isArray(item.problem_transitions) ? item.problem_transitions : [];
-  const events = (dayInfo?.events ?? []) as any[];
-  const recalculated = dayInfo?.recalculated ?? item.recalculated;
-  const initAfter = getInitInventoryAfter(events);
-  const displayInventoryStart = initAfter
-    ? {
-        full12: initAfter.full12 ?? item.inventory_start.full12,
-        empty12: initAfter.empty12 ?? item.inventory_start.empty12,
-        full48: initAfter.full48 ?? item.inventory_start.full48,
-        empty48: initAfter.empty48 ?? item.inventory_start.empty48,
-      }
-    : item.inventory_start;
-
-  const alertLines: string[] =
-    problemTransitions.length > 0
-      ? formatBalanceTransitions(problemTransitions, {
-          mode: "transition",
-          collapseAllSettled: true,
-          includeDisplayName: true,
-          intent: "generic",
-          formatMoney,
-        })
-      : problems;
-  const hasAlerts = alertLines.length > 0;
-  const sold12 = item.sold_12kg ?? 0;
-  const sold48 = item.sold_48kg ?? 0;
-  const netToday =
-    typeof item.net_today === "number" ? item.net_today : (item.cash_end ?? 0) - (item.cash_start ?? 0);
-  const cashMathLines = buildCashMathLines(item.cash_math);
-  const dayLabel =
-    formatDateLocale(item.date, { day: "2-digit", month: "short" }, "en-GB").toUpperCase() || item.date;
-
-  return (
-    <View>
-      <Pressable
-        onPress={() => onToggle(item.date)}
-        style={({ pressed }) => [
-          styles.card,
-          !isOpen && styles.cardCollapsed,
-          isOpen && styles.cardExpanded,
-          pressed && styles.cardPressed,
-        ]}
-      >
-        <View>
-          <View>
-            <View style={styles.collapsedHeaderRow}>
-              <View style={[styles.alertBar, hasAlerts ? styles.alertBarActive : styles.alertBarNeutral]} />
-              <View style={styles.collapsedHeaderBody}>
-                <View style={styles.collapsedHeaderTop}>
-                  <Text style={styles.v2Date}>
-                    {dayLabel} - {weekday}
-                  </Text>
-                  <View style={styles.collapsedPillsRow}>
-                    <Text style={[styles.collapsedPillText, { color: gasColor("12kg") }]}>
-                      {formatCount(sold12)}x12kg
-                    </Text>
-                    <Text style={styles.collapsedPillSeparator}>|</Text>
-                    <Text style={[styles.collapsedPillText, { color: gasColor("48kg") }]}>
-                      {formatCount(sold48)}x48kg
-                    </Text>
-                  </View>
-                  <Text style={styles.collapsedNet}>Net {formatMoneySigned(netToday)}</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.collapsedBodyRow}>
-              <View style={styles.collapsedAlerts}>
-                {alertLines.map((line, index) => (
-                  <Text key={`${line}-${index}`} style={styles.alertLine} numberOfLines={1} ellipsizeMode="tail">
-                    ! {line}
-                  </Text>
-                ))}
-              </View>
-              <View style={styles.collapsedCashMath}>
-                {cashMathLines.map((line, index) => (
-                  <Text key={`${line.label}-${index}`} style={styles.cashLine} numberOfLines={1} ellipsizeMode="tail">
-                    {line.label} {formatMoneySigned(line.value)}
-                  </Text>
-                ))}
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {isOpen ? (
-          <>
-            <View style={styles.expandedDivider} />
-            {dayInfo ? (
-              <V2Timeline events={events} formatMoney={formatMoney} formatCount={formatCount} />
-            ) : (
-              <Text style={styles.meta}>Loading events...</Text>
-            )}
-
-            <View style={styles.rowBetween}>
-              <View />
-              <View style={styles.badgeRow}>
-                {recalculated ? (
-                  <Pressable style={styles.recalcBadge} onPress={() => onShowSyncInfo(item.date)}>
-                    <Text style={styles.recalcBadgeText}>Sync Update</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={styles.v2InvCashRow}>
-              <View style={styles.v2InvCompactBox}>
-                <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg F</Text>
-                <View style={styles.v2DeltaBlock}>
-                  <DeltaArrowRow
-                    start={displayInventoryStart.full12}
-                    end={item.inventory_end.full12}
-                    format={formatCount}
-                    size="sm"
-                  />
-                </View>
-                <Text style={[styles.v2InvCompactLabel, { color: gasColor("12kg") }]}>12kg E</Text>
-                <View style={styles.v2DeltaBlock}>
-                  <DeltaArrowRow
-                    start={displayInventoryStart.empty12}
-                    end={item.inventory_end.empty12}
-                    format={formatCount}
-                    size="sm"
-                  />
-                </View>
-              </View>
-              <View style={styles.v2InvCompactBox}>
-                <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg F</Text>
-                <View style={styles.v2DeltaBlock}>
-                  <DeltaArrowRow
-                    start={displayInventoryStart.full48}
-                    end={item.inventory_end.full48}
-                    format={formatCount}
-                    size="sm"
-                  />
-                </View>
-                <Text style={[styles.v2InvCompactLabel, { color: gasColor("48kg") }]}>48kg E</Text>
-                <View style={styles.v2DeltaBlock}>
-                  <DeltaArrowRow
-                    start={displayInventoryStart.empty48}
-                    end={item.inventory_end.empty48}
-                    format={formatCount}
-                    size="sm"
-                  />
-                </View>
-              </View>
-              <View style={styles.v2InvCompactBox}>
-                <Text style={styles.v2InvCompactLabel}>Wallet</Text>
-                <View style={styles.v2DeltaBlock}>
-                  <DeltaArrowRow start={item.cash_start} end={item.cash_end} format={formatMoney} size="sm" />
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.v2DetailsRow}>
-              <Text style={styles.v2DetailsText}>Hide details</Text>
-              <Ionicons name="chevron-up" size={16} color="#0a7ea4" />
-            </View>
-          </>
-        ) : null}
-      </Pressable>
-    </View>
-  );
-});
-
-/**
- * NOTE:
- * - Your original file was truncated/garbled, with unbalanced JSX and some state setters using wrong types.
- * - This version fixes syntax issues (balanced JSX) and includes minimal local UI helpers so bundling succeeds.
- * - Replace these helper components with your real ones if they exist elsewhere in the codebase.
- */
 
 export default function ReportsScreen() {
   // Expense modal state
@@ -1124,52 +916,6 @@ export default function ReportsScreen() {
  * Minimal helper UI components (safe defaults)
  * ----------------------------------------- */
 
-function DeltaArrowRow({
-  start,
-  end,
-  format,
-  size = "sm",
-}: {
-  start: number;
-  end: number;
-  format: (v: number) => string;
-  size?: "sm" | "lg";
-}) {
-  const valueStyle = size === "lg" ? styles.deltaValueLg : styles.deltaValueSm;
-  const delta = (end || 0) - (start || 0);
-  const sign = delta > 0 ? "+" : "";
-  return (
-    <View style={styles.deltaRow}>
-      <Text style={valueStyle}>{format(start)}</Text>
-      <Text style={styles.deltaArrow}>{'->'}</Text>
-      <View style={styles.deltaEndColumn}>
-        <Text style={valueStyle}>{format(end)}</Text>
-        <Text style={styles.deltaMeta}>
-          ({sign}
-          {delta})
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function MetricRow({
-  label,
-  labelStyle,
-  children,
-}: {
-  label: string;
-  labelStyle?: any;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.metricRow}>
-      <Text style={[styles.metricLabel, labelStyle]}>{label}</Text>
-      <View style={{ flex: 1, alignItems: "flex-end" }}>{children}</View>
-    </View>
-  );
-}
-
 function ExpenseModal(props: {
   visible: boolean;
   accessoryId?: string;
@@ -1540,82 +1286,6 @@ function EventExpandedPanel({
   return <View style={styles.eventExpandedPanel}>{content}</View>;
 }
 
-function V2Timeline({
-  events,
-  formatMoney,
-  formatCount,
-}: {
-  events: any[];
-  formatMoney: (v: number) => string;
-  formatCount: (v: number) => string;
-}) {
-  const [openEvents, setOpenEvents] = useState<string[]>([]);
-  const normalizedEvents = useMemo(() => {
-    const merged: any[] = [];
-    const initIndex = new Map<string, number>();
-
-    const mergeInventory = (target: any, source: any) => {
-      if (!source) return target;
-      const next = target ? { ...target } : {};
-      ["full12", "empty12", "full48", "empty48"].forEach((key) => {
-        if (next[key] == null && source[key] != null) {
-          next[key] = source[key];
-        }
-      });
-      return next;
-    };
-
-    events.forEach((ev) => {
-      const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-      if (eventType === "customer_adjust" || eventType === "company_adjustment") {
-        return;
-      }
-      if (eventType !== "init") {
-        merged.push(ev);
-        return;
-      }
-      const key = `init:${ev?.effective_at ?? ev?.created_at ?? ""}`;
-      const existingIndex = initIndex.get(key);
-      if (existingIndex == null) {
-        initIndex.set(key, merged.length);
-        merged.push({ ...ev });
-        return;
-      }
-      const existing = merged[existingIndex];
-      if (!existing) return;
-      existing.inventory_before = mergeInventory(existing.inventory_before, ev?.inventory_before);
-      existing.inventory_after = mergeInventory(existing.inventory_after, ev?.inventory_after);
-      if (!existing.gas_type) {
-        existing.gas_type = ev?.gas_type;
-      }
-    });
-    return sortReportEventsNewestFirst(merged);
-  }, [events]);
-
-  const toggleEvent = useCallback((key: string) => {
-    setOpenEvents((prev) => (prev.includes(key) ? prev.filter((entry) => entry !== key) : [...prev, key]));
-  }, []);
-
-  return (
-    <View>
-      {normalizedEvents.map((ev) => {
-        const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-        const eventKey = String(ev?.id ?? ev?.source_id ?? `${eventType}:${ev?.effective_at ?? ev?.created_at ?? ""}`);
-        const isOpen = openEvents.includes(eventKey);
-
-        return (
-          <View key={eventKey}>
-            <Pressable onPress={() => toggleEvent(eventKey)}>
-              <SlimActivityRow event={ev} formatMoney={formatMoney} />
-            </Pressable>
-            {isOpen ? <EventExpandedPanel ev={ev} formatMoney={formatMoney} formatCount={formatCount} /> : null}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 function DeltaBox({
   testID,
   label,
@@ -1835,11 +1505,6 @@ const styles = StyleSheet.create({
   tabChipText: { fontSize: 12, color: "#0f172a", fontWeight: "600", fontFamily: FontFamilies.semibold },
   tabChipTextActive: { color: "white" },
 
-  card: { backgroundColor: "white", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#e2e8f0" },
-  cardPressed: { opacity: 0.92 },
-  cardCollapsed: { backgroundColor: "white", borderColor: "#e2e8f0" },
-  cardExpanded: { backgroundColor: "white", borderColor: "#e2e8f0" },
-
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   date: { fontSize: 14, fontWeight: "700", color: "#0f172a", fontFamily: FontFamilies.semibold },
@@ -1862,26 +1527,12 @@ const styles = StyleSheet.create({
 
   labeledRowGroupCard: { backgroundColor: "#ffffff" },
 
-  v2Date: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   badgeRow: { flexDirection: "row", gap: Spacing.md, alignItems: "center" },
   pendingBadge: { backgroundColor: "#fde68a", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
   pendingBadgeText: { fontSize: 11, fontWeight: "800", color: "#78350f", fontFamily: FontFamilies.bold },
-  recalcBadge: { backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  recalcBadgeText: { fontSize: 11, fontWeight: "800", color: "#1d4ed8", fontFamily: FontFamilies.bold },
 
   v2CashLabel: { fontSize: 12, fontWeight: "800", color: "#0f172a", marginBottom: 6, fontFamily: FontFamilies.bold },
-  v2InvCashRow: { marginTop: 10, flexDirection: "row", gap: 10, alignItems: "stretch" },
-  v2InvCompactBox: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#f8fafc",
-    justifyContent: "flex-start",
-    minHeight: 120,
-  },
-  v2InvCompactLabel: { fontSize: 12, fontWeight: "900", marginBottom: 4, fontFamily: FontFamilies.extrabold },
   v2InvCompactValue: { fontSize: 12, fontWeight: "800", color: "#0f172a", marginBottom: 8, fontFamily: FontFamilies.bold },
-  v2DeltaBlock: { marginBottom: 6 },
   v2CashBox: { flex: 1, padding: 10, borderRadius: 12, backgroundColor: "#f8fafc" },
   v2InvLabel: { fontSize: 12, fontWeight: "900", marginBottom: 6, fontFamily: FontFamilies.extrabold },
   v2MetricLabelSmall: { fontSize: 12, fontWeight: "800", fontFamily: FontFamilies.bold },
@@ -1889,41 +1540,6 @@ const styles = StyleSheet.create({
   v2EventSummaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
   v2EventSummaryChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   v2EventSummaryText: { fontSize: 11, fontWeight: "900", color: "white", fontFamily: FontFamilies.extrabold },
-  collapsedSummaryLine: { color: "#0f172a", fontWeight: "700", marginTop: 6, fontFamily: FontFamilies.semibold },
-  collapsedHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: Spacing.md,
-  },
-  alertBar: { width: 4, borderRadius: 999, marginTop: 4, alignSelf: "stretch" },
-  alertBarActive: { backgroundColor: "#dc2626" },
-  alertBarNeutral: { backgroundColor: "#cbd5e1" },
-  collapsedHeaderBody: { flex: 1, minWidth: 0 },
-  collapsedHeaderTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  collapsedNet: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
-  collapsedPillsRow: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 },
-  collapsedPillText: { fontSize: 12, fontWeight: "800", fontFamily: FontFamilies.bold },
-  collapsedPillSeparator: { fontSize: 12, fontWeight: "800", color: "#94a3b8", fontFamily: FontFamilies.bold },
-  collapsedBodyRow: { marginTop: 10, flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  collapsedAlerts: { flex: 3, gap: 4, minWidth: 0 },
-  alertLine: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "700",
-    color: "#b91c1c",
-    flexShrink: 1,
-    fontFamily: FontFamilies.semibold,
-  },
-  collapsedCashMath: { flex: 1, alignItems: "flex-end", gap: 4, minWidth: 0 },
-  cashLine: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "700",
-    color: "#0f172a",
-    textAlign: "right",
-    flexShrink: 1,
-    fontFamily: FontFamilies.semibold,
-  },
   missingInlineBox: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -1946,8 +1562,6 @@ const styles = StyleSheet.create({
 
   problemLine: { marginTop: 8, fontSize: 12, fontWeight: "700", color: "#b91c1c", fontFamily: FontFamilies.semibold },
 
-  v2DetailsRow: { marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 },
-  v2DetailsText: { fontSize: 12, fontWeight: "800", color: "#0a7ea4", fontFamily: FontFamilies.bold },
   v2Timeline: { backgroundColor: "#ffffff" },
 
   // balances + header styles live in components/reports
@@ -1987,16 +1601,6 @@ const styles = StyleSheet.create({
   summaryChipValueOk: { color: "#16a34a" },
   summaryChipValueBad: { color: "#b91c1c" },
   summaryRow: { width: "100%", flexDirection: "row", gap: 8 },
-  deltaRow: { flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "nowrap" },
-  deltaEndColumn: { alignItems: "flex-end" },
-  deltaValueSm: { fontSize: 14, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
-  deltaValueLg: { fontSize: 18, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
-  deltaArrow: { fontSize: 14, fontWeight: "900", color: "#0a7ea4", fontFamily: FontFamilies.extrabold },
-  deltaMeta: { fontSize: 12, fontWeight: "800", color: "#475569", fontFamily: FontFamilies.bold },
-
-  metricRow: { marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  metricLabel: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
-
   table: { padding: 10, borderRadius: 12, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" },
   tableExpanded: { backgroundColor: "#eef2ff" },
   tableRow: { fontSize: 12, fontWeight: "800", color: "#0f172a", fontFamily: FontFamilies.bold },
@@ -2134,12 +1738,6 @@ const styles = StyleSheet.create({
   smallBtnDanger: { backgroundColor: "#b91c1c" },
   smallBtnActive: { backgroundColor: "#0f172a" },
   smallBtnText: { color: "white", fontWeight: "900", fontSize: 12, fontFamily: FontFamilies.extrabold },
-
-  expandedDivider: {
-    height: 1,
-    backgroundColor: "#e2e8f0",
-    marginVertical: 8,
-  },
 
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },

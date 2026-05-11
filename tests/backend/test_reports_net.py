@@ -35,7 +35,7 @@ def test_daily_net_excludes_same_day_system_init(client) -> None:
 
 
 def test_daily_net_excludes_bank_transfers_but_keeps_customer_cash_events(client) -> None:
-    day = date(2026, 5, 2)
+    day = date.today()
     day_iso = day.isoformat()
 
     init_resp = client.post(

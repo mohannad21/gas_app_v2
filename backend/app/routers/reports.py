@@ -68,8 +68,6 @@ from app.services.reports_event_fields import (
   _apply_ticket_fields,
   _apply_level3_fields,
   _apply_ui_fields,
-  _apply_status_fields,
-  _remaining_actions_for_event,
   _notes_for_event,
   currency_symbol_for_code,
 )
@@ -121,12 +119,11 @@ def _inventory_state_for_event(
   }
   if not touched_inventory:
     return None
-  touched_gas_types = {gas_type for gas_type, _ in touched_inventory}
   return ReportInventoryState(
-    full12=totals.full12 if "12kg" in touched_gas_types else None,
-    empty12=totals.empty12 if "12kg" in touched_gas_types else None,
-    full48=totals.full48 if "48kg" in touched_gas_types else None,
-    empty48=totals.empty48 if "48kg" in touched_gas_types else None,
+    full12=totals.full12 if ("12kg", "full") in touched_inventory else None,
+    empty12=totals.empty12 if ("12kg", "empty") in touched_inventory else None,
+    full48=totals.full48 if ("48kg", "full") in touched_inventory else None,
+    empty48=totals.empty48 if ("48kg", "empty") in touched_inventory else None,
   )
 
 
@@ -299,7 +296,6 @@ def list_daily_reports(
   # Build daily cards
   response: list[DailyReportCard] = []
   for current in _date_range(start_date, end_date):
-    cash_start = running_cash
     running_cash += cash_deltas.get(current, 0)
 
     company_start = running_company
@@ -309,13 +305,9 @@ def list_daily_reports(
     company_48_start = running_company_48
     running_company_48 += company_cyl_48.get(current, 0)
 
-    inv_12_full_start = running_full12
     running_full12 += inv_full_12.get(current, 0)
-    inv_12_empty_start = running_empty12
     running_empty12 += inv_empty_12.get(current, 0)
-    inv_48_full_start = running_full48
     running_full48 += inv_full_48.get(current, 0)
-    inv_48_empty_start = running_empty48
     running_empty48 += inv_empty_48.get(current, 0)
 
     problem_lines: list[tuple[str, str, str]] = []
@@ -365,7 +357,6 @@ def list_daily_reports(
 
     card = DailyReportCard(
       date=current.isoformat(),
-      cash_start=cash_start,
       cash_end=running_cash,
       sold_12kg=sold_full.get((current, "12kg"), 0),
       sold_48kg=sold_full.get((current, "48kg"), 0),
@@ -378,31 +369,12 @@ def list_daily_reports(
         adjust=adjustments_by_day.get(current, 0),
         other=0,
       ),
-      math=None,
       company_start=company_start,
       company_end=running_company,
       company_12kg_start=company_12_start,
       company_12kg_end=running_company_12,
       company_48kg_start=company_48_start,
       company_48kg_end=running_company_48,
-      company_give_start=0,
-      company_give_end=0,
-      company_receive_start=0,
-      company_receive_end=0,
-      company_12kg_give_start=0,
-      company_12kg_give_end=0,
-      company_12kg_receive_start=0,
-      company_12kg_receive_end=0,
-      company_48kg_give_start=0,
-      company_48kg_give_end=0,
-      company_48kg_receive_start=0,
-      company_48kg_receive_end=0,
-      inventory_start=ReportInventoryTotals(
-        full12=inv_12_full_start,
-        empty12=inv_12_empty_start,
-        full48=inv_48_full_start,
-        empty48=inv_48_empty_start,
-      ),
       inventory_end=ReportInventoryTotals(
         full12=running_full12,
         empty12=running_empty12,
@@ -696,7 +668,6 @@ def get_daily_report(
     company_before = (running_company_money, running_company_12, running_company_48)
 
     event.cash_before = running_cash
-    event.bank_before = running_bank
     if customer_before is not None:
       event.customer_money_before = customer_before[0]
       event.customer_12kg_before = customer_before[1]
@@ -724,7 +695,6 @@ def get_daily_report(
     customer_after = running_customer_states.get(event.customer_id, customer_before) if event.customer_id else None
 
     event.cash_after = running_cash
-    event.bank_after = running_bank
     if customer_after is not None:
       event.customer_money_after = customer_after[0]
       event.customer_12kg_after = customer_after[1]
@@ -765,16 +735,6 @@ def get_daily_report(
     # Level3 fields
     _apply_level3_fields(event, customer_after=customer_after)
 
-    # Status fields
-    _apply_status_fields(event, currency_symbol)
-
-    # Remaining actions
-    event.action_pills = _remaining_actions_for_event(
-      event,
-      customer_after=customer_after,
-      currency_symbol=currency_symbol,
-    )
-
     # UI fields
     notes = _notes_for_event(event)
     _apply_ui_fields(
@@ -784,7 +744,7 @@ def get_daily_report(
       notes=notes,
     )
 
-  events = [event for event in events if event.event_type not in {"customer_adjust", "company_adjustment"}]
+  events = [event for event in events if event.event_type != "company_adjustment"]
   events.reverse()
 
   # Get audit summary
@@ -792,7 +752,6 @@ def get_daily_report(
 
   return DailyReportDay(
     date=report_day.isoformat(),
-    cash_start=_sum_cash_before_day(session, report_day),
     cash_end=_sum_cash_at_day_end(session, report_day),
     company_start=_sum_company_before_day(session, report_day),
     company_end=_sum_company_at_day_end(session, report_day),
@@ -800,19 +759,6 @@ def get_daily_report(
     company_12kg_end=_sum_company_cyl_at_day_end(session, report_day, "12kg"),
     company_48kg_start=_sum_company_cyl_before_day(session, report_day, "48kg"),
     company_48kg_end=_sum_company_cyl_at_day_end(session, report_day, "48kg"),
-    company_give_start=0,
-    company_give_end=0,
-    company_receive_start=0,
-    company_receive_end=0,
-    company_12kg_give_start=0,
-    company_12kg_give_end=0,
-    company_12kg_receive_start=0,
-    company_12kg_receive_end=0,
-    company_48kg_give_start=0,
-    company_48kg_give_end=0,
-    company_48kg_receive_start=0,
-    company_48kg_receive_end=0,
-    inventory_start=_sum_inventory_before_day(session, report_day),
     inventory_end=_sum_inventory_at_day_end(session, report_day),
     audit_summary=audit_summary,
     events=events,
