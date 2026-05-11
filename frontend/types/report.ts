@@ -75,7 +75,6 @@ export type BalanceTransition = z.infer<typeof BalanceTransitionSchema>;
 
 export const DailyReportCardSchema = z.object({
   date: z.string(),
-  cash_start: z.number(),
   cash_end: z.number(),
   sold_12kg: z.number(),
   sold_48kg: z.number(),
@@ -101,7 +100,6 @@ export const DailyReportCardSchema = z.object({
   company_48kg_give_end: z.number().nullish(),
   company_48kg_receive_start: z.number().nullish(),
   company_48kg_receive_end: z.number().nullish(),
-  inventory_start: ReportInventoryTotalsSchema,
   inventory_end: ReportInventoryTotalsSchema,
   problems: z.array(z.string()),
   problem_transitions: z
@@ -296,7 +294,6 @@ export type DailyReportEvent = z.infer<typeof DailyReportEventSchema>;
 
 export const DailyReportDaySchema = z.object({
   date: z.string(),
-  cash_start: z.number(),
   cash_end: z.number(),
   company_start: z.number().nullish(),
   company_end: z.number().nullish(),
@@ -316,7 +313,6 @@ export const DailyReportDaySchema = z.object({
   company_48kg_give_end: z.number().nullish(),
   company_48kg_receive_start: z.number().nullish(),
   company_48kg_receive_end: z.number().nullish(),
-  inventory_start: ReportInventoryTotalsSchema,
   inventory_end: ReportInventoryTotalsSchema,
   recalculated: z.boolean().optional(),
   audit_summary: DailyAuditSummarySchema,

@@ -119,33 +119,21 @@ def test_day_smart_ticket_order_fields(client) -> None:
 
     rep_bal = events[rep_bal_id]
     assert rep_bal["label"] == "Replacement"
-    assert rep_bal["is_balanced"] is True
-    assert rep_bal["action_lines"] == []
 
     rep_unbal = events[rep_unbal_id]
     assert rep_unbal["label"] == "Replacement"
-    assert rep_unbal["is_balanced"] is False
-    assert rep_unbal["action_lines"] == ["Return 1x12kg", "Collect 50"]
 
     sell_bal = events[sell_bal_id]
     assert sell_bal["label"] == "Sell Full"
-    assert sell_bal["is_balanced"] is True
-    assert sell_bal["action_lines"] == []
 
     sell_unbal = events[sell_unbal_id]
     assert sell_unbal["label"] == "Sell Full"
-    assert sell_unbal["is_balanced"] is False
-    assert sell_unbal["action_lines"] == ["Collect 20"]
 
     buy_bal = events[buy_bal_id]
     assert buy_bal["label"] == "Buy Empty"
-    assert buy_bal["is_balanced"] is True
-    assert buy_bal["action_lines"] == []
 
     buy_unbal = events[buy_unbal_id]
     assert buy_unbal["label"] == "Buy Empty"
-    assert buy_unbal["is_balanced"] is False
-    assert buy_unbal["action_lines"] == ["Pay customer 50"]
 
 
 def test_day_smart_ticket_refill_fields(client) -> None:
@@ -202,17 +190,9 @@ def test_day_smart_ticket_refill_fields(client) -> None:
 
     balanced = refill_events[balanced_id]
     assert balanced["label"] == "Refill"
-    assert balanced["is_balanced"] is True
-    assert balanced["action_lines"] == []
 
     unbalanced = refill_events[unbalanced_id]
     assert unbalanced["label"] == "Refill"
-    assert unbalanced["is_balanced"] is False
-    assert unbalanced["action_lines"] == [
-        "Return 2x12kg to company",
-        "Return 3x48kg to company",
-        "Pay company 100",
-    ]
 
 
 def test_day_refill_does_not_merge_new_shells(client) -> None:

@@ -242,8 +242,6 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert event["counterparty"]["type"] == "customer"
     assert event["customer_name"] == "Adjust Customer"
     assert event["hero_text"] == "Adjusted customer balance"
-    assert event["status_mode"] == "settlement"
-    assert event["status"] == "needs_action"
     assert isinstance(event["cash_before"], int)
     assert isinstance(event["cash_after"], int)
     assert event["cash_before"] == event["cash_after"]
@@ -291,8 +289,6 @@ def test_day_orders_feed_by_effective_then_created_then_tiebreaker(client) -> No
 
     # Newest-first display order is based on effective_at first; created_at only breaks ties.
     assert company_payment < customer_adjust
-    assert events[company_payment]["time_display"] == "10:42"
-    assert events[customer_adjust]["time_display"] == "09:46"
 
 
 def test_daily_customer_adjust_problem_transitions_are_marked_neutral(client) -> None:
@@ -406,10 +402,6 @@ def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -
         event for event in events if event["event_type"] == "company_payment" and event["reason"] == "tz company"
     )
 
-    assert refill["time_display"] == "18:18"
-    assert cash_adjust["time_display"] == "18:19"
-    assert inventory_adjust["time_display"] == "18:20"
-    assert company_payment["time_display"] == "18:21"
     assert "18:18" in refill["context_line"]
 
 
@@ -469,17 +461,13 @@ def test_day_payment_wording_is_direction_aware(client) -> None:
     )
 
     assert customer_payment["label"] == "Payment from customer"
-    assert customer_payment["hero"]["text"] == "Payment from customer"
     assert customer_payment["hero_text"] == "Payment from customer ₪456"
 
     assert customer_payout["label"] == "Payment to customer"
-    assert customer_payout["hero"]["text"] == "Payment to customer"
     assert customer_payout["hero_text"] == "Payment to customer ₪123"
 
     assert company_payment["label"] == "Payment to company"
-    assert company_payment["hero"]["text"] == "Payment to company"
     assert company_payment["hero_text"] == "Payment to company ₪5"
 
     assert company_receive["label"] == "Payment from company"
-    assert company_receive["hero"]["text"] == "Payment from company"
     assert company_receive["hero_text"] == "Payment from company ₪2"

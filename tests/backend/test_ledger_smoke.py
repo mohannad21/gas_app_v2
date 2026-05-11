@@ -301,7 +301,6 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     # ── Ledger tab: physical wallet ───────────────────────────────────────────
     day = _get_day_report(client, MAIN_DAY_ISO)
 
-    assert day["cash_start"] == 10_000, f"cash_start expected 10_000, got {day['cash_start']}"
     assert day["cash_end"] == 10_100, f"cash_end expected 10_100, got {day['cash_end']}"
 
     inv_end = day["inventory_end"]
@@ -309,12 +308,6 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     assert inv_end["empty12"] == 13, f"empty12_end: {inv_end['empty12']}"
     assert inv_end["full48"] == 20, f"full48_end: {inv_end['full48']}"
     assert inv_end["empty48"] == 5, f"empty48_end: {inv_end['empty48']}"
-
-    inv_start = day["inventory_start"]
-    assert inv_start["full12"] == 50
-    assert inv_start["empty12"] == 10
-    assert inv_start["full48"] == 20
-    assert inv_start["empty48"] == 5
 
     # ── Event card balance transitions ────────────────────────────────────────
     events = day["events"]
@@ -449,7 +442,6 @@ def test_ledger_smoke_bank_deposit(client) -> None:
     assert btw["cash_after"] == 6_000, f"bank_to_wallet cash_after: {btw['cash_after']}"
 
     # Ledger tab
-    assert day["cash_start"] == 8_000
     assert day["cash_end"] == 6_000
 
     card = get_daily_row(client, D_ISO)
@@ -477,7 +469,6 @@ def test_ledger_smoke_retroactive_order(client) -> None:
     assert card["sold_12kg"] == 0
 
     day = _get_day_report(client, D_ISO)
-    assert day["cash_start"] == 5_000
     assert day["cash_end"] == 5_000
     assert day["inventory_end"]["full12"] == 20
 

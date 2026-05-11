@@ -1,5 +1,6 @@
 from __future__ import annotations
 import pytest
+from datetime import datetime
 from conftest import (
     init_inventory, create_customer, create_system,
     create_order, get_daily_row, assert_inventory, iso_at
@@ -250,7 +251,9 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
     assert body["date"] == "2025-01-02"
     events = [e for e in body["events"] if e["event_type"] in {"refill", "order", "adjust"}]
     assert len(events) == 3
-    assert events[0]["effective_at"] >= events[1]["effective_at"] >= events[2]["effective_at"]
+    def _ts(s: str) -> datetime:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    assert _ts(events[0]["effective_at"]) >= _ts(events[1]["effective_at"]) >= _ts(events[2]["effective_at"])
 
     daily = get_daily_row(client, "2025-01-02")
     assert_inventory(daily["inventory_end"], full12=50, empty12=10, full48=22, empty48=5)

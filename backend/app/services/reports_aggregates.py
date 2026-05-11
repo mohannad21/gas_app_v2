@@ -447,7 +447,6 @@ def _net_by_day(
   Excludes:
   - system initialization opening balances
   - company transactions
-  - cash / wallet adjustments
   - wallet/bank transfers (Expense.kind == "deposit")
   """
   expense_ids = (
@@ -466,6 +465,7 @@ def _net_by_day(
     .where(
       or_(
         LedgerEntry.source_type == "customer_txn",
+        LedgerEntry.source_type == "cash_adjust",
         and_(
           LedgerEntry.source_type == "expense",
           LedgerEntry.source_id.in_(expense_ids),

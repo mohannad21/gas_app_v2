@@ -210,6 +210,7 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 100,
+            "paid_now": 100,
         },
     )
     assert refill_resp.status_code == 200
@@ -234,10 +235,11 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
     assert timeline.status_code == 200
     events = [event for event in timeline.json()["events"] if event["event_type"] in {"refill", "order"}]
     assert len(events) >= 2
-    refill_event = events[0]
-    order_event = events[1]
-    assert refill_event["event_type"] == "refill"
+    # Events are newest-first: order (09:00) before refill (08:00)
+    order_event = events[0]
+    refill_event = events[1]
     assert order_event["event_type"] == "order"
+    assert refill_event["event_type"] == "refill"
     assert refill_event["cash_before"] == 1000
     assert refill_event["cash_after"] == 900
     assert order_event["cash_before"] == 900

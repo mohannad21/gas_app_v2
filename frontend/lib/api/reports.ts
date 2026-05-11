@@ -14,7 +14,6 @@ export async function listDailyReports(params: { from: string; to: string }): Pr
   const { data } = await api.get("/reports/daily", { params });
   return parseArray(DailyReportCardSchema, data).map((row) => ({
     ...row,
-    cash_start: fromMinorUnits(row.cash_start),
     cash_end: fromMinorUnits(row.cash_end),
     net_today: fromMinorUnits(row.net_today),
     cash_math: {
@@ -41,7 +40,6 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
   const parsed = parse(DailyReportDaySchema, data);
   return {
     ...parsed,
-    cash_start: fromMinorUnits(parsed.cash_start),
     cash_end: fromMinorUnits(parsed.cash_end),
     company_start: parsed.company_start != null ? fromMinorUnits(parsed.company_start) : parsed.company_start,
     company_end: parsed.company_end != null ? fromMinorUnits(parsed.company_end) : parsed.company_end,
