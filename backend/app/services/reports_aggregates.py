@@ -75,19 +75,15 @@ def _sum_company_before_day(session: Session, day: date) -> int:
   return _sum_company_at_day_end(session, prev)
 
 
-def _sum_company_cyl_at_day_end(session: Session, day: date, gas_type: str) -> int:
+def _sum_company_cyl_before_day(session: Session, day: date, gas_type: str) -> int:
+  prev = day - timedelta(days=1)
   return sum_ledger(
     session,
     account="company_cylinders_debts",
     gas_type=gas_type,
     unit="count",
-    day_to=day,
+    day_to=prev,
   )
-
-
-def _sum_company_cyl_before_day(session: Session, day: date, gas_type: str) -> int:
-  prev = day - timedelta(days=1)
-  return _sum_company_cyl_at_day_end(session, prev, gas_type)
 
 
 def _seed_customer_states_before_day(
@@ -538,9 +534,9 @@ def _company_day_state_bounds(
   money_before = _sum_company_before_day(session, day)
   money_after = _sum_company_at_day_end(session, day)
   cyl12_before = _sum_company_cyl_before_day(session, day, "12kg")
-  cyl12_after = _sum_company_cyl_at_day_end(session, day, "12kg")
+  cyl12_after = sum_ledger(session, account="company_cylinders_debts", gas_type="12kg", unit="count", day_to=day)
   cyl48_before = _sum_company_cyl_before_day(session, day, "48kg")
-  cyl48_after = _sum_company_cyl_at_day_end(session, day, "48kg")
+  cyl48_after = sum_ledger(session, account="company_cylinders_debts", gas_type="48kg", unit="count", day_to=day)
 
   return ((money_before, cyl12_before, cyl48_before), (money_after, cyl12_after, cyl48_after))
 

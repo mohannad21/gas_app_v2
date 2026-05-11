@@ -44,7 +44,6 @@ from app.services.reports_aggregates import (
   _sum_bank_before_day,
   _sum_company_at_day_end,
   _sum_company_before_day,
-  _sum_company_cyl_at_day_end,
   _sum_company_cyl_before_day,
   _seed_customer_states_before_day,
   _customer_balance_transitions,
@@ -300,9 +299,7 @@ def list_daily_reports(
 
     company_start = running_company
     running_company += company_deltas.get(current, 0)
-    company_12_start = running_company_12
     running_company_12 += company_cyl_12.get(current, 0)
-    company_48_start = running_company_48
     running_company_48 += company_cyl_48.get(current, 0)
 
     running_full12 += inv_full_12.get(current, 0)
@@ -371,10 +368,6 @@ def list_daily_reports(
       ),
       company_start=company_start,
       company_end=running_company,
-      company_12kg_start=company_12_start,
-      company_12kg_end=running_company_12,
-      company_48kg_start=company_48_start,
-      company_48kg_end=running_company_48,
       inventory_end=ReportInventoryTotals(
         full12=running_full12,
         empty12=running_empty12,
@@ -673,8 +666,6 @@ def get_daily_report(
       event.customer_12kg_before = customer_before[1]
       event.customer_48kg_before = customer_before[2]
     event.company_before = running_company_money
-    event.company_12kg_before = running_company_12
-    event.company_48kg_before = running_company_48
     inventory_before = _report_inventory_state(running_inventory)
 
     source_keys = event_source_keys.get(id(event), [])
@@ -700,8 +691,6 @@ def get_daily_report(
       event.customer_12kg_after = customer_after[1]
       event.customer_48kg_after = customer_after[2]
     event.company_after = running_company_money
-    event.company_12kg_after = running_company_12
-    event.company_48kg_after = running_company_48
     inventory_after = _report_inventory_state(running_inventory)
     event.inventory_before = _inventory_state_for_event(event, inventory_before, event_entries=event_entries)
     event.inventory_after = _inventory_state_for_event(event, inventory_after, event_entries=event_entries)
@@ -755,10 +744,6 @@ def get_daily_report(
     cash_end=_sum_cash_at_day_end(session, report_day),
     company_start=_sum_company_before_day(session, report_day),
     company_end=_sum_company_at_day_end(session, report_day),
-    company_12kg_start=_sum_company_cyl_before_day(session, report_day, "12kg"),
-    company_12kg_end=_sum_company_cyl_at_day_end(session, report_day, "12kg"),
-    company_48kg_start=_sum_company_cyl_before_day(session, report_day, "48kg"),
-    company_48kg_end=_sum_company_cyl_at_day_end(session, report_day, "48kg"),
     inventory_end=_sum_inventory_at_day_end(session, report_day),
     audit_summary=audit_summary,
     events=events,

@@ -59,10 +59,6 @@ class DailyReportCard(SQLModel):
   cash_math: DailyReportCashMath = Field(default_factory=DailyReportCashMath)
   company_start: int = 0
   company_end: int = 0
-  company_12kg_start: int = 0
-  company_12kg_end: int = 0
-  company_48kg_start: int = 0
-  company_48kg_end: int = 0
   inventory_end: ReportInventoryTotals
   problems: list[str] = Field(default_factory=list)
   problem_transitions: list[BalanceTransition] = Field(default_factory=list)
@@ -164,10 +160,6 @@ class DailyReportEvent(SQLModel):
   customer_48kg_after: Optional[int] = None
   company_before: Optional[int] = None
   company_after: Optional[int] = None
-  company_12kg_before: Optional[int] = None
-  company_12kg_after: Optional[int] = None
-  company_48kg_before: Optional[int] = None
-  company_48kg_after: Optional[int] = None
   inventory_before: Optional[ReportInventoryState] = None
   inventory_after: Optional[ReportInventoryState] = None
   balance_transitions: list[BalanceTransition] = Field(default_factory=list)
@@ -178,10 +170,6 @@ class DailyReportDay(SQLModel):
   cash_end: int
   company_start: int = 0
   company_end: int = 0
-  company_12kg_start: int = 0
-  company_12kg_end: int = 0
-  company_48kg_start: int = 0
-  company_48kg_end: int = 0
   inventory_end: ReportInventoryTotals
   audit_summary: DailyAuditSummary
   events: list[DailyReportEvent]

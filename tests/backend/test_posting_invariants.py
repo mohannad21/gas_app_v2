@@ -316,8 +316,10 @@ def test_company_refill_swap_invariants(client) -> None:
     assert refill_event["inventory_after"]["empty48"] == refill_event["inventory_before"]["empty48"] - 1
 
     assert refill_event["company_after"] - refill_event["company_before"] == 150
-    assert refill_event["company_12kg_after"] - refill_event["company_12kg_before"] == -2
-    assert refill_event["company_48kg_after"] - refill_event["company_48kg_before"] == -1
+    cyl12 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+    assert cyl12["after"] - cyl12["before"] == -2
+    cyl48 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_48")
+    assert cyl48["after"] - cyl48["before"] == -1
 
 
 def test_company_refill_buy_only_invariants(client) -> None:
@@ -343,7 +345,8 @@ def test_company_refill_buy_only_invariants(client) -> None:
     assert refill_event["cash_after"] - refill_event["cash_before"] == -80
     assert refill_event["inventory_after"]["full12"] == refill_event["inventory_before"]["full12"] + 4
     assert refill_event["company_after"] - refill_event["company_before"] == 0
-    assert refill_event["company_12kg_after"] - refill_event["company_12kg_before"] == -4
+    cyl12 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+    assert cyl12["after"] - cyl12["before"] == -4
 
 
 def test_company_refill_return_only_invariants(client) -> None:
@@ -368,7 +371,8 @@ def test_company_refill_return_only_invariants(client) -> None:
     refill_event = next(event for event in events if event["event_type"] == "refill")
     assert refill_event["cash_after"] - refill_event["cash_before"] == 0
     assert refill_event["inventory_after"]["empty12"] == refill_event["inventory_before"]["empty12"] - 2
-    assert refill_event["company_12kg_after"] - refill_event["company_12kg_before"] == 2
+    cyl12 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+    assert cyl12["after"] - cyl12["before"] == 2
 
 
 def test_company_payment_invariants(client) -> None:
@@ -424,4 +428,4 @@ def test_company_buy_iron_invariants(client) -> None:
     assert buy_event["inventory_after"]["full12"] == buy_event["inventory_before"]["full12"] + 3
     assert buy_event["inventory_after"]["empty12"] == buy_event["inventory_before"]["empty12"]
     assert buy_event["company_after"] - buy_event["company_before"] == 30
-    assert buy_event["company_12kg_after"] - buy_event["company_12kg_before"] == 0
+    assert not any(t["scope"] == "company" and t["component"] == "cyl_12" for t in buy_event["balance_transitions"])

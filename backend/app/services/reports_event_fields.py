@@ -592,24 +592,28 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
       positive_direction="you_pay_company",
       negative_direction="company_pays_you",
     )
-    _append_cylinder_note(
-      notes,
-      before=event.company_12kg_before,
-      after=event.company_12kg_after,
-      empty_kind="cyl_12",
-      full_kind="cyl_full_12",
-      empty_direction="you_return_company",
-      full_direction="company_delivers_you",
-    )
-    _append_cylinder_note(
-      notes,
-      before=event.company_48kg_before,
-      after=event.company_48kg_after,
-      empty_kind="cyl_48",
-      full_kind="cyl_full_48",
-      empty_direction="you_return_company",
-      full_direction="company_delivers_you",
-    )
+    cyl12 = next((t for t in event.balance_transitions if t.scope == "company" and t.component == "cyl_12"), None)
+    if cyl12 is not None:
+      _append_cylinder_note(
+        notes,
+        before=cyl12.before,
+        after=cyl12.after,
+        empty_kind="cyl_12",
+        full_kind="cyl_full_12",
+        empty_direction="you_return_company",
+        full_direction="company_delivers_you",
+      )
+    cyl48 = next((t for t in event.balance_transitions if t.scope == "company" and t.component == "cyl_48"), None)
+    if cyl48 is not None:
+      _append_cylinder_note(
+        notes,
+        before=cyl48.before,
+        after=cyl48.after,
+        empty_kind="cyl_48",
+        full_kind="cyl_full_48",
+        empty_direction="you_return_company",
+        full_direction="company_delivers_you",
+      )
     return notes
 
   return notes

@@ -547,7 +547,8 @@ class TestBalanceAdjustmentsNotInDailyReport:
         assert "company_adjustment" not in event_types
 
         later_event = next(event for event in report["events"] if event.get("event_type") == "refill")
-        assert later_event["company_12kg_before"] == 3
+        cyl12 = next(t for t in later_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12["before"] == 3
 
     def test_company_balance_adjustment_delete_reverts_later_wording(self, client) -> None:
         _init(client)
@@ -569,14 +570,16 @@ class TestBalanceAdjustmentsNotInDailyReport:
 
         report = _day_report(client, DAY)
         later_event = next(e for e in report["events"] if e.get("event_type") == "refill")
-        assert later_event["company_12kg_before"] == 5
+        cyl12 = next(t for t in later_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12["before"] == 5
 
         del_resp = client.delete(f"/company/balance-adjustments/{adj_id}")
         assert del_resp.status_code == 204, del_resp.text
 
         report2 = _day_report(client, DAY)
         later_event2 = next(e for e in report2["events"] if e.get("event_type") == "refill")
-        assert later_event2["company_12kg_before"] == 0
+        cyl12_after_delete = next(t for t in later_event2["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12_after_delete["before"] == 0
 
     def test_company_balance_adjustment_update_changes_later_wording(self, client) -> None:
         _init(client)
@@ -598,7 +601,8 @@ class TestBalanceAdjustmentsNotInDailyReport:
 
         report = _day_report(client, DAY)
         later_event = next(e for e in report["events"] if e.get("event_type") == "refill")
-        assert later_event["company_12kg_before"] == 5
+        cyl12 = next(t for t in later_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12["before"] == 5
 
         upd_resp = client.put(
             f"/company/balance-adjustments/{adj_id}",
@@ -608,7 +612,8 @@ class TestBalanceAdjustmentsNotInDailyReport:
 
         report2 = _day_report(client, DAY)
         later_event2 = next(e for e in report2["events"] if e.get("event_type") == "refill")
-        assert later_event2["company_12kg_before"] == 10
+        cyl12_after_update = next(t for t in later_event2["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12_after_update["before"] == 10
 
     def test_company_balance_adjustment_backdated_affects_same_day_later_events(self, client) -> None:
         _init(client)
@@ -617,7 +622,8 @@ class TestBalanceAdjustmentsNotInDailyReport:
 
         report_before = _day_report(client, DAY)
         refill_before = next(e for e in report_before["events"] if e.get("event_type") == "refill")
-        assert refill_before["company_12kg_before"] == 0
+        cyl12_before = next(t for t in refill_before["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12_before["before"] == 0
 
         adj_resp = client.post(
             "/company/balances/adjust",
@@ -633,7 +639,8 @@ class TestBalanceAdjustmentsNotInDailyReport:
 
         report_after = _day_report(client, DAY)
         refill_after = next(e for e in report_after["events"] if e.get("event_type") == "refill")
-        assert refill_after["company_12kg_before"] == 7
+        cyl12_after = next(t for t in refill_after["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
+        assert cyl12_after["before"] == 7
 
 
 # ---------------------------------------------------------------------------
