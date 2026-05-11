@@ -20,7 +20,7 @@ def test_refill_details_time_correct_after_edit(client) -> None:
             "return48": 2,
             "note": "first",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert refill_resp.status_code == 200

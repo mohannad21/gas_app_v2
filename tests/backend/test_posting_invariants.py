@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from conftest import create_customer, create_system, init_inventory, iso_at
 
 
-def _cash_init(client, *, day: date, amount: int) -> None:
+def _wallet_init(client, *, day: date, amount: int) -> None:
     prev_day = (day - timedelta(days=1)).isoformat()
     resp = client.post(
         "/cash/adjust",
@@ -32,7 +32,7 @@ def _bootstrap_day(
         full48=full48,
         empty48=empty48,
     )
-    _cash_init(client, day=day, amount=cash)
+    _wallet_init(client, day=day, amount=cash)
 
 
 def _get_day_events(client, *, day: date) -> list[dict]:
@@ -125,7 +125,7 @@ def test_customer_replacement_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     order_event = next(event for event in events if event["event_type"] == "order")
-    assert order_event["cash_after"] - order_event["cash_before"] == 40
+    assert order_event["wallet_after"] - order_event["wallet_before"] == 40
     assert order_event["inventory_after"]["full12"] == order_event["inventory_before"]["full12"] - 2
     assert order_event["inventory_after"]["empty12"] == order_event["inventory_before"]["empty12"] + 1
 
@@ -155,7 +155,7 @@ def test_customer_sell_iron_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     order_event = next(event for event in events if event["event_type"] == "order")
-    assert order_event["cash_after"] - order_event["cash_before"] == 200
+    assert order_event["wallet_after"] - order_event["wallet_before"] == 200
     assert order_event["inventory_after"]["full12"] == order_event["inventory_before"]["full12"] - 2
 
     balances = _customer_balances(client, customer_id)
@@ -184,7 +184,7 @@ def test_customer_buy_iron_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     order_event = next(event for event in events if event["event_type"] == "order")
-    assert order_event["cash_after"] - order_event["cash_before"] == -90
+    assert order_event["wallet_after"] - order_event["wallet_before"] == -90
     assert order_event["inventory_after"]["empty12"] == order_event["inventory_before"]["empty12"] + 3
 
     balances = _customer_balances(client, customer_id)
@@ -221,7 +221,7 @@ def test_customer_payment_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     payment_event = next(event for event in events if event["event_type"] == "collection_money")
-    assert payment_event["cash_after"] - payment_event["cash_before"] == 40
+    assert payment_event["wallet_after"] - payment_event["wallet_before"] == 40
     assert payment_event["inventory_before"] is None
 
     balances = _customer_balances(client, customer_id)
@@ -243,7 +243,7 @@ def test_customer_payout_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     payout_event = next(event for event in events if event["event_type"] == "collection_payout")
-    assert payout_event["cash_after"] - payout_event["cash_before"] == -50
+    assert payout_event["wallet_after"] - payout_event["wallet_before"] == -50
     assert payout_event["inventory_before"] is None
 
     balances = _customer_balances(client, customer_id)
@@ -279,7 +279,7 @@ def test_customer_return_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     return_event = next(event for event in events if event["event_type"] == "collection_empty")
-    assert return_event["cash_after"] - return_event["cash_before"] == 0
+    assert return_event["wallet_after"] - return_event["wallet_before"] == 0
     assert (
         return_event["inventory_after"]["empty12"]
         == return_event["inventory_before"]["empty12"] + 1
@@ -302,14 +302,14 @@ def test_company_refill_swap_invariants(client) -> None:
             "buy48": 2,
             "return48": 1,
             "total_cost": 200,
-            "paid_now": 50,
+            "paid_amount": 50,
         },
     )
     assert resp.status_code == 200
 
     events = _get_day_events(client, day=day)
     refill_event = next(event for event in events if event["event_type"] == "refill")
-    assert refill_event["cash_after"] - refill_event["cash_before"] == -50
+    assert refill_event["wallet_after"] - refill_event["wallet_before"] == -50
     assert refill_event["inventory_after"]["full12"] == refill_event["inventory_before"]["full12"] + 5
     assert refill_event["inventory_after"]["empty12"] == refill_event["inventory_before"]["empty12"] - 3
     assert refill_event["inventory_after"]["full48"] == refill_event["inventory_before"]["full48"] + 2
@@ -335,14 +335,14 @@ def test_company_refill_buy_only_invariants(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 80,
-            "paid_now": 80,
+            "paid_amount": 80,
         },
     )
     assert resp.status_code == 200
 
     events = _get_day_events(client, day=day)
     refill_event = next(event for event in events if event["event_type"] == "refill")
-    assert refill_event["cash_after"] - refill_event["cash_before"] == -80
+    assert refill_event["wallet_after"] - refill_event["wallet_before"] == -80
     assert refill_event["inventory_after"]["full12"] == refill_event["inventory_before"]["full12"] + 4
     assert refill_event["company_after"] - refill_event["company_before"] == 0
     cyl12 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
@@ -362,14 +362,14 @@ def test_company_refill_return_only_invariants(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
 
     events = _get_day_events(client, day=day)
     refill_event = next(event for event in events if event["event_type"] == "refill")
-    assert refill_event["cash_after"] - refill_event["cash_before"] == 0
+    assert refill_event["wallet_after"] - refill_event["wallet_before"] == 0
     assert refill_event["inventory_after"]["empty12"] == refill_event["inventory_before"]["empty12"] - 2
     cyl12 = next(t for t in refill_event["balance_transitions"] if t["scope"] == "company" and t["component"] == "cyl_12")
     assert cyl12["after"] - cyl12["before"] == 2
@@ -388,7 +388,7 @@ def test_company_payment_invariants(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 100,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -401,12 +401,12 @@ def test_company_payment_invariants(client) -> None:
 
     events = _get_day_events(client, day=day)
     payment_event = next(event for event in events if event["event_type"] == "company_payment")
-    assert payment_event["cash_after"] - payment_event["cash_before"] == -40
+    assert payment_event["wallet_after"] - payment_event["wallet_before"] == -40
     assert payment_event["company_after"] - payment_event["company_before"] == -40
     assert payment_event["inventory_before"] is None
 
 
-def test_company_buy_iron_invariants(client) -> None:
+def test_company_buy_full_invariants(client) -> None:
     day = date(2025, 10, 11)
     _bootstrap_day(client, day=day, full12=10, empty12=5)
 
@@ -417,14 +417,14 @@ def test_company_buy_iron_invariants(client) -> None:
             "new12": 3,
             "new48": 0,
             "total_cost": 90,
-            "paid_now": 60,
+            "paid_amount": 60,
         },
     )
     assert resp.status_code == 201
 
     events = _get_day_events(client, day=day)
-    buy_event = next(event for event in events if event["event_type"] == "company_buy_iron")
-    assert buy_event["cash_after"] - buy_event["cash_before"] == -60
+    buy_event = next(event for event in events if event["event_type"] == "company_buy_full")
+    assert buy_event["wallet_after"] - buy_event["wallet_before"] == -60
     assert buy_event["inventory_after"]["full12"] == buy_event["inventory_before"]["full12"] + 3
     assert buy_event["inventory_after"]["empty12"] == buy_event["inventory_before"]["empty12"]
     assert buy_event["company_after"] - buy_event["company_before"] == 30

@@ -178,7 +178,7 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 500,
-            "paid_now": 100,
+            "paid_amount": 100,
         },
     )
     assert resp.status_code == 200

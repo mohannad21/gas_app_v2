@@ -23,13 +23,13 @@ class ReportInventoryState(SQLModel):
 
 
 class DailyAuditSummary(SQLModel):
-  cash_in: int
+  wallet_in: int
   new_debt: int
   inv_delta_12: int
   inv_delta_48: int
 
 
-class DailyReportCashMath(SQLModel):
+class DailyReportWalletMath(SQLModel):
   sales: int = 0
   late: int = 0
   expenses: int = 0
@@ -51,12 +51,12 @@ class BalanceTransition(SQLModel):
 
 class DailyReportCard(SQLModel):
   date: str
-  cash_end: int
+  wallet_end: int
   sold_12kg: int = 0
   sold_48kg: int = 0
   net_today: int = 0
   has_refill: bool = False
-  cash_math: DailyReportCashMath = Field(default_factory=DailyReportCashMath)
+  wallet_math: DailyReportWalletMath = Field(default_factory=DailyReportWalletMath)
   company_start: int = 0
   company_end: int = 0
   inventory_end: ReportInventoryTotals
@@ -145,13 +145,13 @@ class DailyReportEvent(SQLModel):
   buy48: Optional[int] = None
   return48: Optional[int] = None
   total_cost: Optional[int] = None
-  paid_now: Optional[int] = None
+  paid_amount: Optional[int] = None
   order_total: Optional[int] = None
   order_paid: Optional[int] = None
   order_installed: Optional[int] = None
   order_received: Optional[int] = None
-  cash_before: Optional[int] = None
-  cash_after: Optional[int] = None
+  wallet_before: Optional[int] = None
+  wallet_after: Optional[int] = None
   customer_money_before: Optional[int] = None
   customer_money_after: Optional[int] = None
   customer_12kg_before: Optional[int] = None
@@ -167,7 +167,7 @@ class DailyReportEvent(SQLModel):
 
 class DailyReportDay(SQLModel):
   date: str
-  cash_end: int
+  wallet_end: int
   company_start: int = 0
   company_end: int = 0
   inventory_end: ReportInventoryTotals

@@ -105,7 +105,7 @@ const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> =>
     case "collection_empty":
       return "customer";
     case "company_payment":
-    case "company_buy_iron":
+    case "company_buy_full":
     case "refill":
     case "company_return_empties":
       return "company";
@@ -137,7 +137,7 @@ const getEventSubtype = (event: any): ActivitySubtypeOption => {
       return event?.money_direction === "in"
         ? { key: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN }
         : { key: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT };
-    case "company_buy_iron":
+    case "company_buy_full":
       return { key: "company_buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL };
     case "refill": {
       const isReturnOnly =
@@ -617,7 +617,7 @@ export default function ReportsScreen() {
               full48: formatCount(latestInventory?.full48 ?? 0),
               empty48: formatCount(latestInventory?.empty48 ?? 0),
             }}
-            cashEnd={formatMoney(displayCard?.cash_end ?? 0)}
+            walletEnd={formatMoney(displayCard?.wallet_end ?? 0)}
             onAdjustInventory={() => {
               router.push("/(tabs)/add?open=adjust-inventory");
             }}
@@ -1049,9 +1049,9 @@ function EventExpandedPanel({
 
   const invBefore = ev?.inventory_before ?? null;
   const invAfter = ev?.inventory_after ?? null;
-  const cashBefore = typeof ev?.cash_before === "number" ? ev.cash_before : null;
-  const cashAfter = typeof ev?.cash_after === "number" ? ev.cash_after : null;
-  const hasCash = typeof cashBefore === "number" && typeof cashAfter === "number";
+  const walletBefore = typeof ev?.wallet_before === "number" ? ev.wallet_before : null;
+  const walletAfter = typeof ev?.wallet_after === "number" ? ev.wallet_after : null;
+  const hasCash = typeof walletBefore === "number" && typeof walletAfter === "number";
 
   const full12Before = typeof invBefore?.full12 === "number" ? invBefore.full12 : null;
   const full12After = typeof invAfter?.full12 === "number" ? invAfter.full12 : null;
@@ -1073,7 +1073,7 @@ function EventExpandedPanel({
   const has48InventoryChange =
     (full48Before != null && full48After != null && full48Before !== full48After) ||
     (empty48Before != null && empty48After != null && empty48Before !== empty48After);
-  const hasCashChange = hasCash && cashBefore !== cashAfter;
+  const hasCashChange = hasCash && walletBefore !== walletAfter;
   const touches12 =
     gasType === "12kg" ||
     (typeof ev?.buy12 === "number" && ev.buy12 !== 0) ||
@@ -1178,7 +1178,7 @@ function EventExpandedPanel({
         ? buildDeltaRow(
             [
               placeholderBox(`${keyPrefix}-cash-left`),
-              renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: cashBefore, after: cashAfter, format: formatMoney }),
+              renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
               placeholderBox(`${keyPrefix}-cash-right`),
             ],
             `${keyPrefix}-cash-row`
@@ -1192,7 +1192,7 @@ function EventExpandedPanel({
     return renderFixedRow([
       renderTopStateBox({ key: `${targetGasType}-full`, label: `${targetGasType} Full`, before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
       renderTopStateBox({ key: `${targetGasType}-empty`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
-      renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: cashBefore, after: cashAfter, format: formatMoney }),
+      renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
     ], `${targetGasType}-triplet`);
   };
 
@@ -1227,8 +1227,8 @@ function EventExpandedPanel({
         ? renderTopStateBox({
             key: `${targetGasType}-sparse-cash`,
             label: "Wallet",
-            before: cashBefore,
-            after: cashAfter,
+            before: walletBefore,
+            after: walletAfter,
             format: formatMoney,
           })
         : null,
@@ -1250,7 +1250,7 @@ function EventExpandedPanel({
     buildDeltaRow(
       [
         placeholderBox(`${keyPrefix}-cash-left`),
-        renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: cashBefore, after: cashAfter, format: formatMoney }),
+        renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
         placeholderBox(`${keyPrefix}-cash-right`),
       ],
       `${keyPrefix}-cash-row`
@@ -1261,7 +1261,7 @@ function EventExpandedPanel({
     if (eventType === "collection_empty" && inferredGasType) return renderSparseGasState(inferredGasType);
     if (eventType === "collection_money" || eventType === "collection_payout") return renderCenteredWalletOnly(eventType);
     if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") return renderCenteredWalletOnly(eventType);
-    if (eventType === "refill" || eventType === "company_buy_iron") {
+    if (eventType === "refill" || eventType === "company_buy_full") {
       if (touches12 && touches48) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "mixed" });
       if (touches12) return renderGasTriplet("12kg");
       if (touches48) return renderGasTriplet("48kg");
@@ -1276,7 +1276,7 @@ function EventExpandedPanel({
       ].filter(Boolean) as ReactNode[];
       if (has12InventoryState && has48InventoryState) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCashChange, keyPrefix: "adjust-mixed" });
       if (cylinderBoxes.length > 0 && (has12InventoryChange || has48InventoryChange || !hasCashChange)) return renderRows(cylinderBoxes);
-      if (hasCash) return buildDeltaRow([renderTopStateBox({ key: "adjust-cash", label: "Wallet", before: cashBefore, after: cashAfter, format: formatMoney })], "adjust-cash-only");
+      if (hasCash) return buildDeltaRow([renderTopStateBox({ key: "adjust-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney })], "adjust-cash-only");
     }
     if (inferredGasType) return renderGasTriplet(inferredGasType);
     if (hasCash) return renderCenteredWalletOnly(eventType);

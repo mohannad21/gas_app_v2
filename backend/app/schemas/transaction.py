@@ -118,7 +118,7 @@ class CompanyBuyIronCreate(SQLModel):
   new12: int = 0
   new48: int = 0
   total_cost: int = 0
-  paid_now: int = 0
+  paid_amount: int = 0
   note: Optional[str] = None
   request_id: Optional[str] = None
   happened_at: Optional[datetime] = None
@@ -127,7 +127,7 @@ class CompanyBuyIronCreate(SQLModel):
   time_of_day: Optional[Literal["morning", "evening"]] = None
   at: Optional[str] = None
 
-  @field_validator("new12", "new48", "total_cost", "paid_now")
+  @field_validator("new12", "new48", "total_cost", "paid_amount")
   @classmethod
   def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
     return _non_negative(value, info.field_name)
@@ -139,7 +139,7 @@ class CompanyBuyIronOut(SQLModel):
   new12: int
   new48: int
   total_cost: int
-  paid_now: int
+  paid_amount: int
   note: Optional[str] = None
 
 

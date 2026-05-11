@@ -52,7 +52,7 @@ export const CompanyBuyIronSchema = z.object({
   new12: z.number(),
   new48: z.number(),
   total_cost: z.number(),
-  paid_now: z.number(),
+  paid_amount: z.number(),
   note: z.string().nullish(),
 });
 export type CompanyBuyIron = z.infer<typeof CompanyBuyIronSchema>;
@@ -60,7 +60,7 @@ export type CompanyBuyIronCreateInput = {
   new12: number;
   new48: number;
   total_cost: number;
-  paid_now: number;
+  paid_amount: number;
   note?: string;
   date?: string;
   time?: string;

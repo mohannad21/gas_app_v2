@@ -53,7 +53,7 @@ def test_refill_event_paid_now_zero(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -86,7 +86,7 @@ def test_refill_event_legacy_payload_works(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -126,7 +126,7 @@ def test_refill_paid_now_affects_cash_and_timeline(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 200,
+            "paid_amount": 200,
         },
     )
     assert resp.status_code == 200
@@ -134,15 +134,15 @@ def test_refill_paid_now_affects_cash_and_timeline(client) -> None:
     report = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
     row = report.json()[0]
-    assert row["cash_end"] == 800
+    assert row["wallet_end"] == 800
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
     refill_event = next(event for event in timeline.json()["events"] if event["event_type"] == "refill")
-    assert refill_event["cash_before"] == 1000
-    assert refill_event["cash_after"] == 800
+    assert refill_event["wallet_before"] == 1000
+    assert refill_event["wallet_after"] == 800
     assert refill_event["total_cost"] == 200
-    assert refill_event["paid_now"] == 200
+    assert refill_event["paid_amount"] == 200
     assert refill_event["company_before"] == 0
     assert refill_event["company_after"] == 0
 
@@ -168,7 +168,7 @@ def test_refill_paid_now_zero_keeps_cash(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -176,15 +176,15 @@ def test_refill_paid_now_zero_keeps_cash(client) -> None:
     report = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report.status_code == 200
     row = report.json()[0]
-    assert row["cash_end"] == 1000
+    assert row["wallet_end"] == 1000
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
     refill_event = next(event for event in timeline.json()["events"] if event["event_type"] == "refill")
-    assert refill_event["cash_before"] == 1000
-    assert refill_event["cash_after"] == 1000
+    assert refill_event["wallet_before"] == 1000
+    assert refill_event["wallet_after"] == 1000
     assert refill_event["total_cost"] == 200
-    assert refill_event["paid_now"] == 0
+    assert refill_event["paid_amount"] == 0
     assert refill_event["company_before"] == 0
     assert refill_event["company_after"] == 200
 
@@ -210,7 +210,7 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 100,
-            "paid_now": 100,
+            "paid_amount": 100,
         },
     )
     assert refill_resp.status_code == 200
@@ -240,7 +240,7 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
     refill_event = events[1]
     assert order_event["event_type"] == "order"
     assert refill_event["event_type"] == "refill"
-    assert refill_event["cash_before"] == 1000
-    assert refill_event["cash_after"] == 900
-    assert order_event["cash_before"] == 900
-    assert order_event["cash_after"] == 950
+    assert refill_event["wallet_before"] == 1000
+    assert refill_event["wallet_after"] == 900
+    assert order_event["wallet_before"] == 900
+    assert order_event["wallet_after"] == 950

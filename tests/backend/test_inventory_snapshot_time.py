@@ -42,7 +42,7 @@ def test_refill_uses_exact_time_for_effective_at(client) -> None:
             "return48": 0,
             "note": "test",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200

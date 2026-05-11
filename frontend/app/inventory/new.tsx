@@ -502,7 +502,7 @@ function CashAdjustForm({
   entry,
   date,
   accessoryId,
-  cashBefore,
+  walletBefore,
   isSubmitting,
   onCreate,
   onUpdate,
@@ -514,7 +514,7 @@ function CashAdjustForm({
   entry: CashAdjustment | null;
   date: string;
   accessoryId?: string;
-  cashBefore: number | null;
+  walletBefore: number | null;
   isSubmitting?: boolean;
   onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<CashAdjustment>;
   onUpdate: (id: string, payload: { delta_cash?: number; reason?: string }) => Promise<void>;
@@ -546,7 +546,7 @@ function CashAdjustForm({
   }, [entry, visible, date]);
 
   const deltaValue = Number(deltaCash) || 0;
-  const cashComment = formatMoneyTransitionComment(cashBefore, cashBefore !== null ? cashBefore + deltaValue : null);
+  const cashComment = formatMoneyTransitionComment(walletBefore, walletBefore !== null ? walletBefore + deltaValue : null);
 
   const resetForm = () => {
     setDeltaCash(String(entry?.delta_cash ?? 0));
@@ -1181,7 +1181,7 @@ export default function InventoryNewScreen() {
             mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
             containerStyle={styles.hubFormContainer}
             scrollStyle={styles.hubScroll}
-            walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
+            walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
           />
         ) : (
           activeTab === "payment" ? (
@@ -1190,7 +1190,7 @@ export default function InventoryNewScreen() {
               date={businessDate}
               accessoryId={accessoryId}
               companyBalance={companyBalance}
-              walletBalance={dailyReportQuery.data?.[0]?.cash_end ?? 0}
+              walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
               balanceReady={companyBalanceReady}
               isSubmitting={createCompanyPayment.isPending}
               onCreate={async (payload) => {
@@ -1213,7 +1213,7 @@ export default function InventoryNewScreen() {
               entry={editingCashAdjust}
               date={businessDate}
               accessoryId={accessoryId}
-              cashBefore={dailyReportQuery.data?.[0]?.cash_end ?? null}
+              walletBefore={dailyReportQuery.data?.[0]?.wallet_end ?? null}
               isSubmitting={editingCashAdjust ? updateCashAdjust.isPending : createCashAdjust.isPending}
               onCreate={async (payload) => {
                 return await createCashAdjust.mutateAsync(payload);

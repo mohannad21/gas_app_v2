@@ -55,7 +55,7 @@ type SavedRefillEntry = {
   buy48: number;
   return48: number;
   total_cost: number;
-  paid_now: number;
+  paid_amount: number;
 };
 
 type AddRefillModalProps = {
@@ -309,7 +309,7 @@ export function RefillForm({
   const companyBalances = companyBalancesQuery.data ?? null;
   const companyBalanceReady = companyBalancesQuery.isSuccess;
   const originalMoneyResult = editEntry
-    ? calcMoneyUiResult(Number(refillDetails?.total_cost ?? 0), Number(refillDetails?.paid_now ?? 0))
+    ? calcMoneyUiResult(Number(refillDetails?.total_cost ?? 0), Number(refillDetails?.paid_amount ?? 0))
     : 0;
   const baseMoneyNet = Number(companyBalances?.company_money ?? 0) - originalMoneyResult;
   const line12Cost = totalBuy12 * price12Value;
@@ -322,8 +322,8 @@ export function RefillForm({
     formState.setPaidNow(totalCost ? totalCost.toString() : "");
   }, [totalCost, formState.paidTouched, formState.setPaidNow]);
 
-  const paidNowValue = Number(formState.paidNow) || 0;
-  const moneyResult = calcMoneyUiResult(totalCost, paidNowValue);
+  const paidAmountValue = Number(formState.paidAmount) || 0;
+  const moneyResult = calcMoneyUiResult(totalCost, paidAmountValue);
 
   const availableEmpty12 = typeof base?.empty12 === "number" ? base.empty12 : null;
   const availableEmpty48 = typeof base?.empty48 === "number" ? base.empty48 : null;
@@ -353,7 +353,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_full" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -362,7 +362,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_full" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -371,7 +371,7 @@ export function RefillForm({
     {
       mode: "transition",
       collapseAllSettled: true,
-      intent: formState.isBuyMode ? "company_buy_iron" : formState.isReturnMode ? "company_settle" : "company_refill",
+      intent: formState.isBuyMode ? "company_buy_full" : formState.isReturnMode ? "company_settle" : "company_refill",
       formatMoney,
     }
   );
@@ -423,7 +423,7 @@ export function RefillForm({
   const refillBuyEmpty48 = availableEmpty48 === null ? null : Math.max(availableEmpty48 - buy48Value, 0);
   const afterEmpty12 = availableEmpty12 === null ? null : Math.max(availableEmpty12 - ret12Value, 0);
   const afterEmpty48 = availableEmpty48 === null ? null : Math.max(availableEmpty48 - ret48Value, 0);
-  const walletAfterPaid = walletBalance - paidNowValue;
+  const walletAfterPaid = walletBalance - paidAmountValue;
 
   const disableSave =
     !companyBalanceReady ||
@@ -487,7 +487,7 @@ export function RefillForm({
           new12: payloadBuy12,
           new48: payloadBuy48,
           total_cost: totalCost,
-          paid_now: paidNowValue,
+          paid_amount: paidAmountValue,
           note: formState.notes.trim() ? formState.notes.trim() : undefined,
         });
       } else {
@@ -498,7 +498,7 @@ export function RefillForm({
           return12: payloadReturn12,
           buy48: payloadBuy48,
           return48: payloadReturn48,
-          paid_now: paidNowValue,
+          paid_amount: paidAmountValue,
           notes: formState.notes.trim() ? formState.notes.trim() : undefined,
           total_cost: totalCost,
           debt_cash: liveMoneyGive,
@@ -518,21 +518,21 @@ export function RefillForm({
         buy48: buy48Value,
         return48: ret48Value,
         total_cost: totalCost,
-        paid_now: paidNowValue,
+        paid_amount: paidAmountValue,
       };
       if (resetAfter && !editEntry?.refill_id) {
         formState.resetFormForCurrentMode();
         onSaveAndAddSuccess?.({
           effectiveAt,
           mode,
-          highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+          highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
         });
       } else {
         if (onSaveSuccess) {
           onSaveSuccess({
             effectiveAt,
             entry: savedEntry,
-            highlightEventType: formState.isBuyMode ? "company_buy_iron" : "refill",
+            highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
           });
         } else {
           onSaved(savedEntry);
@@ -575,7 +575,7 @@ export function RefillForm({
   const canEditBuy = !formState.isReturnMode;
   const canEditReturn = !formState.isBuyMode;
   const canEditMoney = !formState.isReturnMode;
-  const refillWalletShortfall = canEditMoney ? Math.max(paidNowValue - walletBalance, 0) : 0;
+  const refillWalletShortfall = canEditMoney ? Math.max(paidAmountValue - walletBalance, 0) : 0;
 
   const adjustBuy12 = (delta: number) => {
     if (!canEditBuy) return;
@@ -599,7 +599,7 @@ export function RefillForm({
   };
   const adjustPaid = (delta: number) => {
     if (!canEditMoney) return;
-    const current = Number(formState.paidNow) || 0;
+    const current = Number(formState.paidAmount) || 0;
     const next = Math.max(current + delta, 0);
     formState.setPaidTouched(true);
     formState.setPaidNow(String(next));
@@ -1148,7 +1148,7 @@ export function RefillForm({
                       <FieldCell
                         title={CUSTOMER_WORDING.paid}
                         comment={`Wallet ${formatMoney(walletBalance)}→${formatMoney(walletAfterPaid)}`}
-                        value={paidNowValue}
+                        value={paidAmountValue}
                         valueMode="decimal"
                         onIncrement={() => adjustPaid(5)}
                         onDecrement={() => adjustPaid(-5)}
@@ -1169,15 +1169,15 @@ export function RefillForm({
                           style={[
                             styles.inlineActionButton,
                             { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                            paidNowValue === 0 ? styles.inlineActionButtonSuccess : null,
+                            paidAmountValue === 0 ? styles.inlineActionButtonSuccess : null,
                           ]}
                           onPress={() => {
                             formState.setPaidTouched(true);
-                            formState.setPaidNow(paidNowValue === 0 ? String(totalCost) : "0");
+                            formState.setPaidNow(paidAmountValue === 0 ? String(totalCost) : "0");
                           }}
                         >
                           <Text style={styles.inlineActionText}>
-                            {paidNowValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
+                            {paidAmountValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
                           </Text>
                         </Pressable>
                       </View>

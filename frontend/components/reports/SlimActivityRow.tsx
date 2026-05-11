@@ -153,7 +153,7 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     lines.push(`Returned: ${returned ?? `${Number(event.return12 ?? 0)}x 12kg | ${Number(event.return48 ?? 0)}x 48kg`}`);
     return lines.length > 0 ? lines.join("\n") : null;
   }
-  if (event.event_type === "company_buy_iron") {
+  if (event.event_type === "company_buy_full") {
     const parts: string[] = [];
     if (event.buy12 && event.buy12 !== 0) parts.push(`${event.buy12}x 12kg`);
     if (event.buy48 && event.buy48 !== 0) parts.push(`${event.buy48}x 48kg`);
@@ -220,12 +220,12 @@ const transitionIntentForEvent = (event: DailyReportEvent) => {
   if (event.event_type === "company_return_empties") return "company_settle" as const;
   if (event.event_type === "customer_adjust") return "customer_adjust" as const;
   if (event.event_type === "company_payment") return "company_payment" as const;
-  if (event.event_type === "company_buy_iron") return "company_buy_iron" as const;
+  if (event.event_type === "company_buy_full") return "company_buy_full" as const;
   if (event.event_type === "refill") {
     const isSettleOnly =
       event.label === "Returned empties" ||
       (!(event.buy12 || event.buy48) && !!(event.return12 || event.return48) &&
-        !event.total_cost && !event.paid_now);
+        !event.total_cost && !event.paid_amount);
     return isSettleOnly ? ("company_settle" as const) : ("company_refill" as const);
   }
   return "generic" as const;
@@ -357,22 +357,22 @@ export default function SlimActivityRow({
       ? (event?.money_direction && event.money_direction !== "none" ? event.money_direction : bankTransferDirection)
       : event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
-    (event.event_type === "refill" || event.event_type === "company_buy_iron")
-      ? Number(event.paid_now ?? 0)
+    (event.event_type === "refill" || event.event_type === "company_buy_full")
+      ? Number(event.paid_amount ?? 0)
       : Number(event.money_amount ?? event.money_received ?? event.money?.amount ?? 0);
   const paymentTotal =
     event.event_type === "refill"
       ? Number(event.total_cost ?? 0)
       : event.event_type === "order"
         ? Number(event.order_total ?? 0)
-        : (event.event_type === "company_payment" || event.event_type === "company_buy_iron")
+        : (event.event_type === "company_payment" || event.event_type === "company_buy_full")
           ? Number(event.total_cost ?? 0)
           : 0;
   const showPaymentRatio =
     (event.event_type === "refill" ||
       event.event_type === "order" ||
       event.event_type === "company_payment" ||
-      event.event_type === "company_buy_iron") &&
+      event.event_type === "company_buy_full") &&
     paymentTotal > 0;
   const moneyText =
     !showPaymentRatio && moneyDirection !== "none" && moneyAmount
@@ -386,7 +386,7 @@ export default function SlimActivityRow({
       ? moneyDirection
       : event.event_type === "order"
         ? "in"
-        : (event.event_type === "refill" || event.event_type === "company_buy_iron")
+        : (event.event_type === "refill" || event.event_type === "company_buy_full")
           ? "out"
           : "none";
   const displayContextLine = event.event_type === "order"

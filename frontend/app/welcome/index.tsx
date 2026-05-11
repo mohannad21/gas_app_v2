@@ -28,7 +28,7 @@ type WizardState = {
   buyIron48: string;
   companyIron12: string;
   companyIron48: string;
-  cashStart: string;
+  walletStart: string;
   companyPayMoney: string;
   inventoryFull12: string;
   inventoryFull48: string;
@@ -73,7 +73,7 @@ const initialState: WizardState = {
   buyIron48: "",
   companyIron12: "",
   companyIron48: "",
-  cashStart: "",
+  walletStart: "",
   companyPayMoney: "",
   inventoryFull12: "",
   inventoryFull48: "",
@@ -227,12 +227,12 @@ export default function WelcomeScreen() {
         ],
       },
       {
-        id: "cash_start",
+        id: "wallet_start",
         title: "Wallet",
         question: "How much money is in your wallet to start the day?",
         explanation: "This is your wallet balance right now.",
         type: "inputs",
-        fields: [{ key: "cashStart", label: `Starting wallet (${getCurrencySymbol()})`, placeholder: "0", unit: "money" }],
+        fields: [{ key: "walletStart", label: `Starting wallet (${getCurrencySymbol()})`, placeholder: "0", unit: "money" }],
       },
       {
         id: "review",
@@ -306,7 +306,7 @@ export default function WelcomeScreen() {
         `Inventory empty: ${count(state.inventoryEmpty12)}x 12kg, ${count(state.inventoryEmpty48)}x 48kg`
       );
     }
-    if (money(state.cashStart) > 0) lines.push(`Wallet balance: ${money(state.cashStart)}${getCurrencySymbol()}`);
+    if (money(state.walletStart) > 0) lines.push(`Wallet balance: ${money(state.walletStart)}${getCurrencySymbol()}`);
 
     return lines.length > 0 ? lines : ["No opening balances provided."];
   }, [state, companyBalances, companyPayMoneyValue]);
@@ -537,11 +537,11 @@ export default function WelcomeScreen() {
       <View style={styles.netBalanceFieldWrap}>
         <FieldCell
           title="Wallet"
-          value={toNumber(state.cashStart)}
+          value={toNumber(state.walletStart)}
           valueMode="decimal"
-          onIncrement={() => updateField("cashStart", String(toNumber(state.cashStart) + 1))}
-          onDecrement={() => updateField("cashStart", String(Math.max(0, toNumber(state.cashStart) - 1)))}
-          onChangeText={(text) => updateField("cashStart", text)}
+          onIncrement={() => updateField("walletStart", String(toNumber(state.walletStart) + 1))}
+          onDecrement={() => updateField("walletStart", String(Math.max(0, toNumber(state.walletStart) - 1)))}
+          onChangeText={(text) => updateField("walletStart", text)}
           steppers={WALLET_STEPPERS}
         />
       </View>
@@ -569,7 +569,7 @@ export default function WelcomeScreen() {
         empty_12: toNumber(state.inventoryEmpty12),
         full_48: toNumber(state.inventoryFull48),
         empty_48: toNumber(state.inventoryEmpty48),
-        cash_start: toNumber(state.cashStart),
+        wallet_start: toNumber(state.walletStart),
         company_payable_money: companyPayMoneyValue,
         company_full_12kg: companyBalances.full12,
         company_empty_12kg: companyBalances.empty12,
@@ -628,7 +628,7 @@ export default function WelcomeScreen() {
             renderInventoryFields("inventoryFull12", "inventoryFull48")
           ) : step.id === "inventory_empty" ? (
             renderInventoryFields("inventoryEmpty12", "inventoryEmpty48")
-          ) : step.id === "cash_start" ? (
+          ) : step.id === "wallet_start" ? (
             renderWalletField()
           ) : (
             renderFields(step.fields)

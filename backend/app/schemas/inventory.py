@@ -71,7 +71,7 @@ class InventoryRefillCreate(SQLModel):
   buy48: int = 0
   return48: int = 0
   total_cost: int = 0
-  paid_now: int = 0
+  paid_amount: int = 0
   debt_cash: int = 0
   debt_cylinders_12: int = 0
   debt_cylinders_48: int = 0
@@ -86,7 +86,7 @@ class InventoryRefillCreate(SQLModel):
     "buy48",
     "return48",
     "total_cost",
-    "paid_now",
+    "paid_amount",
     "new12",
     "new48",
   )
@@ -108,7 +108,7 @@ class InventoryRefillSummary(SQLModel):
   new12: int = 0
   new48: int = 0
   total_cost: int = 0
-  paid_now: int = 0
+  paid_amount: int = 0
   debt_cash: int = 0
   debt_cylinders_12: int = 0
   debt_cylinders_48: int = 0
@@ -126,7 +126,7 @@ class InventoryRefillUpdate(SQLModel):
   buy48: int = 0
   return48: int = 0
   total_cost: int = 0
-  paid_now: int = 0
+  paid_amount: int = 0
   debt_cash: Optional[int] = None
   debt_cylinders_12: Optional[int] = None
   debt_cylinders_48: Optional[int] = None
@@ -140,7 +140,7 @@ class InventoryRefillUpdate(SQLModel):
     "buy48",
     "return48",
     "total_cost",
-    "paid_now",
+    "paid_amount",
     "new12",
     "new48",
   )
@@ -159,7 +159,7 @@ class InventoryRefillDetails(SQLModel):
   buy48: int
   return48: int
   total_cost: int
-  paid_now: int
+  paid_amount: int
   new12: int = 0
   new48: int = 0
   debt_cash: int = 0

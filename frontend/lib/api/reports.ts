@@ -14,16 +14,16 @@ export async function listDailyReports(params: { from: string; to: string }): Pr
   const { data } = await api.get("/reports/daily", { params });
   return parseArray(DailyReportCardSchema, data).map((row) => ({
     ...row,
-    cash_end: fromMinorUnits(row.cash_end),
+    wallet_end: fromMinorUnits(row.wallet_end),
     net_today: fromMinorUnits(row.net_today),
-    cash_math: {
-      ...row.cash_math,
-      sales: fromMinorUnits(row.cash_math.sales),
-      late: fromMinorUnits(row.cash_math.late),
-      expenses: fromMinorUnits(row.cash_math.expenses),
-      company: fromMinorUnits(row.cash_math.company),
-      adjust: fromMinorUnits(row.cash_math.adjust),
-      other: row.cash_math.other != null ? fromMinorUnits(row.cash_math.other) : row.cash_math.other,
+    wallet_math: {
+      ...row.wallet_math,
+      sales: fromMinorUnits(row.wallet_math.sales),
+      late: fromMinorUnits(row.wallet_math.late),
+      expenses: fromMinorUnits(row.wallet_math.expenses),
+      company: fromMinorUnits(row.wallet_math.company),
+      adjust: fromMinorUnits(row.wallet_math.adjust),
+      other: row.wallet_math.other != null ? fromMinorUnits(row.wallet_math.other) : row.wallet_math.other,
     },
     company_start: row.company_start != null ? fromMinorUnits(row.company_start) : row.company_start,
     company_end: row.company_end != null ? fromMinorUnits(row.company_end) : row.company_end,
@@ -36,25 +36,25 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
   const parsed = parse(DailyReportDaySchema, data);
   return {
     ...parsed,
-    cash_end: fromMinorUnits(parsed.cash_end),
+    wallet_end: fromMinorUnits(parsed.wallet_end),
     company_start: parsed.company_start != null ? fromMinorUnits(parsed.company_start) : parsed.company_start,
     company_end: parsed.company_end != null ? fromMinorUnits(parsed.company_end) : parsed.company_end,
     audit_summary: {
       ...parsed.audit_summary,
-      cash_in: fromMinorUnits(parsed.audit_summary.cash_in),
+      wallet_in: fromMinorUnits(parsed.audit_summary.wallet_in),
       new_debt: fromMinorUnits(parsed.audit_summary.new_debt),
     },
     events: parsed.events.map((ev) =>
       normalizeBankDepositDisplayEvent({
         ...ev,
-      cash_before: ev.cash_before != null ? fromMinorUnits(ev.cash_before) : ev.cash_before,
-      cash_after: ev.cash_after != null ? fromMinorUnits(ev.cash_after) : ev.cash_after,
+      wallet_before: ev.wallet_before != null ? fromMinorUnits(ev.wallet_before) : ev.wallet_before,
+      wallet_after: ev.wallet_after != null ? fromMinorUnits(ev.wallet_after) : ev.wallet_after,
       company_before: ev.company_before != null ? fromMinorUnits(ev.company_before) : ev.company_before,
       company_after: ev.company_after != null ? fromMinorUnits(ev.company_after) : ev.company_after,
       customer_money_before: ev.customer_money_before != null ? fromMinorUnits(ev.customer_money_before) : ev.customer_money_before,
       customer_money_after: ev.customer_money_after != null ? fromMinorUnits(ev.customer_money_after) : ev.customer_money_after,
       total_cost: ev.total_cost != null ? fromMinorUnits(ev.total_cost) : ev.total_cost,
-      paid_now: ev.paid_now != null ? fromMinorUnits(ev.paid_now) : ev.paid_now,
+      paid_amount: ev.paid_amount != null ? fromMinorUnits(ev.paid_amount) : ev.paid_amount,
       order_total: ev.order_total != null ? fromMinorUnits(ev.order_total) : ev.order_total,
       order_paid: ev.order_paid != null ? fromMinorUnits(ev.order_paid) : ev.order_paid,
       money: ev.money

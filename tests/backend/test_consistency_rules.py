@@ -103,7 +103,7 @@ def _create_refill(
             "buy48": 0,
             "return48": 0,
             "total_cost": total_cost,
-            "paid_now": paid_now,
+            "paid_amount": paid_now,
         },
     )
     assert resp.status_code == 200, resp.text

@@ -25,7 +25,7 @@ export const SystemInitializeInputSchema = z.object({
   empty_12: z.number(),
   full_48: z.number(),
   empty_48: z.number(),
-  cash_start: z.number(),
+  wallet_start: z.number(),
   company_payable_money: z.number().optional(),
   company_full_12kg: z.number().optional(),
   company_empty_12kg: z.number().optional(),

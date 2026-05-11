@@ -15,7 +15,7 @@ from .reports_aggregates import CustomerLedgerState
 # Display labels for event types
 _EVENT_LABELS: dict[str, str] = {
   "refill": "Refill",
-  "company_buy_iron": "Bought full cylinders",
+  "company_buy_full": "Bought full cylinders",
   "collection_money": "Payment from customer",
   "collection_empty": "Returned empties",
   "company_payment": "Payment to company",
@@ -41,7 +41,7 @@ def _titleize_event_type(event_type: str) -> str:
 
 
 def _company_payment_label(event: DailyReportEvent) -> str:
-  paid = _safe_int(event.paid_now or event.total_cost)
+  paid = _safe_int(event.paid_amount or event.total_cost)
   if paid < 0:
     return "Payment from company"
   return "Payment to company"
@@ -57,7 +57,7 @@ def _event_label(event: DailyReportEvent) -> str:
   if event.event_type == "refill" and _is_company_settle_only_refill(event):
     return "Returned empties"
   if event.event_type == "company_payment":
-    paid = _safe_int(event.paid_now or event.total_cost)
+    paid = _safe_int(event.paid_amount or event.total_cost)
     if paid < 0:
       return "Payment from company"
     return "Payment to company"
@@ -114,10 +114,10 @@ def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
   return12 = _safe_int(event.return12)
   return48 = _safe_int(event.return48)
   total_cost = _safe_int(event.total_cost)
-  paid_now = _safe_int(event.paid_now)
+  paid_amount = _safe_int(event.paid_amount)
   has_returns = return12 > 0 or return48 > 0
   no_buys = buy12 == 0 and buy48 == 0
-  no_money = total_cost == 0 and paid_now == 0
+  no_money = total_cost == 0 and paid_amount == 0
   return has_returns and no_buys and no_money
 
 
@@ -129,10 +129,10 @@ def _is_company_receive_only_refill(event: DailyReportEvent) -> bool:
   return12 = _safe_int(event.return12)
   return48 = _safe_int(event.return48)
   total_cost = _safe_int(event.total_cost)
-  paid_now = _safe_int(event.paid_now)
+  paid_amount = _safe_int(event.paid_amount)
   has_buys = buy12 > 0 or buy48 > 0
   no_returns = return12 == 0 and return48 == 0
-  no_money = total_cost == 0 and paid_now == 0
+  no_money = total_cost == 0 and paid_amount == 0
   return has_buys and no_returns and no_money
 
 
@@ -160,7 +160,7 @@ def _level3_counterparty(event: DailyReportEvent) -> Level3Counterparty:
       description=event.customer_description,
       display=display,
     )
-  if event.event_type in {"refill", "company_payment", "company_buy_iron", "company_adjustment"}:
+  if event.event_type in {"refill", "company_payment", "company_buy_full", "company_adjustment"}:
     return Level3Counterparty(type="company", display_name="Company", description=None, display="Company")
   return Level3Counterparty(type="none", display_name=None, description=None, display=None)
 
@@ -175,9 +175,9 @@ def _level3_system(event: DailyReportEvent) -> Optional[Level3System]:
 
 
 def _cash_delta(event: DailyReportEvent) -> int:
-  if event.cash_before is None or event.cash_after is None:
+  if event.wallet_before is None or event.wallet_after is None:
     return 0
-  return int(event.cash_after - event.cash_before)
+  return int(event.wallet_after - event.wallet_before)
 
 
 def _level3_money(event: DailyReportEvent) -> Level3Money:
@@ -190,17 +190,17 @@ def _level3_money(event: DailyReportEvent) -> Level3Money:
       verb = "paid" if event.order_mode == "buy_iron" else "received"
       amount = abs(paid)
   elif event.event_type == "refill":
-    paid = _safe_int(event.paid_now)
+    paid = _safe_int(event.paid_amount)
     if paid:
       verb = "paid"
       amount = abs(paid)
-  elif event.event_type == "company_buy_iron":
-    paid = _safe_int(event.paid_now or event.total_cost)
+  elif event.event_type == "company_buy_full":
+    paid = _safe_int(event.paid_amount or event.total_cost)
     if paid:
       verb = "paid"
       amount = abs(paid)
   elif event.event_type == "company_payment":
-    paid = _safe_int(event.paid_now or event.total_cost)
+    paid = _safe_int(event.paid_amount or event.total_cost)
     if paid < 0:
       verb = "received"
       amount = abs(paid)
@@ -280,7 +280,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       parts.append(f"{event.buy48}x48kg")
     if parts:
       return f"Bought {' | '.join(parts)}"
-  if event.event_type == "company_buy_iron":
+  if event.event_type == "company_buy_full":
     parts: list[str] = []
     if event.buy12:
       parts.append(f"{event.buy12}x12kg")
@@ -584,7 +584,7 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
     )
     return notes
 
-  if event.event_type in {"refill", "company_buy_iron", "company_payment"}:
+  if event.event_type in {"refill", "company_buy_full", "company_payment"}:
     _append_money_note(
       notes,
       before=event.company_before,

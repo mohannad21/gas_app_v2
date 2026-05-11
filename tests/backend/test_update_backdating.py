@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from conftest import create_customer, create_order, create_system, init_inventory, iso_at
 
 
-def _cash_init(client, *, day: date, amount: int) -> None:
+def _wallet_init(client, *, day: date, amount: int) -> None:
     prev_day = (day - timedelta(days=1)).isoformat()
     resp = client.post(
         "/cash/adjust",
@@ -18,7 +18,7 @@ def test_order_update_preserves_original_day(client) -> None:
     day1 = date(2025, 10, 1)
     day2 = date(2025, 10, 10)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day1, amount=1000)
+    _wallet_init(client, day=day1, amount=1000)
 
     customer_id = create_customer(client, name="Backdate")
     system_id = create_system(client, customer_id=customer_id)
@@ -46,8 +46,8 @@ def test_order_update_preserves_original_day(client) -> None:
     day1_events = day1_resp.json()["events"]
     order_event = next(event for event in day1_events if event["event_type"] == "order")
     assert order_event["source_id"] == new_order_id
-    assert order_event["cash_before"] == 1000
-    assert order_event["cash_after"] == 1050
+    assert order_event["wallet_before"] == 1000
+    assert order_event["wallet_after"] == 1050
     assert order_event["inventory_after"]["full12"] == 8
 
     day2_resp = client.get("/reports/day", params={"date": day2.isoformat()})

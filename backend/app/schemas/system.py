@@ -95,7 +95,7 @@ class SystemInitialize(SQLModel):
   empty_12: int
   full_48: int
   empty_48: int
-  cash_start: int
+  wallet_start: int
   company_payable_money: int = 0
   company_full_12kg: int = 0
   company_empty_12kg: int = 0

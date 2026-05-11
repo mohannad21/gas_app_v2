@@ -135,7 +135,7 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
             "buy48": 0,
             "return48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert first_refill.status_code == 200
@@ -147,7 +147,7 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
             "new12": 5,
             "new48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert buy_iron.status_code == 201
@@ -161,7 +161,7 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
             "buy48": 0,
             "return48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert second_refill.status_code == 200

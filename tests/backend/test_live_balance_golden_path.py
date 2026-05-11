@@ -167,7 +167,7 @@ def test_company_balance_after_payment_delete(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 500,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     first_payment = _post_company_payment(
@@ -208,7 +208,7 @@ def test_company_balance_after_past_refill_inserted(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 300,
-            "paid_now": 300,
+            "paid_amount": 300,
         },
     )
     later_refill = _find_refill(client, buy12=2, return12=0)
@@ -223,7 +223,7 @@ def test_company_balance_after_past_refill_inserted(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
 
@@ -327,7 +327,7 @@ def test_company_cylinder_balance_after_refill_delete(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 300,
-            "paid_now": 300,
+            "paid_amount": 300,
         },
     )
     first_refill = _find_refill(client, buy12=5, return12=0)
@@ -341,7 +341,7 @@ def test_company_cylinder_balance_after_refill_delete(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     later_refill = _find_refill(client, buy12=0, return12=3)

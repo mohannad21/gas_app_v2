@@ -246,7 +246,7 @@ export default function NewExpenseScreen() {
     <View style={styles.screen}>
       <CashExpensesView
         title={expenseIdParam ? "Edit Money Activity" : "Add Money Activity"}
-        cashBalance={dailyReportQuery.data?.[0]?.cash_end ?? null}
+        cashBalance={dailyReportQuery.data?.[0]?.wallet_end ?? null}
         onRefreshCash={() => dailyReportQuery.refetch()}
         onClose={() => router.back()}
         onTransferNow={(shortfall) => {

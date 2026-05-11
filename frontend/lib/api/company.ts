@@ -150,7 +150,7 @@ export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): 
     new12: payload.new12,
     new48: payload.new48,
     total_cost: toMinorUnits(payload.total_cost),
-    paid_now: toMinorUnits(payload.paid_now),
+    paid_amount: toMinorUnits(payload.paid_amount),
     note: payload.note,
     request_id: payload.request_id,
   });
@@ -158,7 +158,7 @@ export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): 
   return {
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),
-    paid_now: fromMinorUnits(parsed.paid_now),
+    paid_amount: fromMinorUnits(parsed.paid_amount),
   };
 }
 

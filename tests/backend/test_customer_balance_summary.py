@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from conftest import create_customer, init_inventory
 
 
-def _cash_init(client, *, day: str, amount: float) -> None:
+def _wallet_init(client, *, day: str, amount: float) -> None:
     resp = client.post(
         "/cash/adjust",
         json={"happened_at": f"{day}T08:00:00", "delta_cash": int(amount), "reason": "open"},
@@ -16,7 +16,7 @@ def _cash_init(client, *, day: str, amount: float) -> None:
 def test_daily_day_rows_do_not_embed_global_customer_totals(client) -> None:
     day = date(2025, 1, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day.isoformat(), amount=1)
+    _wallet_init(client, day=day.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Osama")
     adj_resp = client.post(
@@ -62,7 +62,7 @@ def test_daily_low_activity_day_only_shows_day_local_customer_transition(client)
     day1 = date(2025, 2, 1)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=0, empty12=0, full48=0, empty48=0)
-    _cash_init(client, day=day1.isoformat(), amount=1)
+    _wallet_init(client, day=day1.isoformat(), amount=1)
 
     customer_id = create_customer(client, name="Customer A")
 

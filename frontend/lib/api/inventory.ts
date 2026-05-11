@@ -45,7 +45,7 @@ export async function createInventoryRefill(payload: {
   buy48: number;
   return48: number;
   total_cost?: number;
-  paid_now?: number;
+  paid_amount?: number;
   debt_cash?: number;
   debt_cylinders_12?: number;
   debt_cylinders_48?: number;
@@ -61,7 +61,7 @@ export async function createInventoryRefill(payload: {
     buy48: payload.buy48,
     return48: payload.return48,
     total_cost: toMinorUnits(payload.total_cost ?? 0),
-    paid_now: toMinorUnits(payload.paid_now ?? 0),
+    paid_amount: toMinorUnits(payload.paid_amount ?? 0),
     debt_cash: payload.debt_cash != null ? toMinorUnits(payload.debt_cash) : payload.debt_cash,
     debt_cylinders_12: payload.debt_cylinders_12,
     debt_cylinders_48: payload.debt_cylinders_48,
@@ -77,7 +77,7 @@ export async function listInventoryRefills(includeDeleted?: boolean): Promise<In
   return parseArray(InventoryRefillSummarySchema, data).map((row) => ({
     ...row,
     total_cost: fromMinorUnits(row.total_cost ?? 0),
-    paid_now: fromMinorUnits(row.paid_now ?? 0),
+    paid_amount: fromMinorUnits(row.paid_amount ?? 0),
     debt_cash: row.debt_cash != null ? fromMinorUnits(row.debt_cash) : row.debt_cash,
     live_debt_cash: row.live_debt_cash != null ? fromMinorUnits(row.live_debt_cash) : row.live_debt_cash,
   }));
@@ -100,7 +100,7 @@ export async function getInventoryRefillDetails(refillId: string): Promise<Inven
   return {
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),
-    paid_now: fromMinorUnits(parsed.paid_now),
+    paid_amount: fromMinorUnits(parsed.paid_amount),
     debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }
@@ -116,7 +116,7 @@ export async function updateInventoryRefill(
     notes?: string;
     allow_negative?: boolean;
     total_cost?: number;
-    paid_now?: number;
+    paid_amount?: number;
     debt_cash?: number;
     debt_cylinders_12?: number;
     debt_cylinders_48?: number;
@@ -128,7 +128,7 @@ export async function updateInventoryRefill(
     buy48: payload.buy48,
     return48: payload.return48,
     total_cost: toMinorUnits(payload.total_cost ?? 0),
-    paid_now: toMinorUnits(payload.paid_now ?? 0),
+    paid_amount: toMinorUnits(payload.paid_amount ?? 0),
     note: payload.notes ?? payload.reason,
   };
   if (payload.debt_cash != null) {
@@ -145,7 +145,7 @@ export async function updateInventoryRefill(
   return {
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),
-    paid_now: fromMinorUnits(parsed.paid_now),
+    paid_amount: fromMinorUnits(parsed.paid_amount),
     debt_cash: parsed.debt_cash != null ? fromMinorUnits(parsed.debt_cash) : parsed.debt_cash,
   };
 }

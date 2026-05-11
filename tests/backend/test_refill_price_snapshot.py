@@ -49,7 +49,7 @@ def test_refill_persists_totals_from_payload(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 500,
-            "paid_now": 300,
+            "paid_amount": 300,
         },
     )
     assert resp.status_code == 200
@@ -57,7 +57,7 @@ def test_refill_persists_totals_from_payload(client) -> None:
     refill_id = client.get("/inventory/refills").json()[0]["refill_id"]
     details = client.get(f"/inventory/refills/{refill_id}").json()
     assert details["total_cost"] == 500
-    assert details["paid_now"] == 300
+    assert details["paid_amount"] == 300
 
 
 def test_refill_update_overwrites_totals(client) -> None:
@@ -74,7 +74,7 @@ def test_refill_update_overwrites_totals(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -88,11 +88,11 @@ def test_refill_update_overwrites_totals(client) -> None:
             "buy48": 1,
             "return48": 0,
             "total_cost": 600,
-            "paid_now": 100,
+            "paid_amount": 100,
             "note": "edit",
         },
     )
     assert update_resp.status_code == 200
     details = update_resp.json()
     assert details["total_cost"] == 600
-    assert details["paid_now"] == 100
+    assert details["paid_amount"] == 100

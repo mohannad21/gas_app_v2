@@ -25,7 +25,7 @@ def test_company_payable_partial_refill(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 150,
+            "paid_amount": 150,
         },
     )
     assert resp.status_code == 200
@@ -56,7 +56,7 @@ def test_company_payment_affects_cash_and_company(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -74,8 +74,8 @@ def test_company_payment_affects_cash_and_company(client) -> None:
 
     day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
     payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
-    assert payment["cash_before"] == 1000
-    assert payment["cash_after"] == 950
+    assert payment["wallet_before"] == 1000
+    assert payment["wallet_after"] == 950
     assert payment["company_before"] == 200
     assert payment["company_after"] == 150
 
@@ -115,7 +115,7 @@ def test_option_b_cascade_with_company_payable(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -139,8 +139,8 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     after = client.get("/reports/day", params={"date": day2.isoformat()}).json()
     after_payment = next(event for event in after["events"] if event["event_type"] == "company_payment")
 
-    assert after_payment["cash_before"] == before_payment["cash_before"] - 100
-    assert after_payment["cash_after"] == before_payment["cash_after"] - 100
+    assert after_payment["wallet_before"] == before_payment["wallet_before"] - 100
+    assert after_payment["wallet_after"] == before_payment["wallet_after"] - 100
     assert after_payment["company_before"] == before_payment["company_before"]
     assert after_payment["company_after"] == before_payment["company_after"]
 
@@ -165,7 +165,7 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 2000,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -182,11 +182,11 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
 
     day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
     payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
-    assert payment["cash_after"] == -1000
+    assert payment["wallet_after"] == -1000
     assert payment["company_after"] == 0
 
 
-def test_company_buy_iron_unpaid_remainder_visible_in_report(client) -> None:
+def test_company_buy_full_unpaid_remainder_visible_in_report(client) -> None:
     day = date(2025, 10, 5)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
@@ -203,14 +203,14 @@ def test_company_buy_iron_unpaid_remainder_visible_in_report(client) -> None:
             "new12": 3,
             "new48": 0,
             "total_cost": 120,
-            "paid_now": 40,
+            "paid_amount": 40,
             "note": "shells",
         },
     )
     assert resp.status_code == 201
 
     day_report = client.get("/reports/day", params={"date": day.isoformat()}).json()
-    event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_iron")
+    event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_full")
 
     assert event["company_before"] == 0
     assert event["company_after"] == 80

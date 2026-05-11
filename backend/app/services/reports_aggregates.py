@@ -619,9 +619,9 @@ def get_daily_audit_summary(
   day: date,
 ) -> DailyAuditSummary:
   """Public function: compute daily audit summary with cash, debt, and inventory deltas."""
-  cash_before = _sum_cash_before_day(session, day)
-  cash_after = _sum_cash_at_day_end(session, day)
-  cash_delta = cash_after - cash_before
+  wallet_before = _sum_cash_before_day(session, day)
+  wallet_after = _sum_cash_at_day_end(session, day)
+  wallet_delta = wallet_after - wallet_before
 
   inv_before = _sum_inventory_before_day(session, day)
   inv_after = _sum_inventory_at_day_end(session, day)
@@ -634,7 +634,7 @@ def get_daily_audit_summary(
   inv_delta_48 = (inv_after.full48 - inv_before.full48) + (inv_after.empty48 - inv_before.empty48)
 
   return DailyAuditSummary(
-    cash_in=cash_delta,
+    wallet_in=wallet_delta,
     new_debt=company_delta,
     inv_delta_12=inv_delta_12,
     inv_delta_48=inv_delta_48,

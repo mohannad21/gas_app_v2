@@ -18,7 +18,7 @@ def test_refill_live_debt_cash_correct_after_creation(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 500,
-            "paid_now": 200,
+            "paid_amount": 200,
         },
     )
     assert create_resp.status_code == 200
@@ -43,7 +43,7 @@ def test_refill_live_fields_correct_per_boundary(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 400,
-            "paid_now": 100,
+            "paid_amount": 100,
         },
     )
     assert first_resp.status_code == 200
@@ -58,7 +58,7 @@ def test_refill_live_fields_correct_per_boundary(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 200,
-            "paid_now": 200,
+            "paid_amount": 200,
         },
     )
     assert second_resp.status_code == 200
@@ -85,7 +85,7 @@ def test_company_payment_live_debt_cash_correct(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 500,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert refill_resp.status_code == 200

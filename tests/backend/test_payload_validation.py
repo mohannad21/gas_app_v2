@@ -17,7 +17,7 @@ def test_refill_rejects_negative_counts(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 422
@@ -120,7 +120,7 @@ def test_company_buy_iron_rejects_negative_counts(client) -> None:
             "new12": -2,
             "new48": 0,
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 422

@@ -245,7 +245,7 @@ export default function NewOrderScreen() {
   const isAdjustment = currentAction === "adjustment";
   const showStickyPayment =
     focusTarget === "amounts" && effectiveKeyboardHeight > 0 && currentAction === "replacement";
-  const walletBalance = dailyReportQuery.data?.[0]?.cash_end ?? 0;
+  const walletBalance = dailyReportQuery.data?.[0]?.wallet_end ?? 0;
   const inventoryBaseFullForGas =
     selectedGas === "48kg"
       ? inventoryLatest.data?.full48 ?? null

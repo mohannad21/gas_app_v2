@@ -1,8 +1,8 @@
 import { DailyReportEvent } from "@/types/domain";
 
 const baseEvent = {
-  cash_before: 1000,
-  cash_after: 1000,
+  wallet_before: 1000,
+  wallet_after: 1000,
 };
 
 export const level3Fixtures: DailyReportEvent[] = [

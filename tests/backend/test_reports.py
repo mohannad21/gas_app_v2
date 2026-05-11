@@ -47,7 +47,7 @@ def _post_refill(client, *, day: str) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -67,7 +67,7 @@ def _post_adjust(client, *, day: str) -> None:
     assert resp.status_code == 200
 
 
-def _cash_init(client, *, day: str, amount: float) -> None:
+def _wallet_init(client, *, day: str, amount: float) -> None:
     prev_day = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     resp = client.post(
         "/cash/adjust",
@@ -82,7 +82,7 @@ def test_cash_carryover_daily(client, monkeypatch) -> None:
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=5, empty48=0)
     customer_id = create_customer(client, name="Cash Carry")
     system_id = create_system(client, customer_id=customer_id)
-    _cash_init(client, day=day1.isoformat(), amount=1000)
+    _wallet_init(client, day=day1.isoformat(), amount=1000)
 
     create_order(
         client,
@@ -101,14 +101,14 @@ def test_cash_carryover_daily(client, monkeypatch) -> None:
     resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     assert resp.status_code == 200
     rows = {row["date"]: row for row in resp.json()}
-    assert rows[day1.isoformat()]["cash_end"] == 1070
+    assert rows[day1.isoformat()]["wallet_end"] == 1070
 
 
 def test_daily_bookends_match_inventory_summary(client, monkeypatch) -> None:
     day1 = date(2025, 2, 1)
 
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=12, empty12=3, full48=6, empty48=2)
-    _cash_init(client, day=day1.isoformat(), amount=500)
+    _wallet_init(client, day=day1.isoformat(), amount=500)
 
     report_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day1.isoformat()})
     assert report_resp.status_code == 200
@@ -118,7 +118,7 @@ def test_daily_bookends_match_inventory_summary(client, monkeypatch) -> None:
     assert row["inventory_end"]["empty12"] == 3
     assert row["inventory_end"]["full48"] == 6
     assert row["inventory_end"]["empty48"] == 2
-    assert row["cash_end"] == 500
+    assert row["wallet_end"] == 500
 
 
 def test_day_timeline_rules(client, monkeypatch) -> None:
@@ -127,7 +127,7 @@ def test_day_timeline_rules(client, monkeypatch) -> None:
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=5, empty48=0)
     customer_id = create_customer(client, name="Timeline")
     system_id = create_system(client, customer_id=customer_id)
-    _cash_init(client, day=day1.isoformat(), amount=1000)
+    _wallet_init(client, day=day1.isoformat(), amount=1000)
 
     create_order(
         client,
@@ -149,11 +149,11 @@ def test_day_timeline_rules(client, monkeypatch) -> None:
     body = resp.json()
     events = body["events"]
 
-    assert all("cash_before" in event and "cash_after" in event for event in events)
+    assert all("wallet_before" in event and "wallet_after" in event for event in events)
 
     order_event = next(event for event in events if event["event_type"] == "order")
-    assert order_event["cash_before"] == 1000
-    assert order_event["cash_after"] == 1100
+    assert order_event["wallet_before"] == 1000
+    assert order_event["wallet_after"] == 1100
     assert order_event["inventory_before"]["full12"] is not None
     assert order_event["inventory_before"]["empty12"] is not None
     assert order_event["inventory_before"]["full48"] is None
@@ -191,7 +191,7 @@ def test_option_b_cascade_delete_order(client, monkeypatch) -> None:
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=8, empty48=0)
     customer_id = create_customer(client, name="Cascade")
     system_id = create_system(client, customer_id=customer_id)
-    _cash_init(client, day=day1.isoformat(), amount=1000)
+    _wallet_init(client, day=day1.isoformat(), amount=1000)
 
     order_a = create_order(
         client,
@@ -245,15 +245,15 @@ def test_option_b_cascade_delete_order(client, monkeypatch) -> None:
     after_order_b = next(event for event in after_day1["events"] if event["source_id"] == order_b)
     after_order_c = next(event for event in after_day2["events"] if event["source_id"] == order_c)
 
-    assert after_order_b["cash_before"] == before_order_b["cash_before"] - 100
-    assert after_order_b["cash_after"] == before_order_b["cash_after"] - 100
+    assert after_order_b["wallet_before"] == before_order_b["wallet_before"] - 100
+    assert after_order_b["wallet_after"] == before_order_b["wallet_after"] - 100
 
     after_daily = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()}).json()
     after_by_date = {row["date"]: row for row in after_daily}
 
-    assert after_by_date[day1.isoformat()]["cash_end"] == before_by_date[day1.isoformat()]["cash_end"] - 100
-    assert after_order_c["cash_before"] == before_order_c["cash_before"] - 100
-    assert after_order_c["cash_after"] == before_order_c["cash_after"] - 100
+    assert after_by_date[day1.isoformat()]["wallet_end"] == before_by_date[day1.isoformat()]["wallet_end"] - 100
+    assert after_order_c["wallet_before"] == before_order_c["wallet_before"] - 100
+    assert after_order_c["wallet_after"] == before_order_c["wallet_after"] - 100
 
 
 def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None:
@@ -263,7 +263,7 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=5, empty48=0)
     customer_id = create_customer(client, name="Update")
     system_id = create_system(client, customer_id=customer_id)
-    _cash_init(client, day=day1.isoformat(), amount=500)
+    _wallet_init(client, day=day1.isoformat(), amount=500)
 
     order_id = create_order(
         client,
@@ -297,21 +297,21 @@ def test_order_update_recomputes_cash_and_inventory(client, monkeypatch) -> None
     day_resp = client.get("/reports/day", params={"date": day1.isoformat()})
     assert day_resp.status_code == 200
     order_event = next(event for event in day_resp.json()["events"] if event["source_id"] == order_id)
-    assert order_event["cash_before"] == 500
-    assert order_event["cash_after"] == 650
+    assert order_event["wallet_before"] == 500
+    assert order_event["wallet_after"] == 650
     assert order_event["inventory_before"]["full12"] == 10
     assert order_event["inventory_after"]["full12"] == 8
 
     daily_resp = client.get("/reports/daily", params={"from": day1.isoformat(), "to": day2.isoformat()})
     daily = {row["date"]: row for row in daily_resp.json()}
-    assert daily[day1.isoformat()]["cash_end"] == 650
+    assert daily[day1.isoformat()]["wallet_end"] == 650
 
 
 def test_expense_ordering_by_created_at(client, monkeypatch) -> None:
     day1 = date(2025, 6, 10)
 
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=5, empty12=0, full48=5, empty48=0)
-    _cash_init(client, day=day1.isoformat(), amount=500)
+    _wallet_init(client, day=day1.isoformat(), amount=500)
 
     _post_expense(client, expense_date=day1.isoformat(), amount=10, expense_type="fuel")
     _post_expense(client, expense_date=day1.isoformat(), amount=20, expense_type="food")
@@ -320,7 +320,7 @@ def test_expense_ordering_by_created_at(client, monkeypatch) -> None:
     assert resp.status_code == 200
     expenses = [event for event in resp.json()["events"] if event["event_type"] == "expense"]
     assert len(expenses) == 2
-    assert expenses[0]["cash_before"] == 490
-    assert expenses[0]["cash_after"] == 470
-    assert expenses[1]["cash_before"] == 500
-    assert expenses[1]["cash_after"] == 490
+    assert expenses[0]["wallet_before"] == 490
+    assert expenses[0]["wallet_after"] == 470
+    assert expenses[1]["wallet_before"] == 500
+    assert expenses[1]["wallet_after"] == 490

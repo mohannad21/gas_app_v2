@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from tests.backend.conftest import create_customer, create_order, create_system, get_daily_row, init_inventory, iso_at
 
 
-def _cash_init(client, *, day: date, amount: int) -> None:
+def _wallet_init(client, *, day: date, amount: int) -> None:
     prev_day = (day - timedelta(days=1)).isoformat()
     resp = client.post(
         "/cash/adjust",
@@ -85,7 +85,7 @@ def _company_state(client) -> tuple[int, int, int]:
 def test_replacement_add_as_last_activity_updates_reports_and_customer_state(client) -> None:
     day = date(2025, 12, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=0, empty48=0)
-    _cash_init(client, day=day, amount=1000)
+    _wallet_init(client, day=day, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Last")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Last System")
@@ -108,13 +108,13 @@ def test_replacement_add_as_last_activity_updates_reports_and_customer_state(cli
     assert daily["sold_12kg"] == 2
 
     report = _day_report(client, day)
-    assert report["cash_end"] == 1100
+    assert report["wallet_end"] == 1100
     assert report["inventory_end"]["full12"] == 8
     assert report["inventory_end"]["empty12"] == 3
 
     event = _event_by_source(report, order_id)
-    assert event["cash_before"] == 1000
-    assert event["cash_after"] == 1100
+    assert event["wallet_before"] == 1000
+    assert event["wallet_after"] == 1100
     assert event["customer_money_before"] == 0
     assert event["customer_money_after"] == 50
     assert event["customer_12kg_before"] == 0
@@ -132,7 +132,7 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
     day1 = date(2025, 12, 2)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=20, empty12=5, full48=0, empty48=0)
-    _cash_init(client, day=day1, amount=1000)
+    _wallet_init(client, day=day1, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Past Add")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Past Add System")
@@ -178,11 +178,11 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
     assert after_day1_row["net_today"] == before_day1_row["net_today"] + 100
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] + 2
 
-    assert after_expense["cash_before"] == before_expense["cash_before"] + 100
-    assert after_expense["cash_after"] == before_expense["cash_after"] + 100
+    assert after_expense["wallet_before"] == before_expense["wallet_before"] + 100
+    assert after_expense["wallet_after"] == before_expense["wallet_after"] + 100
 
-    assert after_later_order["cash_before"] == before_later_order["cash_before"] + 100
-    assert after_later_order["cash_after"] == before_later_order["cash_after"] + 100
+    assert after_later_order["wallet_before"] == before_later_order["wallet_before"] + 100
+    assert after_later_order["wallet_after"] == before_later_order["wallet_after"] + 100
     assert after_later_order["inventory_before"]["full12"] == before_later_order["inventory_before"]["full12"] - 2
     assert after_later_order["inventory_after"]["full12"] == before_later_order["inventory_after"]["full12"] - 2
     assert after_later_order["inventory_before"]["empty12"] == before_later_order["inventory_before"]["empty12"] + 1
@@ -199,7 +199,7 @@ def test_replacement_add_in_past_recomputes_later_events_and_next_day_opening_st
 def test_replacement_delete_last_activity_reverses_reports_and_active_visibility(client) -> None:
     day = date(2025, 12, 3)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=0, empty48=0)
-    _cash_init(client, day=day, amount=1000)
+    _wallet_init(client, day=day, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Delete Last")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Delete Last System")
@@ -226,7 +226,7 @@ def test_replacement_delete_last_activity_reverses_reports_and_active_visibility
 
     report = _day_report(client, day)
     assert not any(event.get("source_id") == order_id for event in report["events"])
-    assert report["cash_end"] == 1000
+    assert report["wallet_end"] == 1000
     assert report["inventory_end"]["full12"] == 10
     assert report["inventory_end"]["empty12"] == 2
 
@@ -249,7 +249,7 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
     day1 = date(2025, 12, 4)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=20, empty12=5, full48=0, empty48=0)
-    _cash_init(client, day=day1, amount=1000)
+    _wallet_init(client, day=day1, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Past Delete")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Past Delete System")
@@ -298,11 +298,11 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
     assert after_day1_row["net_today"] == before_day1_row["net_today"] - 100
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] - 2
 
-    assert after_expense["cash_before"] == before_expense["cash_before"] - 100
-    assert after_expense["cash_after"] == before_expense["cash_after"] - 100
+    assert after_expense["wallet_before"] == before_expense["wallet_before"] - 100
+    assert after_expense["wallet_after"] == before_expense["wallet_after"] - 100
 
-    assert after_later_order["cash_before"] == before_later_order["cash_before"] - 100
-    assert after_later_order["cash_after"] == before_later_order["cash_after"] - 100
+    assert after_later_order["wallet_before"] == before_later_order["wallet_before"] - 100
+    assert after_later_order["wallet_after"] == before_later_order["wallet_after"] - 100
     assert after_later_order["inventory_before"]["full12"] == before_later_order["inventory_before"]["full12"] + 2
     assert after_later_order["inventory_after"]["full12"] == before_later_order["inventory_after"]["full12"] + 2
     assert after_later_order["inventory_before"]["empty12"] == before_later_order["inventory_before"]["empty12"] - 1
@@ -319,7 +319,7 @@ def test_replacement_delete_in_past_recomputes_later_events_and_next_day_opening
 def test_replacement_update_last_activity_recomputes_reports_and_customer_state(client) -> None:
     day = date(2025, 12, 5)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=0, empty48=0)
-    _cash_init(client, day=day, amount=1000)
+    _wallet_init(client, day=day, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Update Last")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Update Last System")
@@ -355,8 +355,8 @@ def test_replacement_update_last_activity_recomputes_reports_and_customer_state(
 
     report = _day_report(client, day)
     event = _event_by_source(report, new_order_id)
-    assert event["cash_before"] == 1000
-    assert event["cash_after"] == 1150
+    assert event["wallet_before"] == 1000
+    assert event["wallet_after"] == 1150
     assert event["customer_money_before"] == 0
     assert event["customer_money_after"] == 60
     assert event["customer_12kg_before"] == 0
@@ -384,7 +384,7 @@ def test_replacement_update_in_past_recomputes_later_events_and_next_day_opening
     day1 = date(2025, 12, 6)
     day2 = day1 + timedelta(days=1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=20, empty12=5, full48=0, empty48=0)
-    _cash_init(client, day=day1, amount=1000)
+    _wallet_init(client, day=day1, amount=1000)
 
     customer_id = create_customer(client, name="Replacement Past Update")
     system_id = create_system(client, customer_id=customer_id, name="Replacement Past Update System")
@@ -442,11 +442,11 @@ def test_replacement_update_in_past_recomputes_later_events_and_next_day_opening
     assert after_day1_row["net_today"] == before_day1_row["net_today"] + 50
     assert after_day1_row["sold_12kg"] == before_day1_row["sold_12kg"] + 1
 
-    assert after_expense["cash_before"] == before_expense["cash_before"] + 50
-    assert after_expense["cash_after"] == before_expense["cash_after"] + 50
+    assert after_expense["wallet_before"] == before_expense["wallet_before"] + 50
+    assert after_expense["wallet_after"] == before_expense["wallet_after"] + 50
 
-    assert after_later_order["cash_before"] == before_later_order["cash_before"] + 50
-    assert after_later_order["cash_after"] == before_later_order["cash_after"] + 50
+    assert after_later_order["wallet_before"] == before_later_order["wallet_before"] + 50
+    assert after_later_order["wallet_after"] == before_later_order["wallet_after"] + 50
     assert after_later_order["inventory_before"]["full12"] == before_later_order["inventory_before"]["full12"] - 1
     assert after_later_order["inventory_after"]["full12"] == before_later_order["inventory_after"]["full12"] - 1
     assert after_later_order["inventory_before"]["empty12"] == before_later_order["inventory_before"]["empty12"]

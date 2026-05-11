@@ -150,7 +150,7 @@ def test_day_smart_ticket_refill_fields(client) -> None:
             "return48": 1,
             "note": "balanced-refill",
             "total_cost": 200,
-            "paid_now": 200,
+            "paid_amount": 200,
         },
     )
     assert resp.status_code == 200
@@ -165,7 +165,7 @@ def test_day_smart_ticket_refill_fields(client) -> None:
             "return48": 1,
             "note": "unbalanced-refill",
             "total_cost": 500,
-            "paid_now": 400,
+            "paid_amount": 400,
         },
     )
     assert resp.status_code == 200

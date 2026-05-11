@@ -15,9 +15,9 @@ import { makeBalanceTransition } from "@/lib/balanceTransitions";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
-const BASE: Pick<DailyReportEvent, "cash_before" | "cash_after"> = {
-  cash_before: 0,
-  cash_after: 0,
+const BASE: Pick<DailyReportEvent, "wallet_before" | "wallet_after"> = {
+  wallet_before: 0,
+  wallet_after: 0,
 };
 
 type BankDepositDisplayDirection = "wallet_to_bank" | "bank_to_wallet";
@@ -135,7 +135,7 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 }
 
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
-  if (refill.kind === "buy_iron") return "company_buy_iron" as const;
+  if (refill.kind === "buy_iron") return "company_buy_full" as const;
   const totals = getCompanyInventoryTotals(refill);
   const totalReturns = totals.return12 + totals.return48;
   if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "company_return_empties" as const;
@@ -144,7 +144,7 @@ export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
 
 export function getCompanyInventoryEditTab(refill: InventoryRefillSummary) {
   const eventType = getCompanyInventoryEventType(refill);
-  if (eventType === "company_buy_iron") return "buy" as const;
+  if (eventType === "company_buy_full") return "buy" as const;
   if (eventType === "company_return_empties") return "return" as const;
   return "refill" as const;
 }
@@ -440,7 +440,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
   if (totals.return48 > 0) parts.push(`Return ${totals.return48}x48kg`);
 
   const contextLine =
-    eventType === "company_buy_iron"
+    eventType === "company_buy_full"
       ? EVENT_LABELS.COMPANY_BUY_FULL
       : eventType === "company_return_empties"
         ? EVENT_LABELS.COMPANY_RETURN
@@ -448,7 +448,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   const moneyAfter = refill.live_debt_cash != null ? refill.live_debt_cash : Number(refill.debt_cash ?? 0);
-  const moneyDelta = Number(refill.total_cost ?? 0) - Number(refill.paid_now ?? 0);
+  const moneyDelta = Number(refill.total_cost ?? 0) - Number(refill.paid_amount ?? 0);
   const moneyBefore = moneyAfter - moneyDelta;
   let cyl12Before = 0;
   let cyl12After = 0;
@@ -466,7 +466,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
   pushTransition(transitions, "company", "money", moneyBefore, moneyAfter);
 
-  if (eventType !== "company_buy_iron") {
+  if (eventType !== "company_buy_full") {
     cyl12Before = cyl12After - totals.return12 + totals.buy12;
     cyl48Before = cyl48After - totals.return48 + totals.buy48;
   } else {
@@ -488,7 +488,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
     label: contextLine,
     hero_text: parts.length > 0 ? parts.join(" | ") : null,
     total_cost: Number(refill.total_cost ?? 0),
-    paid_now: Number(refill.paid_now ?? 0),
+    paid_amount: Number(refill.paid_amount ?? 0),
     buy12: totals.buy12,
     return12: totals.return12,
     buy48: totals.buy48,

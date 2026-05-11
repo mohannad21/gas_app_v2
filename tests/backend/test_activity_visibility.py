@@ -119,7 +119,7 @@ def test_refill_appears_in_day_report(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 300,
-            "paid_now": 100,
+            "paid_amount": 100,
         },
     )
     assert refill_resp.status_code == 200
@@ -127,7 +127,7 @@ def test_refill_appears_in_day_report(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "refill" and event.get("total_cost") == 300 and event.get("paid_now") == 100,
+        lambda event: event.get("event_type") == "refill" and event.get("total_cost") == 300 and event.get("paid_amount") == 100,
     )
 
     refills_resp = client.get("/inventory/refills")
@@ -153,7 +153,7 @@ def test_buy_iron_appears_in_day_report(client) -> None:
             "new12": 2,
             "new48": 0,
             "total_cost": 300,
-            "paid_now": 100,
+            "paid_amount": 100,
             "note": "visibility test",
         },
     )
@@ -163,7 +163,7 @@ def test_buy_iron_appears_in_day_report(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "company_buy_iron" and event.get("source_id") == buy_iron_id,
+        lambda event: event.get("event_type") == "company_buy_full" and event.get("source_id") == buy_iron_id,
     )
 
     refills_resp = client.get("/inventory/refills")

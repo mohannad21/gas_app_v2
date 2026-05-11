@@ -25,10 +25,10 @@ def test_cash_replay_ordering_tiebreak(client) -> None:
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
     assert [event["reason"] for event in events] == ["second", "first"]
-    assert events[1]["cash_before"] == 0
-    assert events[1]["cash_after"] == 10
-    assert events[0]["cash_before"] == 10
-    assert events[0]["cash_after"] == 30
+    assert events[1]["wallet_before"] == 0
+    assert events[1]["wallet_after"] == 10
+    assert events[0]["wallet_before"] == 10
+    assert events[0]["wallet_after"] == 30
 
 
 def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
@@ -150,10 +150,10 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
     assert resp.status_code == 200
     events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
     assert [event["reason"] for event in events] == ["adjust-a", "adjust-b"]
-    assert events[1]["cash_before"] == 0
-    assert events[1]["cash_after"] == 20
-    assert events[0]["cash_before"] == 20
-    assert events[0]["cash_after"] == 30
+    assert events[1]["wallet_before"] == 0
+    assert events[1]["wallet_after"] == 20
+    assert events[0]["wallet_before"] == 20
+    assert events[0]["wallet_after"] == 30
 
 
 def test_refill_grouping_by_source_id(client) -> None:
@@ -170,7 +170,7 @@ def test_refill_grouping_by_source_id(client) -> None:
             "return48": 0,
             "note": "group",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200
@@ -190,7 +190,7 @@ def test_refill_grouping_by_source_id(client) -> None:
     assert refill["inventory_after"]["empty48"] is not None
 
 
-def test_daily_audit_summary_cash_in_net_zero(client) -> None:
+def test_daily_audit_summary_wallet_in_net_zero(client) -> None:
     day = date(2025, 8, 1)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
     customer_id = create_customer(client, name="Audit Customer")
@@ -211,7 +211,7 @@ def test_daily_audit_summary_cash_in_net_zero(client) -> None:
     resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     audit = resp.json()["audit_summary"]
-    assert audit["cash_in"] == 1000
+    assert audit["wallet_in"] == 1000
     assert audit["new_debt"] == 0
 
 
@@ -242,9 +242,9 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert event["counterparty"]["type"] == "customer"
     assert event["customer_name"] == "Adjust Customer"
     assert event["hero_text"] == "Adjusted customer balance"
-    assert isinstance(event["cash_before"], int)
-    assert isinstance(event["cash_after"], int)
-    assert event["cash_before"] == event["cash_after"]
+    assert isinstance(event["wallet_before"], int)
+    assert isinstance(event["wallet_after"], int)
+    assert event["wallet_before"] == event["wallet_after"]
     assert "inventory_before" in event
     assert "inventory_after" in event
     transitions = {row["component"]: row for row in event["balance_transitions"]}
@@ -360,7 +360,7 @@ def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -
             "return48": 0,
             "note": "tz refill",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert resp.status_code == 200

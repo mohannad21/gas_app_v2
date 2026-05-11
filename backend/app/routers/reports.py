@@ -29,7 +29,7 @@ from app.models import (
 )
 from app.schemas import (
   DailyReportCard,
-  DailyReportCashMath,
+  DailyReportWalletMath,
   DailyReportDay,
   DailyReportEvent,
   ReportInventoryState,
@@ -354,11 +354,11 @@ def list_daily_reports(
 
     card = DailyReportCard(
       date=current.isoformat(),
-      cash_end=running_cash,
+      wallet_end=running_cash,
       sold_12kg=sold_full.get((current, "12kg"), 0),
       sold_48kg=sold_full.get((current, "48kg"), 0),
       net_today=net_by_day.get(current, 0),
-      cash_math=DailyReportCashMath(
+      wallet_math=DailyReportWalletMath(
         sales=customer_sales_by_day.get(current, 0),
         late=customer_pay_by_day.get(current, 0),
         expenses=expenses_by_day.get(current, 0),
@@ -542,7 +542,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type="refill" if txn.kind == "refill" else "company_buy_iron" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
+      event_type="refill" if txn.kind == "refill" else "company_buy_full" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
       effective_at=txn.happened_at,
       created_at=txn.created_at,
       reason=txn.note,
@@ -551,7 +551,7 @@ def get_daily_report(
       buy48=txn.new48 if txn.kind == "buy_iron" else txn.buy48,
       return48=txn.return48,
       total_cost=txn.total,
-      paid_now=txn.paid,
+      paid_amount=txn.paid,
     )
     events.append(event)
     event_sort_ids[id(event)] = txn.id or ""
@@ -660,7 +660,7 @@ def get_daily_report(
     customer_before = running_customer_states.get(event.customer_id, (0, 0, 0)) if event.customer_id else None
     company_before = (running_company_money, running_company_12, running_company_48)
 
-    event.cash_before = running_cash
+    event.wallet_before = running_cash
     if customer_before is not None:
       event.customer_money_before = customer_before[0]
       event.customer_12kg_before = customer_before[1]
@@ -685,7 +685,7 @@ def get_daily_report(
 
     customer_after = running_customer_states.get(event.customer_id, customer_before) if event.customer_id else None
 
-    event.cash_after = running_cash
+    event.wallet_after = running_cash
     if customer_after is not None:
       event.customer_money_after = customer_after[0]
       event.customer_12kg_after = customer_after[1]
@@ -741,7 +741,7 @@ def get_daily_report(
 
   return DailyReportDay(
     date=report_day.isoformat(),
-    cash_end=_sum_cash_at_day_end(session, report_day),
+    wallet_end=_sum_cash_at_day_end(session, report_day),
     company_start=_sum_company_before_day(session, report_day),
     company_end=_sum_company_at_day_end(session, report_day),
     inventory_end=_sum_inventory_at_day_end(session, report_day),

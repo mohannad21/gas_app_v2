@@ -67,7 +67,7 @@ def test_refill_negative_rejected(client) -> None:
         "return48": 0,
         "note": "test",
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
     }
     resp = client.post("/inventory/refill", json=payload)
     assert resp.status_code == 200
@@ -84,7 +84,7 @@ def test_refill_allow_negative_requires_admin(client) -> None:
         "return48": 0,
         "note": "test",
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
     }
     resp = client.post("/inventory/refill", json=payload)
     assert resp.status_code == 200
@@ -99,7 +99,7 @@ def test_inventory_snapshot_by_time_of_day(client) -> None:
         "return48": 2,
         "note": "test",
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
     })
     assert resp.status_code == 200
 
@@ -234,7 +234,7 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
         "return48": 0,
         "note": "restock",
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
     })
     create_order(client, customer_id=c_id, system_id=s_id, delivered_at="2025-01-02T10:00:00", installed=2, received=1)
     client.post("/inventory/adjust", json={
@@ -314,7 +314,7 @@ def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
         "return48": 0,
         "note": "restock",
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
     })
     create_order(client, customer_id=c_id, system_id=s_id, delivered_at="2025-01-02T11:00:00", installed=1, received=0)
 

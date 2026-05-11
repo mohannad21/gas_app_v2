@@ -593,7 +593,7 @@ def create_company_buy_iron(
           new12=existing.new12,
           new48=existing.new48,
           total_cost=existing.total,
-          paid_now=existing.paid,
+          paid_amount=existing.paid,
           note=existing.note,
         )
 
@@ -605,7 +605,7 @@ def create_company_buy_iron(
       new12=payload.new12,
       new48=payload.new48,
       total=payload.total_cost,
-      paid=payload.paid_now,
+      paid=payload.paid_amount,
       note=payload.note,
       request_id=payload.request_id,
     )
@@ -623,7 +623,7 @@ def create_company_buy_iron(
     new12=txn.new12,
     new48=txn.new48,
     total_cost=txn.total,
-    paid_now=txn.paid,
+    paid_amount=txn.paid,
     note=txn.note,
   )
 

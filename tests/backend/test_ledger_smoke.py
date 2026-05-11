@@ -150,7 +150,7 @@ def _post_refill(
             "return48": return48,
             "new48": 0,
             "total_cost": total_cost,
-            "paid_now": paid_now,
+            "paid_amount": paid_now,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -234,7 +234,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
                   → cash −500=10_100  (company_txn: INCLUDED in physical wallet)
 
     FINAL STATE:
-        Ledger tab  cash_start=10_000  cash_end=10_100
+        Ledger tab  cash_start=10_000  wallet_end=10_100
         Inventory   full12=53  empty12=13  full48=20  empty48=5
         Date card   sold_12kg=2  sold_48kg=1  net_today=+1_400  (excl company_txn)
         Customer    money_balance=100  cylinder_balance_12kg=−3  cylinder_balance_48kg=1
@@ -301,7 +301,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     # ── Ledger tab: physical wallet ───────────────────────────────────────────
     day = _get_day_report(client, MAIN_DAY_ISO)
 
-    assert day["cash_end"] == 10_100, f"cash_end expected 10_100, got {day['cash_end']}"
+    assert day["wallet_end"] == 10_100, f"wallet_end expected 10_100, got {day['wallet_end']}"
 
     inv_end = day["inventory_end"]
     assert inv_end["full12"] == 53, f"full12_end: {inv_end['full12']}"
@@ -319,8 +319,8 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     ]
     assert t1_matches, "No 12kg order event found"
     t1 = t1_matches[0]
-    assert t1["cash_before"] == 10_000, f"T1 cash_before: {t1['cash_before']}"
-    assert t1["cash_after"] == 10_300, f"T1 cash_after: {t1['cash_after']}"
+    assert t1["wallet_before"] == 10_000, f"T1 wallet_before: {t1['wallet_before']}"
+    assert t1["wallet_after"] == 10_300, f"T1 wallet_after: {t1['wallet_after']}"
     assert _inv(t1, "before")["full12"] == 50
     assert _inv(t1, "after")["full12"] == 48
     assert _inv(t1, "before")["empty12"] == 10
@@ -333,37 +333,37 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     ]
     assert t2_matches, "No 48kg order event found"
     t2 = t2_matches[0]
-    assert t2["cash_before"] == 10_300, f"T2 cash_before: {t2['cash_before']}"
-    assert t2["cash_after"] == 10_700, f"T2 cash_after: {t2['cash_after']}"
+    assert t2["wallet_before"] == 10_300, f"T2 wallet_before: {t2['wallet_before']}"
+    assert t2["wallet_after"] == 10_700, f"T2 wallet_after: {t2['wallet_after']}"
     assert _inv(t2, "before")["full48"] == 20
     assert _inv(t2, "after")["full48"] == 19
 
     # T3: collection payment
     t3 = _find_event(events, "collection_money")
-    assert t3["cash_before"] == 10_700, f"T3 cash_before: {t3['cash_before']}"
-    assert t3["cash_after"] == 10_900, f"T3 cash_after: {t3['cash_after']}"
+    assert t3["wallet_before"] == 10_700, f"T3 wallet_before: {t3['wallet_before']}"
+    assert t3["wallet_after"] == 10_900, f"T3 wallet_after: {t3['wallet_after']}"
 
     # T4: collection return (no cash change, empty12 +3)
     t4 = _find_event(events, "collection_empty")
-    assert t4["cash_before"] == 10_900, f"T4 cash_before: {t4['cash_before']}"
-    assert t4["cash_after"] == 10_900, f"T4 cash_after: {t4['cash_after']}"
+    assert t4["wallet_before"] == 10_900, f"T4 wallet_before: {t4['wallet_before']}"
+    assert t4["wallet_after"] == 10_900, f"T4 wallet_after: {t4['wallet_after']}"
     assert _inv(t4, "before")["empty12"] == 12
     assert _inv(t4, "after")["empty12"] == 15
 
     # T5: expense
     t5 = _find_event(events, "expense")
-    assert t5["cash_before"] == 10_900, f"T5 cash_before: {t5['cash_before']}"
-    assert t5["cash_after"] == 10_400, f"T5 cash_after: {t5['cash_after']}"
+    assert t5["wallet_before"] == 10_900, f"T5 wallet_before: {t5['wallet_before']}"
+    assert t5["wallet_after"] == 10_400, f"T5 wallet_after: {t5['wallet_after']}"
 
     # T6: cash adjustment
     t6 = _find_event(events, "cash_adjust")
-    assert t6["cash_before"] == 10_400, f"T6 cash_before: {t6['cash_before']}"
-    assert t6["cash_after"] == 11_400, f"T6 cash_after: {t6['cash_after']}"
+    assert t6["wallet_before"] == 10_400, f"T6 wallet_before: {t6['wallet_before']}"
+    assert t6["wallet_after"] == 11_400, f"T6 wallet_after: {t6['wallet_after']}"
 
     # T7: refill — company_txn cash payment IS reflected in physical wallet
     t7 = _find_event(events, "refill")
-    assert t7["cash_before"] == 11_400, f"T7 cash_before: {t7['cash_before']}"
-    assert t7["cash_after"] == 10_600, f"T7 cash_after: {t7['cash_after']}"
+    assert t7["wallet_before"] == 11_400, f"T7 wallet_before: {t7['wallet_before']}"
+    assert t7["wallet_after"] == 10_600, f"T7 wallet_after: {t7['wallet_after']}"
     assert _inv(t7, "before")["full12"] == 48
     assert _inv(t7, "after")["full12"] == 53
     assert _inv(t7, "before")["empty12"] == 15
@@ -373,8 +373,8 @@ def test_ledger_smoke_all_activity_types(client) -> None:
 
     # T8: company payment — company_txn cash payment IS reflected in physical wallet
     t8 = _find_event(events, "company_payment")
-    assert t8["cash_before"] == 10_600, f"T8 cash_before: {t8['cash_before']}"
-    assert t8["cash_after"] == 10_100, f"T8 cash_after: {t8['cash_after']}"
+    assert t8["wallet_before"] == 10_600, f"T8 wallet_before: {t8['wallet_before']}"
+    assert t8["wallet_after"] == 10_100, f"T8 wallet_after: {t8['wallet_after']}"
 
     # ── Date card: operational net (excludes company_txn) ─────────────────────
     # net_today = +300 (T1) + 400 (T2) + 200 (T3) + 0 (T4) − 500 (T5) + 1_000 (T6)
@@ -407,7 +407,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
 def test_ledger_smoke_bank_deposit(client) -> None:
     """
     Verifies wallet_to_bank and bank_to_wallet transitions in event cards.
-    Both directions affect cash_before/cash_after correctly, while date-card
+    Both directions affect wallet_before/wallet_after correctly, while date-card
     net_today ignores them because transfers are not operational net.
     """
     D = date(2025, 3, 5)
@@ -433,16 +433,16 @@ def test_ledger_smoke_bank_deposit(client) -> None:
 
     # First event (10:00): wallet_to_bank (cash drops 8_000 → 5_000)
     wtb = bd_events[0]
-    assert wtb["cash_before"] == 8_000, f"wallet_to_bank cash_before: {wtb['cash_before']}"
-    assert wtb["cash_after"] == 5_000, f"wallet_to_bank cash_after: {wtb['cash_after']}"
+    assert wtb["wallet_before"] == 8_000, f"wallet_to_bank wallet_before: {wtb['wallet_before']}"
+    assert wtb["wallet_after"] == 5_000, f"wallet_to_bank wallet_after: {wtb['wallet_after']}"
 
     # Second event (11:00): bank_to_wallet (cash rises 5_000 → 6_000)
     btw = bd_events[1]
-    assert btw["cash_before"] == 5_000, f"bank_to_wallet cash_before: {btw['cash_before']}"
-    assert btw["cash_after"] == 6_000, f"bank_to_wallet cash_after: {btw['cash_after']}"
+    assert btw["wallet_before"] == 5_000, f"bank_to_wallet wallet_before: {btw['wallet_before']}"
+    assert btw["wallet_after"] == 6_000, f"bank_to_wallet wallet_after: {btw['wallet_after']}"
 
     # Ledger tab
-    assert day["cash_end"] == 6_000
+    assert day["wallet_end"] == 6_000
 
     card = get_daily_row(client, D_ISO)
     assert card["net_today"] == 0
@@ -469,7 +469,7 @@ def test_ledger_smoke_retroactive_order(client) -> None:
     assert card["sold_12kg"] == 0
 
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 5_000
+    assert day["wallet_end"] == 5_000
     assert day["inventory_end"]["full12"] == 20
 
     # ── Add an order ──────────────────────────────────────────────────────────
@@ -490,7 +490,7 @@ def test_ledger_smoke_retroactive_order(client) -> None:
     assert card["net_today"] == 900, f"After add net_today: {card['net_today']}"
 
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 5_900, f"After add cash_end: {day['cash_end']}"
+    assert day["wallet_end"] == 5_900, f"After add wallet_end: {day['wallet_end']}"
     assert day["inventory_end"]["full12"] == 17, f"After add full12: {day['inventory_end']['full12']}"
 
     # ── Delete the order ──────────────────────────────────────────────────────
@@ -502,14 +502,14 @@ def test_ledger_smoke_retroactive_order(client) -> None:
     assert card["net_today"] == 0, f"After delete net_today: {card['net_today']}"
 
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 5_000, f"After delete cash_end: {day['cash_end']}"
+    assert day["wallet_end"] == 5_000, f"After delete wallet_end: {day['wallet_end']}"
     assert day["inventory_end"]["full12"] == 20, f"After delete full12: {day['inventory_end']['full12']}"
 
 
 def test_ledger_smoke_retroactive_refill_with_cash(client) -> None:
     """
     Adding a refill with cash payment on a past date updates the physical
-    wallet (cash_end) but NOT net_today (company_txn is excluded from net).
+    wallet (wallet_end) but NOT net_today (company_txn is excluded from net).
     Deleting the refill reverts both.
     """
     D_ISO = RETRO_DAY_ISO
@@ -521,7 +521,7 @@ def test_ledger_smoke_retroactive_refill_with_cash(client) -> None:
     card = get_daily_row(client, D_ISO)
     assert card["net_today"] == 0
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 6_000
+    assert day["wallet_end"] == 6_000
     assert day["inventory_end"]["full12"] == 10
 
     # ── Add refill (paid 1_200 cash) ──────────────────────────────────────────
@@ -534,7 +534,7 @@ def test_ledger_smoke_retroactive_refill_with_cash(client) -> None:
 
     # Physical wallet decreases by cash paid
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 4_800, f"After refill cash_end: {day['cash_end']}"
+    assert day["wallet_end"] == 4_800, f"After refill wallet_end: {day['wallet_end']}"
     # Inventory updated
     assert day["inventory_end"]["full12"] == 14, f"After refill full12: {day['inventory_end']['full12']}"
     assert day["inventory_end"]["empty12"] == 3, f"After refill empty12: {day['inventory_end']['empty12']}"
@@ -546,8 +546,8 @@ def test_ledger_smoke_retroactive_refill_with_cash(client) -> None:
     # Verify the event chain is still correct (refill cash before = 6_000)
     events = day["events"]
     refill_ev = _find_event(events, "refill")
-    assert refill_ev["cash_before"] == 6_000
-    assert refill_ev["cash_after"] == 4_800
+    assert refill_ev["wallet_before"] == 6_000
+    assert refill_ev["wallet_after"] == 4_800
 
 
 def test_ledger_smoke_retroactive_update_order(client) -> None:
@@ -590,4 +590,4 @@ def test_ledger_smoke_retroactive_update_order(client) -> None:
     assert card["sold_12kg"] == 3, f"After update sold_12kg: {card['sold_12kg']}"
 
     day = _get_day_report(client, D_ISO)
-    assert day["cash_end"] == 3_600, f"After update cash_end: {day['cash_end']}"
+    assert day["wallet_end"] == 3_600, f"After update wallet_end: {day['wallet_end']}"

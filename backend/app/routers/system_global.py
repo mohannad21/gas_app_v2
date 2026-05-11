@@ -145,7 +145,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
     add_line("inv", payload.empty_12, gas_type="12kg", state="empty", unit="count")
     add_line("inv", payload.full_48, gas_type="48kg", state="full", unit="count")
     add_line("inv", payload.empty_48, gas_type="48kg", state="empty", unit="count")
-    add_line("cash", payload.cash_start, unit="money")
+    add_line("cash", payload.wallet_start, unit="money")
 
     # Company Debts
     add_line("company_money_debts", payload.company_payable_money, unit="money")

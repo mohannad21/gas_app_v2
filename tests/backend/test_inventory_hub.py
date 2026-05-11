@@ -20,7 +20,7 @@ def test_refill_soft_delete_keeps_audit_and_reverts_inventory(client) -> None:
             "return48": 0,
             "note": "test",
             "total_cost": 0,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert refill_resp.status_code == 200

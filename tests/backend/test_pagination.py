@@ -128,7 +128,7 @@ def test_refills_default_limit(client) -> None:
                 "return48": 0,
                 "note": f"refill-{i}",
                 "total_cost": 0,
-                "paid_now": 0,
+                "paid_amount": 0,
             },
         )
         assert resp.status_code == 200
@@ -259,6 +259,6 @@ def test_expense_patch_ledger_consistency(client) -> None:
     assert report_resp.status_code == 200
     expenses = [event for event in report_resp.json()["events"] if event["event_type"] == "expense"]
     assert len(expenses) == 1
-    cash_delta = expenses[0]["cash_before"] - expenses[0]["cash_after"]
+    cash_delta = expenses[0]["wallet_before"] - expenses[0]["wallet_after"]
     assert cash_delta == 200
     assert cash_delta != 100

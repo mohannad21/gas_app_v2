@@ -99,7 +99,7 @@ def test_refill_create_rolls_back_on_posting_failure(client, monkeypatch) -> Non
                 "buy48": 0,
                 "return48": 0,
                 "total_cost": 100,
-                "paid_now": 50,
+                "paid_amount": 50,
             },
         )
     except RuntimeError as exc:

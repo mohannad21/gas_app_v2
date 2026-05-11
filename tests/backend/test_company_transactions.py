@@ -18,7 +18,7 @@ def test_company_refill_updates_inventory_and_debt(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 200,
-            "paid_now": 50,
+            "paid_amount": 50,
         },
     )
     assert resp.status_code == 200
@@ -44,7 +44,7 @@ def test_company_balance_adjustment_updates_balances(client) -> None:
             "buy48": 0,
             "return48": 0,
             "total_cost": 200,
-            "paid_now": 50,
+            "paid_amount": 50,
         },
     )
     assert refill.status_code == 200
@@ -82,7 +82,7 @@ def test_company_payment_delete_recomputes_balance_and_hides_payment(client) -> 
             "buy48": 0,
             "return48": 0,
             "total_cost": 200,
-            "paid_now": 50,
+            "paid_amount": 50,
         },
     )
     assert refill.status_code == 200

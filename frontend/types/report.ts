@@ -18,14 +18,14 @@ export const ReportInventoryStateSchema = z.object({
 export type ReportInventoryState = z.infer<typeof ReportInventoryStateSchema>;
 
 export const DailyAuditSummarySchema = z.object({
-  cash_in: z.number(),
+  wallet_in: z.number(),
   new_debt: z.number(),
   inv_delta_12: z.number(),
   inv_delta_48: z.number(),
 });
 export type DailyAuditSummary = z.infer<typeof DailyAuditSummarySchema>;
 
-export const DailyReportCashMathSchema = z.object({
+export const DailyReportWalletMathSchema = z.object({
   sales: z.number(),
   late: z.number(),
   expenses: z.number(),
@@ -33,7 +33,7 @@ export const DailyReportCashMathSchema = z.object({
   adjust: z.number(),
   other: z.number().optional(),
 });
-export type DailyReportCashMath = z.infer<typeof DailyReportCashMathSchema>;
+export type DailyReportWalletMath = z.infer<typeof DailyReportWalletMathSchema>;
 
 export const BalanceTransitionSchema = z.object({
   scope: z.enum(["customer", "company"]),
@@ -48,12 +48,12 @@ export type BalanceTransition = z.infer<typeof BalanceTransitionSchema>;
 
 export const DailyReportCardSchema = z.object({
   date: z.string(),
-  cash_end: z.number(),
+  wallet_end: z.number(),
   sold_12kg: z.number(),
   sold_48kg: z.number(),
   net_today: z.number(),
   has_refill: z.boolean().optional().default(false),
-  cash_math: DailyReportCashMathSchema,
+  wallet_math: DailyReportWalletMathSchema,
   company_start: z.number().nullish(),
   company_end: z.number().nullish(),
   inventory_end: ReportInventoryTotalsSchema,
@@ -216,13 +216,13 @@ export const DailyReportEventSchema = z.object({
   buy48: z.number().nullish(),
   return48: z.number().nullish(),
   total_cost: z.number().nullish(),
-  paid_now: z.number().nullish(),
+  paid_amount: z.number().nullish(),
   order_total: z.number().nullish(),
   order_paid: z.number().nullish(),
   order_installed: z.number().nullish(),
   order_received: z.number().nullish(),
-  cash_before: z.number().nullish(),
-  cash_after: z.number().nullish(),
+  wallet_before: z.number().nullish(),
+  wallet_after: z.number().nullish(),
   customer_money_before: z.number().nullish(),
   customer_money_after: z.number().nullish(),
   customer_12kg_before: z.number().nullish(),
@@ -243,7 +243,7 @@ export type DailyReportEvent = z.infer<typeof DailyReportEventSchema>;
 
 export const DailyReportDaySchema = z.object({
   date: z.string(),
-  cash_end: z.number(),
+  wallet_end: z.number(),
   company_start: z.number().nullish(),
   company_end: z.number().nullish(),
   inventory_end: ReportInventoryTotalsSchema,

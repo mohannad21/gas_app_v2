@@ -23,7 +23,7 @@ def test_company_snapshot_tiebreaker_same_timestamp(client) -> None:
             "return48": 0,
             "note": "first",
             "total_cost": 100,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert first_resp.status_code == 200
@@ -38,7 +38,7 @@ def test_company_snapshot_tiebreaker_same_timestamp(client) -> None:
             "return48": 0,
             "note": "second",
             "total_cost": 50,
-            "paid_now": 0,
+            "paid_amount": 0,
         },
     )
     assert second_resp.status_code == 200

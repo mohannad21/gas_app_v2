@@ -188,7 +188,7 @@ def test_delete_return_allows_negative_inventory(client):
         "buy48": 0,
         "return48": 0,
         "total_cost": 0,
-        "paid_now": 0,
+        "paid_amount": 0,
         "note": "test",
     }
     refill_resp = client.post("/inventory/refill", json=refill_payload)

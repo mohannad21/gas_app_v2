@@ -30,7 +30,7 @@ def test_daily_net_excludes_same_day_system_init(client) -> None:
     assert resp.status_code == 200, resp.text
 
     row = get_daily_row(client, day)
-    assert row["cash_end"] == 1000
+    assert row["wallet_end"] == 1000
     assert row["net_today"] == 0
 
 
@@ -85,5 +85,5 @@ def test_daily_net_excludes_bank_transfers_but_keeps_customer_cash_events(client
     )
 
     row = get_daily_row(client, day_iso)
-    assert row["cash_end"] == 870
+    assert row["wallet_end"] == 870
     assert row["net_today"] == 170
