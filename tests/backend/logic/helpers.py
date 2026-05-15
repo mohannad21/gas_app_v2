@@ -155,11 +155,12 @@ def post_inventory_adjustment(client, gas_type, delta_full, delta_empty, happene
 
 # ── Company activities ────────────────────────────────────────────────────────
 
-def post_buy_full_from_company(client, gas_type, quantity, happened_at):
-    r = client.post("/company/cylinders/settle", json={
-        "gas_type": gas_type,
-        "quantity": quantity,
-        "direction": "receive_full",
+def post_buy_full_from_company(client, new12, new48, total_cost, paid_amount, happened_at):
+    r = client.post("/company/buy_iron", json={
+        "new12": new12,
+        "new48": new48,
+        "total_cost": total_cost,
+        "paid_amount": paid_amount,
         "happened_at": happened_at,
     })
     assert r.status_code < 300, r.text

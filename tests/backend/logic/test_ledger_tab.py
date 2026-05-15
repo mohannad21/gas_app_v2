@@ -233,23 +233,27 @@ def test_refill_48kg(client, baseline):
 
 def test_buy_full_from_company_12kg(client, baseline):
     """
-    Receive full 12kg cylinders from company (cylinder settle, no payment here).
-    wallet unchanged. full12 += quantity. All other inventory untouched.
+    Buy full 12kg cylinders from company: we purchase cylinders and pay now.
+    wallet -= paid_amount. full12 += new12. All other inventory untouched.
     """
-    post_buy_full_from_company(client, "12kg", quantity=10, happened_at=at(DAY1, 9, 0))
+    post_buy_full_from_company(client, new12=10, new48=0,
+                               total_cost=1000, paid_amount=800,
+                               happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
-                   wallet_end=1000,
+                   wallet_end=200,
                    full12=110, empty12=50, full48=50, empty48=30)
 
 
 def test_buy_full_from_company_48kg(client, baseline):
     """
-    Receive full 48kg cylinders from company (cylinder settle, no payment here).
-    wallet unchanged. full48 += quantity. All other inventory untouched.
+    Buy full 48kg cylinders from company: we purchase cylinders and pay now.
+    wallet -= paid_amount. full48 += new48. All other inventory untouched.
     """
-    post_buy_full_from_company(client, "48kg", quantity=5, happened_at=at(DAY1, 9, 0))
+    post_buy_full_from_company(client, new12=0, new48=5,
+                               total_cost=2500, paid_amount=500,
+                               happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
-                   wallet_end=1000,
+                   wallet_end=500,
                    full12=100, empty12=50, full48=55, empty48=30)
 
 
