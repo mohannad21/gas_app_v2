@@ -10,7 +10,7 @@ def at(date: str, hour: int = 9, minute: int = 0) -> str:
     return f"{date}T{hour:02d}:{minute:02d}:00"
 
 
-# ── Customer activities ───────────────────────────────────────────────────────
+# ---Customer activities ───────────────────────────────────────────────────────
 
 def post_system(client, customer_id, gas_type, name=None):
     r = client.post("/systems", json={
@@ -125,7 +125,7 @@ def post_customer_balance_adjustment(client, customer_id, amount_money,
     return r.json()
 
 
-# ── Inventory / refill activities ─────────────────────────────────────────────
+# ---Inventory / refill activities ─────────────────────────────────────────────
 
 def post_refill(client, buy12, return12, buy48, return48,
                 total_cost, paid_amount, happened_at):
@@ -153,7 +153,7 @@ def post_inventory_adjustment(client, gas_type, delta_full, delta_empty, happene
     return r.json()
 
 
-# ── Company activities ────────────────────────────────────────────────────────
+# ---Company activities ────────────────────────────────────────────────────────
 
 def post_buy_full_from_company(client, new12, new48, total_cost, paid_amount, happened_at):
     r = client.post("/company/buy_iron", json={
@@ -213,7 +213,7 @@ def post_company_balance_adjustment(client, money_balance, cylinder_balance_12,
     return r.json()
 
 
-# ── Cash activities ───────────────────────────────────────────────────────────
+# ---Cash activities ───────────────────────────────────────────────────────────
 
 def post_wallet_adjustment(client, delta_cash, happened_at):
     r = client.post("/cash/adjust", json={
@@ -244,7 +244,7 @@ def post_bank_to_wallet(client, amount, happened_at):
     return r.json()
 
 
-# ── Expense ───────────────────────────────────────────────────────────────────
+# ---Expense ---────
 
 # VERIFY BEFORE USE: the expense_type field in POST /expenses.
 # Assumption: accepts the category ID string returned by POST /expenses/categories.
@@ -260,7 +260,7 @@ def post_expense(client, expense_type_id, amount, happened_at):
     return r.json()
 
 
-# ── Report helpers ────────────────────────────────────────────────────────────
+# ---Report helpers ────────────────────────────────────────────────────────────
 
 def get_day_report(client, date: str) -> dict:
     r = client.get("/reports/day", params={"date": date})

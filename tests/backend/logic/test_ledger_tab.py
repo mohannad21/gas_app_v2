@@ -27,7 +27,7 @@ def _assert_ledger(client, date, *, wallet_end, full12, empty12, full48, empty48
     assert inv["empty48"] == empty48, f"empty48: expected {empty48}, got {inv['empty48']}"
 
 
-# ── Replacement ───────────────────────────────────────────────────────────────
+# ---Replacement ---
 
 def test_replacement_12kg(client, baseline):
     """
@@ -75,7 +75,7 @@ def test_replacement_zero_payment(client, baseline):
                    full12=98, empty12=51, full48=50, empty48=30)
 
 
-# ── Sell full ─────────────────────────────────────────────────────────────────
+# ---Sell full ---──
 
 def test_sell_full_12kg(client, baseline):
     """
@@ -105,7 +105,7 @@ def test_sell_full_48kg(client, baseline):
                    full12=100, empty12=50, full48=49, empty48=30)
 
 
-# ── Buy empty ─────────────────────────────────────────────────────────────────
+# ---Buy empty ---──
 
 def test_buy_empty_12kg(client, baseline):
     """
@@ -135,7 +135,7 @@ def test_buy_empty_48kg(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=32)
 
 
-# ── Collections ───────────────────────────────────────────────────────────────
+# ---Collections ---
 
 def test_payment_from_customer(client, baseline):
     """
@@ -201,7 +201,7 @@ def test_customer_balance_adjustment(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-# ── Refill ────────────────────────────────────────────────────────────────────
+# ---Refill ---─────
 
 def test_refill_12kg(client, baseline):
     """
@@ -229,7 +229,7 @@ def test_refill_48kg(client, baseline):
                    full12=100, empty12=50, full48=55, empty48=27)
 
 
-# ── Company cylinder settle ───────────────────────────────────────────────────
+# ---Company cylinder settle ───────────────────────────────────────────────────
 
 def test_buy_full_from_company_12kg(client, baseline):
     """
@@ -315,7 +315,7 @@ def test_company_balance_adjustment(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-# ── Expense ───────────────────────────────────────────────────────────────────
+# ---Expense ---────
 
 def test_expense(client, baseline):
     """
@@ -328,7 +328,7 @@ def test_expense(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-# ── Cash / bank ───────────────────────────────────────────────────────────────
+# ---Cash / bank ---
 
 def test_wallet_to_bank(client, baseline):
     """
@@ -373,7 +373,7 @@ def test_wallet_adjustment_negative(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-# ── Inventory adjustment ──────────────────────────────────────────────────────
+# ---Inventory adjustment ──────────────────────────────────────────────────────
 
 def test_inventory_adjustment_12kg(client, baseline):
     """
