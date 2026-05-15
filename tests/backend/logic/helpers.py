@@ -283,3 +283,9 @@ def get_daily_card(client, date: str) -> dict | None:
 
 def get_day_events(client, date: str) -> list[dict]:
     return get_day_report(client, date)["events"]
+
+
+def get_customer_balances(client, customer_id: str) -> dict:
+    r = client.get(f"/customers/{customer_id}/balances")
+    assert r.status_code < 300, r.text
+    return r.json()
