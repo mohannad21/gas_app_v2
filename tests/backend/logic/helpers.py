@@ -268,14 +268,14 @@ def get_day_report(client, date: str) -> dict:
     return r.json()
 
 
-def get_daily_cards(client) -> list[dict]:
-    r = client.get("/reports/daily")
+def get_daily_cards(client, from_date: str = DAY0, to_date: str = DAY3) -> list[dict]:
+    r = client.get("/reports/daily", params={"from": from_date, "to": to_date})
     assert r.status_code < 300, r.text
     return r.json()
 
 
-def get_daily_card(client, date: str) -> dict | None:
-    for card in get_daily_cards(client):
+def get_daily_card(client, date: str, from_date: str = DAY0, to_date: str = DAY3) -> dict | None:
+    for card in get_daily_cards(client, from_date=from_date, to_date=to_date):
         if card["date"] == date:
             return card
     return None
