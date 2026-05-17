@@ -70,6 +70,7 @@ from app.services.reports_event_fields import (
   _notes_for_event,
   currency_symbol_for_code,
 )
+from app.utils.time import business_local_datetime_from_utc as _local
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -515,7 +516,7 @@ def get_daily_report(
       id=txn.id,
       source_id=stable_source_id,
       event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else txn.kind,
-      effective_at=txn.happened_at,
+      effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       customer_id=txn.customer_id,
       customer_name=customers[txn.customer_id].name if txn.customer_id and txn.customer_id in customers else None,
@@ -543,7 +544,7 @@ def get_daily_report(
       id=txn.id,
       source_id=txn.id,
       event_type="refill" if txn.kind == "refill" else "company_buy_full" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
-      effective_at=txn.happened_at,
+      effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,
       buy12=txn.new12 if txn.kind == "buy_iron" else txn.buy12,
@@ -562,7 +563,7 @@ def get_daily_report(
       id=exp.id,
       source_id=exp.id,
       event_type="bank_deposit" if exp.kind == "deposit" else "expense",
-      effective_at=exp.happened_at,
+      effective_at=_local(exp.happened_at),
       created_at=exp.created_at,
       total_cost=exp.amount,
       expense_type=expense_categories[exp.category_id].name if exp.kind == "expense" and exp.category_id and exp.category_id in expense_categories else None,
@@ -580,7 +581,7 @@ def get_daily_report(
       id=ca.id,
       source_id=ca.id,
       event_type="cash_adjust",
-      effective_at=ca.happened_at,
+      effective_at=_local(ca.happened_at),
       created_at=ca.created_at,
       total_cost=ca.delta_cash,
       reason=ca.note,
@@ -600,7 +601,7 @@ def get_daily_report(
       id=base.id,
       source_id=group_key,
       event_type="adjust",
-      effective_at=base.happened_at,
+      effective_at=_local(base.happened_at),
       created_at=base.created_at,
       gas_type=base.gas_type,
       reason=base.note,
@@ -621,7 +622,7 @@ def get_daily_report(
       id=base.id,
       source_id=group_key,
       event_type="customer_adjust",
-      effective_at=base.happened_at,
+      effective_at=_local(base.happened_at),
       created_at=base.created_at,
       customer_id=base.customer_id,
       customer_name=customers[base.customer_id].name if base.customer_id and base.customer_id in customers else None,
@@ -639,7 +640,7 @@ def get_daily_report(
       id=txn.id,
       source_id=txn.id,
       event_type="company_adjustment",
-      effective_at=txn.happened_at,
+      effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,
     )
