@@ -218,6 +218,61 @@ def settle_company_cylinders(
   )
 
 
+@router.delete(
+  "/cylinders/settle/{settle_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("company:write"))],
+)
+def delete_company_cylinder_settle(
+  settle_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
+  try:
+    existing = session.get(CompanyTransaction, settle_id)
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
+      raise HTTPException(status_code=404, detail="Cylinder settle not found")
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    reversal = CompanyTransaction(
+      tenant_id=tenant_id,
+      happened_at=existing.happened_at,
+      day=existing.day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.deleted_at = datetime.now(timezone.utc)
+    session.add(existing)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
+
+
 @router.post(
   "/payments",
   response_model=CompanyPaymentOut,
@@ -626,6 +681,61 @@ def create_company_buy_iron(
     paid_amount=txn.paid,
     note=txn.note,
   )
+
+
+@router.delete(
+  "/buy_iron/{buy_iron_id}",
+  status_code=status.HTTP_204_NO_CONTENT,
+  dependencies=[Depends(require_permission("company:write"))],
+)
+def delete_company_buy_iron(
+  buy_iron_id: str,
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> None:
+  try:
+    existing = session.get(CompanyTransaction, buy_iron_id)
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "buy_iron":
+      raise HTTPException(status_code=404, detail="Buy iron not found")
+    acquire_company_lock(session)
+    acquire_inventory_locks(session, ["12kg", "48kg"])
+    reversal = CompanyTransaction(
+      tenant_id=tenant_id,
+      happened_at=existing.happened_at,
+      day=existing.day,
+      kind=existing.kind,
+      buy12=existing.buy12,
+      return12=existing.return12,
+      buy48=existing.buy48,
+      return48=existing.return48,
+      new12=existing.new12,
+      new48=existing.new48,
+      total=existing.total,
+      paid=existing.paid,
+      debt_cash=existing.debt_cash,
+      debt_cylinders_12=existing.debt_cylinders_12,
+      debt_cylinders_48=existing.debt_cylinders_48,
+      note=f"Reversal of {existing.id}",
+      deleted_at=datetime.now(timezone.utc),
+      reversal_source_id=existing.id,
+    )
+    session.add(reversal)
+    reverse_source(
+      session,
+      source_type="company_txn",
+      source_id=existing.id,
+      reversal_source_type="company_txn",
+      reversal_source_id=reversal.id,
+      happened_at=reversal.happened_at,
+      day=reversal.day,
+      note=reversal.note,
+    )
+    existing.deleted_at = datetime.now(timezone.utc)
+    session.add(existing)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
 
 
 @router.post("/balances/adjust", response_model=CompanyBalanceAdjustmentOut, status_code=status.HTTP_201_CREATED)

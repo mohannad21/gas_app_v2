@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-# These tests document missing DELETE endpoints for two company activities.
-# They are expected to FAIL until the endpoints are implemented.
-# Ticket: Add DELETE /company/buy_iron/{id} and DELETE /company/cylinders/settle/{id}
+# These tests verify DELETE endpoints for two company activities:
+#   DELETE /company/buy_iron/{id}
+#   DELETE /company/cylinders/settle/{id}
 
 from .helpers import (
     DAY0,
@@ -31,7 +31,6 @@ class TestDeleteBuyIron:
         inv = _inv(client)
         assert inv["full12"] == 105
 
-        # DELETE endpoint does not exist yet — this will fail with 404/405
         r = client.delete(f"/company/buy_iron/{result['id']}")
         assert r.status_code == 204, f"Expected 204, got {r.status_code}: {r.text}"
 
@@ -58,7 +57,6 @@ class TestDeleteReturnEmptiesToCompany:
         inv = _inv(client)
         assert inv["empty12"] == 47
 
-        # DELETE endpoint does not exist yet — this will fail with 404/405
         r = client.delete(f"/company/cylinders/settle/{result['id']}")
         assert r.status_code == 204, f"Expected 204, got {r.status_code}: {r.text}"
 
