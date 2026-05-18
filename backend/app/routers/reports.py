@@ -187,7 +187,7 @@ def list_daily_reports(
       .where(CompanyTransaction.tenant_id == tenant_id)
       .where(CompanyTransaction.day >= start_date)
       .where(CompanyTransaction.day <= end_date)
-      .where(CompanyTransaction.kind.in_(["refill", "buy_iron"]))
+      .where(CompanyTransaction.kind == "refill")
       .where(CompanyTransaction.deleted_at == None)  # noqa: E711
       .distinct()
     ).all()

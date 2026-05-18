@@ -108,17 +108,14 @@ class TestWorldDailyCardMetrics:
     def test_day1_has_refill_true(self, client, world):
         assert get_daily_card(client, DAY1)["has_refill"] is True
 
-    @pytest.mark.xfail(
-        reason="backend bug: has_refill is not scoped per day — the DAY1 refill "
-               "leaks into DAY2 and DAY3 daily cards"
-    )
     def test_day2_has_refill_false(self, client, world):
         # buy_iron (buy_full_from_company) is NOT a refill
         assert get_daily_card(client, DAY2)["has_refill"] is False
 
     @pytest.mark.xfail(
-        reason="backend bug: has_refill is not scoped per day — the DAY1 refill "
-               "leaks into DAY2 and DAY3 daily cards"
+        reason="backend bug: return_empties_to_company stores kind='refill' in "
+               "CompanyTransaction, so days with only empty returns incorrectly "
+               "show has_refill=True"
     )
     def test_day3_has_refill_false(self, client, world):
         assert get_daily_card(client, DAY3)["has_refill"] is False
