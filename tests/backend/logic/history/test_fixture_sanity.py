@@ -238,10 +238,5 @@ class TestDeleteSmoke:
 # --- Wallet continuity invariant ─────────────────────────────────────────────
 
 class TestWalletContinuityInvariant:
-    @pytest.mark.xfail(
-        reason="wallet_before/wallet_after may not be populated for all event types "
-               "(e.g. return_empties_to_company, inventory_adjustment) — need to verify "
-               "backend coverage before asserting cross-event continuity"
-    )
     def test_wallet_continuity_on_clean_world(self, client, world):
         assert_wallet_continuity(client)

@@ -119,29 +119,36 @@ def find_event_at(events: list[dict], happened_at: str) -> dict | None:
 
 def assert_wallet_continuity(client) -> None:
     """
-    For every consecutive pair of events within each day, verify:
-      wallet_after[i] == wallet_before[i+1]
+    Verify wallet continuity across all events for each day.
 
-    Also verifies cross-day continuity:
-      last event of DAY N wallet_after == first event of DAY N+1 wallet_before
+    The API returns events newest-first. For consecutive events [i] and [i+1],
+    events[i+1] is chronologically earlier, so:
+      events[i+1].wallet_after == events[i].wallet_before
+
+    Cross-day: the chronologically last event of DAY N is events[0] (first in
+    the newest-first list), and the chronologically first event of DAY N+1 is
+    events[-1]. Their wallet_after and wallet_before must match.
     """
     events_by_day: dict[str, list[dict]] = {}
     for date in [DAY1, DAY2, DAY3]:
         events_by_day[date] = get_day_events(client, date)
 
+    # Within-day: events are newest-first, so events[i+1] is the earlier event
     for date, events in events_by_day.items():
         for i in range(len(events) - 1):
-            wa = events[i].get("wallet_after")
-            wb = events[i + 1].get("wallet_before")
+            wa = events[i + 1].get("wallet_after")   # earlier event's end
+            wb = events[i].get("wallet_before")       # later event's start
             if wa is not None and wb is not None:
                 assert wa == wb, (
-                    f"[{date}] Wallet continuity broken between events {i} and {i + 1}: "
+                    f"[{date}] Wallet continuity broken between events {i + 1} and {i}: "
                     f"wallet_after={wa}, next wallet_before={wb}"
                 )
 
+    # Cross-day: events[0] = last chronological event of day_a
+    #            events[-1] = first chronological event of day_b
     for day_a, day_b in [(DAY1, DAY2), (DAY2, DAY3)]:
-        last = events_by_day[day_a][-1] if events_by_day[day_a] else None
-        first = events_by_day[day_b][0] if events_by_day[day_b] else None
+        last = events_by_day[day_a][0] if events_by_day[day_a] else None
+        first = events_by_day[day_b][-1] if events_by_day[day_b] else None
         if last and first:
             wa = last.get("wallet_after")
             wb = first.get("wallet_before")
