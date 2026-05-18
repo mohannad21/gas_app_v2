@@ -40,6 +40,7 @@ class InventoryAdjustmentRow(SQLModel):
 
 
 class InventorySnapshot(SQLModel):
+  id: Optional[str] = None
   as_of: datetime
   full12: int
   empty12: int

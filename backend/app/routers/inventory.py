@@ -161,7 +161,10 @@ def create_inventory_adjust(
   except Exception:
     session.rollback()
     raise
-  return snapshot_at(session, happened_at, adj.note)
+  session.refresh(adj)
+  snapshot = snapshot_at(session, happened_at, adj.note)
+  snapshot.id = adj.id
+  return snapshot
 
 
 @router.get("/adjustments", response_model=list[InventoryAdjustmentRow])
