@@ -430,6 +430,45 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
           amount=cyl_delta_48,
         )
       )
+  elif txn.kind == "dist_return_empties":
+    if txn.return12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="12kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=-txn.return12,
+        )
+      )
+    if txn.return48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_INV,
+          gas_type="48kg",
+          state="empty",
+          unit=UNIT_COUNT,
+          amount=-txn.return48,
+        )
+      )
+    if txn.return12:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="12kg",
+          unit=UNIT_COUNT,
+          amount=txn.return12,
+        )
+      )
+    if txn.return48:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_COMPANY_CYL,
+          gas_type="48kg",
+          unit=UNIT_COUNT,
+          amount=txn.return48,
+        )
+      )
   elif txn.kind == "buy_iron":
     if txn.new12:
       lines.append(

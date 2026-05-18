@@ -185,7 +185,7 @@ def settle_company_cylinders(
       tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="refill",
+      kind="refill" if payload.direction == "receive_full" else "dist_return_empties",
       buy12=buy12,
       return12=return12,
       buy48=buy48,
@@ -230,7 +230,7 @@ def delete_company_cylinder_settle(
 ) -> None:
   try:
     existing = session.get(CompanyTransaction, settle_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind not in ("refill", "dist_return_empties"):
       raise HTTPException(status_code=404, detail="Cylinder settle not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])

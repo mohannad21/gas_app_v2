@@ -543,7 +543,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type="refill" if txn.kind == "refill" else "company_buy_full" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
+      event_type="refill" if txn.kind == "refill" else "dist_return_empties" if txn.kind == "dist_return_empties" else "company_buy_full" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,
@@ -734,7 +734,7 @@ def get_daily_report(
       notes=notes,
     )
 
-  events = [event for event in events if event.event_type != "company_adjustment"]
+  events = [event for event in events if event.event_type not in ("company_adjustment", "customer_adjust")]
   events.reverse()
 
   # Get audit summary

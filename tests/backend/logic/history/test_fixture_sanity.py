@@ -112,11 +112,6 @@ class TestWorldDailyCardMetrics:
         # buy_iron (buy_full_from_company) is NOT a refill
         assert get_daily_card(client, DAY2)["has_refill"] is False
 
-    @pytest.mark.xfail(
-        reason="backend bug: return_empties_to_company stores kind='refill' in "
-               "CompanyTransaction, so days with only empty returns incorrectly "
-               "show has_refill=True"
-    )
     def test_day3_has_refill_false(self, client, world):
         assert get_daily_card(client, DAY3)["has_refill"] is False
 
