@@ -249,7 +249,8 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["date"] == "2025-01-02"
-    events = [e for e in body["events"] if e["event_type"] in {"refill", "order", "adjust"}]
+    _ORDER_KINDS = {"replacement", "sell_full", "buy_empty_from_customer"}
+    events = [e for e in body["events"] if e["event_type"] in {"refill", "adjust"} | _ORDER_KINDS]
     assert len(events) == 3
     def _ts(s: str) -> datetime:
         return datetime.fromisoformat(s.replace("Z", "+00:00"))
@@ -321,6 +322,7 @@ def test_inventory_deltas_endpoint_filters_and_order(client) -> None:
     resp = client.get("/reports/day", params={"date": "2025-01-02"})
     assert resp.status_code == 200
     body = resp.json()
-    events = [e for e in body["events"] if e["event_type"] in {"refill", "order"}]
+    _ORDER_KINDS2 = {"replacement", "sell_full", "buy_empty_from_customer"}
+    events = [e for e in body["events"] if e["event_type"] in {"refill"} | _ORDER_KINDS2]
     assert len(events) >= 2
     assert events[0]["effective_at"] >= events[1]["effective_at"]

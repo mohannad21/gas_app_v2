@@ -157,9 +157,9 @@ def test_level3_late_pay_not_settled_with_cylinders(client) -> None:
     assert payment.status_code == 201
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
-    event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
+    event = next(event for event in report.json()["events"] if event["event_type"] == "payment_from_customer")
 
-    assert event["event_type"] == "collection_money"
+    assert event["event_type"] == "payment_from_customer"
     notes = event["notes"]
     assert len(notes) == 1
     assert notes[0]["direction"] == "customer_pays_you"
@@ -244,7 +244,7 @@ def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
-    event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
+    event = next(event for event in report.json()["events"] if event["event_type"] == "dist_return_empties")
 
     assert event["label"] == "Returned empties"
     assert event["hero_text"] == "Returned 2x48kg empties to company"
@@ -272,7 +272,7 @@ def test_level3_system_only_for_replacement(client) -> None:
     assert report.status_code == 200
     event = _get_event(report.json(), sell_id)
 
-    assert event["event_type"] == "order"
+    assert event["event_type"] == "sell_full"
     assert event["order_mode"] == "sell_iron"
     assert event["system"] is None
 
@@ -308,7 +308,7 @@ def test_level3_money_delta_matches_hero_primary(client) -> None:
 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
-    event = next(event for event in report.json()["events"] if event["event_type"] == "collection_money")
+    event = next(event for event in report.json()["events"] if event["event_type"] == "payment_from_customer")
 
     assert event["hero_primary"] == f"Payment from customer ₪{_major(45600)}"
     assert event["money_delta"] == _major(45600)

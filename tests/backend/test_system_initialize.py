@@ -15,7 +15,7 @@ def _init_payload(**overrides):
         "empty_12": 5,
         "full_48": 4,
         "empty_48": 2,
-        "cash_start": 100,
+        "wallet_start": 100,
         "company_payable_money": 0,
         "company_full_12kg": 0,
         "company_full_48kg": 0,

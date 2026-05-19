@@ -115,7 +115,7 @@ def test_day_smart_ticket_order_fields(client) -> None:
 
     resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
-    events = {event["source_id"]: event for event in resp.json()["events"] if event["event_type"] == "order"}
+    events = {event["source_id"]: event for event in resp.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer")}
 
     rep_bal = events[rep_bal_id]
     assert rep_bal["label"] == "Replacement"
@@ -276,5 +276,5 @@ def test_day_ordering_tie_breaker_source_id(client) -> None:
 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
-    events = [event for event in report.json()["events"] if event["event_type"] == "order"]
+    events = [event for event in report.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer")]
     assert [event["source_id"] for event in events] == sorted([order_a, order_b], reverse=True)

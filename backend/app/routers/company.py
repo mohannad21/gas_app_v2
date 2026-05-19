@@ -93,7 +93,7 @@ def _post_company_adjustment(
     tenant_id=tenant_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
-    kind="adjust",
+    kind="adjust_company_balance",
     buy12=delta_cyl_12,
     buy48=delta_cyl_48,
     total=delta_money,
@@ -321,7 +321,7 @@ def create_company_payment(
       tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payment",
+      kind="payment_to_company" if payload.amount >= 0 else "payment_from_company",
       total=0,
       paid=payload.amount,
       note=payload.note,
@@ -354,7 +354,7 @@ def list_company_payments(
 ) -> list[CompanyPaymentOut]:
   stmt = (
     select(CompanyTransaction)
-    .where(CompanyTransaction.kind == "payment")
+    .where(CompanyTransaction.kind.in_(["payment_to_company", "payment_from_company"]))
     .where(CompanyTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -397,7 +397,7 @@ def list_company_balance_adjustments(
 ) -> list[CompanyBalanceAdjustmentOut]:
   stmt = (
     select(CompanyTransaction)
-    .where(CompanyTransaction.kind == "adjust")
+    .where(CompanyTransaction.kind == "adjust_company_balance")
     .where(CompanyTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -429,7 +429,7 @@ def delete_company_payment(
 ) -> None:
   try:
     existing = session.get(CompanyTransaction, payment_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "payment":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind not in ("payment_to_company", "payment_from_company"):
       raise HTTPException(status_code=404, detail="Company payment not found")
     acquire_company_lock(session)
     reversal_happened_at = existing.happened_at
@@ -485,7 +485,7 @@ def delete_company_balance_adjustment(
 ) -> None:
   try:
     existing = _resolve_active_company_adjustment(session, adjustment_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust_company_balance":
       raise HTTPException(status_code=404, detail="Company balance adjustment not found")
     acquire_company_lock(session)
     reversal = CompanyTransaction(
@@ -540,7 +540,7 @@ def update_company_balance_adjustment(
 ) -> CompanyBalanceAdjustmentOut:
   try:
     existing = _resolve_active_company_adjustment(session, adjustment_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "adjust_company_balance":
       raise HTTPException(status_code=404, detail="Company balance adjustment not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
@@ -656,7 +656,7 @@ def create_company_buy_iron(
       tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="buy_iron",
+      kind="buy_full_from_company",
       new12=payload.new12,
       new48=payload.new48,
       total=payload.total_cost,
@@ -695,7 +695,7 @@ def delete_company_buy_iron(
 ) -> None:
   try:
     existing = session.get(CompanyTransaction, buy_iron_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "buy_iron":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "buy_full_from_company":
       raise HTTPException(status_code=404, detail="Buy iron not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])

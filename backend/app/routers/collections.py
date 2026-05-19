@@ -84,7 +84,7 @@ def _build_collection_transactions(
       system_id=system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="payout" if is_payout else "payment",
+      kind="payment_to_customer" if is_payout else "payment_from_customer",
       gas_type=None,
       installed=0,
       received=0,
@@ -115,7 +115,7 @@ def _build_collection_transactions(
       system_id=system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="return",
+      kind="customer_return_empties",
       gas_type="12kg",
       installed=0,
       received=qty_12,
@@ -142,7 +142,7 @@ def _build_collection_transactions(
       system_id=system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="return",
+      kind="customer_return_empties",
       gas_type="48kg",
       installed=0,
       received=qty_48,
@@ -169,8 +169,8 @@ def _as_event(txns: list[CustomerTransaction], session: Session) -> CollectionEv
   after = max(txns, key=_stable_txn_key)
   qty_12 = sum(t.received for t in txns if t.gas_type == "12kg")
   qty_48 = sum(t.received for t in txns if t.gas_type == "48kg")
-  amount_payment = sum(t.paid for t in txns if t.kind == "payment")
-  amount_payout = sum(t.paid for t in txns if t.kind == "payout")
+  amount_payment = sum(t.paid for t in txns if t.kind == "payment_from_customer")
+  amount_payout = sum(t.paid for t in txns if t.kind == "payment_to_customer")
   action_type = "payment" if amount_payment else "payout" if amount_payout else "return"
   amount = amount_payment or amount_payout
   group_id = base.group_id or base.id
@@ -215,7 +215,7 @@ def list_collections(
 ) -> list[CollectionEvent]:
   stmt = (
     select(CustomerTransaction)
-    .where(CustomerTransaction.kind.in_(["payment", "payout", "return"]))
+    .where(CustomerTransaction.kind.in_(["payment_from_customer", "payment_to_customer", "customer_return_empties"]))
     .where(CustomerTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -338,16 +338,16 @@ def update_collection(
     base = txns[0]
     action_type = payload_data.get("action_type") or (
       "payment"
-      if base.kind == "payment"
+      if base.kind == "payment_from_customer"
       else "payout"
-      if base.kind == "payout"
+      if base.kind == "payment_to_customer"
       else "return"
     )
     amount_money = payload_data.get("amount_money")
     qty_12kg = payload_data.get("qty_12kg")
     qty_48kg = payload_data.get("qty_48kg")
     if amount_money is None:
-      amount_money = sum(t.paid for t in txns if t.kind in {"payment", "payout"}) or None
+      amount_money = sum(t.paid for t in txns if t.kind in {"payment_from_customer", "payment_to_customer"}) or None
     if qty_12kg is None:
       qty_12kg = sum(t.received for t in txns if t.gas_type == "12kg")
     if qty_48kg is None:

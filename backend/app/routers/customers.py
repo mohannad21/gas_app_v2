@@ -47,8 +47,7 @@ def _customer_balances(session: Session) -> tuple[dict[str, int], dict[str, int]
 def _replacement_order_count_query(customer_id: str | None = None):
   query = (
     select(func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.mode == "replacement")
+    .where(CustomerTransaction.kind == "replacement")
     .where(CustomerTransaction.received > 0)
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
   )
@@ -60,8 +59,7 @@ def _replacement_order_count_query(customer_id: str | None = None):
 def _replacement_order_count_grouped_query():
   return (
     select(CustomerTransaction.customer_id, func.count(CustomerTransaction.id))
-    .where(CustomerTransaction.kind == "order")
-    .where(CustomerTransaction.mode == "replacement")
+    .where(CustomerTransaction.kind == "replacement")
     .where(CustomerTransaction.received > 0)
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.customer_id)

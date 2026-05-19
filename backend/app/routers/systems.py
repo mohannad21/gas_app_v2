@@ -164,7 +164,7 @@ def delete_system(
     select(CustomerTransaction.id)
     .where(CustomerTransaction.system_id == system_id)
     .where(CustomerTransaction.tenant_id == tenant_id)
-    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.kind.in_(["replacement", "sell_full", "buy_empty_from_customer"]))
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .limit(1)
   ).first()

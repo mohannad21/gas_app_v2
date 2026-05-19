@@ -304,7 +304,7 @@ def test_sell_full_today_and_delete_updates_reports_orders_and_balances(
 
     report = _day_report(client, TODAY)
     event = _event_by_source(report, order_id)
-    assert event["event_type"] == "order"
+    assert event["event_type"] == "sell_full"
     assert event["order_mode"] == "sell_iron"
     assert event["wallet_before"] == 1000
     assert event["wallet_after"] == 1070
@@ -411,7 +411,7 @@ def test_buy_empty_today_and_delete_updates_reports_orders_and_balances(
 
     report = _day_report(client, TODAY)
     event = _event_by_source(report, order_id)
-    assert event["event_type"] == "order"
+    assert event["event_type"] == "buy_empty_from_customer"
     assert event["order_mode"] == "buy_iron"
     assert event["wallet_before"] == 1000
     assert event["wallet_after"] == 970

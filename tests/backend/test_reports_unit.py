@@ -235,7 +235,7 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
-    events = [event for event in report.json()["events"] if event["event_type"] == "customer_adjust"]
+    events = [event for event in report.json()["events"] if event["event_type"] == "adjust_customer_balance"]
     assert len(events) == 1
     event = events[0]
     assert event["source_id"] == adjustment["id"]
@@ -252,8 +252,8 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert transitions["money"]["after"] == 100
     assert transitions["cyl_12"]["before"] == 0
     assert transitions["cyl_12"]["after"] == 2
-    assert transitions["money"]["intent"] == "customer_adjust"
-    assert transitions["cyl_12"]["intent"] == "customer_adjust"
+    assert transitions["money"]["intent"] == "adjust_customer_balance"
+    assert transitions["cyl_12"]["intent"] == "adjust_customer_balance"
 
 
 def test_day_orders_feed_by_effective_then_created_then_tiebreaker(client) -> None:
@@ -284,8 +284,8 @@ def test_day_orders_feed_by_effective_then_created_then_tiebreaker(client) -> No
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
-    company_payment = next(index for index, event in enumerate(events) if event["event_type"] == "company_payment")
-    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "customer_adjust")
+    company_payment = next(index for index, event in enumerate(events) if event["event_type"] in ("payment_to_company", "payment_from_company"))
+    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "adjust_customer_balance")
 
     # Newest-first display order is based on effective_at first; created_at only breaks ties.
     assert company_payment < customer_adjust
@@ -310,7 +310,7 @@ def test_daily_customer_adjust_problem_transitions_are_marked_neutral(client) ->
     assert report.status_code == 200
     [row] = report.json()
     cyl12 = next(item for item in row["problem_transitions"] if item["component"] == "cyl_12")
-    assert cyl12["intent"] == "customer_adjust"
+    assert cyl12["intent"] == "adjust_customer_balance"
 
 
 def test_day_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> None:
@@ -335,7 +335,7 @@ def test_day_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200
     events = report.json()["events"]
-    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "customer_adjust")
+    customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "adjust_customer_balance")
     cash_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "cash_adjust")
 
     assert customer_adjust < cash_adjust
@@ -399,7 +399,7 @@ def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -
         event for event in events if event["event_type"] == "adjust" and event["reason"] == "tz inventory"
     )
     company_payment = next(
-        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "tz company"
+        event for event in events if event["event_type"] in ("payment_to_company", "payment_from_company") and event["reason"] == "tz company"
     )
 
     assert "18:18" in refill["context_line"]
@@ -448,16 +448,16 @@ def test_day_payment_wording_is_direction_aware(client) -> None:
     events = report.json()["events"]
 
     customer_payment = next(
-        event for event in events if event["event_type"] == "collection_money" and event["money_amount"] == 45600
+        event for event in events if event["event_type"] == "payment_from_customer" and event["money_amount"] == 45600
     )
     customer_payout = next(
-        event for event in events if event["event_type"] == "collection_payout" and event["money_amount"] == 12300
+        event for event in events if event["event_type"] == "payment_to_customer" and event["money_amount"] == 12300
     )
     company_payment = next(
-        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "pay company"
+        event for event in events if event["event_type"] in ("payment_to_company", "payment_from_company") and event["reason"] == "pay company"
     )
     company_receive = next(
-        event for event in events if event["event_type"] == "company_payment" and event["reason"] == "receive company"
+        event for event in events if event["event_type"] in ("payment_to_company", "payment_from_company") and event["reason"] == "receive company"
     )
 
     assert customer_payment["label"] == "Payment from customer"

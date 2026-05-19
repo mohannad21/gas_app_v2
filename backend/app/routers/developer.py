@@ -325,7 +325,7 @@ def backfill_adjustment_snapshots(
   rows = session.exec(
     select(CustomerTransaction)
     .where(CustomerTransaction.tenant_id == tenant_id)
-    .where(CustomerTransaction.kind == "adjust")
+    .where(CustomerTransaction.kind == "adjust_customer_balance")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .order_by(
       CustomerTransaction.happened_at,

@@ -57,7 +57,7 @@ def test_whatsapp_link_is_url_encoded() -> None:
         get=lambda model, key: (
             SimpleNamespace(
                 id=order_id,
-                kind="order",
+                kind="replacement",
                 is_reversed=False,
                 deleted_at=None,
                 customer_id=customer_id,

@@ -415,7 +415,7 @@ def list_refills(
 ) -> list[InventoryRefillSummary]:
   stmt = (
     select(CompanyTransaction)
-    .where(CompanyTransaction.kind.in_(["refill", "buy_iron"]))
+    .where(CompanyTransaction.kind.in_(["refill", "buy_full_from_company"]))
     .where(CompanyTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -449,9 +449,9 @@ def list_refills(
       time_of_day=time_of_day(row.happened_at),
       effective_at=business_local_datetime_from_utc(row.happened_at),
       created_at=business_local_datetime_from_utc(row.created_at),
-      buy12=row.new12 if row.kind == "buy_iron" else row.buy12,
+      buy12=row.new12 if row.kind == "buy_full_from_company" else row.buy12,
       return12=row.return12,
-      buy48=row.new48 if row.kind == "buy_iron" else row.buy48,
+      buy48=row.new48 if row.kind == "buy_full_from_company" else row.buy48,
       return48=row.return48,
       new12=row.new12,
       new48=row.new48,

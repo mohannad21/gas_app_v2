@@ -233,12 +233,13 @@ def test_refill_ordering_tie_break_with_order_same_time(client) -> None:
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
-    events = [event for event in timeline.json()["events"] if event["event_type"] in {"refill", "order"}]
+    _ORDER_KINDS3 = {"replacement", "sell_full", "buy_empty_from_customer"}
+    events = [event for event in timeline.json()["events"] if event["event_type"] in {"refill"} | _ORDER_KINDS3]
     assert len(events) >= 2
     # Events are newest-first: order (09:00) before refill (08:00)
     order_event = events[0]
     refill_event = events[1]
-    assert order_event["event_type"] == "order"
+    assert order_event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer")
     assert refill_event["event_type"] == "refill"
     assert refill_event["wallet_before"] == 1000
     assert refill_event["wallet_after"] == 900

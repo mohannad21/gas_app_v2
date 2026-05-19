@@ -499,7 +499,7 @@ class TestBalanceAdjustmentsNotInDailyReport:
         later_event = next(
             event
             for event in report["events"]
-            if event.get("event_type") == "collection_empty" and event.get("customer_id") == customer_id
+            if event.get("event_type") == "customer_return_empties" and event.get("customer_id") == customer_id
         )
         assert later_event["customer_money_before"] == 150
         assert later_event["customer_money_after"] == 150

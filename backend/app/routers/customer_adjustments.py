@@ -70,7 +70,7 @@ def list_adjustments(
     select(CustomerTransaction)
     .where(CustomerTransaction.customer_id == customer_id)
     .where(CustomerTransaction.tenant_id == tenant_id)
-    .where(CustomerTransaction.kind == "adjust")
+    .where(CustomerTransaction.kind == "adjust_customer_balance")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .order_by(
       CustomerTransaction.happened_at.desc(),
@@ -136,7 +136,7 @@ def create_adjustment(
       system_id=None,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="adjust",
+      kind="adjust_customer_balance",
       gas_type=None,
       installed=0,
       received=0,
@@ -160,7 +160,7 @@ def create_adjustment(
       system_id=None,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="adjust",
+      kind="adjust_customer_balance",
       gas_type="12kg",
       installed=max(count_12, 0),
       received=max(-count_12, 0),
@@ -184,7 +184,7 @@ def create_adjustment(
       system_id=None,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="adjust",
+      kind="adjust_customer_balance",
       gas_type="48kg",
       installed=max(count_48, 0),
       received=max(-count_48, 0),
@@ -224,7 +224,7 @@ def delete_adjustment(
     txns = session.exec(
       select(CustomerTransaction)
       .where(CustomerTransaction.tenant_id == tenant_id)
-      .where(CustomerTransaction.kind == "adjust")
+      .where(CustomerTransaction.kind == "adjust_customer_balance")
       .where(CustomerTransaction.deleted_at == None)  # noqa: E711
       .where(
         or_(
@@ -245,7 +245,7 @@ def delete_adjustment(
         system_id=txn.system_id,
         happened_at=txn.happened_at,
         day=txn.day,
-        kind="adjust",
+        kind="adjust_customer_balance",
         gas_type=txn.gas_type,
         installed=txn.installed,
         received=txn.received,

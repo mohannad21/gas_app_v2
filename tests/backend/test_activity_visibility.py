@@ -41,7 +41,7 @@ def test_order_appears_in_day_report_and_customer_review(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "order" and event.get("source_id") == order_id,
+        lambda event: event.get("event_type") in ("replacement", "sell_full", "buy_empty_from_customer") and event.get("source_id") == order_id,
     )
 
     orders_resp = client.get("/orders")
@@ -69,7 +69,7 @@ def test_collection_appears_in_day_report_and_customer_review(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "collection_money" and event.get("customer_id") == customer_id,
+        lambda event: event.get("event_type") == "payment_from_customer" and event.get("customer_id") == customer_id,
     )
 
     collections_resp = client.get("/collections", params={"customer_id": customer_id})
@@ -97,7 +97,7 @@ def test_customer_adjustment_appears_in_day_report_and_customer_review(client) -
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "customer_adjust" and event.get("customer_id") == customer_id,
+        lambda event: event.get("event_type") == "adjust_customer_balance" and event.get("customer_id") == customer_id,
     )
 
     adjustments_resp = client.get(f"/customer-adjustments/{customer_id}")
@@ -163,14 +163,14 @@ def test_buy_iron_appears_in_day_report(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "company_buy_full" and event.get("source_id") == buy_iron_id,
+        lambda event: event.get("event_type") == "buy_full_from_company" and event.get("source_id") == buy_iron_id,
     )
 
     refills_resp = client.get("/inventory/refills")
     assert refills_resp.status_code == 200
     refills = refills_resp.json()
     assert any(
-        refill["refill_id"] == buy_iron_id and refill["kind"] == "buy_iron"
+        refill["refill_id"] == buy_iron_id and refill["kind"] == "buy_full_from_company"
         for refill in refills
     )
 
@@ -192,7 +192,7 @@ def test_company_payment_appears_in_day_report(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "company_payment" and event.get("source_id") == payment_id,
+        lambda event: event.get("event_type") in ("payment_to_company", "payment_from_company") and event.get("source_id") == payment_id,
     )
 
     payments_resp = client.get("/company/payments")

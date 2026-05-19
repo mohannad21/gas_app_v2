@@ -192,63 +192,40 @@ def _insert_ledger_entries(
 def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
   gas = txn.gas_type
   lines: list[LedgerLine] = []
-  is_buy_iron = txn.kind == "order" and (txn.mode or "") == "buy_iron"
+  is_buy_iron = txn.kind == "buy_empty_from_customer"
   money_delta = txn.paid - txn.total if is_buy_iron else txn.total - txn.paid
 
-  if txn.kind == "order":
-    mode = txn.mode or "replacement"
-    if mode == "replacement":
-      lines.append(
-        LedgerLine(
-          account=ACCOUNT_INV,
-          gas_type=gas,
-          state="full",
-          unit=UNIT_COUNT,
-          amount=-txn.installed,
-        )
+  if txn.kind == "replacement":
+    lines.append(
+      LedgerLine(
+        account=ACCOUNT_INV,
+        gas_type=gas,
+        state="full",
+        unit=UNIT_COUNT,
+        amount=-txn.installed,
       )
-      lines.append(
-        LedgerLine(
-          account=ACCOUNT_INV,
-          gas_type=gas,
-          state="empty",
-          unit=UNIT_COUNT,
-          amount=txn.received,
-        )
+    )
+    lines.append(
+      LedgerLine(
+        account=ACCOUNT_INV,
+        gas_type=gas,
+        state="empty",
+        unit=UNIT_COUNT,
+        amount=txn.received,
       )
-      cyl_delta = txn.installed - txn.received
-      if cyl_delta:
-        lines.append(
-          LedgerLine(
-            account=ACCOUNT_CUST_CYL,
-            gas_type=gas,
-            state="empty",
-            unit=UNIT_COUNT,
-            amount=cyl_delta,
-            customer_id=txn.customer_id,
-          )
-        )
-    elif mode == "sell_iron":
+    )
+    cyl_delta = txn.installed - txn.received
+    if cyl_delta:
       lines.append(
         LedgerLine(
-          account=ACCOUNT_INV,
-          gas_type=gas,
-          state="full",
-          unit=UNIT_COUNT,
-          amount=-txn.installed,
-        )
-      )
-    elif mode == "buy_iron":
-      lines.append(
-        LedgerLine(
-          account=ACCOUNT_INV,
+          account=ACCOUNT_CUST_CYL,
           gas_type=gas,
           state="empty",
           unit=UNIT_COUNT,
-          amount=txn.received,
+          amount=cyl_delta,
+          customer_id=txn.customer_id,
         )
       )
-
     if money_delta:
       lines.append(
         LedgerLine(
@@ -263,11 +240,67 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         LedgerLine(
           account=ACCOUNT_CASH,
           unit=UNIT_MONEY,
-          amount=-txn.paid if is_buy_iron else txn.paid,
+          amount=txn.paid,
         )
       )
 
-  elif txn.kind == "payment":
+  elif txn.kind == "sell_full":
+    lines.append(
+      LedgerLine(
+        account=ACCOUNT_INV,
+        gas_type=gas,
+        state="full",
+        unit=UNIT_COUNT,
+        amount=-txn.installed,
+      )
+    )
+    if money_delta:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CUST_MONEY,
+          unit=UNIT_MONEY,
+          amount=money_delta,
+          customer_id=txn.customer_id,
+        )
+      )
+    if txn.paid:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CASH,
+          unit=UNIT_MONEY,
+          amount=txn.paid,
+        )
+      )
+
+  elif txn.kind == "buy_empty_from_customer":
+    lines.append(
+      LedgerLine(
+        account=ACCOUNT_INV,
+        gas_type=gas,
+        state="empty",
+        unit=UNIT_COUNT,
+        amount=txn.received,
+      )
+    )
+    if money_delta:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CUST_MONEY,
+          unit=UNIT_MONEY,
+          amount=money_delta,
+          customer_id=txn.customer_id,
+        )
+      )
+    if txn.paid:
+      lines.append(
+        LedgerLine(
+          account=ACCOUNT_CASH,
+          unit=UNIT_MONEY,
+          amount=-txn.paid,
+        )
+      )
+
+  elif txn.kind == "payment_from_customer":
     if txn.paid:
       lines.append(
         LedgerLine(
@@ -285,7 +318,7 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         )
       )
 
-  elif txn.kind == "payout":
+  elif txn.kind == "payment_to_customer":
     if txn.paid:
       lines.append(
         LedgerLine(
@@ -303,7 +336,7 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         )
       )
 
-  elif txn.kind == "return":
+  elif txn.kind == "customer_return_empties":
     if txn.received:
       lines.append(
         LedgerLine(
@@ -325,7 +358,7 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
         )
       )
 
-  elif txn.kind == "adjust":
+  elif txn.kind == "adjust_customer_balance":
     if money_delta:
       lines.append(
         LedgerLine(
@@ -469,7 +502,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
           amount=txn.return48,
         )
       )
-  elif txn.kind == "buy_iron":
+  elif txn.kind == "buy_full_from_company":
     if txn.new12:
       lines.append(
         LedgerLine(
@@ -490,7 +523,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
           amount=txn.new48,
         )
       )
-  elif txn.kind == "adjust":
+  elif txn.kind == "adjust_company_balance":
     if txn.buy12:
       lines.append(
         LedgerLine(
@@ -510,7 +543,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
         )
       )
 
-  if txn.paid and txn.kind != "adjust":
+  if txn.paid and txn.kind != "adjust_company_balance":
     lines.append(
       LedgerLine(
         account=ACCOUNT_CASH,
@@ -519,7 +552,7 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
       )
     )
 
-  money_delta = txn.total if txn.kind == "adjust" else txn.total - txn.paid
+  money_delta = txn.total if txn.kind == "adjust_company_balance" else txn.total - txn.paid
   if money_delta:
     lines.append(
       LedgerLine(
