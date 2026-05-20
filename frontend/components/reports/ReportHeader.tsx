@@ -11,14 +11,14 @@ type ReportHeaderProps = {
     full48: string;
     empty48: string;
   };
-  cashEnd: string;
+  walletEnd: string;
   onAdjustInventory: () => void;
   onAdjustCash: () => void;
 };
 
 export default function ReportHeader({
   inventory,
-  cashEnd,
+  walletEnd,
   onAdjustInventory,
   onAdjustCash,
 }: ReportHeaderProps) {
@@ -29,7 +29,7 @@ export default function ReportHeader({
         <InventoryTile value={inventory.empty12} gas="12kg" filled={false} />
         <InventoryTile value={inventory.full48} gas="48kg" filled />
         <InventoryTile value={inventory.empty48} gas="48kg" filled={false} />
-        <CashTile value={cashEnd} />
+        <CashTile value={walletEnd} />
       </View>
       <View style={styles.adjustButtonRow}>
         <TouchableOpacity onPress={onAdjustInventory} activeOpacity={0.85} style={styles.adjustButton}>
