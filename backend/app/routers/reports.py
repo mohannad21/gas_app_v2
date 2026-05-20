@@ -584,7 +584,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=ca.id,
       source_id=ca.id,
-      event_type="cash_adjust",
+      event_type="adjust_wallet",
       effective_at=_local(ca.happened_at),
       created_at=ca.created_at,
       total_cost=ca.delta_cash,
@@ -604,7 +604,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=base.id,
       source_id=group_key,
-      event_type="adjust",
+      event_type="adjust_inventory",
       effective_at=_local(base.happened_at),
       created_at=base.created_at,
       gas_type=base.gas_type,

@@ -23,7 +23,7 @@ def test_cash_replay_ordering_tiebreak(client) -> None:
 
     resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
-    events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
+    events = [event for event in resp.json()["events"] if event["event_type"] == "adjust_wallet"]
     assert [event["reason"] for event in events] == ["second", "first"]
     assert events[1]["wallet_before"] == 0
     assert events[1]["wallet_after"] == 10
@@ -148,7 +148,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
 
     resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
-    events = [event for event in resp.json()["events"] if event["event_type"] == "cash_adjust"]
+    events = [event for event in resp.json()["events"] if event["event_type"] == "adjust_wallet"]
     assert [event["reason"] for event in events] == ["adjust-a", "adjust-b"]
     assert events[1]["wallet_before"] == 0
     assert events[1]["wallet_after"] == 20
@@ -336,7 +336,7 @@ def test_day_uses_created_at_as_tiebreak_when_effective_time_matches(client) -> 
     assert report.status_code == 200
     events = report.json()["events"]
     customer_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "adjust_customer_balance")
-    cash_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "cash_adjust")
+    cash_adjust = next(index for index, event in enumerate(events) if event["event_type"] == "adjust_wallet")
 
     assert customer_adjust < cash_adjust
 
@@ -394,9 +394,9 @@ def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -
     events = report.json()["events"]
 
     refill = next(event for event in events if event["event_type"] == "refill" and event["reason"] == "tz refill")
-    cash_adjust = next(event for event in events if event["event_type"] == "cash_adjust" and event["reason"] == "tz cash")
+    cash_adjust = next(event for event in events if event["event_type"] == "adjust_wallet" and event["reason"] == "tz cash")
     inventory_adjust = next(
-        event for event in events if event["event_type"] == "adjust" and event["reason"] == "tz inventory"
+        event for event in events if event["event_type"] == "adjust_inventory" and event["reason"] == "tz inventory"
     )
     company_payment = next(
         event for event in events if event["event_type"] in ("payment_to_company", "payment_from_company") and event["reason"] == "tz company"

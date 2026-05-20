@@ -356,7 +356,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     assert t5["wallet_after"] == 10_400, f"T5 wallet_after: {t5['wallet_after']}"
 
     # T6: cash adjustment
-    t6 = _find_event(events, "cash_adjust")
+    t6 = _find_event(events, "adjust_wallet")
     assert t6["wallet_before"] == 10_400, f"T6 wallet_before: {t6['wallet_before']}"
     assert t6["wallet_after"] == 11_400, f"T6 wallet_after: {t6['wallet_after']}"
 

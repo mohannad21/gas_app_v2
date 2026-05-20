@@ -250,7 +250,7 @@ def test_inventory_day_endpoint_ordering_and_totals(client) -> None:
     body = resp.json()
     assert body["date"] == "2025-01-02"
     _ORDER_KINDS = {"replacement", "sell_full", "buy_empty_from_customer"}
-    events = [e for e in body["events"] if e["event_type"] in {"refill", "adjust"} | _ORDER_KINDS]
+    events = [e for e in body["events"] if e["event_type"] in {"refill", "adjust_inventory"} | _ORDER_KINDS]
     assert len(events) == 3
     def _ts(s: str) -> datetime:
         return datetime.fromisoformat(s.replace("Z", "+00:00"))
@@ -291,7 +291,7 @@ def test_inventory_adjust_grouped_report_event_for_multi_row_action(client) -> N
 
     report = client.get("/reports/day", params={"date": "2025-01-02"})
     assert report.status_code == 200
-    events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
+    events = [event for event in report.json()["events"] if event["event_type"] == "adjust_inventory"]
     assert len(events) == 1
 
     event = events[0]

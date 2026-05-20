@@ -96,7 +96,7 @@ def test_inventory_init_is_visible_in_day_feed(client) -> None:
 
     report = client.get("/reports/day", params={"date": today})
     assert report.status_code == 200
-    adjust_events = [event for event in report.json()["events"] if event["event_type"] == "adjust"]
+    adjust_events = [event for event in report.json()["events"] if event["event_type"] == "adjust_inventory"]
     assert adjust_events
     assert any(event["reason"] == "initial" for event in adjust_events)
 
