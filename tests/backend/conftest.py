@@ -134,9 +134,9 @@ def create_customer(
     if starting_money or starting_12kg or starting_48kg:
         adjustment_payload = {
             "customer_id": customer_id,
-            "amount_money": int(starting_money),
-            "count_12kg": int(starting_12kg),
-            "count_48kg": int(starting_48kg),
+            "money_balance": int(starting_money),
+            "cylinder_balance_12kg": int(starting_12kg),
+            "cylinder_balance_48kg": int(starting_48kg),
             "reason": "opening_balance",
         }
         adj_resp = client.post("/customer-adjustments", json=adjustment_payload)

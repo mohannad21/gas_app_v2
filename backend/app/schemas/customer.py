@@ -22,9 +22,12 @@ class CustomerUpdate(SQLModel):
 
 class CustomerAdjustmentCreate(SQLModel):
   customer_id: str
-  amount_money: int = 0
-  count_12kg: int = 0
-  count_48kg: int = 0
+  money_balance: Optional[int] = None
+  cylinder_balance_12kg: Optional[int] = None
+  cylinder_balance_48kg: Optional[int] = None
+  amount_money: Optional[int] = None
+  count_12kg: Optional[int] = None
+  count_48kg: Optional[int] = None
   reason: Optional[str] = None
   happened_at: Optional[datetime] = None
   request_id: Optional[str] = None

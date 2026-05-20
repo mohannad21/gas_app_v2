@@ -282,12 +282,12 @@ export default function CustomerDetailsScreen() {
   const availableActivityFilters = useMemo(() => {
     const visible = new Set<ActivityFilter>();
     for (const event of activities) {
-      if (event.event_type === "order" && event.order_mode === "replacement") visible.add("replacement");
-      if (event.event_type === "collection_money") visible.add("late_payment");
+      if ((event.event_type === "order" && event.order_mode === "replacement") || event.event_type === "replacement") visible.add("replacement");
+      if (event.event_type === "collection_money" || event.event_type === "payment_from_customer") visible.add("late_payment");
       if (event.event_type === "collection_payout") visible.add("payout");
-      if (event.event_type === "collection_empty") visible.add("return_empties");
-      if (event.event_type === "order" && event.order_mode === "buy_iron") visible.add("buy_empty");
-      if (event.event_type === "order" && event.order_mode === "sell_iron") visible.add("sell_full");
+      if (event.event_type === "collection_empty" || event.event_type === "customer_return_empties") visible.add("return_empties");
+      if ((event.event_type === "order" && event.order_mode === "buy_iron") || event.event_type === "buy_empty_from_customer") visible.add("buy_empty");
+      if ((event.event_type === "order" && event.order_mode === "sell_iron") || event.event_type === "sell_full") visible.add("sell_full");
       if (event.event_type === "customer_adjust") visible.add("adjustment");
     }
     return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
@@ -364,17 +364,17 @@ export default function CustomerDetailsScreen() {
       next = next.filter((e) => {
         switch (selectedFilter) {
           case "replacement":
-            return e.event_type === "order" && e.order_mode === "replacement";
+            return (e.event_type === "order" && e.order_mode === "replacement") || e.event_type === "replacement";
           case "late_payment":
-            return e.event_type === "collection_money";
+            return e.event_type === "collection_money" || e.event_type === "payment_from_customer";
           case "payout":
             return e.event_type === "collection_payout";
           case "return_empties":
-            return e.event_type === "collection_empty";
+            return e.event_type === "collection_empty" || e.event_type === "customer_return_empties";
           case "buy_empty":
-            return e.event_type === "order" && e.order_mode === "buy_iron";
+            return (e.event_type === "order" && e.order_mode === "buy_iron") || e.event_type === "buy_empty_from_customer";
           case "sell_full":
-            return e.event_type === "order" && e.order_mode === "sell_iron";
+            return (e.event_type === "order" && e.order_mode === "sell_iron") || e.event_type === "sell_full";
           case "adjustment":
             return e.event_type === "customer_adjust";
           default:
@@ -792,10 +792,12 @@ export default function CustomerDetailsScreen() {
         !activitiesError &&
         filteredActivities.map((event) => {
           const fmtMoney = (v: number) => Number(v || 0).toFixed(getMoneyDecimals());
-          const isOrder = event.event_type === "order";
+          const isOrder =
+            event.event_type === "order" || event.event_type === "replacement" ||
+            event.event_type === "sell_full" || event.event_type === "buy_empty_from_customer";
           const isCollection =
-            event.event_type === "collection_money" ||
-            event.event_type === "collection_empty" ||
+            event.event_type === "collection_money" || event.event_type === "payment_from_customer" ||
+            event.event_type === "collection_empty" || event.event_type === "customer_return_empties" ||
             event.event_type === "collection_payout";
 
           const isAdjustment = event.event_type === "customer_adjust";

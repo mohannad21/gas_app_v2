@@ -151,7 +151,7 @@ def test_day_timeline_rules(client, monkeypatch) -> None:
 
     assert all("wallet_before" in event and "wallet_after" in event for event in events)
 
-    order_event = next(event for event in events if event["event_type"] == "order")
+    order_event = next(event for event in events if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer"))
     assert order_event["wallet_before"] == 1000
     assert order_event["wallet_after"] == 1100
     assert order_event["inventory_before"]["full12"] is not None
@@ -163,7 +163,7 @@ def test_day_timeline_rules(client, monkeypatch) -> None:
     assert order_event["inventory_after"]["full48"] is None
     assert order_event["inventory_after"]["empty48"] is None
 
-    adjust_event = next(event for event in events if event["event_type"] == "adjust")
+    adjust_event = next(event for event in events if event["event_type"] == "adjust_inventory")
     assert adjust_event["inventory_before"]["full12"] is None
     assert adjust_event["inventory_before"]["empty12"] is not None
     assert adjust_event["inventory_after"]["full12"] is None

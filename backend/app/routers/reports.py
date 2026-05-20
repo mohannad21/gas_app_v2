@@ -74,6 +74,8 @@ from app.utils.time import business_local_datetime_from_utc as _local
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+_ORDER_KINDS = frozenset(["replacement", "sell_full", "buy_empty_from_customer"])
+
 
 def _inventory_state_for_event(
   event: DailyReportEvent,
@@ -82,18 +84,19 @@ def _inventory_state_for_event(
   event_entries: list[LedgerEntry],
 ) -> ReportInventoryState | None:
   if event.event_type in {
-    "collection_money",
-    "collection_payout",
-    "company_payment",
-    "company_adjustment",
+    "payment_from_customer",
+    "payment_to_customer",
+    "payment_to_company",
+    "payment_from_company",
+    "adjust_company_balance",
     "expense",
     "bank_deposit",
     "cash_adjust",
-    "customer_adjust",
+    "adjust_customer_balance",
   }:
     return None
 
-  if event.event_type == "order":
+  if event.event_type in _ORDER_KINDS:
     if event.gas_type == "12kg":
       return ReportInventoryState(
         full12=totals.full12,
@@ -245,7 +248,7 @@ def list_daily_reports(
     .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
-    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.kind.in_(["replacement", "sell_full", "buy_empty_from_customer"]))
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.day)
   ).all()
@@ -256,7 +259,7 @@ def list_daily_reports(
     .where(CustomerTransaction.tenant_id == tenant_id)
     .where(CustomerTransaction.day >= start_date)
     .where(CustomerTransaction.day <= end_date)
-    .where(CustomerTransaction.kind == "payment")
+    .where(CustomerTransaction.kind == "payment_from_customer")
     .where(CustomerTransaction.deleted_at == None)  # noqa: E711
     .group_by(CustomerTransaction.day)
   ).all()
@@ -319,7 +322,7 @@ def list_daily_reports(
         continue
       before, after = _customer_day_state_bounds(session, customer_id=customer_id, day=current)
       activity_kinds = customer_activity_kinds.get((current, customer_id), set())
-      transition_intent = "customer_adjust" if activity_kinds == {"adjust"} else None
+      transition_intent = "adjust_customer_balance" if activity_kinds == {"adjust_customer_balance"} else None
       problem_lines.extend(
         _snapshot_lines_for_customer(
           customer_id=customer_id,
@@ -507,49 +510,50 @@ def get_daily_report(
 
   for txn in customer_txns:
     stable_source_id = txn.group_id or txn.id
-    if txn.kind == "adjust":
+    if txn.kind == "adjust_customer_balance":
       continue
     # `effective_at` is the report/API name for the stored `happened_at`
     # business timestamp. Keep that mapping explicit here so reporting does not
     # drift toward `created_at` semantics.
+    is_order = txn.kind in _ORDER_KINDS
     event = DailyReportEvent(
       id=txn.id,
       source_id=stable_source_id,
-      event_type="order" if txn.kind == "order" else "collection_money" if txn.kind == "payment" else "collection_empty" if txn.kind == "return" else "collection_payout" if txn.kind == "payout" else txn.kind,
+      event_type=txn.kind,
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       customer_id=txn.customer_id,
       customer_name=customers[txn.customer_id].name if txn.customer_id and txn.customer_id in customers else None,
       customer_description=customers[txn.customer_id].note if txn.customer_id and txn.customer_id in customers else None,
-      order_total=txn.total if txn.kind == "order" else None,
-      order_paid=txn.paid if txn.kind == "order" else None,
-      order_mode=txn.mode if txn.kind == "order" else None,
+      order_total=txn.total if is_order else None,
+      order_paid=txn.paid if is_order else None,
+      order_mode=txn.mode if is_order else None,
       gas_type=txn.gas_type,
       system_name=systems[txn.system_id].name if txn.system_id and txn.system_id in systems else None,
       system_type=systems[txn.system_id].gas_type if txn.system_id and txn.system_id in systems else None,
       reason=txn.note,
-      order_installed=txn.installed if txn.kind == "order" else None,
-      order_received=txn.received if txn.kind == "order" else None,
-      return12=txn.received if txn.kind == "return" and txn.gas_type == "12kg" else None,
-      return48=txn.received if txn.kind == "return" and txn.gas_type == "48kg" else None,
+      order_installed=txn.installed if is_order else None,
+      order_received=txn.received if is_order else None,
+      return12=txn.received if txn.kind == "customer_return_empties" and txn.gas_type == "12kg" else None,
+      return48=txn.received if txn.kind == "customer_return_empties" and txn.gas_type == "48kg" else None,
     )
     events.append(event)
     event_sort_ids[id(event)] = stable_source_id or ""
     event_source_keys[id(event)] = [("customer_txn", txn.id)]
 
   for txn in company_txns:
-    if txn.kind == "adjust":
+    if txn.kind == "adjust_company_balance":
       continue
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type="refill" if txn.kind == "refill" else "dist_return_empties" if txn.kind == "dist_return_empties" else "company_buy_full" if txn.kind == "buy_iron" else "company_payment" if txn.kind == "payment" else txn.kind,
+      event_type=txn.kind,
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,
-      buy12=txn.new12 if txn.kind == "buy_iron" else txn.buy12,
+      buy12=txn.new12 if txn.kind == "buy_full_from_company" else txn.buy12,
       return12=txn.return12,
-      buy48=txn.new48 if txn.kind == "buy_iron" else txn.buy48,
+      buy48=txn.new48 if txn.kind == "buy_full_from_company" else txn.buy48,
       return48=txn.return48,
       total_cost=txn.total,
       paid_amount=txn.paid,
@@ -580,7 +584,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=ca.id,
       source_id=ca.id,
-      event_type="cash_adjust",
+      event_type="adjust_wallet",
       effective_at=_local(ca.happened_at),
       created_at=ca.created_at,
       total_cost=ca.delta_cash,
@@ -600,7 +604,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=base.id,
       source_id=group_key,
-      event_type="adjust",
+      event_type="adjust_inventory",
       effective_at=_local(base.happened_at),
       created_at=base.created_at,
       gas_type=base.gas_type,
@@ -612,7 +616,7 @@ def get_daily_report(
 
   adjustment_groups: dict[str, list[CustomerTransaction]] = defaultdict(list)
   for txn in customer_txns:
-    if txn.kind != "adjust":
+    if txn.kind != "adjust_customer_balance":
       continue
     adjustment_groups[txn.group_id or txn.id].append(txn)
 
@@ -621,7 +625,7 @@ def get_daily_report(
     event = DailyReportEvent(
       id=base.id,
       source_id=group_key,
-      event_type="customer_adjust",
+      event_type="adjust_customer_balance",
       effective_at=_local(base.happened_at),
       created_at=base.created_at,
       customer_id=base.customer_id,
@@ -634,12 +638,12 @@ def get_daily_report(
     event_source_keys[id(event)] = [("customer_txn", txn.id) for txn in txns]
 
   for txn in company_txns:
-    if txn.kind != "adjust":
+    if txn.kind != "adjust_company_balance":
       continue
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type="company_adjustment",
+      event_type="adjust_company_balance",
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,
@@ -704,7 +708,7 @@ def get_daily_report(
           after=customer_after,
           display_name=event.customer_name,
           display_description=event.customer_description,
-          intent="customer_adjust" if event.event_type == "customer_adjust" else None,
+          intent="adjust_customer_balance" if event.event_type == "adjust_customer_balance" else None,
         )
       )
     balance_transitions.extend(
@@ -734,7 +738,6 @@ def get_daily_report(
       notes=notes,
     )
 
-  events = [event for event in events if event.event_type not in ("company_adjustment", "customer_adjust")]
   events.reverse()
 
   # Get audit summary

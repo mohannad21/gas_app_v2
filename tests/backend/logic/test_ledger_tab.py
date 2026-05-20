@@ -194,7 +194,7 @@ def test_customer_balance_adjustment(client, baseline):
     """
     cid = baseline["customer_c_id"]
     post_customer_balance_adjustment(client, cid,
-                                     amount_money=100, count_12kg=2, count_48kg=0,
+                                     money_balance=100, cylinder_balance_12kg=2, cylinder_balance_48kg=0,
                                      happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
                    wallet_end=1000,

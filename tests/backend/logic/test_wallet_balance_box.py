@@ -67,7 +67,7 @@ class TestWalletUnchangedByNonCashActivities:
     def test_customer_balance_adjustment(self, client, baseline):
         post_customer_balance_adjustment(
             client, baseline["customer_a_id"],
-            amount_money=200, count_12kg=2, count_48kg=0,
+            money_balance=700, cylinder_balance_12kg=7, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         assert _wallet_end(client) == 1000

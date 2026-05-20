@@ -275,7 +275,7 @@ class TestCustomerBalanceAdjustment:
     def test_adjustment_adds_to_all_dimensions(self, client, baseline):
         post_customer_balance_adjustment(
             client, baseline["customer_c_id"],
-            amount_money=300, count_12kg=2, count_48kg=1,
+            money_balance=300, cylinder_balance_12kg=2, cylinder_balance_48kg=1,
             happened_at=at(DAY1),
         )
         _assert_balances(client, baseline["customer_c_id"], money=300, cyl12=2, cyl48=1)
@@ -283,7 +283,7 @@ class TestCustomerBalanceAdjustment:
     def test_adjustment_negative_values(self, client, baseline):
         post_customer_balance_adjustment(
             client, baseline["customer_a_id"],
-            amount_money=-100, count_12kg=-2, count_48kg=0,
+            money_balance=400, cylinder_balance_12kg=3, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         # money: 500 + (-100) = 400; cyl12: 5 + (-2) = 3

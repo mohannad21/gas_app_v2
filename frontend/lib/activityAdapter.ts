@@ -121,7 +121,7 @@ function pushTransition(
   before: number,
   after: number
 ) {
-  if (before === 0 && after === 0) return;
+  if (before === after) return;
   transitions.push(makeBalanceTransition(scope, component, before, after));
 }
 
@@ -135,17 +135,17 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 }
 
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
-  if (refill.kind === "buy_iron") return "company_buy_full" as const;
+  if (refill.kind === "buy_full_from_company" || refill.kind === "buy_iron") return "buy_full_from_company" as const;
   const totals = getCompanyInventoryTotals(refill);
   const totalReturns = totals.return12 + totals.return48;
-  if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "company_return_empties" as const;
+  if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "dist_return_empties" as const;
   return "refill" as const;
 }
 
 export function getCompanyInventoryEditTab(refill: InventoryRefillSummary) {
   const eventType = getCompanyInventoryEventType(refill);
-  if (eventType === "company_buy_full") return "buy" as const;
-  if (eventType === "company_return_empties") return "return" as const;
+  if (eventType === "buy_full_from_company") return "buy" as const;
+  if (eventType === "dist_return_empties") return "return" as const;
   return "refill" as const;
 }
 
@@ -440,9 +440,9 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
   if (totals.return48 > 0) parts.push(`Return ${totals.return48}x48kg`);
 
   const contextLine =
-    eventType === "company_buy_full"
+    eventType === "buy_full_from_company"
       ? EVENT_LABELS.COMPANY_BUY_FULL
-      : eventType === "company_return_empties"
+      : eventType === "dist_return_empties"
         ? EVENT_LABELS.COMPANY_RETURN
         : EVENT_LABELS.REFILL;
 
@@ -466,7 +466,7 @@ export function refillSummaryToEvent(refill: InventoryRefillSummary): DailyRepor
 
   pushTransition(transitions, "company", "money", moneyBefore, moneyAfter);
 
-  if (eventType !== "company_buy_full") {
+  if (eventType !== "buy_full_from_company") {
     cyl12Before = cyl12After - totals.return12 + totals.buy12;
     cyl48Before = cyl48After - totals.return48 + totals.buy48;
   } else {
@@ -607,7 +607,7 @@ export function cashAdjustmentToEvent(adj: CashAdjustment): DailyReportEvent {
   const formattedDelta = `${delta > 0 ? "+" : "-"}${formatDisplayMoney(Math.abs(delta))} ${getCurrencySymbol()}`;
   return {
     ...BASE,
-    event_type: "cash_adjust",
+    event_type: "adjust_wallet",
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,
@@ -626,7 +626,7 @@ export function inventoryAdjustmentGroupToEvent(adjustments: InventoryAdjustment
   if (adjustments.length === 0) {
     return {
       ...BASE,
-      event_type: "adjust",
+      event_type: "adjust_inventory",
       id: "inventory-adjustment-group",
       effective_at: new Date(0).toISOString(),
       created_at: new Date(0).toISOString(),
@@ -656,7 +656,7 @@ export function inventoryAdjustmentGroupToEvent(adjustments: InventoryAdjustment
 
   return {
     ...BASE,
-    event_type: "adjust",
+    event_type: "adjust_inventory",
     id: primary.group_id ?? primary.id,
     effective_at: primary.effective_at,
     created_at: primary.created_at,

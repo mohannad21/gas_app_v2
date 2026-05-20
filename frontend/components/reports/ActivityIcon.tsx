@@ -280,21 +280,27 @@ export function getActivityIcon(
     if (orderMode === "buy_iron") return "arrow-down-circle-outline";
     return "swap-horizontal-outline";
   }
+  if (eventType === "replacement") return "swap-horizontal-outline";
+  if (eventType === "sell_full") return "arrow-up-circle-outline";
+  if (eventType === "buy_empty_from_customer") return "arrow-down-circle-outline";
   if (eventType === "collection_money") return "cash-outline";
+  if (eventType === "payment_from_customer") return "cash-outline";
   if (eventType === "collection_payout") return "cash-outline";
   if (eventType === "collection_empty") return "refresh-outline";
-  if (eventType === "customer_adjust") return "build-outline";
+  if (eventType === "customer_return_empties") return "refresh-outline";
+  if (eventType === "customer_adjust" || eventType === "adjust_customer_balance") return "build-outline";
   if (eventType === "refill") return "reload-outline";
-  if (eventType === "company_buy_iron") return "download-outline";
-  if (eventType === "company_payment") {
+  if (eventType === "company_buy_full" || eventType === "buy_full_from_company") return "download-outline";
+  if (eventType === "dist_return_empties" || eventType === "company_return_empties") return "reload-outline";
+  if (eventType === "company_payment" || eventType === "payment_to_company") {
     if (moneyDirection === "in" || moneyDirection === "received") return "arrow-down-circle-outline";
     return "arrow-up-circle-outline";
   }
-  if (eventType === "company_adjustment") return "build-outline";
+  if (eventType === "company_adjustment" || eventType === "adjust_company_balance") return "build-outline";
   if (eventType === "expense") return "receipt-outline";
   if (eventType === "bank_deposit") return "card-outline";
-  if (eventType === "cash_adjust") return "wallet-outline";
-  if (eventType === "adjust") return "cube-outline";
+  if (eventType === "cash_adjust" || eventType === "adjust_wallet") return "wallet-outline";
+  if (eventType === "adjust" || eventType === "adjust_inventory") return "cube-outline";
   if (eventType === "init") return "flag-outline";
   return "ellipse-outline";
 }
@@ -304,20 +310,25 @@ export function iconTypeForEvent(eventType: string, orderMode?: string | null): 
     if (orderMode === "buy_iron") return "customer_to_dist";
     return "dist_customer_both";
   }
+  if (eventType === "replacement" || eventType === "sell_full") return "dist_customer_both";
+  if (eventType === "buy_empty_from_customer") return "customer_to_dist";
   if (eventType === "collection_money") return "customer_to_dist";
+  if (eventType === "payment_from_customer") return "customer_to_dist";
   if (eventType === "collection_payout") return "dist_to_customer";
   if (eventType === "collection_empty") return "customer_to_dist";
-  if (eventType === "customer_adjust") return "dist_to_customer";
+  if (eventType === "customer_return_empties") return "customer_to_dist";
+  if (eventType === "customer_adjust" || eventType === "adjust_customer_balance") return "dist_to_customer";
 
   if (eventType === "refill") return "dist_company_both";
-  if (eventType === "company_buy_iron") return "company_to_dist";
-  if (eventType === "company_payment") return "dist_to_company";
-  if (eventType === "company_adjustment") return "dist_to_company";
+  if (eventType === "company_buy_full" || eventType === "buy_full_from_company") return "company_to_dist";
+  if (eventType === "dist_return_empties" || eventType === "company_return_empties") return "dist_to_company";
+  if (eventType === "company_payment" || eventType === "payment_to_company") return "dist_to_company";
+  if (eventType === "company_adjustment" || eventType === "adjust_company_balance") return "dist_to_company";
 
   if (eventType === "expense") return "internal_wallet";
   if (eventType === "bank_deposit") return "internal_bank";
-  if (eventType === "cash_adjust") return "internal_wallet";
-  if (eventType === "adjust") return "internal_inventory";
+  if (eventType === "cash_adjust" || eventType === "adjust_wallet") return "internal_wallet";
+  if (eventType === "adjust" || eventType === "adjust_inventory") return "internal_inventory";
   if (eventType === "init") return "internal_inventory";
 
   return "internal_wallet";

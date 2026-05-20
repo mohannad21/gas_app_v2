@@ -12,6 +12,8 @@ from app.models import Customer, CustomerTransaction, System
 from app.schemas import OrderCreate, OrderOut
 from app.services.ledger import boundary_for_source, snapshot_customer_debts
 
+_ORDER_KINDS = frozenset(["replacement", "sell_full", "buy_empty_from_customer"])
+
 
 def resolve_value(payload_data: dict, field: str, current):
   """Resolve field value from payload or fall back to current."""
@@ -132,7 +134,7 @@ def order_gas_types(*values: Optional[str]) -> list[str]:
 def resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTransaction]:
   """Resolve active order, following reversal chain to current active order."""
   current = session.get(CustomerTransaction, order_id)
-  if not current or current.kind != "order":
+  if not current or current.kind not in _ORDER_KINDS:
     return current
 
   visited: set[str] = set()
@@ -140,7 +142,7 @@ def resolve_active_order(session: Session, order_id: str) -> Optional[CustomerTr
     visited.add(current.id)
     next_txn = session.exec(
       select(CustomerTransaction)
-      .where(CustomerTransaction.kind == "order")
+      .where(CustomerTransaction.kind.in_(_ORDER_KINDS))
       .where(CustomerTransaction.reversed_id == current.id)
       .order_by(CustomerTransaction.created_at.desc())
     ).first()

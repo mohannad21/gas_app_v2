@@ -71,6 +71,9 @@ export type CustomerAdjustment = z.infer<typeof CustomerAdjustmentSchema>;
 
 export const CustomerAdjustmentCreateInputSchema = z.object({
   customer_id: z.string(),
+  money_balance: z.number().optional(),
+  cylinder_balance_12kg: z.number().optional(),
+  cylinder_balance_48kg: z.number().optional(),
   amount_money: z.number().optional(),
   count_12kg: z.number().optional(),
   count_48kg: z.number().optional(),

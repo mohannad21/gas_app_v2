@@ -16,6 +16,13 @@ from app.utils.locks import acquire_customer_locks, acquire_inventory_locks
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+_ORDER_KIND_FROM_MODE: dict[str, str] = {
+    "replacement": "replacement",
+    "sell_iron": "sell_full",
+    "buy_iron": "buy_empty_from_customer",
+}
+_ORDER_KINDS = frozenset(_ORDER_KIND_FROM_MODE.values())
+
 
 @router.get("/validate_order_impact")
 def validate_order_impact(
@@ -67,7 +74,7 @@ def validate_order_impact(
 @router.get("/whatsapp_link/{order_id}")
 def whatsapp_link(order_id: str, session: Session = Depends(get_session)) -> dict:
   order = session.get(CustomerTransaction, order_id)
-  if not order or order.kind != "order" or order.deleted_at is not None:
+  if not order or order.kind not in _ORDER_KINDS or order.deleted_at is not None:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
   customer = session.get(Customer, order.customer_id)
   if not customer:
@@ -120,7 +127,7 @@ def list_orders(
 ) -> list[OrderOut]:
   stmt = (
     select(CustomerTransaction)
-    .where(CustomerTransaction.kind == "order")
+    .where(CustomerTransaction.kind.in_(_ORDER_KINDS))
     .where(CustomerTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -208,7 +215,7 @@ def create_order(
       system_id=payload.system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="order",
+      kind=_ORDER_KIND_FROM_MODE[payload.order_mode],
       mode=payload.order_mode,
       gas_type=payload.gas_type,
       installed=payload.cylinders_installed,
@@ -246,7 +253,7 @@ def update_order(
   payload_data = payload.model_dump(exclude_unset=True)
   try:
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.kind not in _ORDER_KINDS or existing.deleted_at is not None:
       raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     customer_id, system_id, mode, gas_type = resolve_update_order_context(
@@ -298,7 +305,7 @@ def update_order(
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
-      kind="order",
+      kind=existing.kind,
       mode=existing.mode,
       gas_type=existing.gas_type,
       installed=existing.installed,
@@ -353,7 +360,7 @@ def update_order(
       system_id=system_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="order",
+      kind=_ORDER_KIND_FROM_MODE[mode],
       mode=mode,
       gas_type=gas_type,
       installed=installed,
@@ -388,7 +395,7 @@ def delete_order(
 ) -> None:
   try:
     existing = resolve_active_order(session, order_id)
-    if not existing or existing.tenant_id != tenant_id or existing.kind != "order" or existing.deleted_at is not None:
+    if not existing or existing.tenant_id != tenant_id or existing.kind not in _ORDER_KINDS or existing.deleted_at is not None:
       return
     acquire_customer_locks(session, [existing.customer_id])
     acquire_inventory_locks(session, order_gas_types(existing.gas_type))
@@ -401,7 +408,7 @@ def delete_order(
       system_id=existing.system_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
-      kind="order",
+      kind=existing.kind,
       mode=existing.mode,
       gas_type=existing.gas_type,
       installed=existing.installed,

@@ -73,7 +73,7 @@ def test_company_payment_affects_cash_and_company(client) -> None:
     assert resp.status_code == 201
 
     day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
-    payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
+    payment = next(event for event in day["events"] if event["event_type"] in ("payment_to_company", "payment_from_company"))
     assert payment["wallet_before"] == 1000
     assert payment["wallet_after"] == 950
     assert payment["company_before"] == 200
@@ -131,13 +131,13 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     assert resp.status_code == 201
 
     before = client.get("/reports/day", params={"date": day2.isoformat()}).json()
-    before_payment = next(event for event in before["events"] if event["event_type"] == "company_payment")
+    before_payment = next(event for event in before["events"] if event["event_type"] in ("payment_to_company", "payment_from_company"))
 
     delete_resp = client.delete(f"/orders/{order_id}")
     assert delete_resp.status_code in {200, 204}
 
     after = client.get("/reports/day", params={"date": day2.isoformat()}).json()
-    after_payment = next(event for event in after["events"] if event["event_type"] == "company_payment")
+    after_payment = next(event for event in after["events"] if event["event_type"] in ("payment_to_company", "payment_from_company"))
 
     assert after_payment["wallet_before"] == before_payment["wallet_before"] - 100
     assert after_payment["wallet_after"] == before_payment["wallet_after"] - 100
@@ -181,7 +181,7 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
     assert resp.status_code == 201
 
     day = client.get("/reports/day", params={"date": day1.isoformat()}).json()
-    payment = next(event for event in day["events"] if event["event_type"] == "company_payment")
+    payment = next(event for event in day["events"] if event["event_type"] in ("payment_to_company", "payment_from_company"))
     assert payment["wallet_after"] == -1000
     assert payment["company_after"] == 0
 
@@ -210,7 +210,7 @@ def test_company_buy_full_unpaid_remainder_visible_in_report(client) -> None:
     assert resp.status_code == 201
 
     day_report = client.get("/reports/day", params={"date": day.isoformat()}).json()
-    event = next(event for event in day_report["events"] if event["event_type"] == "company_buy_full")
+    event = next(event for event in day_report["events"] if event["event_type"] == "buy_full_from_company")
 
     assert event["company_before"] == 0
     assert event["company_after"] == 80

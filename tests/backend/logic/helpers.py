@@ -112,13 +112,13 @@ def post_return_empties_from_customer(client, customer_id, qty_12kg, qty_48kg, h
     return r.json()
 
 
-def post_customer_balance_adjustment(client, customer_id, amount_money,
-                                     count_12kg, count_48kg, happened_at):
+def post_customer_balance_adjustment(client, customer_id, money_balance,
+                                     cylinder_balance_12kg, cylinder_balance_48kg, happened_at):
     r = client.post("/customer-adjustments", json={
         "customer_id": customer_id,
-        "amount_money": amount_money,
-        "count_12kg": count_12kg,
-        "count_48kg": count_48kg,
+        "money_balance": money_balance,
+        "cylinder_balance_12kg": cylinder_balance_12kg,
+        "cylinder_balance_48kg": cylinder_balance_48kg,
         "happened_at": happened_at,
     })
     assert r.status_code < 300, r.text

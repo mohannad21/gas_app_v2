@@ -451,7 +451,7 @@ class CustomerTransaction(SQLModel, table=True):
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
-  kind: str = Field(index=True)  # "order" | "payment" | "return" | "adjust"
+  kind: str = Field(index=True)  # "replacement" | "sell_full" | "buy_empty_from_customer" | "payment_from_customer" | "payment_to_customer" | "customer_return_empties" | "adjust_customer_balance"
   mode: Optional[str] = Field(default=None, index=True)  # order mode
   customer_id: str = Field(foreign_key="customers.id", index=True)
   system_id: Optional[str] = Field(default=None, foreign_key="systems.id", index=True)
@@ -503,7 +503,7 @@ class CompanyTransaction(SQLModel, table=True):
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
-  kind: str = Field(default="refill", index=True)  # "refill" | "buy_iron" | "payment"
+  kind: str = Field(default="refill", index=True)  # "refill" | "dist_return_empties" | "buy_full_from_company" | "payment_to_company" | "payment_from_company" | "adjust_company_balance"
   buy12: int = Field(default=0)
   return12: int = Field(default=0)
   buy48: int = Field(default=0)

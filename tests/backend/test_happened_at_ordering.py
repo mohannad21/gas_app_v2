@@ -137,11 +137,11 @@ def test_same_second_api_writes_store_monotonic_happened_at_across_models(client
             select(InventoryAdjustment).where(InventoryAdjustment.note == "mixed-inventory")
         ).one()
         company_row = session.exec(
-            select(CompanyTransaction).where(CompanyTransaction.kind == "payment").where(CompanyTransaction.note == "mixed-company")
+            select(CompanyTransaction).where(CompanyTransaction.kind.in_(["payment_to_company", "payment_from_company"])).where(CompanyTransaction.note == "mixed-company")
         ).one()
         customer_row = session.exec(
             select(CustomerTransaction)
-            .where(CustomerTransaction.kind == "adjust")
+            .where(CustomerTransaction.kind == "adjust_customer_balance")
             .where(CustomerTransaction.note == "mixed-customer")
             .where(CustomerTransaction.gas_type == None)  # noqa: E711
         ).one()

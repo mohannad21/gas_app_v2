@@ -299,14 +299,11 @@ export default function CustomerAdjustInlineForm({
       const effectiveAt =
         buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ??
         new Date(`${adjustDate}T${adjustTime}:00`).toISOString();
-      const moneyDelta = desiredMoney - currentMoneyBalance;
-      const cyl12Delta = desired12 - current12Balance;
-      const cyl48Delta = desired48 - current48Balance;
       const created = await createAdjustment.mutateAsync({
         customer_id: customerId,
-        ...(moneyDelta !== 0 ? { amount_money: moneyDelta } : {}),
-        ...(cyl12Delta !== 0 ? { count_12kg: cyl12Delta } : {}),
-        ...(cyl48Delta !== 0 ? { count_48kg: cyl48Delta } : {}),
+        money_balance: desiredMoney,
+        cylinder_balance_12kg: desired12,
+        cylinder_balance_48kg: desired48,
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         happened_at: effectiveAt,
       });

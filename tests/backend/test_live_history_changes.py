@@ -168,6 +168,6 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
 
     refills = client.get("/inventory/refills")
     assert refills.status_code == 200
-    buy_iron_row = next(item for item in refills.json() if item.get("kind") == "buy_iron")
+    buy_iron_row = next(item for item in refills.json() if item.get("kind") == "buy_full_from_company")
     assert buy_iron_row["live_debt_cylinders_12"] == 3
-    assert buy_iron_row["kind"] == "buy_iron"
+    assert buy_iron_row["kind"] == "buy_full_from_company"

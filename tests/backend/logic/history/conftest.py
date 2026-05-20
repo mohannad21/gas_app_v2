@@ -77,7 +77,7 @@ def world(client):
     customer_a_id = r.json()["id"]
     post_customer_balance_adjustment(
         client, customer_a_id,
-        amount_money=500, count_12kg=5, count_48kg=0,
+        money_balance=500, cylinder_balance_12kg=5, cylinder_balance_48kg=0,
         happened_at=at(DAY0, 8, 2),
     )
     customer_a_system_12kg = post_system(client, customer_a_id, "12kg", "A Kitchen 12kg")
@@ -88,7 +88,7 @@ def world(client):
     customer_b_id = r.json()["id"]
     post_customer_balance_adjustment(
         client, customer_b_id,
-        amount_money=-200, count_12kg=-3, count_48kg=0,
+        money_balance=-200, cylinder_balance_12kg=-3, cylinder_balance_48kg=0,
         happened_at=at(DAY0, 8, 3),
     )
 

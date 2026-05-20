@@ -315,7 +315,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     # T1: replacement order (12kg)
     t1_matches = [
         e for e in events
-        if e.get("event_type") == "order" and e.get("gas_type") == "12kg"
+        if e.get("event_type") in ("replacement", "sell_full", "buy_empty_from_customer") and e.get("gas_type") == "12kg"
     ]
     assert t1_matches, "No 12kg order event found"
     t1 = t1_matches[0]
@@ -329,7 +329,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     # T2: order (48kg)
     t2_matches = [
         e for e in events
-        if e.get("event_type") == "order" and e.get("gas_type") == "48kg"
+        if e.get("event_type") in ("replacement", "sell_full", "buy_empty_from_customer") and e.get("gas_type") == "48kg"
     ]
     assert t2_matches, "No 48kg order event found"
     t2 = t2_matches[0]
@@ -339,12 +339,12 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     assert _inv(t2, "after")["full48"] == 19
 
     # T3: collection payment
-    t3 = _find_event(events, "collection_money")
+    t3 = _find_event(events, "payment_from_customer")
     assert t3["wallet_before"] == 10_700, f"T3 wallet_before: {t3['wallet_before']}"
     assert t3["wallet_after"] == 10_900, f"T3 wallet_after: {t3['wallet_after']}"
 
     # T4: collection return (no cash change, empty12 +3)
-    t4 = _find_event(events, "collection_empty")
+    t4 = _find_event(events, "customer_return_empties")
     assert t4["wallet_before"] == 10_900, f"T4 wallet_before: {t4['wallet_before']}"
     assert t4["wallet_after"] == 10_900, f"T4 wallet_after: {t4['wallet_after']}"
     assert _inv(t4, "before")["empty12"] == 12
@@ -356,7 +356,7 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     assert t5["wallet_after"] == 10_400, f"T5 wallet_after: {t5['wallet_after']}"
 
     # T6: cash adjustment
-    t6 = _find_event(events, "cash_adjust")
+    t6 = _find_event(events, "adjust_wallet")
     assert t6["wallet_before"] == 10_400, f"T6 wallet_before: {t6['wallet_before']}"
     assert t6["wallet_after"] == 11_400, f"T6 wallet_after: {t6['wallet_after']}"
 
@@ -372,17 +372,17 @@ def test_ledger_smoke_all_activity_types(client) -> None:
     assert _inv(t7, "after")["full48"] == 20
 
     # T8: company payment — company_txn cash payment IS reflected in physical wallet
-    t8 = _find_event(events, "company_payment")
+    t8 = _find_event(events, "payment_to_company")
     assert t8["wallet_before"] == 10_600, f"T8 wallet_before: {t8['wallet_before']}"
     assert t8["wallet_after"] == 10_100, f"T8 wallet_after: {t8['wallet_after']}"
 
     # ── Date card: operational net (excludes company_txn) ─────────────────────
-    # net_today = +300 (T1) + 400 (T2) + 200 (T3) + 0 (T4) − 500 (T5) + 1_000 (T6)
-    #           = 1_400   (T7 refill cash and T8 company payment are excluded)
+    # net_today = +300 (T1) + 400 (T2) + 200 (T3) + 0 (T4) − 500 (T5)
+    #           = 400   (T6 cash_adjust, T7 refill cash and T8 company payment are excluded)
     card = get_daily_row(client, MAIN_DAY_ISO)
     assert card["sold_12kg"] == 2, f"sold_12kg: {card['sold_12kg']}"
     assert card["sold_48kg"] == 1, f"sold_48kg: {card['sold_48kg']}"
-    assert card["net_today"] == 1_400, f"net_today: {card['net_today']}"
+    assert card["net_today"] == 400, f"net_today: {card['net_today']}"
 
     # ── Customer balance ───────────────────────────────────────────────────────
     bal = client.get(f"/customers/{cust_id}/balances").json()

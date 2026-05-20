@@ -44,6 +44,9 @@ export async function createCustomerAdjustment(
 ): Promise<CustomerAdjustment> {
   const { data } = await api.post("/customer-adjustments", {
     ...payload,
+    money_balance: payload.money_balance != null ? toMinorUnits(payload.money_balance) : payload.money_balance,
+    cylinder_balance_12kg: payload.cylinder_balance_12kg,
+    cylinder_balance_48kg: payload.cylinder_balance_48kg,
     amount_money: payload.amount_money != null ? toMinorUnits(payload.amount_money) : payload.amount_money,
     happened_at: payload.happened_at,
   });

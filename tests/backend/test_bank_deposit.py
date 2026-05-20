@@ -175,7 +175,7 @@ def test_wallet_to_bank_delete_cascades_cash_forward(client) -> None:
 
     timeline_before = client.get("/reports/day", params={"date": day2.isoformat()})
     assert timeline_before.status_code == 200
-    order_before = next(event for event in timeline_before.json()["events"] if event["event_type"] == "order")
+    order_before = next(event for event in timeline_before.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer"))
     assert order_before["wallet_before"] == 800
     assert order_before["wallet_after"] == 900
 
@@ -184,7 +184,7 @@ def test_wallet_to_bank_delete_cascades_cash_forward(client) -> None:
 
     timeline_after = client.get("/reports/day", params={"date": day2.isoformat()})
     assert timeline_after.status_code == 200
-    order_after = next(event for event in timeline_after.json()["events"] if event["event_type"] == "order")
+    order_after = next(event for event in timeline_after.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer"))
     assert order_after["wallet_before"] == 1000
     assert order_after["wallet_after"] == 1100
 
@@ -222,7 +222,7 @@ def test_bank_to_wallet_delete_restores_balances(client) -> None:
 
     timeline_before = client.get("/reports/day", params={"date": day2.isoformat()})
     assert timeline_before.status_code == 200
-    order_before = next(event for event in timeline_before.json()["events"] if event["event_type"] == "order")
+    order_before = next(event for event in timeline_before.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer"))
     assert order_before["wallet_before"] == 200
     assert order_before["wallet_after"] == 250
 
@@ -231,6 +231,6 @@ def test_bank_to_wallet_delete_restores_balances(client) -> None:
 
     timeline_after = client.get("/reports/day", params={"date": day2.isoformat()})
     assert timeline_after.status_code == 200
-    order_after = next(event for event in timeline_after.json()["events"] if event["event_type"] == "order")
+    order_after = next(event for event in timeline_after.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer"))
     assert order_after["wallet_before"] == 0
     assert order_after["wallet_after"] == 50
