@@ -353,7 +353,7 @@ class TestInventoryExcluded:
     def test_customer_balance_adjustment_excluded(self, client, baseline):
         post_customer_balance_adjustment(
             client, baseline["customer_a_id"],
-            amount_money=200, count_12kg=2, count_48kg=0,
+            money_balance=700, cylinder_balance_12kg=7, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)

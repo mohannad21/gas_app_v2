@@ -104,7 +104,7 @@ class TestNetTodayExcluded:
     def test_customer_balance_adjustment_excluded(self, client, baseline):
         post_customer_balance_adjustment(
             client, baseline["customer_a_id"],
-            amount_money=200, count_12kg=0, count_48kg=0,
+            money_balance=700, cylinder_balance_12kg=5, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0

@@ -115,19 +115,42 @@ def create_adjustment(
   group_id = _group_id()
   txns: list[CustomerTransaction] = []
 
-  money = payload.amount_money or 0
-  count_12 = payload.count_12kg or 0
-  count_48 = payload.count_48kg or 0
-
   # Compute current balances before any posting
   current_money = sum_customer_money(session, customer_id=payload.customer_id)
   current_cyl_12 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="12kg")
   current_cyl_48 = sum_customer_cylinders(session, customer_id=payload.customer_id, gas_type="48kg")
 
-  # Compute after-snapshots (what the balance will be after all three transactions)
-  next_money = current_money + (money if money else 0)
-  next_cyl_12 = current_cyl_12 + (count_12 if count_12 else 0)
-  next_cyl_48 = current_cyl_48 + (count_48 if count_48 else 0)
+  has_target_fields = any(
+    value is not None
+    for value in (
+      payload.money_balance,
+      payload.cylinder_balance_12kg,
+      payload.cylinder_balance_48kg,
+    )
+  )
+
+  if has_target_fields:
+    next_money = payload.money_balance if payload.money_balance is not None else current_money
+    next_cyl_12 = (
+      payload.cylinder_balance_12kg
+      if payload.cylinder_balance_12kg is not None
+      else current_cyl_12
+    )
+    next_cyl_48 = (
+      payload.cylinder_balance_48kg
+      if payload.cylinder_balance_48kg is not None
+      else current_cyl_48
+    )
+    money = next_money - current_money
+    count_12 = next_cyl_12 - current_cyl_12
+    count_48 = next_cyl_48 - current_cyl_48
+  else:
+    money = payload.amount_money or 0
+    count_12 = payload.count_12kg or 0
+    count_48 = payload.count_48kg or 0
+    next_money = current_money + (money if money else 0)
+    next_cyl_12 = current_cyl_12 + (count_12 if count_12 else 0)
+    next_cyl_48 = current_cyl_48 + (count_48 if count_48 else 0)
 
   if money:
     txn = CustomerTransaction(

@@ -467,7 +467,7 @@ class TestInsertCustomerAdjustmentCascade:
     def _insert(self, client, world) -> dict:
         return post_customer_balance_adjustment(
             client, world["customer_c_id"],
-            amount_money=50, count_12kg=0, count_48kg=0,
+            money_balance=100, cylinder_balance_12kg=0, cylinder_balance_48kg=0,
             happened_at=at(DAY1, 9, 15),
         )
 

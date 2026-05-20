@@ -200,23 +200,20 @@ export default function EditCustomerScreen() {
       const currentMoney = Number(customer.money_balance || 0);
       const current12 = Number(customer.cylinder_balance_12kg || 0);
       const current48 = Number(customer.cylinder_balance_48kg || 0);
-      const moneyDelta = desiredMoney - currentMoney;
-      const cyl12Delta = desired12 - current12;
-      const cyl48Delta = desired48 - current48;
-      if (moneyDelta !== 0 || cyl12Delta !== 0 || cyl48Delta !== 0) {
+      if (desiredMoney !== currentMoney || desired12 !== current12 || desired48 !== current48) {
         const payload: {
           customer_id: string;
-          amount_money?: number;
-          count_12kg?: number;
-          count_48kg?: number;
+          money_balance: number;
+          cylinder_balance_12kg: number;
+          cylinder_balance_48kg: number;
           reason: string;
         } = {
           customer_id: customer.id,
+          money_balance: desiredMoney,
+          cylinder_balance_12kg: desired12,
+          cylinder_balance_48kg: desired48,
           reason: "Balance update (Edit Customer)",
         };
-        if (moneyDelta !== 0) payload.amount_money = moneyDelta;
-        if (cyl12Delta !== 0) payload.count_12kg = cyl12Delta;
-        if (cyl48Delta !== 0) payload.count_48kg = cyl48Delta;
         await createAdjustment.mutateAsync(payload);
       }
       for (const sys of systems) {

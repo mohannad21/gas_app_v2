@@ -160,15 +160,15 @@ export default function NewCustomerScreen() {
         note: values.note,
       });
       const adjustmentReason = "Opening Balance (App Setup)";
-      const moneyDelta = resolveSignedAmount(values.initial_money_state, values.initial_money_amount);
-      const cyl12Delta = resolveSignedCount(values.initial_12kg_state, values.initial_12kg_amount);
-      const cyl48Delta = resolveSignedCount(values.initial_48kg_state, values.initial_48kg_amount);
-      if (moneyDelta !== 0 || cyl12Delta !== 0 || cyl48Delta !== 0) {
+      const moneyBalance = resolveSignedAmount(values.initial_money_state, values.initial_money_amount);
+      const cyl12Balance = resolveSignedCount(values.initial_12kg_state, values.initial_12kg_amount);
+      const cyl48Balance = resolveSignedCount(values.initial_48kg_state, values.initial_48kg_amount);
+      if (moneyBalance !== 0 || cyl12Balance !== 0 || cyl48Balance !== 0) {
         await createAdjustment.mutateAsync({
           customer_id: created.id,
-          amount_money: moneyDelta,
-          count_12kg: cyl12Delta,
-          count_48kg: cyl48Delta,
+          money_balance: moneyBalance,
+          cylinder_balance_12kg: cyl12Balance,
+          cylinder_balance_48kg: cyl48Balance,
           reason: adjustmentReason,
         });
       }

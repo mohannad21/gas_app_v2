@@ -86,7 +86,7 @@ def test_customer_adjustment_appears_in_day_report_and_customer_review(client) -
         "/customer-adjustments",
         json={
             "customer_id": customer_id,
-            "amount_money": 300,
+            "money_balance": 300,
             "reason": "visibility test",
             "happened_at": f"{today}T12:00:00",
         },
@@ -218,7 +218,7 @@ def test_cash_adjustment_appears_in_day_report(client) -> None:
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "cash_adjust" and event.get("source_id") == cash_adjust_id,
+        lambda event: event.get("event_type") == "adjust_wallet" and event.get("source_id") == cash_adjust_id,
     )
 
 

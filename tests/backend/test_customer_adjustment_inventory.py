@@ -11,9 +11,9 @@ def test_customer_adjustment_updates_customer_balances(client) -> None:
 
     create_payload = {
         "customer_id": customer_id,
-        "amount_money": 150,
-        "count_12kg": -10,
-        "count_48kg": 0,
+        "money_balance": 150,
+        "cylinder_balance_12kg": -10,
+        "cylinder_balance_48kg": 0,
         "reason": "test_adjustment",
     }
     create_resp = client.post("/customer-adjustments", json=create_payload)
@@ -44,9 +44,9 @@ def test_customer_adjustment_persists_true_after_snapshots_for_non_zero_balances
         "/customer-adjustments",
         json={
             "customer_id": customer_id,
-            "amount_money": 100,
-            "count_12kg": -2,
-            "count_48kg": 3,
+            "money_balance": 280,
+            "cylinder_balance_12kg": -12,
+            "cylinder_balance_48kg": 12,
             "reason": "manual_fix",
         },
     )
@@ -94,9 +94,9 @@ def test_customer_adjustment_applies_delta_on_top_of_existing_non_zero_balance(c
         "/customer-adjustments",
         json={
             "customer_id": customer_id,
-            "amount_money": -20,
-            "count_12kg": 1,
-            "count_48kg": -1,
+            "money_balance": 260,
+            "cylinder_balance_12kg": -11,
+            "cylinder_balance_48kg": 11,
             "reason": "second_fix",
         },
     )
