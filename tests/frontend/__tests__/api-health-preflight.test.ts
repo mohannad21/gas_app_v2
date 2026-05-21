@@ -6,6 +6,14 @@ let requestHandler: ((config: Record<string, unknown>) => Record<string, unknown
   null;
 
 jest.mock("axios", () => {
+  const AxiosHeaders = {
+    from: (headers: Record<string, unknown> = {}) => ({
+      ...headers,
+      set(name: string, value: string) {
+        (this as Record<string, unknown>)[name] = value;
+      },
+    }),
+  };
   const create = jest
     .fn()
     .mockImplementationOnce(() => ({
@@ -33,7 +41,8 @@ jest.mock("axios", () => {
 
   return {
     __esModule: true,
-    default: { create },
+    default: { create, AxiosHeaders },
+    AxiosHeaders,
     create,
   };
 });

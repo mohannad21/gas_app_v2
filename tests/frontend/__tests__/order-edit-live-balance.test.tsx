@@ -81,11 +81,11 @@ describe("EditOrderScreen live balance source", () => {
     const view = render(<EditOrderScreen />);
 
     await waitFor(() => {
-      expect(view.getByText("Customer owes you EUR 120")).toBeTruthy();
+      expect(view.getByText("Debts on customer 120.00 $")).toBeTruthy();
     });
 
-    expect(view.getByText("Customer owes you 2x12kg empties")).toBeTruthy();
-    expect(view.queryByText("Customer owes you EUR 999")).toBeNull();
-    expect(view.queryByText("Customer owes you 9x12kg empties")).toBeNull();
+    expect(view.getByText("Debts on customer 2x12kg empty cylinders")).toBeTruthy();
+    expect(view.queryByText("Debts on customer 999.00 $")).toBeNull();
+    expect(view.queryByText("Debts on customer 9x12kg empty cylinders")).toBeNull();
   });
 });

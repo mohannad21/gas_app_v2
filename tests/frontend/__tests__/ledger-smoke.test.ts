@@ -7,7 +7,7 @@
  * 2. normalizeBankDepositDisplayEvent produces the correct amount, direction,
  *    hero_text, and context_line for bank_deposit events coming from the
  *    backend.
- * 3. Event cards receive the right cash_before/cash_after and inventory
+ * 3. Event cards receive the right wallet_before/wallet_after and inventory
  *    transition values after the API transformation.
  *
  * All "minor unit" values are integers (e.g. 10_000 = ₪100.00).
@@ -32,17 +32,15 @@ beforeEach(() => {
 function makeBackendDayResponse(overrides: Record<string, unknown> = {}) {
   return {
     date: "2025-03-01",
-    cash_start: 10_000,
-    cash_end: 10_100,
+    wallet_end: 10_100,
     company_start: 700,
     company_end: 700,
     company_give_start: null,
     company_give_end: null,
     company_receive_start: null,
     company_receive_end: null,
-    inventory_start: { full12: 50, empty12: 10, full48: 20, empty48: 5 },
     inventory_end: { full12: 53, empty12: 13, full48: 20, empty48: 5 },
-    audit_summary: { cash_in: 0, new_debt: 0, inv_delta_12: 0, inv_delta_48: 0 },
+    audit_summary: { wallet_in: 0, cash_in: 0, new_debt: 0, inv_delta_12: 0, inv_delta_48: 0 },
     recalculated: false,
     events: [],
     ...overrides,
@@ -57,8 +55,8 @@ function makeBackendEvent(overrides: Partial<Record<string, unknown>> = {}): Rec
     effective_at: "2025-03-01T09:00:00Z",
     created_at: "2025-03-01T09:00:00Z",
     gas_type: "12kg",
-    cash_before: 10_000,
-    cash_after: 10_300,
+    wallet_before: 10_000,
+    wallet_after: 10_300,
     bank_before: null,
     bank_after: null,
     customer_money_before: null,
@@ -68,7 +66,7 @@ function makeBackendEvent(overrides: Partial<Record<string, unknown>> = {}): Rec
     money_amount: null,
     money_delta: null,
     total_cost: null,
-    paid_now: null,
+    paid_amount: null,
     order_total: 600,
     order_paid: 300,
     notes: [],
@@ -83,37 +81,36 @@ function makeBackendEvent(overrides: Partial<Record<string, unknown>> = {}): Rec
 // ── getDailyReport: money field conversions ───────────────────────────────────
 
 describe("getDailyReport — money field conversion (minor → major units)", () => {
-  it("converts cash_start and cash_end from minor to major units", async () => {
+  it("converts wallet_end from minor to major units", async () => {
     mockGet.mockResolvedValue({ data: makeBackendDayResponse() });
     const result = await getDailyReport("2025-03-01");
 
-    // 10_000 minor = 100.00 major
-    expect(result.cash_start).toBeCloseTo(100.0);
-    expect(result.cash_end).toBeCloseTo(101.0);
+    // 10_100 minor = 101.00 major
+    expect(result.wallet_end).toBeCloseTo(101.0);
   });
 
-  it("converts event cash_before and cash_after from minor to major units", async () => {
-    const event = makeBackendEvent({ cash_before: 10_000, cash_after: 10_300 });
+  it("converts event wallet_before and wallet_after from minor to major units", async () => {
+    const event = makeBackendEvent({ wallet_before: 10_000, wallet_after: 10_300 });
     mockGet.mockResolvedValue({
       data: makeBackendDayResponse({ events: [event] }),
     });
     const result = await getDailyReport("2025-03-01");
     const ev = result.events[0];
 
-    expect(ev.cash_before).toBeCloseTo(100.0); // 10_000 / 100
-    expect(ev.cash_after).toBeCloseTo(103.0);  // 10_300 / 100
+    expect(ev.wallet_before).toBeCloseTo(100.0); // 10_000 / 100
+    expect(ev.wallet_after).toBeCloseTo(103.0);  // 10_300 / 100
   });
 
-  it("leaves null cash_before/cash_after as null", async () => {
-    const event = makeBackendEvent({ cash_before: null, cash_after: null });
+  it("leaves null wallet_before/wallet_after as null", async () => {
+    const event = makeBackendEvent({ wallet_before: null, wallet_after: null });
     mockGet.mockResolvedValue({
       data: makeBackendDayResponse({ events: [event] }),
     });
     const result = await getDailyReport("2025-03-01");
     const ev = result.events[0];
 
-    expect(ev.cash_before).toBeNull();
-    expect(ev.cash_after).toBeNull();
+    expect(ev.wallet_before).toBeNull();
+    expect(ev.wallet_after).toBeNull();
   });
 
   it("converts customer_money_before and customer_money_after", async () => {
@@ -178,17 +175,14 @@ describe("getDailyReport — money field conversion (minor → major units)", ()
 // ── getDailyReport: inventory counts ─────────────────────────────────────────
 
 describe("getDailyReport — inventory count fields (no conversion)", () => {
-  it("passes through inventory_start and inventory_end counts unchanged", async () => {
+  it("passes through inventory_end counts unchanged", async () => {
     mockGet.mockResolvedValue({
       data: makeBackendDayResponse({
-        inventory_start: { full12: 50, empty12: 10, full48: 20, empty48: 5 },
         inventory_end: { full12: 53, empty12: 13, full48: 20, empty48: 5 },
       }),
     });
     const result = await getDailyReport("2025-03-01");
 
-    expect(result.inventory_start?.full12).toBe(50);
-    expect(result.inventory_start?.empty12).toBe(10);
     expect(result.inventory_end?.full12).toBe(53);
     expect(result.inventory_end?.empty12).toBe(13);
     expect(result.inventory_end?.full48).toBe(20);
@@ -208,8 +202,8 @@ function makeBankDepositEvent(overrides: Partial<DailyReportEvent> = {}): DailyR
     transfer_direction: "wallet_to_bank",
     money_amount: 30,     // major units (e.g. ₪30.00)
     money_delta: 30,
-    cash_before: 114,     // major units
-    cash_after: 84,
+    wallet_before: 114,     // major units
+    wallet_after: 84,
     notes: [],
     open_actions: [],
     remaining_actions: [],
@@ -328,13 +322,13 @@ describe("normalizeBankDepositDisplayEvent", () => {
     expect(result.transfer_direction).toBe("wallet_to_bank");
   });
 
-  it("does not alter cash_before / cash_after (these are pre-converted by getDailyReport)", () => {
-    const ev = makeBankDepositEvent({ cash_before: 114, cash_after: 84 });
+  it("does not alter wallet_before / wallet_after (these are pre-converted by getDailyReport)", () => {
+    const ev = makeBankDepositEvent({ wallet_before: 114, wallet_after: 84 });
     const result = normalizeBankDepositDisplayEvent(ev);
 
-    // cash_before/cash_after are set before normalization and must not change
-    expect(result.cash_before).toBe(114);
-    expect(result.cash_after).toBe(84);
+    // wallet_before/wallet_after are set before normalization and must not change
+    expect(result.wallet_before).toBe(114);
+    expect(result.wallet_after).toBe(84);
   });
 });
 
@@ -359,38 +353,38 @@ describe("getDailyReport — full scenario event chain", () => {
 
   const backendEvents = [
     makeBackendEvent({ event_type: "order", gas_type: "12kg",
-      cash_before: 10_000, cash_after: 10_300,
+      wallet_before: 10_000, wallet_after: 10_300,
       inventory_before: { full12: 50, empty12: 10, full48: 20, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 12, full48: 20, empty48: 5 },
     }),
     makeBackendEvent({ event_type: "order", gas_type: "48kg",
-      cash_before: 10_300, cash_after: 10_700,
+      wallet_before: 10_300, wallet_after: 10_700,
       inventory_before: { full12: 48, empty12: 12, full48: 20, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 12, full48: 19, empty48: 5 },
     }),
     makeBackendEvent({ event_type: "collection_money",
-      cash_before: 10_700, cash_after: 10_900,
+      wallet_before: 10_700, wallet_after: 10_900,
       customer_money_before: 30_000, customer_money_after: 10_000,
     }),
     makeBackendEvent({ event_type: "collection_empty",
-      cash_before: 10_900, cash_after: 10_900,
+      wallet_before: 10_900, wallet_after: 10_900,
       inventory_before: { full12: 48, empty12: 12, full48: 19, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 15, full48: 19, empty48: 5 },
     }),
     makeBackendEvent({ event_type: "expense",
-      cash_before: 10_900, cash_after: 10_400,
+      wallet_before: 10_900, wallet_after: 10_400,
     }),
     makeBackendEvent({ event_type: "cash_adjust",
-      cash_before: 10_400, cash_after: 11_400,
+      wallet_before: 10_400, wallet_after: 11_400,
     }),
     makeBackendEvent({ event_type: "refill",
-      cash_before: 11_400, cash_after: 10_600,
+      wallet_before: 11_400, wallet_after: 10_600,
       inventory_before: { full12: 48, empty12: 15, full48: 19, empty48: 5 },
       inventory_after:  { full12: 53, empty12: 13, full48: 20, empty48: 5 },
-      total_cost: 200_000, paid_now: 80_000,
+      total_cost: 200_000, paid_amount: 80_000,
     }),
     makeBackendEvent({ event_type: "company_payment",
-      cash_before: 10_600, cash_after: 10_100,
+      wallet_before: 10_600, wallet_after: 10_100,
       money_amount: 50_000,
     }),
   ];
@@ -401,7 +395,7 @@ describe("getDailyReport — full scenario event chain", () => {
     });
   });
 
-  it("converts all cash_before/cash_after values from minor to major units", async () => {
+  it("converts all wallet_before/wallet_after values from minor to major units", async () => {
     const result = await getDailyReport("2025-03-01");
     const evs = result.events;
 
@@ -417,8 +411,8 @@ describe("getDailyReport — full scenario event chain", () => {
     ];
 
     cases.forEach(([label, expectedBefore, expectedAfter], i) => {
-      expect(evs[i].cash_before).toBeCloseTo(expectedBefore, 1);
-      expect(evs[i].cash_after).toBeCloseTo(expectedAfter, 1);
+      expect(evs[i].wallet_before).toBeCloseTo(expectedBefore, 1);
+      expect(evs[i].wallet_after).toBeCloseTo(expectedAfter, 1);
     });
   });
 
@@ -435,8 +429,8 @@ describe("getDailyReport — full scenario event chain", () => {
     // T4 (collection_empty) — inventory changes, cash unchanged
     expect(evs[3].inventory_before?.empty12).toBe(12);
     expect(evs[3].inventory_after?.empty12).toBe(15);
-    expect(evs[3].cash_before).toBeCloseTo(109.0);
-    expect(evs[3].cash_after).toBeCloseTo(109.0);
+    expect(evs[3].wallet_before).toBeCloseTo(109.0);
+    expect(evs[3].wallet_after).toBeCloseTo(109.0);
 
     // T7 (refill)
     expect(evs[6].inventory_before?.full12).toBe(48);
@@ -455,12 +449,12 @@ describe("getDailyReport — full scenario event chain", () => {
     expect(ev.customer_money_after).toBeCloseTo(100.0);  // 10_000 / 100
   });
 
-  it("converts total_cost and paid_now for refill event", async () => {
+  it("converts total_cost and paid_amount for refill event", async () => {
     const result = await getDailyReport("2025-03-01");
     const ev = result.events[6]; // refill (T7)
 
     expect(ev.total_cost).toBeCloseTo(2000.0); // 200_000 / 100
-    expect(ev.paid_now).toBeCloseTo(800.0);    // 80_000 / 100
+    expect(ev.paid_amount).toBeCloseTo(800.0); // 80_000 / 100
   });
 
   it("converts money_amount for company_payment event", async () => {

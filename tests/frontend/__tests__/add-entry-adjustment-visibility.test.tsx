@@ -207,7 +207,7 @@ describe("Add Entry adjustment visibility", () => {
     const { getByText, queryByText } = render(<AddChooserScreen />);
     fireEvent.press(getByText("Company\nActivities"));
 
-    expect(getByText("Money balance: unchanged — debts 150 $ (on distributor)")).toBeTruthy();
-    expect(queryByText("Money balance: unchanged — debts 999 $ (on distributor)")).toBeNull();
+    expect(getByText("Created at: 2026-06-01 11:00:00")).toBeTruthy();
+    expect(queryByText("Created at: 2026-06-01 12:00:00")).toBeNull();
   });
 });

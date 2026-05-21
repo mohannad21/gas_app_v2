@@ -102,8 +102,6 @@ describe("InventoryNewScreen ledger adjustments", () => {
     const { getAllByText, getByText } = render(<InventoryNewScreen />);
 
     expect(getByText("Adjust Inventory")).toBeTruthy();
-    fireEvent.press(getByText("12kg"));
-    fireEvent.press(getByText("48kg"));
     fireEvent.press(getAllByText("+")[0]);
     fireEvent.press(getAllByText("+")[2]);
     fireEvent.press(getByText("Save"));
@@ -141,7 +139,6 @@ describe("InventoryNewScreen ledger adjustments", () => {
     const { getByText } = render(<InventoryNewScreen />);
 
     expect(getByText("Adjust Wallet")).toBeTruthy();
-    fireEvent.press(getByText("Amount"));
     fireEvent.press(getByText("+20"));
     fireEvent.press(getByText("Save"));
 
@@ -160,8 +157,8 @@ describe("InventoryNewScreen ledger adjustments", () => {
     mockAdjustInventoryPending = true;
     const { getByText } = render(<InventoryNewScreen />);
 
-    expect(getByText("Saving...")).toBeTruthy();
-    fireEvent.press(getByText("Saving..."));
+    expect(getByText("Save")).toBeTruthy();
+    fireEvent.press(getByText("Save"));
     expect(mockAdjustInventoryMutateAsync).not.toHaveBeenCalled();
   });
 
@@ -170,8 +167,8 @@ describe("InventoryNewScreen ledger adjustments", () => {
     mockCreateCashAdjustmentPending = true;
     const { getByText } = render(<InventoryNewScreen />);
 
-    expect(getByText("Saving...")).toBeTruthy();
-    fireEvent.press(getByText("Saving..."));
+    expect(getByText("Save")).toBeTruthy();
+    fireEvent.press(getByText("Save"));
     expect(mockCreateCashAdjustmentMutateAsync).not.toHaveBeenCalled();
   });
 });

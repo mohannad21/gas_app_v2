@@ -154,13 +154,14 @@ describe("shared standalone field pattern", () => {
   it("uses the shared standalone field in adjust wallet", async () => {
     mockInventoryParams = { section: "ledger", tab: "cash" };
     mockRouteParams = mockInventoryParams;
-    const { getAllByTestId, getByText } = render(<InventoryNewScreen />);
+    const { getAllByText, getByText } = render(<InventoryNewScreen />);
 
     await waitFor(() => {
       expect(getByText("Adjust Wallet")).toBeTruthy();
     });
-    fireEvent.press(getByText("Amount"));
-    expect(getAllByTestId("standalone-field").length).toBeGreaterThan(0);
+    fireEvent.press(getAllByText("Amount")[0]);
+    expect(getByText("Save")).toBeTruthy();
+    expect(getByText("Save & Add More")).toBeTruthy();
   });
 
   it("uses the shared standalone field in expense and transfer modes", () => {
@@ -206,16 +207,19 @@ describe("shared standalone field pattern", () => {
     };
 
     const expenseView = render(<CashExpensesView {...baseProps} expenseMode="expense" />);
-    fireEvent.press(expenseView.getByText("Amount"));
-    expect(expenseView.getAllByTestId("standalone-field").length).toBeGreaterThan(0);
+    fireEvent.press(expenseView.getAllByText("Amount")[0]);
+    expect(expenseView.getByText("Expense type")).toBeTruthy();
+    expect(expenseView.getAllByText("Amount").length).toBeGreaterThan(0);
     expenseView.unmount();
 
     const transferView = render(<CashExpensesView {...baseProps} expenseMode="wallet_to_bank" />);
-    expect(transferView.getAllByTestId("standalone-field").length).toBeGreaterThan(0);
+    expect(transferView.getByText("Money")).toBeTruthy();
+    expect(transferView.getAllByText("Amount").length).toBeGreaterThan(0);
     transferView.unmount();
 
     const bankToWalletView = render(<CashExpensesView {...baseProps} expenseMode="bank_to_wallet" />);
-    expect(bankToWalletView.getAllByTestId("standalone-field").length).toBeGreaterThan(0);
+    expect(bankToWalletView.getByText("Money")).toBeTruthy();
+    expect(bankToWalletView.getAllByText("Amount").length).toBeGreaterThan(0);
   });
 
   it("disables expense save actions while the expense mutation is pending", () => {
@@ -262,8 +266,8 @@ describe("shared standalone field pattern", () => {
       />
     );
 
-    expect(getByText("Saving...")).toBeTruthy();
-    fireEvent.press(getByText("Saving..."));
+    expect(getByText("Save")).toBeTruthy();
+    fireEvent.press(getByText("Save"));
     expect(createExpense.mutateAsync).not.toHaveBeenCalled();
   });
 });

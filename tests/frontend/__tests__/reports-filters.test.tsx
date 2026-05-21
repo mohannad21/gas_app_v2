@@ -127,7 +127,7 @@ describe("ReportsScreen filters", () => {
           event_type: "collection_money",
           source_id: "collection-1",
           customer_name: "Adam",
-          label: "Received payment",
+          label: "Customer paid",
           money_amount: 50,
         }),
         makeEvent({
@@ -179,7 +179,7 @@ describe("ReportsScreen filters", () => {
     fireEvent.press(getByText("Customer Activities"));
     const subtypeRow = getByTestId("reports-filter-subtypes");
     expect(within(subtypeRow).getByText("Replacement")).toBeTruthy();
-    expect(within(subtypeRow).getByText("Received payment")).toBeTruthy();
+    expect(within(subtypeRow).getByText("Customer paid")).toBeTruthy();
     expect(queryByText("Paid company")).toBeNull();
   });
 

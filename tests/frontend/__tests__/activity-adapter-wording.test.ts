@@ -26,7 +26,7 @@ describe("activity adapter wording", () => {
         delivered_at: "2026-05-05T10:00:00Z",
         created_at: "2026-05-05T10:00:00Z",
       } as any).label
-    ).toBe("Sell Full");
+    ).toBe("Sold full");
 
     expect(
       collectionToEvent({
@@ -40,7 +40,7 @@ describe("activity adapter wording", () => {
         effective_at: "2026-05-05T10:00:00Z",
         created_at: "2026-05-05T10:00:00Z",
       } as any).label
-    ).toBe("Received payment");
+    ).toBe("Customer paid");
 
     expect(
       collectionToEvent({

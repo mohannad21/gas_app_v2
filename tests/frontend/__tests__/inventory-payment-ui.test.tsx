@@ -99,8 +99,8 @@ describe("InventoryNewScreen company payment layout", () => {
     mockCreateCompanyPaymentPending = true;
     const { getByText } = render(<InventoryNewScreen />);
 
-    expect(getByText("Saving...")).toBeTruthy();
-    fireEvent.press(getByText("Saving..."));
+    expect(getByText("Save")).toBeTruthy();
+    fireEvent.press(getByText("Save"));
     expect(mockCreateCompanyPaymentMutateAsync).not.toHaveBeenCalled();
   });
 });

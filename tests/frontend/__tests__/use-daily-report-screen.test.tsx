@@ -27,11 +27,15 @@ function Harness({
     dayByDate: Record<string, unknown>;
   }) => void;
 }) {
-  const { setV2Expanded, v2DayByDate, v2DayStatusByDate } = useDailyReportScreen(30, selectedDate);
+  const { setV2Expanded, v2DayByDate, v2DayStatusByDate, v2Expanded } = useDailyReportScreen(30, selectedDate);
 
   useEffect(() => {
-    setV2Expanded(expanded);
-  }, [expanded, setV2Expanded]);
+    const sameExpanded =
+      v2Expanded.length === expanded.length && v2Expanded.every((date, index) => date === expanded[index]);
+    if (!sameExpanded) {
+      setV2Expanded(expanded);
+    }
+  }, [expanded, setV2Expanded, v2Expanded]);
 
   useEffect(() => {
     onSnapshot({
@@ -68,7 +72,7 @@ describe("useDailyReportScreen ownership", () => {
     };
 
     const { getByTestId } = render(
-      <Harness selectedDate="2025-01-01" expanded={["2025-01-01"]} onSnapshot={onSnapshot} />
+      <Harness selectedDate="2025-01-01" expanded={[]} onSnapshot={onSnapshot} />
     );
 
     await waitFor(() => {

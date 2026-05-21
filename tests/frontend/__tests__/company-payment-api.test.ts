@@ -1,7 +1,7 @@
 const mockBuildHappenedAt = jest.fn(() => "2025-01-10T17:21:00.000Z");
 
 jest.mock("@/lib/date", () => ({
-  buildHappenedAt: (...args: unknown[]) => mockBuildHappenedAt(...args),
+  buildActivityHappenedAt: (...args: unknown[]) => mockBuildHappenedAt(...args),
 }));
 
 import { api, createCompanyPayment } from "@/lib/api";

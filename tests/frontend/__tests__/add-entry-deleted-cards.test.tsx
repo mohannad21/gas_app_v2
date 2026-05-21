@@ -151,7 +151,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Expenses"));
+    fireEvent.press(getByText("Money\nActivities"));
 
     expect(getByText("100")).toBeTruthy();
     expect(queryByText("200")).toBeNull();
@@ -167,7 +167,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Expenses"));
+    fireEvent.press(getByText("Money\nActivities"));
 
     expect(getByText("Wallet → Bank")).toBeTruthy();
     expect(queryByText("Bank → Wallet")).toBeNull();
@@ -186,8 +186,8 @@ describe("Add Entry — deleted cards are hidden", () => {
     const { getByText, queryByText } = render(<AddChooserScreen />);
     fireEvent.press(getByText("Company\nActivities"));
 
-    expect(getByText("Amount 400")).toBeTruthy();
-    expect(queryByText("Amount 888")).toBeNull();
+    expect(getByText("Payment to company 400 $")).toBeTruthy();
+    expect(queryByText("Payment to company 888 $")).toBeNull();
   });
 
   it("deleted inventory adjustment does not appear; active one does", () => {

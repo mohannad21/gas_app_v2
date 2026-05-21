@@ -44,6 +44,7 @@ jest.mock("@/hooks/useCustomers", () => ({
     refetch: jest.fn(),
   }),
   useDeleteCustomer: () => ({ mutateAsync: jest.fn() }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   CUSTOMER_DELETE_BLOCKED_MESSAGE: "Customer has transactions",
   isCustomerDeleteBlockedError: () => false,
@@ -73,6 +74,7 @@ jest.mock("@/hooks/useBalancesSummary", () => ({
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useExpenses", () => ({
@@ -128,7 +130,7 @@ describe("Add screen destructive confirmation copy", () => {
   it("uses real delete wording for orders", () => {
     const view = render(<AddChooserScreen />);
 
-    fireEvent(view.getByLabelText("Remove order"), "press", { stopPropagation: jest.fn() });
+    fireEvent(view.getByLabelText("Delete"), "press", { stopPropagation: jest.fn() });
 
     expect(view.getByText("Delete order?")).toBeTruthy();
     expect(view.getByText("This will reverse the order and update related ledger balances.")).toBeTruthy();

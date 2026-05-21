@@ -66,6 +66,7 @@ jest.mock("@/hooks/useOrders", () => ({
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
@@ -76,6 +77,7 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
     refetch: jest.fn(),
   }),
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useCollections", () => ({

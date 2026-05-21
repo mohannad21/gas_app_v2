@@ -24,7 +24,7 @@ function makeRefill(overrides: Partial<InventoryRefillSummary> = {}): InventoryR
 }
 
 describe("activityAdapter company balance pills", () => {
-  it("keeps the company money transition on refill cards when money is unchanged but non-zero", () => {
+  it("omits unchanged company balance transitions on refill cards", () => {
     const event = refillSummaryToEvent(
       makeRefill({
         buy12: 3,
@@ -32,7 +32,7 @@ describe("activityAdapter company balance pills", () => {
         buy48: 4,
         return48: 4,
         total_cost: 2090,
-        paid_now: 2090,
+        paid_amount: 2090,
         live_debt_cash: -200,
         live_debt_cylinders_12: -6,
         live_debt_cylinders_48: -10,
@@ -42,16 +42,10 @@ describe("activityAdapter company balance pills", () => {
     expect(event.event_type).toBe("refill");
     expect(event.company_before).toBe(-200);
     expect(event.company_after).toBe(-200);
-    expect(event.balance_transitions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ scope: "company", component: "money", before: -200, after: -200 }),
-        expect.objectContaining({ scope: "company", component: "cyl_12", before: -6, after: -6 }),
-        expect.objectContaining({ scope: "company", component: "cyl_48", before: -10, after: -10 }),
-      ])
-    );
+    expect(event.balance_transitions).toBeUndefined();
   });
 
-  it("renders company money and unchanged cylinder transitions for buy-full cards", () => {
+  it("renders company money transitions and omits unchanged cylinders for buy-full cards", () => {
     const event = refillSummaryToEvent(
       makeRefill({
         kind: "buy_iron",
@@ -60,14 +54,14 @@ describe("activityAdapter company balance pills", () => {
         new12: 2,
         new48: 1,
         total_cost: 300,
-        paid_now: 100,
+        paid_amount: 100,
         live_debt_cash: 50,
         live_debt_cylinders_12: -6,
         live_debt_cylinders_48: 4,
       })
     );
 
-    expect(event.event_type).toBe("company_buy_iron");
+    expect(event.event_type).toBe("buy_full_from_company");
     expect(event.company_before).toBe(-150);
     expect(event.company_after).toBe(50);
     expect(event.company_12kg_before).toBe(-6);
@@ -77,8 +71,12 @@ describe("activityAdapter company balance pills", () => {
     expect(event.balance_transitions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ scope: "company", component: "money", before: -150, after: 50 }),
-        expect.objectContaining({ scope: "company", component: "cyl_12", before: -6, after: -6 }),
-        expect.objectContaining({ scope: "company", component: "cyl_48", before: 4, after: 4 }),
+      ])
+    );
+    expect(event.balance_transitions).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: "company", component: "cyl_12" }),
+        expect.objectContaining({ scope: "company", component: "cyl_48" }),
       ])
     );
   });

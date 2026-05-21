@@ -4,16 +4,22 @@ import { fireEvent, render } from "@testing-library/react-native";
 import NewExpenseScreen from "@/app/expenses/new";
 
 jest.mock("@/hooks/useExpenses", () => ({
-  useCreateExpense: () => ({ mutateAsync: jest.fn() }),
+  useCreateExpense: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useExpenses: () => ({ data: [], isLoading: false, error: null }),
+  useUpdateExpense: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
 jest.mock("@/hooks/useBankDeposits", () => ({
-  useCreateBankDeposit: () => ({ mutateAsync: jest.fn() }),
+  useCreateBankDeposit: () => ({ mutateAsync: jest.fn(), isPending: false }),
+}));
+
+jest.mock("@/hooks/useExpenseCategories", () => ({
+  useExpenseCategories: () => ({ data: [], isLoading: false, error: null }),
 }));
 
 jest.mock("@/hooks/useReports", () => ({
   useDailyReportsV2: () => ({
-    data: [{ cash_end: 100 }],
+    data: [{ wallet_end: 100 }],
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -49,24 +55,20 @@ describe("NewExpenseScreen transfer tabs", () => {
     const { getByDisplayValue, getByText } = render(<NewExpenseScreen />);
 
     fireEvent.press(getByText("Bank to Wallet"));
-    fireEvent.changeText(getByDisplayValue("0"), "25");
-    expect(
-      getByText("You will have 125 shekels in the wallet after moving 25 from bank. (was 100)")
-    ).toBeTruthy();
+    fireEvent.changeText(getByDisplayValue("0.00"), "25");
+    expect(getByText("100.00->125.00")).toBeTruthy();
 
     fireEvent.press(getByText("+5"));
-    expect(getByDisplayValue("30")).toBeTruthy();
+    expect(getByDisplayValue("30.00")).toBeTruthy();
   });
 
   it("switches to Bank to Wallet and prefills the shortfall from the inline prompt", () => {
     const { getByDisplayValue, getByText } = render(<NewExpenseScreen />);
 
-    fireEvent.changeText(getByDisplayValue("0"), "150");
+    fireEvent.changeText(getByDisplayValue("0.00"), "150");
     fireEvent.press(getByText("Transfer now"));
 
-    expect(getByDisplayValue("50")).toBeTruthy();
-    expect(
-      getByText("You will have 150 shekels in the wallet after moving 50 from bank. (was 100)")
-    ).toBeTruthy();
+    expect(getByDisplayValue("50.00")).toBeTruthy();
+    expect(getByText("100.00->150.00")).toBeTruthy();
   });
 });

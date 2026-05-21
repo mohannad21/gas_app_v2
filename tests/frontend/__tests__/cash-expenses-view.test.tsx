@@ -24,6 +24,7 @@ jest.mock("@/hooks/useCollections", () => ({
 jest.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
   useDeleteCustomer: () => ({ mutate: jest.fn() }),
+  useDeleteCustomerAdjustment: () => ({ mutateAsync: jest.fn() }),
   useAllCustomerAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
 }));
 
@@ -34,6 +35,7 @@ jest.mock("@/hooks/useCompanyBalances", () => ({
     refetch: jest.fn(),
   }),
   useCompanyBalanceAdjustments: () => ({ data: [], isLoading: false, error: null, refetch: jest.fn() }),
+  useDeleteCompanyBalanceAdjustment: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock("@/hooks/useSystems", () => ({
@@ -169,36 +171,37 @@ describe("Cash & Expenses view", () => {
   it("switches to expenses mode and renders duplicate expenses separately", () => {
     const { getAllByLabelText, getAllByText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Expenses"));
-    expect(getAllByText("Wallet to Bank").length).toBeGreaterThan(0);
-    expect(getByText("80")).toBeTruthy();
-    expect(getByText("50")).toBeTruthy();
-    expect(getAllByLabelText("Remove expense").length).toBe(2);
+    fireEvent.press(getByText("Money\nActivities"));
+    expect(getAllByText("Wallet to bank").length).toBeGreaterThan(0);
+    expect(getByText("80.00")).toBeTruthy();
+    expect(getByText("50.00")).toBeTruthy();
+    expect(getAllByLabelText("Delete").length).toBe(3);
   });
 
   it("shows both same-day same-type expenses as distinct rows", () => {
-    const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
+    const { getAllByLabelText, getAllByText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Expenses"));
-    expect(getByText("second")).toBeTruthy();
-    expect(getByText("test")).toBeTruthy();
-    expect(getAllByLabelText("Remove expense").length).toBe(2);
+    fireEvent.press(getByText("Money\nActivities"));
+    expect(getAllByText("fuel")).toHaveLength(2);
+    expect(getByText("80.00")).toBeTruthy();
+    expect(getByText("50.00")).toBeTruthy();
+    expect(getAllByLabelText("Delete").length).toBe(3);
   });
 
   it("deletes the exact selected expense row through the real UI path", async () => {
     const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Expenses"));
-    const deleteExpenseButtons = getAllByLabelText("Remove expense");
+    fireEvent.press(getByText("Money\nActivities"));
+    const deleteExpenseButtons = getAllByLabelText("Delete");
     await act(async () => {
-      fireEvent.press(deleteExpenseButtons[0]);
+      fireEvent.press(deleteExpenseButtons[1]);
     });
     expect(mockDeleteExpense).toHaveBeenCalledWith({ id: "e2", date: "2025-01-01" });
   });
 
   it("shows Done accessory for keyboard", () => {
     const { getByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Expenses"));
+    fireEvent.press(getByText("Money\nActivities"));
     expect(getByText("Done")).toBeTruthy();
   });
 });

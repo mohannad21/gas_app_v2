@@ -46,13 +46,13 @@ describe("CompanyBalancesSection", () => {
     expect(getByText("Money balance")).toBeTruthy();
     expect(getByText("12kg balance")).toBeTruthy();
     expect(getByText("48kg balance")).toBeTruthy();
-    expect(getByText("120 shekels")).toBeTruthy();
+    expect(getByText("120 $")).toBeTruthy();
     expect(getByText("4 cyl")).toBeTruthy();
     expect(getByText("2 cyl")).toBeTruthy();
     expect(getByText("Adjust balances")).toBeTruthy();
-    expect(getAllByText("Credit to company")).toHaveLength(2);
-    expect(getByText("Debts to company")).toBeTruthy();
-    expect(queryByText("+120 shekels")).toBeNull();
+    expect(getAllByText("Debts on distributor")).toHaveLength(2);
+    expect(getByText("Credit for distributor")).toBeTruthy();
+    expect(queryByText("+120 $")).toBeNull();
     expect(queryByText("+ = you owe company. - = company owes you.")).toBeNull();
   });
 

@@ -45,8 +45,8 @@ describe("CustomerBalancesSection", () => {
     expect(getByText("Money credit")).toBeTruthy();
     expect(getByText("12kg credit")).toBeTruthy();
     expect(getByText("48kg credit")).toBeTruthy();
-    expect(getByText("20 shekels")).toBeTruthy();
-    expect(getByText("15 shekels")).toBeTruthy();
+    expect(getByText("20 $")).toBeTruthy();
+    expect(getByText("15 $")).toBeTruthy();
     expect(queryByText("Wallet debt")).toBeNull();
     expect(queryByText("Wallet credit")).toBeNull();
   });

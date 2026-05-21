@@ -46,7 +46,7 @@ jest.mock("@/lib/date", () => {
   const actual = jest.requireActual("@/lib/date");
   return {
     ...actual,
-    buildHappenedAt: (...args: unknown[]) => mockBuildHappenedAt(...args),
+    buildActivityHappenedAt: (...args: unknown[]) => mockBuildHappenedAt(...args),
   };
 });
 
@@ -227,7 +227,7 @@ describe("NewOrderScreen collection request_id forwarding", () => {
 
     await waitFor(() => {
       expect(mockCustomerBalanceRefetch).toHaveBeenCalledTimes(1);
-      expect(getByText("Customer owes you 80")).toBeTruthy();
+      expect(getByText("Debts on customer 80.00")).toBeTruthy();
     });
 
     expect(mockRouterReplace).not.toHaveBeenCalled();
@@ -286,7 +286,7 @@ describe("NewOrderScreen collection request_id forwarding", () => {
 
     await waitFor(() => {
       expect(mockCustomerBalanceRefetch).toHaveBeenCalledTimes(1);
-      expect(getByText("Customer owes you 1 12kg empty cylinder")).toBeTruthy();
+      expect(getByText("Debts on customer 1 12kg empty cylinder")).toBeTruthy();
     });
 
     expect(mockRouterReplace).not.toHaveBeenCalled();

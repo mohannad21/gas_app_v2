@@ -32,7 +32,7 @@ describe("payment direction wording", () => {
   });
 
   it("uses updated report shorthand labels for payment directions", () => {
-    expect(formatEventType("collection_money")).toBe("Received payment");
+    expect(formatEventType("collection_money")).toBe("Customer paid");
     expect(formatEventType("collection_payout")).toBe("Paid customer");
     expect(formatEventType("company_payment")).toBe("Paid company");
     expect(formatEventType("company_buy_iron")).toBe("Bought full");

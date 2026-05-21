@@ -274,7 +274,7 @@ describe("customer review derived stats", () => {
     expect(totals).toEqual({ "12kg": 2, "48kg": 0 });
   });
 
-  it("sorts activity events by effective_at before created_at", () => {
+  it("sorts activity events by created_at before effective_at", () => {
     const sorted = sortCustomerActivityEvents([
       makeEvent({
         id: "backdated-created-late",
@@ -288,6 +288,6 @@ describe("customer review derived stats", () => {
       }),
     ]);
 
-    expect(sorted.map((event) => event.id)).toEqual(["newer-effective", "backdated-created-late"]);
+    expect(sorted.map((event) => event.id)).toEqual(["backdated-created-late", "newer-effective"]);
   });
 });

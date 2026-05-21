@@ -77,8 +77,8 @@ describe("OrderDetailsScreen delete confirmation", () => {
 
     expect(getByText("Customer: Alice")).toBeTruthy();
     expect(getByText("System: Main Kitchen")).toBeTruthy();
-    expect(getByText("Total: $75")).toBeTruthy();
-    expect(getByText("Paid: $25")).toBeTruthy();
+    expect(getByText("Total: $75.00")).toBeTruthy();
+    expect(getByText("Paid: $25.00")).toBeTruthy();
     expect(queryByText(/^Balance:/)).toBeNull();
     expect(queryByText(/^Cyl 12:/)).toBeNull();
     expect(queryByText(/^Cyl 48:/)).toBeNull();

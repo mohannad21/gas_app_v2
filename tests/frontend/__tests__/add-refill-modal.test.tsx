@@ -19,6 +19,10 @@ jest.mock("@/hooks/useInventory", () => ({
   useCreateRefill: () => ({ mutateAsync: mockCreateRefillMutateAsync, isPending: false }),
   useInitInventory: () => ({ mutateAsync: mockInitInventoryMutateAsync, isPending: false }),
   useInventoryRefillDetails: () => ({ data: null }),
+  useInventoryLatest: () => ({
+    data: { full12: 10, empty12: 3, full48: 6, empty48: 1 },
+    isLoading: false,
+  }),
   useInventorySnapshot: () => ({
     data: { full12: 10, empty12: 3, full48: 6, empty48: 1 },
   }),
@@ -92,7 +96,7 @@ describe("AddRefillModal company activity behavior", () => {
           new12: 1,
           new48: 0,
           total_cost: 75,
-          paid_now: 75,
+          paid_amount: 0,
         })
       );
     });
@@ -104,7 +108,7 @@ describe("AddRefillModal company activity behavior", () => {
       <RefillForm visible onClose={jest.fn()} onSaved={jest.fn()} mode="return" walletBalance={500} />
     );
 
-    expect(getAllByText("You owe company 2x12kg empties")).toHaveLength(1);
-    expect(getAllByText("Company owes you 1x48kg empty")).toHaveLength(1);
+    expect(getAllByText("Credit for distributor 2x12kg full cylinders")).toHaveLength(1);
+    expect(getAllByText("Debts on distributor 1x48kg empty cylinder")).toHaveLength(1);
   });
 });

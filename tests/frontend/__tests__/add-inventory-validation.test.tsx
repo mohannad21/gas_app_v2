@@ -121,7 +121,10 @@ describe("Add screen navigation", () => {
 
     fireEvent.press(getByText("+ New Customer Activity"));
 
-    expect(router.push).toHaveBeenCalledWith("/orders/new");
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/orders/new",
+      params: { source: "add" },
+    });
   });
 
   it("keeps company activity button route unchanged", () => {
@@ -132,17 +135,20 @@ describe("Add screen navigation", () => {
 
     expect(router.push).toHaveBeenCalledWith({
       pathname: "/inventory/new",
-      params: { section: "company", tab: "refill" },
+      params: { section: "company", tab: "refill", source: "add" },
     });
   });
 
   it("keeps expense button route unchanged", () => {
     const { getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Expenses"));
-    fireEvent.press(getByText("+ Add Expense"));
+    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("+ Add Money Activity"));
 
-    expect(router.push).toHaveBeenCalledWith("/expenses/new");
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/expenses/new",
+      params: { source: "add" },
+    });
   });
 
   it("keeps ledger adjustment button route unchanged", () => {
@@ -153,7 +159,7 @@ describe("Add screen navigation", () => {
 
     expect(router.push).toHaveBeenCalledWith({
       pathname: "/inventory/new",
-      params: { section: "ledger", tab: "inventory" },
+      params: { section: "ledger", tab: "inventory", source: "add" },
     });
   });
 
@@ -162,7 +168,7 @@ describe("Add screen navigation", () => {
 
     fireEvent.press(getByText("Ledger\nAdjustments"));
 
-    expect(getByText("Wallet Adjustment")).toBeTruthy();
+    expect(getByText("No ledger adjustments match these filters.")).toBeTruthy();
     expect(queryByText("Cash Adjustment")).toBeNull();
   });
 });

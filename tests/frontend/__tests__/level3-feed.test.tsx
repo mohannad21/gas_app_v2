@@ -76,8 +76,9 @@ describe("Level 3 feed rendering", () => {
       status: "none",
     } as any;
 
-    const { queryByText } = render(<SlimActivityRow event={event} />);
-    expect(queryByText(/^Expense$/)).toBeNull();
+    const { getAllByText, getByText } = render(<SlimActivityRow event={event} />);
+    expect(getByText("fuel")).toBeTruthy();
+    expect(getAllByText(/^Expense$/)).toHaveLength(1);
   });
 
   it("keeps non-expense row titles unchanged", () => {

@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import ReportsScreen from "@/app/(tabs)/reports";
 
@@ -48,6 +49,8 @@ const dayDetail = {
       hero_text: "Received ₪150",
       cash_before: 1000,
       cash_after: 1150,
+      wallet_before: 1000,
+      wallet_after: 1150,
       customer_money_before: 200,
       customer_money_after: 50,
       balance_transitions: [],
@@ -67,6 +70,8 @@ const dayDetail = {
       customer_name: "Acme",
       cash_before: 1000,
       cash_after: 900,
+      wallet_before: 1000,
+      wallet_after: 900,
       customer_money_before: 0,
       customer_money_after: 0,
       customer_12kg_before: 0,
@@ -89,6 +94,8 @@ const dayDetail = {
       hero_text: "Returned 1x12kg | 3x48kg empties",
       cash_before: 1150,
       cash_after: 1150,
+      wallet_before: 1150,
+      wallet_after: 1150,
       customer_12kg_before: 2,
       customer_12kg_after: 1,
       customer_48kg_before: 5,
@@ -105,6 +112,8 @@ const dayDetail = {
       label: "Pay Company",
       cash_before: 900,
       cash_after: 800,
+      wallet_before: 900,
+      wallet_after: 800,
       company_before: 100,
       company_after: 50,
       company_12kg_before: 0,
@@ -123,6 +132,8 @@ const dayDetail = {
       buy48: 0,
       cash_before: 800,
       cash_after: 700,
+      wallet_before: 800,
+      wallet_after: 700,
       company_before: 0,
       company_after: 120,
       company_12kg_before: 0,
@@ -145,6 +156,8 @@ const dayDetail = {
       return48: 0,
       cash_before: 700,
       cash_after: 650,
+      wallet_before: 700,
+      wallet_after: 650,
       company_before: 0,
       company_after: 80,
       company_12kg_before: 0,
@@ -163,6 +176,8 @@ const dayDetail = {
       hero_text: "Transferred ₪500 to bank",
       cash_before: 650,
       cash_after: 150,
+      wallet_before: 650,
+      wallet_after: 150,
       bank_before: 0,
       bank_after: 500,
       balance_transitions: [],
@@ -177,6 +192,7 @@ jest.mock("@/hooks/useDailyReportScreen", () => ({
     v2Expanded: ["2025-01-01"],
     setV2Expanded: jest.fn(),
     v2DayByDate: { "2025-01-01": dayDetail },
+    v2DayStatusByDate: { "2025-01-01": "success" },
     setV2DayByDate: jest.fn(),
     balanceSummary: {
       money: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
@@ -197,6 +213,25 @@ jest.mock("@/hooks/useDailyReportScreen", () => ({
   }),
 }));
 
+jest.mock("@/hooks/useBalancesSummary", () => ({
+  useBalancesSummary: () => ({
+    balanceSummary: {
+      money: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+      cyl12: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+      cyl48: { receivable: { count: 0, total: 0 }, payable: { count: 0, total: 0 } },
+    },
+    companySummary: {
+      give12: 0,
+      receive12: 0,
+      give48: 0,
+      receive48: 0,
+      payCash: 0,
+      receiveCash: 0,
+    },
+    companyBalancesQuery: { data: { company_money: 0, company_cyl_12: 0, company_cyl_48: 0 }, isSuccess: true },
+  }),
+}));
+
 jest.mock("@/hooks/useExpenses", () => ({
   useCreateExpense: () => ({ mutateAsync: jest.fn() }),
 }));
@@ -212,6 +247,7 @@ jest.mock("@react-navigation/native", () => ({
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
+  MaterialCommunityIcons: () => null,
 }));
 
 const rowChildTestIds = (node: any) =>
@@ -219,47 +255,62 @@ const rowChildTestIds = (node: any) =>
     .map((child: any) => child?.props?.testID)
     .filter(Boolean);
 
+function renderReportsScreen() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ReportsScreen />
+    </QueryClientProvider>
+  );
+}
+
 describe("ReportsScreen expanded DeltaBox", () => {
   it("renders customer operational boxes in full-empty-wallet order", () => {
-    const { getByText, getAllByText, getByTestId } = render(<ReportsScreen />);
+    const { getByText, getAllByText, getByTestId } = renderReportsScreen();
 
-    expect(getByText("Installed 1x12kg")).toBeTruthy();
+    expect(getByText("Installed: 1x 12kg")).toBeTruthy();
 
-    fireEvent.press(getByText("Installed 1x12kg"));
+    fireEvent.press(getByText("Installed: 1x 12kg"));
 
-    expect(getAllByText("12kg F").length).toBeGreaterThan(0);
-    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg Full").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg Empty").length).toBeGreaterThan(0);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
     expect(rowChildTestIds(getByTestId("12kg-triplet"))).toEqual(["12kg-full", "12kg-empty", "12kg-cash"]);
   });
 
   it("renders company relationship boxes for company payment and buy iron", () => {
-    const { getAllByText } = render(<ReportsScreen />);
+    const { getAllByText } = renderReportsScreen();
 
-    fireEvent.press(getAllByText("Pay Company")[0]);
+    fireEvent.press(getAllByText("Paid company")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
     fireEvent.press(getAllByText("Bought 2x12kg")[0]);
-    expect(getAllByText("12kg F").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg Full").length).toBeGreaterThan(0);
   });
 
   it("renders customer relationship boxes for payment and grouped return", () => {
-    const { getAllByText } = render(<ReportsScreen />);
+    const { getAllByText, getByTestId } = renderReportsScreen();
 
     fireEvent.press(getAllByText("Received ₪150")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
     fireEvent.press(getAllByText("Returned 1x12kg | 3x48kg empties")[0]);
-    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
-    expect(getAllByText("48kg E").length).toBeGreaterThan(0);
+    expect(getAllByText("Wallet").length).toBeGreaterThan(0);
+    expect(rowChildTestIds(getByTestId("collection_empty-cash-row"))).toEqual([
+      "collection_empty-cash-left",
+      "collection_empty-cash",
+      "collection_empty-cash-right",
+    ]);
   });
 
   it("renders split company relationship result on fixed 2-2-1 rows", () => {
-    const { getAllByText, getByTestId } = render(<ReportsScreen />);
+    const { getAllByText, getByTestId } = renderReportsScreen();
 
     fireEvent.press(getAllByText("Refill")[0]);
-    expect(getAllByText("12kg E").length).toBeGreaterThan(0);
-    expect(getAllByText("48kg F").length).toBeGreaterThan(0);
+    expect(getAllByText("12kg Empty").length).toBeGreaterThan(0);
+    expect(getAllByText("48kg Full").length).toBeGreaterThan(0);
     expect(rowChildTestIds(getByTestId("mixed-12-row"))).toEqual(["mixed-12-full", "mixed-12-empty"]);
     expect(rowChildTestIds(getByTestId("mixed-48-row"))).toEqual(["mixed-48-full", "mixed-48-empty"]);
     expect(rowChildTestIds(getByTestId("mixed-cash-row"))).toEqual([
@@ -270,7 +321,7 @@ describe("ReportsScreen expanded DeltaBox", () => {
   });
 
   it("renders bank deposit as a centered wallet-only row", () => {
-    const { getAllByText, getByTestId, queryByText } = render(<ReportsScreen />);
+    const { getAllByText, getByTestId, queryByText } = renderReportsScreen();
 
     fireEvent.press(getAllByText("Transferred ₪500 to bank")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
