@@ -57,7 +57,7 @@ def test_backdated_order_recomputes_future_days(client) -> None:
     assert_inventory(daily_2["inventory_end"], full12=49, empty12=10, full48=20, empty48=5)
     assert_inventory(daily_3["inventory_end"], full12=47, empty12=10, full48=20, empty48=5)
 
-def test_refill_negative_rejected(client) -> None:
+def test_refill_return_can_make_empty_inventory_negative(client) -> None:
     init_inventory(client, date="2025-01-01")
     payload = {
         "happened_at": iso_at("2025-01-02", "morning"),
@@ -74,7 +74,7 @@ def test_refill_negative_rejected(client) -> None:
     snapshot = resp.json()
     assert snapshot["empty12"] == -90
 
-def test_refill_allow_negative_requires_admin(client) -> None:
+def test_refill_negative_inventory_request_returns_ok(client) -> None:
     init_inventory(client, date="2025-01-01")
     payload = {
         "happened_at": iso_at("2025-01-02", "morning"),
@@ -112,7 +112,7 @@ def test_inventory_snapshot_by_time_of_day(client) -> None:
     assert snapshot["full48"] == 21
     assert snapshot["empty48"] == 3
 
-def test_adjust_negative_rejected(client) -> None:
+def test_adjust_negative_full_inventory_request_returns_ok(client) -> None:
     init_inventory(client, date="2025-01-01")
     payload = {
         "happened_at": iso_at("2025-01-02", "morning"),
@@ -124,7 +124,7 @@ def test_adjust_negative_rejected(client) -> None:
     resp = client.post("/inventory/adjust", json=payload)
     assert resp.status_code == 200
 
-def test_adjust_allow_negative_requires_admin(client) -> None:
+def test_adjust_negative_inventory_request_returns_ok(client) -> None:
     init_inventory(client, date="2025-01-01")
     payload = {
         "happened_at": iso_at("2025-01-02", "morning"),
