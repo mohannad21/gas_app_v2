@@ -76,6 +76,77 @@ describe("SlimActivityRow company activity rendering", () => {
     expect(getByText("Returned: 2x 12kg | 1x 48kg")).toBeTruthy();
   });
 
+  it("uses the backend label for return-only refill rows", () => {
+    const { getAllByText, getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "refill",
+          label: "Returned empties",
+          context_line: "Returned empties",
+          buy12: 0,
+          buy48: 0,
+          return12: 2,
+          return48: 1,
+          total_cost: 0,
+          paid_amount: 0,
+          company_12kg_before: -3,
+          company_12kg_after: -1,
+          company_48kg_before: -2,
+          company_48kg_after: -1,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getAllByText("Returned empties").length).toBeGreaterThan(0);
+    expect(getByText("Returned: 2x 12kg | 1x 48kg")).toBeTruthy();
+  });
+
+  it("renders dist_return_empties with the returned empties label", () => {
+    const { getAllByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "dist_return_empties",
+          label: "Returned empties",
+          context_line: "Returned empties",
+          buy12: 0,
+          buy48: 0,
+          return12: 3,
+          return48: 0,
+          company_12kg_before: -5,
+          company_12kg_after: -2,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getAllByText("Returned empties").length).toBeGreaterThan(0);
+  });
+
+  it("renders buy_full_from_company with the bought full label", () => {
+    const { getAllByText, getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "buy_full_from_company",
+          label: "Bought full",
+          context_line: "Bought full",
+          buy12: 4,
+          buy48: 2,
+          return12: 0,
+          return48: 0,
+          paid_amount: 250,
+          total_cost: 300,
+          company_before: 10,
+          company_after: 60,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getAllByText("Bought full").length).toBeGreaterThan(0);
+    expect(getByText("Bought: 4x 12kg | 2x 48kg")).toBeTruthy();
+  });
+
   it("renders the expense icon and label", () => {
     const { getByText } = render(
       <SlimActivityRow
