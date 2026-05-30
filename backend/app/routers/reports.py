@@ -91,7 +91,7 @@ def _inventory_state_for_event(
     "adjust_company_balance",
     "expense",
     "bank_deposit",
-    "cash_adjust",
+    "adjust_wallet",
     "adjust_customer_balance",
   }:
     return None

@@ -237,3 +237,31 @@ class TestInsertRefillCascade:
         assert after["day2_card"]["inventory_end"] == snap["day2_card"]["inventory_end"]
         assert after["day3_card"]["inventory_end"] == snap["day3_card"]["inventory_end"]
         assert len(after["day1_events"]) == len(snap["day1_events"])
+
+
+class TestCrossCustomerIsolation:
+    def test_replacement_for_customer_c_does_not_change_customer_a_or_b(self, client, world):
+        snap = _snap(client, world)
+
+        post_replacement(
+            client,
+            world["customer_c_id"],
+            world["customer_c_system_12kg"],
+            "12kg",
+            cylinders_installed=1,
+            cylinders_received=0,
+            price_total=100,
+            paid_amount=50,
+            happened_at=at(DAY1, 9, 15),
+        )
+
+        customer_a = get_customer_balances(client, world["customer_a_id"])
+        customer_b = get_customer_balances(client, world["customer_b_id"])
+
+        assert customer_a["money_balance"] == snap["customer_a"]["money_balance"]
+        assert customer_a["cylinder_balance_12kg"] == snap["customer_a"]["cylinder_balance_12kg"]
+        assert customer_a["cylinder_balance_48kg"] == snap["customer_a"]["cylinder_balance_48kg"]
+
+        assert customer_b["money_balance"] == snap["customer_b"]["money_balance"]
+        assert customer_b["cylinder_balance_12kg"] == snap["customer_b"]["cylinder_balance_12kg"]
+        assert customer_b["cylinder_balance_48kg"] == snap["customer_b"]["cylinder_balance_48kg"]

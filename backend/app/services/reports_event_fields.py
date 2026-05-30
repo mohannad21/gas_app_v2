@@ -25,8 +25,8 @@ _EVENT_LABELS: dict[str, str] = {
   "payment_from_company": "Payment from company",
   "expense": "Expense",
   "bank_deposit": "Deposit",
-  "adjust": "Inventory adjustment",
-  "cash_adjust": "Wallet adjustment",
+  "adjust_inventory": "Inventory adjustment",
+  "adjust_wallet": "Wallet adjustment",
   "payment_to_customer": "Payment to customer",
   "adjust_customer_balance": "Balance adjustment",
   "adjust_company_balance": "Balance adjustment",
@@ -219,7 +219,7 @@ def _level3_money(event: DailyReportEvent) -> Level3Money:
   elif event.event_type == "bank_deposit":
     verb = "none"
     amount = 0
-  elif event.event_type == "cash_adjust":
+  elif event.event_type == "adjust_wallet":
     total = _safe_int(event.total_cost)
     if total > 0:
       verb = "received"
@@ -339,12 +339,12 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
     if amount:
       return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to bank"
     return "Transferred to bank"
-  if event.event_type == "cash_adjust":
+  if event.event_type == "adjust_wallet":
     amount = _safe_int(event.total_cost)
     if amount:
       return f"Wallet change: {_format_signed_money_major(amount, money_decimals, currency_symbol)}"
     return "Wallet adjustment"
-  if event.event_type == "adjust":
+  if event.event_type == "adjust_inventory":
     lines = _inventory_adjustment_summary_lines(event)
     if lines:
       return "\n".join(lines)
@@ -406,7 +406,7 @@ def _apply_ui_fields(
     event.money_direction = "none"
     event.money_delta = 0
 
-  if event.event_type == "cash_adjust":
+  if event.event_type == "adjust_wallet":
     amount_minor = _safe_int(event.total_cost)
     event.money_amount = abs(amount_minor)
     event.money_direction = "in" if amount_minor >= 0 else "out"

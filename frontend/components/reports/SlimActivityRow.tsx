@@ -296,6 +296,7 @@ export default function SlimActivityRow({
       return event?.transfer_direction === "bank_to_wallet"
         ? EVENT_LABELS.BANK_TO_WALLET
         : EVENT_LABELS.WALLET_TO_BANK;
+    if (event?.label) return event.label;
     return formatEventType(eventType, event?.order_mode);
   })();
   const counterparty = event?.counterparty;
