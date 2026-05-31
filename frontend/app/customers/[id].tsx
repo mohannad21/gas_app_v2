@@ -7,6 +7,7 @@ import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
+import { normalizeEventType } from "@/lib/activityKindMeta";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
@@ -282,13 +283,14 @@ export default function CustomerDetailsScreen() {
   const availableActivityFilters = useMemo(() => {
     const visible = new Set<ActivityFilter>();
     for (const event of activities) {
-      if ((event.event_type === "order" && event.order_mode === "replacement") || event.event_type === "replacement") visible.add("replacement");
-      if (event.event_type === "collection_money" || event.event_type === "payment_from_customer") visible.add("late_payment");
-      if (event.event_type === "collection_payout") visible.add("payout");
-      if (event.event_type === "collection_empty" || event.event_type === "customer_return_empties") visible.add("return_empties");
-      if ((event.event_type === "order" && event.order_mode === "buy_iron") || event.event_type === "buy_empty_from_customer") visible.add("buy_empty");
-      if ((event.event_type === "order" && event.order_mode === "sell_iron") || event.event_type === "sell_full") visible.add("sell_full");
-      if (event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance") visible.add("adjustment");
+      const _kind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
+      if (_kind === "replacement") visible.add("replacement");
+      if (_kind === "payment_from_customer") visible.add("late_payment");
+      if (_kind === "payment_to_customer") visible.add("payout");
+      if (_kind === "customer_return_empties") visible.add("return_empties");
+      if (_kind === "buy_empty_from_customer") visible.add("buy_empty");
+      if (_kind === "sell_full") visible.add("sell_full");
+      if (_kind === "adjust_customer_balance") visible.add("adjustment");
     }
     return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
   }, [activities]);
@@ -363,20 +365,34 @@ export default function CustomerDetailsScreen() {
     if (selectedFilter) {
       next = next.filter((e) => {
         switch (selectedFilter) {
-          case "replacement":
-            return (e.event_type === "order" && e.order_mode === "replacement") || e.event_type === "replacement";
-          case "late_payment":
-            return e.event_type === "collection_money" || e.event_type === "payment_from_customer";
-          case "payout":
-            return e.event_type === "collection_payout";
-          case "return_empties":
-            return e.event_type === "collection_empty" || e.event_type === "customer_return_empties";
-          case "buy_empty":
-            return (e.event_type === "order" && e.order_mode === "buy_iron") || e.event_type === "buy_empty_from_customer";
-          case "sell_full":
-            return (e.event_type === "order" && e.order_mode === "sell_iron") || e.event_type === "sell_full";
-          case "adjustment":
-            return e.event_type === "customer_adjust" || e.event_type === "adjust_customer_balance";
+          case "replacement": {
+            const k = normalizeEventType(e.event_type, { order_mode: e.order_mode ?? undefined });
+            return k === "replacement";
+          }
+          case "late_payment": {
+            const k = normalizeEventType(e.event_type);
+            return k === "payment_from_customer";
+          }
+          case "payout": {
+            const k = normalizeEventType(e.event_type);
+            return k === "payment_to_customer";
+          }
+          case "return_empties": {
+            const k = normalizeEventType(e.event_type);
+            return k === "customer_return_empties";
+          }
+          case "buy_empty": {
+            const k = normalizeEventType(e.event_type, { order_mode: e.order_mode ?? undefined });
+            return k === "buy_empty_from_customer";
+          }
+          case "sell_full": {
+            const k = normalizeEventType(e.event_type, { order_mode: e.order_mode ?? undefined });
+            return k === "sell_full";
+          }
+          case "adjustment": {
+            const k = normalizeEventType(e.event_type);
+            return k === "adjust_customer_balance";
+          }
           default:
             return true;
         }
@@ -792,15 +808,14 @@ export default function CustomerDetailsScreen() {
         !activitiesError &&
         filteredActivities.map((event) => {
           const fmtMoney = (v: number) => Number(v || 0).toFixed(getMoneyDecimals());
-          const isOrder =
-            event.event_type === "order" || event.event_type === "replacement" ||
-            event.event_type === "sell_full" || event.event_type === "buy_empty_from_customer";
+          const _evKind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
+          const isOrder = _evKind === "replacement" || _evKind === "sell_full" || _evKind === "buy_empty_from_customer";
           const isCollection =
-            event.event_type === "collection_money" || event.event_type === "payment_from_customer" ||
-            event.event_type === "collection_empty" || event.event_type === "customer_return_empties" ||
-            event.event_type === "collection_payout";
+            _evKind === "payment_from_customer" ||
+            _evKind === "customer_return_empties" ||
+            _evKind === "payment_to_customer";
 
-          const isAdjustment = event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance";
+          const isAdjustment = _evKind === "adjust_customer_balance";
 
           return (
             <SlimActivityRow

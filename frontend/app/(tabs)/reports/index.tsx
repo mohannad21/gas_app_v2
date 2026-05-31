@@ -332,9 +332,10 @@ export default function ReportsScreen() {
   const selectedDayInfo = selectedDate ? v2DayByDate[selectedDate] ?? null : null;
   const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
   const rawSelectedEvents = sortReportEventsNewestFirst(
-    ((selectedDayInfo?.events ?? []) as any[]).filter(
-      (ev) => ev?.event_type !== "adjust_customer_balance" && ev?.event_type !== "adjust_company_balance"
-    )
+    ((selectedDayInfo?.events ?? []) as any[]).filter((ev) => {
+      const k = normalizeEventType(ev?.event_type ?? "");
+      return k !== "adjust_customer_balance" && k !== "adjust_company_balance";
+    })
   );
   const availableGroupOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -1002,6 +1003,11 @@ function _Deleted_EventExpandedPanel_SeeComponentsFolder({
   formatCount: (v: number) => string;
 }) {
   const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+  const _evKind = normalizeEventType(eventType, {
+    order_mode: ev?.order_mode,
+    transfer_direction: ev?.transfer_direction,
+    money_direction: ev?.money_direction,
+  });
 
   const invBefore = ev?.inventory_before ?? null;
   const invAfter = ev?.inventory_after ?? null;
@@ -1213,17 +1219,17 @@ function _Deleted_EventExpandedPanel_SeeComponentsFolder({
     );
 
   const content = (() => {
-    if (eventType === "order" && inferredGasType) return renderGasTriplet(inferredGasType);
-    if (eventType === "collection_empty" && inferredGasType) return renderSparseGasState(inferredGasType);
-    if (eventType === "collection_money" || eventType === "collection_payout") return renderCenteredWalletOnly(eventType);
-    if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust") return renderCenteredWalletOnly(eventType);
-    if (eventType === "refill" || eventType === "company_buy_full") {
+    if ((_evKind === "replacement" || _evKind === "sell_full" || _evKind === "buy_empty_from_customer") && inferredGasType) return renderGasTriplet(inferredGasType);
+    if (_evKind === "customer_return_empties" && inferredGasType) return renderSparseGasState(inferredGasType);
+    if (_evKind === "payment_from_customer" || _evKind === "payment_to_customer") return renderCenteredWalletOnly(eventType);
+    if (_evKind === "expense" || _evKind === "bank_to_wallet" || _evKind === "wallet_to_bank" || _evKind === "adjust_wallet") return renderCenteredWalletOnly(eventType);
+    if (_evKind === "refill" || _evKind === "buy_full_from_company") {
       if (touches12 && touches48) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "mixed" });
       if (touches12) return renderGasTriplet("12kg");
       if (touches48) return renderGasTriplet("48kg");
       if (hasCash) return renderCenteredWalletOnly(eventType);
     }
-    if (eventType === "adjust") {
+    if (_evKind === "adjust_inventory") {
       const cylinderBoxes = [
         has12InventoryState ? renderTopStateBox({ key: "adjust-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }) : null,
         has12InventoryState ? renderTopStateBox({ key: "adjust-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }) : null,

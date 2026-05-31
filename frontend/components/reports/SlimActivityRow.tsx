@@ -10,6 +10,7 @@ import { getCurrencySymbol } from "@/lib/money";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
+import type { ActivityKind } from "@/lib/activityKinds";
 import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 import { t } from "@/lib/i18n/translations";
 import { DailyReportEvent } from "@/types/domain";
@@ -122,11 +123,17 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
   return null;
 };
 
-const _ORDER_KINDS = new Set(["order", "replacement", "sell_full", "buy_empty_from_customer"]);
-const _isOrderKind = (et: string) => _ORDER_KINDS.has(et);
+const _ORDER_KINDS = new Set<ActivityKind>(["replacement", "sell_full", "buy_empty_from_customer"]);
+const _isOrderKind = (et: string) => {
+  const k = normalizeEventType(et);
+  return k !== null && _ORDER_KINDS.has(k);
+};
 const _isCollectionMoney = (et: string) => normalizeEventType(et) === "payment_from_customer";
 const _isCollectionEmpty = (et: string) => normalizeEventType(et) === "customer_return_empties";
-const _isCompanyPayment = (et: string) => et === "company_payment" || et === "payment_to_company" || et === "payment_from_company";
+const _isCompanyPayment = (et: string) => {
+  const k = normalizeEventType(et);
+  return k === "payment_to_company" || k === "payment_from_company";
+};
 const _isCompanyBuyFull = (et: string) => normalizeEventType(et) === "buy_full_from_company";
 const _isDistReturn = (et: string) => normalizeEventType(et) === "dist_return_empties";
 const _isWalletAdjust = (et: string) => normalizeEventType(et) === "adjust_wallet";
@@ -149,27 +156,30 @@ const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
 
 const formatOrderMetric = (event: DailyReportEvent) => {
   const lines: string[] = [];
-  const isSystemAttached =
-    event.order_mode === "replacement" || event.order_mode === "sell_iron" ||
-    event.event_type === "replacement" || event.event_type === "sell_full";
+  const _fomKind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
+  const isSystemAttached = _fomKind === "replacement" || _fomKind === "sell_full";
   const resolvedSystemName = event.system_name ?? (event as any).system?.display_name ?? null;
   if (resolvedSystemName && isSystemAttached) lines.push(`System: ${resolvedSystemName}`);
   const gas = event.gas_type ? `${event.gas_type}` : "";
   const installed = Number(event.order_installed ?? 0);
   const received = Number(event.order_received ?? 0);
   if (installed > 0) lines.push(`Installed: ${installed}x ${gas}`);
-  if (event.order_mode !== "sell_iron" && event.event_type !== "sell_full") {
+  if (_fomKind !== "sell_full") {
     lines.push(`Received: ${received}x ${gas}`);
   }
   return lines.length > 0 ? lines.join("\n") : null;
 };
 
 const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => string) => {
+  const _bhKind = normalizeEventType(event.event_type, {
+    order_mode: event.order_mode ?? undefined,
+    transfer_direction: event.transfer_direction ?? undefined,
+  });
   // Order and refill have explicit formatting — always apply it first
   if (_isOrderKind(event.event_type)) {
     return formatOrderMetric(event);
   }
-  if (event.event_type === "refill") {
+  if (_bhKind === "refill") {
     const bought = formatGasSummary(event.buy12, event.buy48);
     const returned = formatGasSummary(event.return12, event.return48);
     const lines: string[] = [];
@@ -189,7 +199,7 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
     return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
   }
-  if (event.event_type === "collection_payout" || event.event_type === "payment_to_customer") {
+  if (_bhKind === "payment_to_customer") {
     const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
     return amount ? `Payment to customer ${formatMoneyValue(amount, formatMoney)}` : "Payment to customer";
   }
@@ -202,7 +212,7 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     const parts = formatGasSummary(event.return12, event.return48);
     return parts ? `Returned ${parts} empties` : "Returned empties";
   }
-  if (event.event_type === "expense") {
+  if (_bhKind === "expense") {
     return null;
   }
   if (_isWalletAdjust(event.event_type)) {
@@ -216,13 +226,8 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     if (note) return note;
     return null;
   }
-  if (event.event_type === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
-  if (event.event_type === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
-  if (event.event_type === "bank_deposit") {
-    return event.transfer_direction === "bank_to_wallet"
-      ? EVENT_LABELS.BANK_TO_WALLET
-      : EVENT_LABELS.WALLET_TO_BANK;
-  }
+  if (_bhKind === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
+  if (_bhKind === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
   return null;
 };
 
@@ -239,15 +244,19 @@ const splitDisplayName = (value: string | null | undefined) => {
 };
 
 const transitionIntentForEvent = (event: DailyReportEvent) => {
+  const _tiKind = normalizeEventType(event.event_type, {
+    order_mode: event.order_mode ?? undefined,
+    money_direction: event.money_direction ?? undefined,
+  });
   if (_isOrderKind(event.event_type)) return "customer_order" as const;
   if (_isCollectionMoney(event.event_type)) return "customer_payment" as const;
-  if (event.event_type === "collection_payout") return "customer_payout" as const;
+  if (_tiKind === "payment_to_customer") return "customer_payout" as const;
   if (_isCollectionEmpty(event.event_type)) return "customer_return" as const;
   if (_isDistReturn(event.event_type)) return "company_settle" as const;
-  if (event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance") return "customer_adjust" as const;
+  if (_tiKind === "adjust_customer_balance") return "customer_adjust" as const;
   if (_isCompanyPayment(event.event_type)) return "company_payment" as const;
   if (_isCompanyBuyFull(event.event_type)) return "company_buy_full" as const;
-  if (event.event_type === "refill") {
+  if (_tiKind === "refill") {
     const isSettleOnly =
       event.label === "Returned empties" ||
       (!(event.buy12 || event.buy48) && !!(event.return12 || event.return48) &&
@@ -316,7 +325,7 @@ export default function SlimActivityRow({
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
 
-  const headerNameRaw = event.event_type === "expense"
+  const headerNameRaw = activityKind === "expense"
       ? (event.expense_type || label)
       : event.display_name
       ? event.display_name
@@ -339,28 +348,15 @@ export default function SlimActivityRow({
     event.hero_primary ?? event.hero_text ?? event.context_line ?? ""
   );
   const bankTransferDirection =
-    event.event_type === "bank_to_wallet"
+    activityKind === "bank_to_wallet"
       ? "in"
-      : event.event_type === "wallet_to_bank"
+      : activityKind === "wallet_to_bank"
         ? "out"
-        : event.event_type === "bank_deposit"
-          ? event.transfer_direction === "bank_to_wallet"
-            ? "in"
-            : event.transfer_direction === "wallet_to_bank"
-              ? "out"
-              : /bank\s*[→-]\s*wallet/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
-                ? "in"
-                : /wallet\s*[→-]\s*bank/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
-                  ? "out"
-                  : /to wallet/i.test(bankTransferText)
-                    ? "in"
-                    : /to bank/i.test(bankTransferText)
-                      ? "out"
-                      : "none"
-          : "none";
-  const _isBankTransfer = (et: string) => et === "bank_deposit" || et === "bank_to_wallet" || et === "wallet_to_bank";
+        : "none";
+  // bank_deposit without transfer_direction defaults to wallet_to_bank per normalizeEventType.
+  const _isBankTransfer = activityKind === "bank_to_wallet" || activityKind === "wallet_to_bank";
   const bankTransferAmount =
-    _isBankTransfer(event.event_type)
+    _isBankTransfer
       ? Math.abs(
           takeNonZeroNumber(
             typeof event.money_amount === "number" ? event.money_amount : null,
@@ -372,9 +368,9 @@ export default function SlimActivityRow({
         )
       : 0;
   const moneyAmount =
-    _isBankTransfer(event.event_type)
+    _isBankTransfer
       ? bankTransferAmount
-      : (_isCollectionMoney(event.event_type) || event.event_type === "collection_payout" || event.event_type === "payment_to_customer")
+      : (_isCollectionMoney(event.event_type) || activityKind === "payment_to_customer")
       ? Number(event.money_amount ?? event.money_delta ?? 0)
       : _isCompanyPayment(event.event_type)
         ? Number(event.money_amount ?? event.money?.amount ?? 0)
@@ -382,15 +378,15 @@ export default function SlimActivityRow({
           ? event.money_delta
           : Number(event?.money_amount ?? 0);
   const moneyDirection =
-    _isBankTransfer(event.event_type)
+    _isBankTransfer
       ? (event?.money_direction && event.money_direction !== "none" ? event.money_direction : bankTransferDirection)
       : event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
-    (event.event_type === "refill" || _isCompanyBuyFull(event.event_type))
+    (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
       ? Number(event.paid_amount ?? 0)
       : Number(event.money_amount ?? event.money_received ?? event.money?.amount ?? 0);
   const paymentTotal =
-    event.event_type === "refill"
+    activityKind === "refill"
       ? Number(event.total_cost ?? 0)
       : _isOrderKind(event.event_type)
         ? Number(event.order_total ?? 0)
@@ -398,7 +394,7 @@ export default function SlimActivityRow({
           ? Number(event.total_cost ?? 0)
           : 0;
   const showPaymentRatio =
-    (event.event_type === "refill" ||
+    (activityKind === "refill" ||
       _isOrderKind(event.event_type) ||
       _isCompanyPayment(event.event_type) ||
       _isCompanyBuyFull(event.event_type)) &&
@@ -415,7 +411,7 @@ export default function SlimActivityRow({
       ? moneyDirection
       : _isOrderKind(event.event_type)
         ? "in"
-        : (event.event_type === "refill" || _isCompanyBuyFull(event.event_type))
+        : (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
           ? "out"
           : "none";
   const displayContextLine = _isOrderKind(event.event_type)
@@ -551,9 +547,9 @@ export default function SlimActivityRow({
             {heroLines.map((line, index) => {
               const isReplacementSystemLine = _isOrderKind(event.event_type) && line.startsWith("System:");
               const isReplacementReceivedLine =
-                ((event.event_type === "order" && event.order_mode === "replacement") || event.event_type === "replacement") &&
+                activityKind === "replacement" &&
                 line.startsWith("Received:");
-              const isRefillReturnedLine = event.event_type === "refill" && !!(event.buy12 || event.buy48) && line.startsWith("Returned:");
+              const isRefillReturnedLine = activityKind === "refill" && !!(event.buy12 || event.buy48) && line.startsWith("Returned:");
               return (
                 <Text
                   key={`hero-${index}`}
