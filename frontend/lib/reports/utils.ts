@@ -1,34 +1,11 @@
-import { EVENT_LABELS } from "@/lib/eventLabels";
+import { ACTIVITY_KIND_META, normalizeEventType } from "../activityKindMeta";
 
-export function formatEventType(type: string, orderMode?: string | null, direction?: string | null) {
-  if (type === "order") {
-    const resolvedMode = orderMode || "replacement";
-    if (resolvedMode === "replacement") return EVENT_LABELS.ORDER_REPLACEMENT;
-    if (resolvedMode === "sell_iron") return EVENT_LABELS.ORDER_SELL_FULL;
-    if (resolvedMode === "buy_iron") return EVENT_LABELS.ORDER_BUY_EMPTY;
-    return EVENT_LABELS.ORDER_REPLACEMENT;
-  }
-  if (type === "replacement") return EVENT_LABELS.ORDER_REPLACEMENT;
-  if (type === "sell_full") return EVENT_LABELS.ORDER_SELL_FULL;
-  if (type === "buy_empty_from_customer") return EVENT_LABELS.ORDER_BUY_EMPTY;
-  if (type === "collection_money") return EVENT_LABELS.COLLECTION_MONEY;
-  if (type === "payment_from_customer") return EVENT_LABELS.COLLECTION_MONEY;
-  if (type === "collection_payout") return EVENT_LABELS.COLLECTION_PAYOUT;
-  if (type === "collection_empty") return EVENT_LABELS.COLLECTION_EMPTY;
-  if (type === "customer_return_empties") return EVENT_LABELS.COLLECTION_EMPTY;
-  if (type === "refill") return EVENT_LABELS.REFILL;
-  if (type === "company_payment") return direction === "in" ? EVENT_LABELS.COMPANY_PAYMENT_IN : EVENT_LABELS.COMPANY_PAYMENT_OUT;
-  if (type === "payment_to_company") return direction === "in" ? EVENT_LABELS.COMPANY_PAYMENT_IN : EVENT_LABELS.COMPANY_PAYMENT_OUT;
-  if (type === "company_buy_iron" || type === "company_buy_full" || type === "buy_full_from_company") return EVENT_LABELS.COMPANY_BUY_FULL;
-  if (type === "company_return_empties" || type === "dist_return_empties") return EVENT_LABELS.COMPANY_RETURN;
-  if (type === "cash_adjust" || type === "adjust_wallet") return EVENT_LABELS.WALLET_ADJUSTMENT;
-  if (type === "adjust" || type === "adjust_inventory") return EVENT_LABELS.INVENTORY_ADJUSTMENT;
-  if (type === "customer_adjust" || type === "adjust_customer_balance") return EVENT_LABELS.CUSTOMER_ADJUSTMENT;
-  if (type === "company_adjustment" || type === "adjust_company_balance") return EVENT_LABELS.COMPANY_ADJUSTMENT;
-  if (type === "init_balance") return EVENT_LABELS.OPENING_BALANCE;
-  if (type === "init_credit") return EVENT_LABELS.OPENING_BALANCE;
-  if (type === "init_return") return EVENT_LABELS.OPENING_BALANCE;
-  if (type === "init") return EVENT_LABELS.OPENING_BALANCE;
+export function formatEventType(type: string, orderMode?: string | null, direction?: string | null): string {
+  const kind = normalizeEventType(type, {
+    order_mode: orderMode ?? undefined,
+    money_direction: direction ?? undefined,
+  });
+  if (kind) return ACTIVITY_KIND_META[kind].label;
   return type
     .replace(/_/g, " ")
     .split(" ")
@@ -49,4 +26,3 @@ export function getInitInventoryAfter(events: any[]) {
   });
   return Object.keys(out).length ? out : null;
 }
-

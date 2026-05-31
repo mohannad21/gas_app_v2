@@ -31,6 +31,7 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatEventType } from "@/lib/reports/utils";
+import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 import EventExpandedPanel from "@/components/reports/EventExpandedPanel";
 import { buildHappenedAt, toDateKey } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
@@ -99,93 +100,24 @@ const ACTIVITY_GROUP_OPTIONS: Record<Exclude<ActivityFilterGroupKey, "all">, Act
 };
 
 const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> => {
-  switch (event?.event_type) {
-    case "order":
-    case "replacement":
-    case "sell_full":
-    case "buy_empty_from_customer":
-    case "collection_money":
-    case "payment_from_customer":
-    case "collection_payout":
-    case "collection_empty":
-    case "customer_return_empties":
-      return "customer";
-    case "company_payment":
-    case "payment_to_company":
-    case "company_buy_full":
-    case "buy_full_from_company":
-    case "refill":
-    case "company_return_empties":
-    case "dist_return_empties":
-      return "company";
-    case "expense":
-    case "bank_deposit":
-      return "expenses";
-    case "adjust":
-    case "adjust_inventory":
-    case "cash_adjust":
-    case "adjust_wallet":
-      return "ledger";
-    default:
-      return "customer";
-  }
+  const kind = normalizeEventType(String(event?.event_type ?? ""), {
+    order_mode: event?.order_mode,
+    money_direction: event?.money_direction,
+    transfer_direction: event?.transfer_direction,
+  });
+  if (kind) return ACTIVITY_KIND_META[kind].filterGroup as Exclude<ActivityFilterGroupKey, "all">;
+  return "customer";
 };
 
 const getEventSubtype = (event: any): ActivitySubtypeOption => {
-  switch (event?.event_type) {
-    case "order": {
-      if (event?.order_mode === "sell_iron") return { key: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL };
-      if (event?.order_mode === "buy_iron") return { key: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY };
-      return { key: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT };
-    }
-    case "replacement":
-      return { key: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT };
-    case "sell_full":
-      return { key: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL };
-    case "buy_empty_from_customer":
-      return { key: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY };
-    case "collection_money":
-    case "payment_from_customer":
-      return { key: "customer_payment", label: EVENT_LABELS.COLLECTION_MONEY };
-    case "collection_payout":
-      return { key: "customer_payout", label: EVENT_LABELS.COLLECTION_PAYOUT };
-    case "collection_empty":
-    case "customer_return_empties":
-      return { key: "customer_return", label: EVENT_LABELS.COLLECTION_EMPTY };
-    case "company_payment":
-    case "payment_to_company":
-      return event?.money_direction === "in"
-        ? { key: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN }
-        : { key: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT };
-    case "company_buy_full":
-    case "buy_full_from_company":
-      return { key: "company_buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL };
-    case "refill": {
-      const isReturnOnly =
-        (!(event?.buy12 ?? 0) && !(event?.buy48 ?? 0) && ((event?.return12 ?? 0) > 0 || (event?.return48 ?? 0) > 0)) ||
-        event?.label === EVENT_LABELS.COMPANY_RETURN;
-      return isReturnOnly
-        ? { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN }
-        : { key: "company_refill", label: EVENT_LABELS.REFILL };
-    }
-    case "company_return_empties":
-    case "dist_return_empties":
-      return { key: "company_return", label: EVENT_LABELS.COMPANY_RETURN };
-    case "expense":
-      return { key: "expense", label: EVENT_LABELS.EXPENSE };
-    case "bank_deposit":
-      return event?.transfer_direction === "bank_to_wallet"
-        ? { key: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET }
-        : { key: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK };
-    case "cash_adjust":
-    case "adjust_wallet":
-      return { key: "wallet_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT };
-    case "adjust":
-    case "adjust_inventory":
-      return { key: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT };
-    default:
-      return { key: String(event?.event_type ?? "activity"), label: formatEventType(String(event?.event_type ?? "activity")) };
-  }
+  const kind = normalizeEventType(String(event?.event_type ?? ""), {
+    order_mode: event?.order_mode,
+    money_direction: event?.money_direction,
+    transfer_direction: event?.transfer_direction,
+  });
+  if (kind) return { key: kind, label: ACTIVITY_KIND_META[kind].label };
+  const raw = String(event?.event_type ?? "activity");
+  return { key: raw, label: formatEventType(raw) };
 };
 
 export default function ReportsScreen() {

@@ -276,9 +276,9 @@ export default function EventExpandedPanel({
     if (ORDER_KINDS.has(eventType) && inferredGasType) return renderGasTriplet(inferredGasType);
     if ((eventType === "collection_empty" || eventType === "customer_return_empties") && inferredGasType)
       return renderSparseGasState(inferredGasType);
-    if (eventType === "collection_money" || eventType === "payment_from_customer" || eventType === "collection_payout")
+    if (eventType === "collection_money" || eventType === "payment_from_customer" || eventType === "collection_payout" || eventType === "payment_to_customer")
       return renderCenteredWalletOnly(eventType);
-    if (eventType === "expense" || eventType === "bank_deposit" || eventType === "cash_adjust" || eventType === "adjust_wallet")
+    if (eventType === "expense" || eventType === "bank_deposit" || eventType === "bank_to_wallet" || eventType === "wallet_to_bank" || eventType === "cash_adjust" || eventType === "adjust_wallet")
       return renderCenteredWalletOnly(eventType);
     if (eventType === "refill" || eventType === "company_buy_full" || eventType === "buy_full_from_company") {
       if (touches12 && touches48) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "mixed" });
