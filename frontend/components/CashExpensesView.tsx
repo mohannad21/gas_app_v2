@@ -260,7 +260,7 @@ export default function CashExpensesView({
           effectiveAt: happened_at ?? expenseDate,
           mode: expenseMode,
           highlightId: (created as { id?: string } | null)?.id,
-          highlightEventType: "bank_deposit",
+          highlightEventType: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
         });
       }
       onRefreshCash?.();
@@ -269,7 +269,7 @@ export default function CashExpensesView({
           onSaveSuccess({
             effectiveAt: happened_at ?? expenseDate,
             highlightId: (created as { id?: string } | null)?.id,
-            highlightEventType: "bank_deposit",
+            highlightEventType: isBankToWallet ? "bank_to_wallet" : "wallet_to_bank",
           });
         } else {
           onClose?.();

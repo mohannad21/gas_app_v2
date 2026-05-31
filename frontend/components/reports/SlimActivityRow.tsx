@@ -122,7 +122,7 @@ const _ORDER_KINDS = new Set(["order", "replacement", "sell_full", "buy_empty_fr
 const _isOrderKind = (et: string) => _ORDER_KINDS.has(et);
 const _isCollectionMoney = (et: string) => et === "collection_money" || et === "payment_from_customer";
 const _isCollectionEmpty = (et: string) => et === "collection_empty" || et === "customer_return_empties";
-const _isCompanyPayment = (et: string) => et === "company_payment" || et === "payment_to_company";
+const _isCompanyPayment = (et: string) => et === "company_payment" || et === "payment_to_company" || et === "payment_from_company";
 const _isCompanyBuyFull = (et: string) => et === "company_buy_full" || et === "buy_full_from_company";
 const _isDistReturn = (et: string) => et === "company_return_empties" || et === "dist_return_empties";
 const _isWalletAdjust = (et: string) => et === "cash_adjust" || et === "adjust_wallet";
@@ -177,7 +177,7 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
     return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
   }
-  if (event.event_type === "collection_payout") {
+  if (event.event_type === "collection_payout" || event.event_type === "payment_to_customer") {
     const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
     return amount ? `Payment to customer ${formatMoneyValue(amount, formatMoney)}` : "Payment to customer";
   }
@@ -204,6 +204,8 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     if (note) return note;
     return null;
   }
+  if (event.event_type === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
+  if (event.event_type === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
   if (event.event_type === "bank_deposit") {
     return event.transfer_direction === "bank_to_wallet"
       ? EVENT_LABELS.BANK_TO_WALLET
@@ -230,7 +232,7 @@ const transitionIntentForEvent = (event: DailyReportEvent) => {
   if (event.event_type === "collection_payout") return "customer_payout" as const;
   if (_isCollectionEmpty(event.event_type)) return "customer_return" as const;
   if (_isDistReturn(event.event_type)) return "company_settle" as const;
-  if (event.event_type === "customer_adjust") return "customer_adjust" as const;
+  if (event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance") return "customer_adjust" as const;
   if (_isCompanyPayment(event.event_type)) return "company_payment" as const;
   if (_isCompanyBuyFull(event.event_type)) return "company_buy_full" as const;
   if (event.event_type === "refill") {
@@ -292,6 +294,8 @@ export default function SlimActivityRow({
       return event?.money_direction === "in"
         ? EVENT_LABELS.COMPANY_PAYMENT_IN
         : EVENT_LABELS.COMPANY_PAYMENT_OUT;
+    if (eventType === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
+    if (eventType === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
     if (eventType === "bank_deposit")
       return event?.transfer_direction === "bank_to_wallet"
         ? EVENT_LABELS.BANK_TO_WALLET
@@ -326,23 +330,28 @@ export default function SlimActivityRow({
     event.hero_primary ?? event.hero_text ?? event.context_line ?? ""
   );
   const bankTransferDirection =
-    event.event_type === "bank_deposit"
-      ? event.transfer_direction === "bank_to_wallet"
-        ? "in"
-        : event.transfer_direction === "wallet_to_bank"
-          ? "out"
-          : /bank\s*[→-]\s*wallet/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
+    event.event_type === "bank_to_wallet"
+      ? "in"
+      : event.event_type === "wallet_to_bank"
+        ? "out"
+        : event.event_type === "bank_deposit"
+          ? event.transfer_direction === "bank_to_wallet"
             ? "in"
-            : /wallet\s*[→-]\s*bank/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
+            : event.transfer_direction === "wallet_to_bank"
               ? "out"
-              : /to wallet/i.test(bankTransferText)
+              : /bank\s*[→-]\s*wallet/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
                 ? "in"
-                : /to bank/i.test(bankTransferText)
+                : /wallet\s*[→-]\s*bank/i.test(String(event.label ?? event.display_name ?? event.context_line ?? ""))
                   ? "out"
-                  : "none"
-      : "none";
+                  : /to wallet/i.test(bankTransferText)
+                    ? "in"
+                    : /to bank/i.test(bankTransferText)
+                      ? "out"
+                      : "none"
+          : "none";
+  const _isBankTransfer = (et: string) => et === "bank_deposit" || et === "bank_to_wallet" || et === "wallet_to_bank";
   const bankTransferAmount =
-    event.event_type === "bank_deposit"
+    _isBankTransfer(event.event_type)
       ? Math.abs(
           takeNonZeroNumber(
             typeof event.money_amount === "number" ? event.money_amount : null,
@@ -354,9 +363,9 @@ export default function SlimActivityRow({
         )
       : 0;
   const moneyAmount =
-    event.event_type === "bank_deposit"
+    _isBankTransfer(event.event_type)
       ? bankTransferAmount
-      : (_isCollectionMoney(event.event_type) || event.event_type === "collection_payout")
+      : (_isCollectionMoney(event.event_type) || event.event_type === "collection_payout" || event.event_type === "payment_to_customer")
       ? Number(event.money_amount ?? event.money_delta ?? 0)
       : _isCompanyPayment(event.event_type)
         ? Number(event.money_amount ?? event.money?.amount ?? 0)
@@ -364,7 +373,7 @@ export default function SlimActivityRow({
           ? event.money_delta
           : Number(event?.money_amount ?? 0);
   const moneyDirection =
-    event.event_type === "bank_deposit"
+    _isBankTransfer(event.event_type)
       ? (event?.money_direction && event.money_direction !== "none" ? event.money_direction : bankTransferDirection)
       : event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
@@ -422,7 +431,7 @@ export default function SlimActivityRow({
   const notes = transitionPills.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
   const showNotes = transitionPills.length > 0 || notes.length > 0;
   const dotColor = getEventColor(eventType);
-  const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection);
+  const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection, event.transfer_direction);
   const heroLines = heroAction ? heroAction.split("\n") : [];
 
   const hasActions = !!(onEdit || onDelete);

@@ -288,7 +288,7 @@ export default function CustomerDetailsScreen() {
       if (event.event_type === "collection_empty" || event.event_type === "customer_return_empties") visible.add("return_empties");
       if ((event.event_type === "order" && event.order_mode === "buy_iron") || event.event_type === "buy_empty_from_customer") visible.add("buy_empty");
       if ((event.event_type === "order" && event.order_mode === "sell_iron") || event.event_type === "sell_full") visible.add("sell_full");
-      if (event.event_type === "customer_adjust") visible.add("adjustment");
+      if (event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance") visible.add("adjustment");
     }
     return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
   }, [activities]);
@@ -376,7 +376,7 @@ export default function CustomerDetailsScreen() {
           case "sell_full":
             return (e.event_type === "order" && e.order_mode === "sell_iron") || e.event_type === "sell_full";
           case "adjustment":
-            return e.event_type === "customer_adjust";
+            return e.event_type === "customer_adjust" || e.event_type === "adjust_customer_balance";
           default:
             return true;
         }
@@ -800,7 +800,7 @@ export default function CustomerDetailsScreen() {
             event.event_type === "collection_empty" || event.event_type === "customer_return_empties" ||
             event.event_type === "collection_payout";
 
-          const isAdjustment = event.event_type === "customer_adjust";
+          const isAdjustment = event.event_type === "customer_adjust" || event.event_type === "adjust_customer_balance";
 
           return (
             <SlimActivityRow
