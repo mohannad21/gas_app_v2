@@ -23,7 +23,7 @@ _EVENT_LABELS: dict[str, str] = {
   AK.PAYMENT_FROM_CUSTOMER: "Payment from customer",
   AK.PAYMENT_TO_CUSTOMER: "Payment to customer",
   AK.CUSTOMER_RETURN_EMPTIES: "Empties from customer",
-  AK.ADJUST_CUSTOMER_BALANCE: "Adjusted customer balance",
+  AK.ADJUST_CUSTOMER_BALANCE: "Adjust customer balance",
   AK.REFILL: "Refill",
   AK.DIST_RETURN_EMPTIES: "Empties to company",
   AK.BUY_FULL_FROM_COMPANY: "Buy fulls",

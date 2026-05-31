@@ -144,6 +144,8 @@ def test_replacement_expanded_details(client) -> None:
         before={"full12": START_FULL12, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": START_FULL12 - 2, "empty12": START_EMPTY12 + 1, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Replace"
+    assert event["hero_text"] == "Installed 2x12kg"
 
 
 def test_sell_full_expanded_details(client) -> None:
@@ -170,6 +172,8 @@ def test_sell_full_expanded_details(client) -> None:
         before={"full12": START_FULL12, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": START_FULL12 - 3, "empty12": START_EMPTY12, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Sell full"
+    assert event["hero_text"] == "Sold 3x12kg"
 
 
 def test_buy_empty_expanded_details(client) -> None:
@@ -196,6 +200,8 @@ def test_buy_empty_expanded_details(client) -> None:
         before={"full12": START_FULL12, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": START_FULL12, "empty12": START_EMPTY12 + 4, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Buy empties"
+    assert event["hero_text"] == "Bought 4x12kg"
 
 
 def test_payment_received_expanded_details(client) -> None:
@@ -214,6 +220,9 @@ def test_payment_received_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="payment_from_customer")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET + 90)
     _assert_no_inventory(event)
+    assert event["label"] == "Payment from customer"
+    assert event["hero_text"].startswith("Payment from customer")
+    assert "₪" in event["hero_text"]
 
 
 def test_payment_payout_expanded_details(client) -> None:
@@ -232,6 +241,9 @@ def test_payment_payout_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="payment_to_customer")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET - 70)
     _assert_no_inventory(event)
+    assert event["label"] == "Payment to customer"
+    assert event["hero_text"].startswith("Payment to customer")
+    assert "₪" in event["hero_text"]
 
 
 def test_return_empties_expanded_details(client) -> None:
@@ -254,6 +266,8 @@ def test_return_empties_expanded_details(client) -> None:
         before={"full12": None, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": None, "empty12": START_EMPTY12 + 3, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Empties from customer"
+    assert event["hero_text"] == "Returned 3x12kg empties"
 
 
 def test_customer_balance_adjustment_expanded_details(client) -> None:
@@ -277,6 +291,8 @@ def test_customer_balance_adjustment_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="adjust_customer_balance")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET)
     _assert_no_inventory(event)
+    assert event["label"] == "Adjust customer balance"
+    assert event["hero_text"] == "Adjust customer balance"
 
 
 def test_refill_expanded_details(client) -> None:
@@ -309,6 +325,8 @@ def test_refill_expanded_details(client) -> None:
             "empty48": START_EMPTY48 - 1,
         },
     )
+    assert event["label"] == "Refill"
+    assert event["hero_text"] == "Bought 5x12kg | 1x48kg"
 
 
 def test_company_payment_payout_expanded_details(client) -> None:
@@ -324,6 +342,9 @@ def test_company_payment_payout_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="payment_to_company")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET - 80)
     _assert_no_inventory(event)
+    assert event["label"] == "Payment to company"
+    assert event["hero_text"].startswith("Payment to company")
+    assert "₪" in event["hero_text"]
 
 
 def test_company_payment_receive_expanded_details(client) -> None:
@@ -339,6 +360,9 @@ def test_company_payment_receive_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="payment_from_company")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET + 65)
     _assert_no_inventory(event)
+    assert event["label"] == "Payment from company"
+    assert event["hero_text"].startswith("Payment from company")
+    assert "₪" in event["hero_text"]
 
 
 def test_return_empties_to_company_expanded_details(client) -> None:
@@ -363,6 +387,8 @@ def test_return_empties_to_company_expanded_details(client) -> None:
         before={"full12": None, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": None, "empty12": START_EMPTY12 - 4, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Empties to company"
+    assert event["hero_text"] == "Returned 4x12kg empties to company"
 
 
 def test_buy_full_expanded_details(client) -> None:
@@ -388,6 +414,8 @@ def test_buy_full_expanded_details(client) -> None:
         before={"full12": START_FULL12, "empty12": None, "full48": START_FULL48, "empty48": None},
         after={"full12": START_FULL12 + 6, "empty12": None, "full48": START_FULL48 + 2, "empty48": None},
     )
+    assert event["label"] == "Buy fulls"
+    assert event["hero_text"] == "Bought 6x12kg | 2x48kg"
 
 
 def test_company_balance_adjustment_expanded_details(client) -> None:
@@ -409,6 +437,8 @@ def test_company_balance_adjustment_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="adjust_company_balance")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET)
     _assert_no_inventory(event)
+    assert event["label"] == "Adjust company balance"
+    assert event["hero_text"] == "Adjust company balance"
 
 
 def test_expense_expanded_details(client) -> None:
@@ -421,7 +451,7 @@ def test_expense_expanded_details(client) -> None:
     resp = client.post(
         "/expenses",
         json={
-            "expense_type": category_id,
+            "expense_type": "Fuel",
             "amount": 85,
             "date": day.isoformat(),
             "happened_at": iso_at(day.isoformat(), "morning"),
@@ -433,6 +463,8 @@ def test_expense_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="expense")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET - 85)
     _assert_no_inventory(event)
+    assert event["label"] == "Expense"
+    assert event["hero_text"] == "Fuel"
 
 
 def test_wallet_to_bank_expanded_details(client) -> None:
@@ -452,6 +484,10 @@ def test_wallet_to_bank_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="wallet_to_bank")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET - 250)
     _assert_no_inventory(event)
+    assert event["label"] == "Wallet to bank"
+    assert event["hero_text"].startswith("Transferred")
+    assert event["hero_text"].endswith("to bank")
+    assert "₪" in event["hero_text"]
 
 
 def test_bank_to_wallet_expanded_details(client) -> None:
@@ -471,6 +507,10 @@ def test_bank_to_wallet_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="bank_to_wallet")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET + 175)
     _assert_no_inventory(event)
+    assert event["label"] == "Bank to wallet"
+    assert event["hero_text"].startswith("Transferred")
+    assert event["hero_text"].endswith("to wallet")
+    assert "₪" in event["hero_text"]
 
 
 def test_adjust_inventory_expanded_details(client) -> None:
@@ -496,6 +536,8 @@ def test_adjust_inventory_expanded_details(client) -> None:
         before={"full12": START_FULL12, "empty12": START_EMPTY12, "full48": None, "empty48": None},
         after={"full12": START_FULL12 + 2, "empty12": START_EMPTY12 - 1, "full48": None, "empty48": None},
     )
+    assert event["label"] == "Adjust inventory"
+    assert event["hero_text"] == "12kg: full +2 | empty -1"
 
 
 def test_adjust_wallet_expanded_details(client) -> None:
@@ -515,3 +557,6 @@ def test_adjust_wallet_expanded_details(client) -> None:
     event = _get_event(client, day=day, event_type="adjust_wallet")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET + 125)
     _assert_no_inventory(event)
+    assert event["label"] == "Adjust wallet"
+    assert event["hero_text"].startswith("Wallet change:")
+    assert "₪" in event["hero_text"]
