@@ -6,37 +6,42 @@ and Level3 schema construction for the daily reporting system.
 
 from typing import Literal, Optional
 
+import app.constants.activity_kinds as AK
 from app.schemas import ActivityNote, DailyReportEvent, Level3Counterparty, Level3Money, Level3System
 from app.utils.time import business_local_datetime_from_utc
 
 from .reports_aggregates import CustomerLedgerState
 
 
-_ORDER_KINDS = frozenset(["replacement", "sell_full", "buy_empty_from_customer"])
+_ORDER_KINDS = frozenset({AK.REPLACEMENT, AK.SELL_FULL, AK.BUY_EMPTY_FROM_CUSTOMER})
 
 # Display labels for event types
 _EVENT_LABELS: dict[str, str] = {
-  "refill": "Refill",
-  "dist_return_empties": "Returned empties",
-  "buy_full_from_company": "Bought full cylinders",
-  "payment_from_customer": "Payment from customer",
-  "customer_return_empties": "Returned empties",
-  "payment_to_company": "Payment to company",
-  "payment_from_company": "Payment from company",
-  "expense": "Expense",
-  "bank_deposit": "Deposit",
-  "adjust_inventory": "Inventory adjustment",
-  "adjust_wallet": "Wallet adjustment",
-  "payment_to_customer": "Payment to customer",
-  "adjust_customer_balance": "Balance adjustment",
-  "adjust_company_balance": "Balance adjustment",
+  AK.REPLACEMENT: "Replace",
+  AK.SELL_FULL: "Sell full",
+  AK.BUY_EMPTY_FROM_CUSTOMER: "Buy empties",
+  AK.PAYMENT_FROM_CUSTOMER: "Payment from customer",
+  AK.PAYMENT_TO_CUSTOMER: "Payment to customer",
+  AK.CUSTOMER_RETURN_EMPTIES: "Empties from customer",
+  AK.ADJUST_CUSTOMER_BALANCE: "Adjust customer balance",
+  AK.REFILL: "Refill",
+  AK.DIST_RETURN_EMPTIES: "Empties to company",
+  AK.BUY_FULL_FROM_COMPANY: "Buy fulls",
+  AK.PAYMENT_TO_COMPANY: "Payment to company",
+  AK.PAYMENT_FROM_COMPANY: "Payment from company",
+  AK.ADJUST_COMPANY_BALANCE: "Adjust company balance",
+  AK.ADJUST_INVENTORY: "Adjust inventory",
+  AK.ADJUST_WALLET: "Adjust wallet",
+  AK.EXPENSE: "Expense",
+  AK.BANK_TO_WALLET: "Bank to wallet",
+  AK.WALLET_TO_BANK: "Wallet to bank",
   "init": "Opening balance",
 }
 
 _ORDER_LABELS: dict[str, str] = {
-  "replacement": "Replacement",
-  "sell_iron": "Sell Full",
-  "buy_iron": "Buy Empty",
+  AK.REPLACEMENT: "Replace",
+  "sell_iron": "Sell full",
+  "buy_iron": "Buy empties",
 }
 
 
@@ -57,17 +62,12 @@ def _event_label(event: DailyReportEvent) -> str:
     if event.order_mode:
       return _ORDER_LABELS.get(event.order_mode, "Order")
     return "Order"
-  if event.event_type == "refill" and _is_company_return_only_refill(event):
-    return "Returned empties"
-  if event.event_type == "refill" and _is_company_settle_only_refill(event):
-    return "Returned empties"
-  if event.event_type in {"payment_to_company", "payment_from_company"}:
-    paid = _safe_int(event.paid_amount or event.total_cost)
-    if paid < 0:
-      return "Payment from company"
-    return "Payment to company"
-  if event.event_type == "bank_deposit":
-    return "Bank → Wallet" if event.transfer_direction == "bank_to_wallet" else "Wallet → Bank"
+  if event.event_type == AK.REFILL and _is_company_return_only_refill(event):
+    return _EVENT_LABELS[AK.DIST_RETURN_EMPTIES]
+  if event.event_type == AK.REFILL and _is_company_settle_only_refill(event):
+    return _EVENT_LABELS[AK.DIST_RETURN_EMPTIES]
+  if event.event_type in {AK.PAYMENT_TO_COMPANY, AK.PAYMENT_FROM_COMPANY}:
+    return _company_payment_label(event)
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
 
 
@@ -112,7 +112,7 @@ def _inventory_adjustment_summary_lines(event: DailyReportEvent) -> list[str]:
 
 
 def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
-  if event.event_type != "refill":
+  if event.event_type != AK.REFILL:
     return False
   buy12 = _safe_int(event.buy12)
   buy48 = _safe_int(event.buy48)
@@ -127,7 +127,7 @@ def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
 
 
 def _is_company_receive_only_refill(event: DailyReportEvent) -> bool:
-  if event.event_type != "refill":
+  if event.event_type != AK.REFILL:
     return False
   buy12 = _safe_int(event.buy12)
   buy48 = _safe_int(event.buy48)
@@ -154,7 +154,12 @@ def _apply_ticket_fields(event: DailyReportEvent) -> None:
 
 
 def _level3_counterparty(event: DailyReportEvent) -> Level3Counterparty:
-  if event.event_type in _ORDER_KINDS | {"payment_from_customer", "customer_return_empties", "payment_to_customer", "adjust_customer_balance"}:
+  if event.event_type in _ORDER_KINDS | {
+    AK.PAYMENT_FROM_CUSTOMER,
+    AK.CUSTOMER_RETURN_EMPTIES,
+    AK.PAYMENT_TO_CUSTOMER,
+    AK.ADJUST_CUSTOMER_BALANCE,
+  }:
     display_name = event.customer_name or "Customer"
     display = display_name
     if event.customer_description:
@@ -165,13 +170,20 @@ def _level3_counterparty(event: DailyReportEvent) -> Level3Counterparty:
       description=event.customer_description,
       display=display,
     )
-  if event.event_type in {"refill", "dist_return_empties", "payment_to_company", "payment_from_company", "buy_full_from_company", "adjust_company_balance"}:
+  if event.event_type in {
+    AK.REFILL,
+    AK.DIST_RETURN_EMPTIES,
+    AK.PAYMENT_TO_COMPANY,
+    AK.PAYMENT_FROM_COMPANY,
+    AK.BUY_FULL_FROM_COMPANY,
+    AK.ADJUST_COMPANY_BALANCE,
+  }:
     return Level3Counterparty(type="company", display_name="Company", description=None, display="Company")
   return Level3Counterparty(type="none", display_name=None, description=None, display=None)
 
 
 def _level3_system(event: DailyReportEvent) -> Optional[Level3System]:
-  if event.event_type == "replacement" and event.system_name:
+  if event.event_type == AK.REPLACEMENT and event.system_name:
     return Level3System(display_name=event.system_name)
   return None
 
@@ -193,17 +205,17 @@ def _level3_money(event: DailyReportEvent) -> Level3Money:
     if paid:
       verb = "paid" if event.order_mode == "buy_iron" else "received"
       amount = abs(paid)
-  elif event.event_type == "refill":
+  elif event.event_type == AK.REFILL:
     paid = _safe_int(event.paid_amount)
     if paid:
       verb = "paid"
       amount = abs(paid)
-  elif event.event_type == "buy_full_from_company":
+  elif event.event_type == AK.BUY_FULL_FROM_COMPANY:
     paid = _safe_int(event.paid_amount or event.total_cost)
     if paid:
       verb = "paid"
       amount = abs(paid)
-  elif event.event_type in {"payment_to_company", "payment_from_company"}:
+  elif event.event_type in {AK.PAYMENT_TO_COMPANY, AK.PAYMENT_FROM_COMPANY}:
     paid = _safe_int(event.paid_amount or event.total_cost)
     if paid < 0:
       verb = "received"
@@ -211,15 +223,15 @@ def _level3_money(event: DailyReportEvent) -> Level3Money:
     elif paid > 0:
       verb = "paid"
       amount = abs(paid)
-  elif event.event_type == "expense":
+  elif event.event_type == AK.EXPENSE:
     total = _safe_int(event.total_cost)
     if total:
       verb = "paid"
       amount = abs(total)
-  elif event.event_type == "bank_deposit":
+  elif event.event_type in {AK.BANK_TO_WALLET, AK.WALLET_TO_BANK}:
     verb = "none"
     amount = 0
-  elif event.event_type == "adjust_wallet":
+  elif event.event_type == AK.ADJUST_WALLET:
     total = _safe_int(event.total_cost)
     if total > 0:
       verb = "received"
@@ -227,7 +239,7 @@ def _level3_money(event: DailyReportEvent) -> Level3Money:
     elif total < 0:
       verb = "paid"
       amount = abs(total)
-  elif event.event_type in {"payment_from_customer", "payment_to_customer"}:
+  elif event.event_type in {AK.PAYMENT_FROM_CUSTOMER, AK.PAYMENT_TO_CUSTOMER}:
     delta = _cash_delta(event)
     if delta > 0:
       verb = "received"
@@ -247,12 +259,12 @@ def _time_display(value) -> str:
   return business_local_datetime_from_utc(value).strftime("%H:%M:%S")
 
 
-def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_symbol: str) -> str:
+def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_symbol: str) -> Optional[str]:
   gas = event.gas_type or "12kg"
   if event.event_type in _ORDER_KINDS:
     installed = _safe_int(event.order_installed)
     received = _safe_int(event.order_received)
-    if event.order_mode == "replacement" and installed:
+    if event.order_mode == AK.REPLACEMENT and installed:
       return f"Installed {installed}x{gas}"
     if event.order_mode == "sell_iron" and installed:
       return f"Sold {installed}x{gas}"
@@ -260,7 +272,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       qty = received if received > 0 else installed
       if qty:
         return f"Bought {qty}x{gas}"
-  if event.event_type == "refill":
+  if event.event_type == AK.REFILL:
     if _is_company_return_only_refill(event):
       parts: list[str] = []
       if event.return12:
@@ -284,7 +296,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       parts.append(f"{event.buy48}x48kg")
     if parts:
       return f"Bought {' | '.join(parts)}"
-  if event.event_type == "dist_return_empties":
+  if event.event_type == AK.DIST_RETURN_EMPTIES:
     parts: list[str] = []
     if event.return12:
       parts.append(f"{event.return12}x12kg")
@@ -293,7 +305,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
     if parts:
       return f"Returned {' | '.join(parts)} empties to company"
     return "Returned empties"
-  if event.event_type == "buy_full_from_company":
+  if event.event_type == AK.BUY_FULL_FROM_COMPANY:
     parts: list[str] = []
     if event.buy12:
       parts.append(f"{event.buy12}x12kg")
@@ -301,12 +313,12 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       parts.append(f"{event.buy48}x48kg")
     if parts:
       return f"Bought {' | '.join(parts)}"
-  if event.event_type == "payment_from_customer":
+  if event.event_type == AK.PAYMENT_FROM_CUSTOMER:
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
       return f"Payment from customer {_format_money_major(amount, money_decimals, currency_symbol)}"
     return "Payment from customer"
-  if event.event_type == "customer_return_empties":
+  if event.event_type == AK.CUSTOMER_RETURN_EMPTIES:
     parts: list[str] = []
     if event.return12:
       parts.append(f"{event.return12}x12kg")
@@ -315,36 +327,36 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
     if parts:
       return f"Returned {' | '.join(parts)} empties"
     return "Returned empties"
-  if event.event_type in {"payment_to_company", "payment_from_company"}:
+  if event.event_type in {AK.PAYMENT_TO_COMPANY, AK.PAYMENT_FROM_COMPANY}:
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     label = _company_payment_label(event)
     if amount:
       return f"{label} {_format_money_major(amount, money_decimals, currency_symbol)}"
     return label
-  if event.event_type == "payment_to_customer":
+  if event.event_type == AK.PAYMENT_TO_CUSTOMER:
     amount = event.money_amount if isinstance(event.money_amount, int) else 0
     if amount:
       return f"Payment to customer {_format_money_major(amount, money_decimals, currency_symbol)}"
     return "Payment to customer"
-  if event.event_type == "adjust_customer_balance":
-    return "Adjusted customer balance"
-  if event.event_type == "expense":
+  if event.event_type in {AK.ADJUST_CUSTOMER_BALANCE, AK.ADJUST_COMPANY_BALANCE}:
+    return None
+  if event.event_type == AK.EXPENSE:
     return event.expense_type or "Expense"
-  if event.event_type == "bank_deposit":
+  if event.event_type in {AK.BANK_TO_WALLET, AK.WALLET_TO_BANK}:
     amount = _safe_int(event.total_cost)
-    if event.transfer_direction == "bank_to_wallet":
+    if event.event_type == AK.BANK_TO_WALLET:
       if amount:
         return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to wallet"
       return "Transferred to wallet"
     if amount:
       return f"Transferred {_format_money_major(amount, money_decimals, currency_symbol)} to bank"
     return "Transferred to bank"
-  if event.event_type == "adjust_wallet":
+  if event.event_type == AK.ADJUST_WALLET:
     amount = _safe_int(event.total_cost)
     if amount:
       return f"Wallet change: {_format_signed_money_major(amount, money_decimals, currency_symbol)}"
     return "Wallet adjustment"
-  if event.event_type == "adjust_inventory":
+  if event.event_type == AK.ADJUST_INVENTORY:
     lines = _inventory_adjustment_summary_lines(event)
     if lines:
       return "\n".join(lines)
@@ -357,7 +369,7 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
 def _context_line(event: DailyReportEvent) -> str:
   label = event.label or _titleize_event_type(event.event_type)
   parts = [label, _time_display(event.effective_at)]
-  if event.event_type == "replacement" and event.system_name:
+  if event.event_type == AK.REPLACEMENT and event.system_name:
     parts.append(f"System: {event.system_name}")
   return " · ".join(parts)
 
@@ -400,13 +412,13 @@ def _apply_ui_fields(
     event.money_direction = "none"
     event.money_delta = 0
 
-  if event.event_type == "bank_deposit":
+  if event.event_type in {AK.BANK_TO_WALLET, AK.WALLET_TO_BANK}:
     amount_minor = abs(_safe_int(event.total_cost))
     event.money_amount = amount_minor
     event.money_direction = "none"
     event.money_delta = 0
 
-  if event.event_type == "adjust_wallet":
+  if event.event_type == AK.ADJUST_WALLET:
     amount_minor = _safe_int(event.total_cost)
     event.money_amount = abs(amount_minor)
     event.money_direction = "in" if amount_minor >= 0 else "out"
@@ -557,19 +569,19 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
   """Generates activity notes for various event types."""
   notes: list[ActivityNote] = []
 
-  if event.event_type == "payment_from_customer":
+  if event.event_type == AK.PAYMENT_FROM_CUSTOMER:
     amount = event.money.amount if event.money is not None else 0
     if amount > 0:
       notes.append(_note(kind="money", direction="customer_pays_you", remaining_after=amount))
     return notes
 
-  if event.event_type == "payment_to_customer":
+  if event.event_type == AK.PAYMENT_TO_CUSTOMER:
     amount = event.money.amount if event.money is not None else 0
     if amount > 0:
       notes.append(_note(kind="money", direction="you_pay_customer", remaining_after=amount))
     return notes
 
-  if event.event_type in _ORDER_KINDS | {"customer_return_empties", "adjust_customer_balance"}:
+  if event.event_type in _ORDER_KINDS | {AK.CUSTOMER_RETURN_EMPTIES, AK.ADJUST_CUSTOMER_BALANCE}:
     _append_money_note(
       notes,
       before=event.customer_money_before,
@@ -597,7 +609,13 @@ def _notes_for_event(event: DailyReportEvent) -> list[ActivityNote]:
     )
     return notes
 
-  if event.event_type in {"refill", "dist_return_empties", "buy_full_from_company", "payment_to_company", "payment_from_company"}:
+  if event.event_type in {
+    AK.REFILL,
+    AK.DIST_RETURN_EMPTIES,
+    AK.BUY_FULL_FROM_COMPANY,
+    AK.PAYMENT_TO_COMPANY,
+    AK.PAYMENT_FROM_COMPANY,
+  }:
     _append_money_note(
       notes,
       before=event.company_before,

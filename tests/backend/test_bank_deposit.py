@@ -33,12 +33,12 @@ def test_wallet_to_bank_reduces_wallet_and_appears_in_timeline(client) -> None:
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
-    transfer_event = next(event for event in timeline.json()["events"] if event["event_type"] == "bank_deposit")
+    transfer_event = next(event for event in timeline.json()["events"] if event["event_type"] == "wallet_to_bank")
     assert transfer_event["source_id"] == transfer_id
     assert transfer_event["wallet_before"] == 1000
     assert transfer_event["wallet_after"] == 800
     assert transfer_event["reason"] == "transfer out"
-    assert transfer_event["label"] == "Wallet → Bank"
+    assert transfer_event["label"] == "Wallet to bank"
     assert transfer_event["hero_text"].endswith("to bank")
     assert transfer_event["transfer_direction"] == "wallet_to_bank"
     assert transfer_event["money_direction"] == "none"
@@ -96,11 +96,11 @@ def test_bank_to_wallet_increases_wallet_and_appears_in_timeline(client) -> None
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
-    transfer_event = next(event for event in timeline.json()["events"] if event["event_type"] == "bank_deposit")
+    transfer_event = next(event for event in timeline.json()["events"] if event["event_type"] == "bank_to_wallet")
     assert transfer_event["source_id"] == transfer_id
     assert transfer_event["wallet_before"] == 0
     assert transfer_event["wallet_after"] == 120
-    assert transfer_event["label"] == "Bank → Wallet"
+    assert transfer_event["label"] == "Bank to wallet"
     assert transfer_event["hero_text"].endswith("to wallet")
     assert transfer_event["transfer_direction"] == "bank_to_wallet"
 
@@ -132,9 +132,9 @@ def test_bank_deposit_ordering_vs_expense_same_day(client) -> None:
 
     timeline = client.get("/reports/day", params={"date": day1.isoformat()})
     assert timeline.status_code == 200
-    events = [event for event in timeline.json()["events"] if event["event_type"] in {"bank_deposit", "expense"}]
+    events = [event for event in timeline.json()["events"] if event["event_type"] in {"wallet_to_bank", "expense"}]
     assert len(events) == 2
-    assert {event["event_type"] for event in events} == {"bank_deposit", "expense"}
+    assert {event["event_type"] for event in events} == {"wallet_to_bank", "expense"}
 
 
 def test_wallet_to_bank_delete_cascades_cash_forward(client) -> None:

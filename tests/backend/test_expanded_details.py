@@ -449,7 +449,7 @@ def test_wallet_to_bank_expanded_details(client) -> None:
     )
     assert resp.status_code == 201, resp.text
 
-    event = _get_event(client, day=day, event_type="bank_deposit")
+    event = _get_event(client, day=day, event_type="wallet_to_bank")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET - 250)
     _assert_no_inventory(event)
 
@@ -468,7 +468,7 @@ def test_bank_to_wallet_expanded_details(client) -> None:
     )
     assert resp.status_code == 201, resp.text
 
-    event = _get_event(client, day=day, event_type="bank_deposit")
+    event = _get_event(client, day=day, event_type="bank_to_wallet")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET + 175)
     _assert_no_inventory(event)
 

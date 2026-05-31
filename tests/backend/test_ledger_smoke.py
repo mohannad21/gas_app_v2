@@ -425,19 +425,21 @@ def test_ledger_smoke_bank_deposit(client) -> None:
     day = _get_day_report(client, D_ISO)
     events = day["events"]
 
-    bd_events = [e for e in events if e.get("event_type") == "bank_deposit"]
-    assert len(bd_events) == 2, f"Expected 2 bank_deposit events, got {len(bd_events)}"
+    bd_events = [e for e in events if e.get("event_type") in {"wallet_to_bank", "bank_to_wallet"}]
+    assert len(bd_events) == 2, f"Expected 2 bank transfer events, got {len(bd_events)}"
 
     # Sort by happened_at (chronological order)
     bd_events.sort(key=lambda e: e.get("effective_at", ""))
 
     # First event (10:00): wallet_to_bank (cash drops 8_000 → 5_000)
     wtb = bd_events[0]
+    assert wtb["event_type"] == "wallet_to_bank"
     assert wtb["wallet_before"] == 8_000, f"wallet_to_bank wallet_before: {wtb['wallet_before']}"
     assert wtb["wallet_after"] == 5_000, f"wallet_to_bank wallet_after: {wtb['wallet_after']}"
 
     # Second event (11:00): bank_to_wallet (cash rises 5_000 → 6_000)
     btw = bd_events[1]
+    assert btw["event_type"] == "bank_to_wallet"
     assert btw["wallet_before"] == 5_000, f"bank_to_wallet wallet_before: {btw['wallet_before']}"
     assert btw["wallet_after"] == 6_000, f"bank_to_wallet wallet_after: {btw['wallet_after']}"
 
