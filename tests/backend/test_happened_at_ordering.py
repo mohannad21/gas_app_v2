@@ -243,15 +243,15 @@ def test_daily_report_orders_same_second_customer_sequence_by_hidden_happened_at
         event
         for event in report.json()["events"]
         if event.get("customer_name") == "Same Second Customer"
-        and event["label"] in {"Replacement", "Payment from customer", "Returned empties", "Sell Full", "Buy Empty"}
+        and event["label"] in {"Replace", "Payment from customer", "Empties from customer", "Sell full", "Buy empties"}
     ]
 
     assert [event["label"] for event in events[:5]] == [
-        "Buy Empty",
-        "Sell Full",
-        "Returned empties",
+        "Buy empties",
+        "Sell full",
+        "Empties from customer",
         "Payment from customer",
-        "Replacement",
+        "Replace",
     ]
     assert [_parse_iso(event["effective_at"]) for event in events[:5]] == sorted(
         (_parse_iso(event["effective_at"]) for event in events[:5]),

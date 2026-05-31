@@ -118,22 +118,22 @@ def test_day_smart_ticket_order_fields(client) -> None:
     events = {event["source_id"]: event for event in resp.json()["events"] if event["event_type"] in ("replacement", "sell_full", "buy_empty_from_customer")}
 
     rep_bal = events[rep_bal_id]
-    assert rep_bal["label"] == "Replacement"
+    assert rep_bal["label"] == "Replace"
 
     rep_unbal = events[rep_unbal_id]
-    assert rep_unbal["label"] == "Replacement"
+    assert rep_unbal["label"] == "Replace"
 
     sell_bal = events[sell_bal_id]
-    assert sell_bal["label"] == "Sell Full"
+    assert sell_bal["label"] == "Sell full"
 
     sell_unbal = events[sell_unbal_id]
-    assert sell_unbal["label"] == "Sell Full"
+    assert sell_unbal["label"] == "Sell full"
 
     buy_bal = events[buy_bal_id]
-    assert buy_bal["label"] == "Buy Empty"
+    assert buy_bal["label"] == "Buy empties"
 
     buy_unbal = events[buy_unbal_id]
-    assert buy_unbal["label"] == "Buy Empty"
+    assert buy_unbal["label"] == "Buy empties"
 
 
 def test_day_smart_ticket_refill_fields(client) -> None:

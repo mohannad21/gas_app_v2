@@ -223,7 +223,7 @@ def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
 
-    assert event["label"] == "Returned empties"
+    assert event["label"] == "Empties to company"
     assert event["hero_text"] == "Received 3x12kg full from company"
 
 
@@ -246,7 +246,7 @@ def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
     assert report.status_code == 200
     event = next(event for event in report.json()["events"] if event["event_type"] == "dist_return_empties")
 
-    assert event["label"] == "Returned empties"
+    assert event["label"] == "Empties to company"
     assert event["hero_text"] == "Returned 2x48kg empties to company"
 
 
