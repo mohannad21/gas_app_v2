@@ -13,7 +13,9 @@ import { formatEventType } from "@/lib/reports/utils";
 import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 import { t } from "@/lib/i18n/translations";
 import { DailyReportEvent } from "@/types/domain";
-import { getActivityIcon } from "@/components/reports/ActivityIcon";
+import ActivityIcon from "@/components/reports/ActivityIcon";
+
+type ActivityTone = "customer" | "company" | "money" | "ledger";
 
 type SlimActivityRowProps = {
   event: DailyReportEvent;
@@ -129,6 +131,14 @@ const _isCompanyBuyFull = (et: string) => normalizeEventType(et) === "buy_full_f
 const _isDistReturn = (et: string) => normalizeEventType(et) === "dist_return_empties";
 const _isWalletAdjust = (et: string) => normalizeEventType(et) === "adjust_wallet";
 const _isInventoryAdjust = (et: string) => normalizeEventType(et) === "adjust_inventory";
+
+const toneForMeta = (meta: (typeof ACTIVITY_KIND_META)[keyof typeof ACTIVITY_KIND_META] | null): ActivityTone => {
+  if (!meta) return "ledger";
+  if (meta.filterGroup === "customer") return "customer";
+  if (meta.filterGroup === "company") return "company";
+  if (meta.filterGroup === "expenses") return "money";
+  return "ledger";
+};
 
 const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
   const parts: string[] = [];
@@ -292,18 +302,16 @@ export default function SlimActivityRow({
   const fmtMoney = formatMoney ?? ((value: number) => String(value));
   const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
-  const label = (() => {
-    const kind = normalizeEventType(eventType, {
-      order_mode: event?.order_mode ?? undefined,
-      money_direction: event?.money_direction ?? undefined,
-      transfer_direction: event?.transfer_direction ?? undefined,
-    });
-    if (kind) {
-      const meta = ACTIVITY_KIND_META[kind];
-      return t(meta.labelKey) ?? event?.label ?? formatEventType(eventType, event?.order_mode);
-    }
-    return event?.label ?? formatEventType(eventType, event?.order_mode);
-  })();
+  const activityKind = normalizeEventType(eventType, {
+    order_mode: event?.order_mode ?? undefined,
+    money_direction: event?.money_direction ?? undefined,
+    transfer_direction: event?.transfer_direction ?? undefined,
+  });
+  const activityMeta = activityKind ? ACTIVITY_KIND_META[activityKind] : null;
+  const activityTone = toneForMeta(activityMeta);
+  const label = activityMeta
+    ? t(activityMeta.labelKey) ?? event?.label ?? formatEventType(eventType, event?.order_mode)
+    : event?.label ?? formatEventType(eventType, event?.order_mode);
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
   const isCompany = counterparty?.type === "company";
@@ -432,8 +440,31 @@ export default function SlimActivityRow({
   const notes = transitionPills.length === 0 && Array.isArray(event?.notes) ? event.notes : [];
   const showNotes = transitionPills.length > 0 || notes.length > 0;
   const dotColor = getEventColor(eventType);
-  const activityIcon = getActivityIcon(eventType, event.order_mode, moneyDirection, event.transfer_direction);
   const heroLines = heroAction ? heroAction.split("\n") : [];
+  const actionToneStyle =
+    activityTone === "customer"
+      ? styles.actionTextCustomer
+      : activityTone === "company"
+        ? styles.actionTextCompany
+        : activityTone === "money"
+          ? styles.actionTextMoney
+          : styles.actionTextLedger;
+  const scopedPillStyle =
+    activityTone === "customer"
+      ? styles.pillCustomer
+      : activityTone === "company"
+        ? styles.pillCompany
+        : activityTone === "money"
+          ? styles.pillMoney
+          : styles.pillLedger;
+  const scopedPillTextStyle =
+    activityTone === "customer"
+      ? styles.pillCustomerText
+      : activityTone === "company"
+        ? styles.pillCompanyText
+        : activityTone === "money"
+          ? styles.pillMoneyText
+          : styles.pillLedgerText;
 
   const hasActions = !!(onEdit || onDelete);
 
@@ -464,12 +495,19 @@ export default function SlimActivityRow({
         ]}
       />
       <View style={styles.railCol}>
-        <Ionicons name={activityIcon} size={22} color={dotColor} style={styles.icon} />
+        <ActivityIcon
+          eventType={eventType}
+          orderMode={event.order_mode}
+          moneyDirection={moneyDirection}
+          transferDirection={event.transfer_direction}
+          color={dotColor}
+          size={40}
+        />
         <View style={styles.rail} />
       </View>
       <View style={styles.content}>
         <View style={styles.topRow}>
-          <Text style={styles.actionText} numberOfLines={1}>
+          <Text style={[styles.actionText, actionToneStyle]} numberOfLines={1}>
             {displayContextLine}
           </Text>
           {showPaymentRatio ? (
@@ -539,9 +577,9 @@ export default function SlimActivityRow({
                 const text = buildLegacyNoteText(note, fmtMoney);
                 if (!text) return null;
                 return (
-                  <View key={`note-${index}`} style={[styles.pill, styles.pillWarning]}>
+                  <View key={`note-${index}`} style={[styles.pill, scopedPillStyle]}>
                     <Text
-                      style={[styles.pillText, styles.pillWarningText]}
+                      style={[styles.pillText, scopedPillTextStyle]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.8}
@@ -558,9 +596,7 @@ export default function SlimActivityRow({
                     styles.pill,
                     pill.intent === "good"
                       ? styles.pillGood
-                      : pill.intent === "neutral"
-                        ? styles.pillNeutral
-                        : styles.pillWarning,
+                      : scopedPillStyle,
                   ]}
                 >
                   <Text
@@ -568,9 +604,7 @@ export default function SlimActivityRow({
                       styles.pillText,
                       pill.intent === "good"
                         ? styles.pillGoodText
-                        : pill.intent === "neutral"
-                          ? styles.pillNeutralText
-                          : styles.pillWarningText,
+                        : scopedPillTextStyle,
                     ]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
@@ -630,13 +664,15 @@ export default function SlimActivityRow({
 
 const styles = StyleSheet.create({
   row: {
-    paddingVertical: Level3Tokens.spacing.rowY,
-    paddingHorizontal: Level3Tokens.spacing.rowX,
-    backgroundColor: Level3Tokens.colors.rowBg,
+    paddingVertical: 16,
+    paddingLeft: 6,
+    paddingRight: Level3Tokens.spacing.rowX,
+    backgroundColor: "transparent",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Level3Tokens.colors.border,
+    borderBottomColor: "#eef2f7",
     flexDirection: "row",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 12,
     position: "relative",
     overflow: "hidden",
   },
@@ -645,22 +681,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
   },
   railCol: {
-    width: 28,
+    width: 42,
     alignItems: "center",
+    paddingTop: 0,
   },
   rail: {
     flex: 1,
-    width: 2,
-    backgroundColor: Level3Tokens.colors.border,
-    marginTop: 4,
+    width: 1,
+    backgroundColor: "#e5e7eb",
+    marginTop: 8,
   },
   content: {
     flex: 1,
-    gap: 4,
+    gap: 5,
+    paddingTop: 11,
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 6,
   },
   icon: {
@@ -669,8 +707,19 @@ const styles = StyleSheet.create({
   actionText: {
     flex: 1,
     fontSize: FontSizes.md,
-    color: Level3Tokens.colors.textMuted,
     fontFamily: FontFamilies.regular,
+  },
+  actionTextCustomer: {
+    color: "#0369a1",
+  },
+  actionTextCompany: {
+    color: "#c2410c",
+  },
+  actionTextMoney: {
+    color: "#0f766e",
+  },
+  actionTextLedger: {
+    color: "#475569",
   },
   headerName: {
     flex: 1,
@@ -700,8 +749,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   contextText: {
-    fontSize: FontSizes.sm,
-    color: Level3Tokens.colors.textMuted,
+    fontSize: FontSizes.xs,
+    color: "#94a3b8",
     fontFamily: FontFamilies.regular,
   },
   contextTextAlert: {
@@ -751,8 +800,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillText: {
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.sm,
     fontFamily: FontFamilies.medium,
+  },
+  pillCustomer: {
+    backgroundColor: "#f0f9ff",
+    borderColor: "#7dd3fc",
+  },
+  pillCustomerText: {
+    color: "#0369a1",
+  },
+  pillCompany: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fdba74",
+  },
+  pillCompanyText: {
+    color: "#c2410c",
+  },
+  pillMoney: {
+    backgroundColor: "#f0fdfa",
+    borderColor: "#5eead4",
+  },
+  pillMoneyText: {
+    color: "#0f766e",
+  },
+  pillLedger: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+  },
+  pillLedgerText: {
+    color: "#475569",
   },
   pillWarning: {
     backgroundColor: "#fff7ed",

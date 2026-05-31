@@ -1,333 +1,309 @@
 import React from "react";
-import Svg, { Circle, Line, Path, Polygon, Rect } from "react-native-svg";
-
-import { ACTIVITY_KIND_META, normalizeEventType, type IconSpec } from "@/lib/activityKindMeta";
-
-export type ActivityIconType =
-  | "customer_to_dist"
-  | "dist_to_customer"
-  | "dist_customer_both"
-  | "company_to_dist"
-  | "dist_to_company"
-  | "dist_company_both"
-  | "internal_wallet"
-  | "internal_bank"
-  | "internal_inventory";
+import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import type { ActivityKindMeta, IconSpec } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 
 type Props = {
-  type: ActivityIconType;
+  eventType: string;
+  orderMode?: string | null;
+  moneyDirection?: string | null;
+  transferDirection?: string | null;
   color: string;
   size?: number;
 };
 
-export default function ActivityIcon({ type, color, size = 20 }: Props) {
-  const w = Math.round(size * 2.2);
-  const h = size;
-  const cy = h / 2;
-  const actorW = h;
-  const arrowStart = actorW + 2;
-  const arrowEnd = w - actorW - 2;
-  const stroke = color;
-  const accent = color;
-  const sw = 1.8;
+type Box = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
-  const customerPath = (ox: number, oy: number, s: number) => {
-    const r = s * 0.22;
-    const hcy = oy + s * 0.33;
-    const bx1 = ox + s * 0.18;
-    const bx2 = ox + s * 0.82;
-    const bcx = ox + s * 0.5;
-    const by = oy + s * 0.58;
-    const bot = oy + s;
-    return (
-      <>
-        <Circle cx={ox + s / 2} cy={hcy} r={r} stroke={stroke} strokeWidth={sw} fill="none" />
-        <Path
-          d={`M${bx1},${bot} Q${bx1},${by} ${bcx},${by} Q${bx2},${by} ${bx2},${bot}`}
-          stroke={stroke}
-          strokeWidth={sw}
-          fill="none"
-          strokeLinecap="round"
-        />
-      </>
-    );
-  };
+type IconPalette = {
+  foreground: string;
+};
 
-  const distributorPath = (ox: number, oy: number, s: number) => {
-    const torsoTop = oy + s * 0.35;
-    const torsoBottom = oy + s * 0.92;
-    return (
-      <>
-        <Circle cx={ox + s / 2} cy={oy + s * 0.24} r={s * 0.16} stroke={stroke} strokeWidth={sw} fill="none" />
-        <Rect
-          x={ox + s * 0.26}
-          y={torsoTop}
-          width={s * 0.48}
-          height={s * 0.34}
-          rx={s * 0.08}
-          stroke={stroke}
-          strokeWidth={sw}
-          fill="none"
-        />
-        <Line x1={ox + s * 0.5} y1={torsoTop + s * 0.34} x2={ox + s * 0.5} y2={torsoBottom} stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
-        <Line x1={ox + s * 0.32} y1={oy + s * 0.5} x2={ox + s * 0.68} y2={oy + s * 0.5} stroke={accent} strokeWidth={sw} strokeLinecap="round" />
-      </>
-    );
-  };
+const VIEWBOX_SIZE = 22;
+const STROKE_WIDTH = 2;
+const THIN_STROKE_WIDTH = 1;
+const SYMBOL: Box = { x: 3, y: 3, width: 16, height: 16 };
 
-  const factoryPath = (ox: number, oy: number, s: number) => {
-    const baseY = oy + s * 0.5;
-    return (
-      <>
-        <Rect x={ox + s * 0.08} y={baseY} width={s * 0.84} height={s * 0.5} stroke={stroke} strokeWidth={sw} fill="none" />
-        <Rect x={ox + s * 0.2} y={oy + s * 0.15} width={s * 0.18} height={s * 0.35} stroke={stroke} strokeWidth={sw} fill="none" />
-        <Rect x={ox + s * 0.55} y={oy + s * 0.25} width={s * 0.18} height={s * 0.25} stroke={stroke} strokeWidth={sw} fill="none" />
-        <Line x1={ox} y1={baseY} x2={ox + s} y2={baseY} stroke={stroke} strokeWidth={sw} />
-      </>
-    );
-  };
+const vectorProps = {
+  strokeWidth: STROKE_WIDTH,
+  fill: "none",
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
 
-  const walletPath = (ox: number, oy: number, s: number) => (
-    <>
-      <Rect
-        x={ox + s * 0.08}
-        y={oy + s * 0.25}
-        width={s * 0.84}
-        height={s * 0.6}
-        rx={s * 0.15}
-        stroke={stroke}
-        strokeWidth={sw}
-        fill="none"
-      />
-      <Rect
-        x={ox + s * 0.58}
-        y={oy + s * 0.42}
-        width={s * 0.22}
-        height={s * 0.26}
-        rx={s * 0.08}
-        stroke={stroke}
-        strokeWidth={sw}
-        fill={stroke}
-      />
-    </>
-  );
+const arrowProps = {
+  strokeWidth: THIN_STROKE_WIDTH,
+  fill: "none",
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
 
-  const bankPath = (ox: number, oy: number, s: number) => (
-    <>
-      <Polygon
-        points={`${ox + s * 0.12},${oy + s * 0.34} ${ox + s * 0.5},${oy + s * 0.08} ${ox + s * 0.88},${oy + s * 0.34}`}
-        stroke={stroke}
-        strokeWidth={sw}
-        fill="none"
-      />
-      <Line x1={ox + s * 0.2} y1={oy + s * 0.34} x2={ox + s * 0.2} y2={oy + s * 0.82} stroke={stroke} strokeWidth={sw} />
-      <Line x1={ox + s * 0.4} y1={oy + s * 0.34} x2={ox + s * 0.4} y2={oy + s * 0.82} stroke={stroke} strokeWidth={sw} />
-      <Line x1={ox + s * 0.6} y1={oy + s * 0.34} x2={ox + s * 0.6} y2={oy + s * 0.82} stroke={stroke} strokeWidth={sw} />
-      <Line x1={ox + s * 0.8} y1={oy + s * 0.34} x2={ox + s * 0.8} y2={oy + s * 0.82} stroke={stroke} strokeWidth={sw} />
-      <Line x1={ox + s * 0.12} y1={oy + s * 0.82} x2={ox + s * 0.88} y2={oy + s * 0.82} stroke={accent} strokeWidth={sw} />
-    </>
-  );
+const cylinderProps = {
+  strokeWidth: THIN_STROKE_WIDTH,
+  fill: "none",
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
 
-  const cylinderPath = (ox: number, oy: number, s: number) => (
-    <>
-      <Path
-        d={`M${ox + s * 0.15},${oy + s * 0.35} Q${ox + s * 0.5},${oy + s * 0.2} ${ox + s * 0.85},${oy + s * 0.35}`}
-        stroke={stroke}
-        strokeWidth={sw}
-        fill="none"
-      />
-      <Rect x={ox + s * 0.15} y={oy + s * 0.35} width={s * 0.7} height={s * 0.45} stroke={stroke} strokeWidth={sw} fill="none" />
-      <Path
-        d={`M${ox + s * 0.15},${oy + s * 0.8} Q${ox + s * 0.5},${oy + s * 0.95} ${ox + s * 0.85},${oy + s * 0.8}`}
-        stroke={stroke}
-        strokeWidth={sw}
-        fill="none"
-      />
-    </>
-  );
-
-  const arrowTipSize = 5;
-
-  const arrowRight = (y: number, x1: number, x2: number, thick = true) => (
-    <>
-      <Line
-        x1={x1}
-        y1={y}
-        x2={x2 - arrowTipSize}
-        y2={y}
-        stroke={stroke}
-        strokeWidth={thick ? sw * 1.2 : sw * 0.8}
-        strokeLinecap="round"
-      />
-      <Polygon
-        points={`${x2 - arrowTipSize},${y - arrowTipSize * 0.7} ${x2},${y} ${x2 - arrowTipSize},${y + arrowTipSize * 0.7}`}
-        fill={stroke}
-      />
-    </>
-  );
-
-  const arrowLeft = (y: number, x1: number, x2: number, thick = true) => (
-    <>
-      <Line
-        x1={x1 + arrowTipSize}
-        y1={y}
-        x2={x2}
-        y2={y}
-        stroke={stroke}
-        strokeWidth={thick ? sw * 1.2 : sw * 0.8}
-        strokeLinecap="round"
-      />
-      <Polygon
-        points={`${x1 + arrowTipSize},${y - arrowTipSize * 0.7} ${x1},${y} ${x1 + arrowTipSize},${y + arrowTipSize * 0.7}`}
-        fill={stroke}
-      />
-    </>
-  );
-
-  let leftActor: React.ReactNode;
-  let rightActor: React.ReactNode;
-  let arrow: React.ReactNode;
-
-  const rax = arrowStart;
-  const rbx = arrowEnd;
-  const primaryY = cy - 2;
-  const secondaryY = cy + 3;
-
-  switch (type) {
-    case "customer_to_dist":
-      leftActor = customerPath(0, 0, actorW);
-      rightActor = distributorPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-
-    case "dist_to_customer":
-      leftActor = distributorPath(0, 0, actorW);
-      rightActor = customerPath(w - actorW, 0, actorW);
-      arrow = arrowLeft(cy, rax, rbx);
-      break;
-
-    case "dist_customer_both":
-      leftActor = distributorPath(0, 0, actorW);
-      rightActor = customerPath(w - actorW, 0, actorW);
-      arrow = (
-        <>
-          {arrowLeft(primaryY, rax, rbx, true)}
-          {arrowRight(secondaryY, rax, rbx, false)}
-        </>
-      );
-      break;
-
-    case "company_to_dist":
-      leftActor = factoryPath(0, 0, actorW);
-      rightActor = distributorPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-
-    case "dist_to_company":
-      leftActor = distributorPath(0, 0, actorW);
-      rightActor = factoryPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-
-    case "dist_company_both":
-      leftActor = factoryPath(0, 0, actorW);
-      rightActor = distributorPath(w - actorW, 0, actorW);
-      arrow = (
-        <>
-          {arrowRight(primaryY, rax, rbx, true)}
-          {arrowLeft(secondaryY, rax, rbx, false)}
-        </>
-      );
-      break;
-
-    case "internal_wallet":
-      leftActor = walletPath(0, 0, actorW);
-      rightActor = walletPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-
-    case "internal_bank":
-      leftActor = bankPath(0, 0, actorW);
-      rightActor = walletPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-
-    case "internal_inventory":
-    default:
-      leftActor = cylinderPath(0, 0, actorW);
-      rightActor = cylinderPath(w - actorW, 0, actorW);
-      arrow = arrowRight(cy, rax, rbx);
-      break;
-  }
-
-  return (
-    <Svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-      {leftActor}
-      {arrow}
-      {rightActor}
-    </Svg>
-  );
-}
-
-export type IoniconName = React.ComponentProps<typeof import("@expo/vector-icons").Ionicons>["name"];
-
-// Maps an IconSpec to the best available Ionicons name.
-// full-cyl and empty-cyl use flask placeholders until custom SVG assets are added in a future ticket.
-export function resolveIonicon(spec: IconSpec): IoniconName {
-  const { arrow, symbol } = spec;
-  if (symbol === null) {
-    if (arrow === "swap-h") return "swap-horizontal-outline";
-    if (arrow === "swap-v") return "swap-vertical-outline";
-    return "ellipse-outline";
-  }
-  switch (symbol) {
-    case "money":    return "cash-outline";
-    case "full-cyl": return "flask-outline";
-    case "empty-cyl": return "flask-outline";
-    case "receipt":  return "receipt-outline";
-    case "wallet":   return "wallet-outline";
-    case "cube":     return "cube-outline";
-    case "edit":     return "build-outline";
-    default:         return "ellipse-outline";
-  }
-}
-
-export function getActivityIcon(
-  eventType: string,
-  orderMode?: string | null,
-  moneyDirection?: string | null,
-  transferDirection?: string | null
-): IoniconName {
+export default function ActivityIcon({
+  eventType,
+  orderMode,
+  moneyDirection,
+  transferDirection,
+  color,
+  size = 22,
+}: Props) {
   const kind = normalizeEventType(eventType, {
     order_mode: orderMode ?? undefined,
     money_direction: moneyDirection ?? undefined,
     transfer_direction: transferDirection ?? undefined,
   });
-  if (kind) return resolveIonicon(ACTIVITY_KIND_META[kind].icon);
-  return "ellipse-outline";
+  const meta = kind ? ACTIVITY_KIND_META[kind] : null;
+  const spec: IconSpec = meta ? meta.icon : { arrow: "none", symbol: null };
+
+  return renderIconSpec(spec, getIconPalette(meta, color), size);
 }
 
-export function iconTypeForEvent(eventType: string, orderMode?: string | null): ActivityIconType {
-  const kind = normalizeEventType(eventType, { order_mode: orderMode ?? undefined });
-  switch (kind) {
-    case "replacement":             return "dist_customer_both";
-    case "sell_full":               return "dist_customer_both";
-    case "buy_empty_from_customer": return "customer_to_dist";
-    case "payment_from_customer":   return "customer_to_dist";
-    case "payment_to_customer":     return "dist_to_customer";
-    case "customer_return_empties": return "customer_to_dist";
-    case "adjust_customer_balance": return "dist_to_customer";
-    case "refill":                  return "dist_company_both";
-    case "buy_full_from_company":   return "company_to_dist";
-    case "dist_return_empties":     return "dist_to_company";
-    case "payment_to_company":      return "dist_to_company";
-    case "payment_from_company":    return "company_to_dist";
-    case "adjust_company_balance":  return "dist_to_company";
-    case "expense":                 return "internal_wallet";
-    case "bank_to_wallet":          return "internal_bank";
-    case "wallet_to_bank":          return "internal_bank";
-    case "adjust_inventory":        return "internal_inventory";
-    case "adjust_wallet":           return "internal_wallet";
-    default:                        return "internal_wallet";
+function getIconPalette(meta: ActivityKindMeta | null, fallbackColor: string): IconPalette {
+  if (!meta) return { foreground: fallbackColor };
+  if (meta.filterGroup === "customer") return { foreground: "#0369a1" };
+  if (meta.filterGroup === "company") return { foreground: "#c2410c" };
+  return { foreground: "#0f766e" };
+}
+
+function renderIconSpec(spec: IconSpec, palette: IconPalette, size: number) {
+  return (
+    <Svg width={size} height={size} viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}>
+      {renderSymbol(spec.symbol, SYMBOL, palette.foreground, spec.arrow)}
+      {renderContainedArrow(spec.arrow, palette.foreground, spec.symbol === null)}
+    </Svg>
+  );
+}
+
+function renderContainedArrow(arrow: IconSpec["arrow"], color: string, isPrimary: boolean) {
+  if (arrow === "none") return null;
+
+  const center = isPrimary ? 11 : 16.4;
+  const side = isPrimary ? 11 : 6.4;
+  const start = 5.2;
+  const end = 16.8;
+  const horizontalStart = isPrimary ? 5.2 : 6.5;
+  const horizontalEnd = isPrimary ? 16.8 : 15.5;
+  const verticalStart = isPrimary ? 5.2 : 4.4;
+  const verticalEnd = isPrimary ? 16.8 : 17.8;
+
+  switch (arrow) {
+    case "in-h":
+      return <Path d={`M${horizontalStart},${center} H${horizontalEnd} M${horizontalEnd - 2},${center - 2} L${horizontalEnd},${center} L${horizontalEnd - 2},${center + 2}`} stroke={color} {...arrowProps} />;
+    case "out-h":
+      return <Path d={`M${horizontalEnd},${center} H${horizontalStart} M${horizontalStart + 2},${center - 2} L${horizontalStart},${center} L${horizontalStart + 2},${center + 2}`} stroke={color} {...arrowProps} />;
+    case "swap-h":
+      return (
+        <Path
+          d={`M${start + 1.6},${center} H${end - 1.6} M${start + 2},${center - 2} L${start},${center} L${start + 2},${center + 2} M${end - 2},${center - 2} L${end},${center} L${end - 2},${center + 2}`}
+          stroke={color}
+          {...arrowProps}
+        />
+      );
+    case "in-v":
+      return <Path d={`M${side},${verticalStart} V${verticalEnd} M${side - 2},${verticalEnd - 2} L${side},${verticalEnd} L${side + 2},${verticalEnd - 2}`} stroke={color} {...arrowProps} />;
+    case "out-v":
+      return <Path d={`M${side},${verticalEnd} V${verticalStart} M${side - 2},${verticalStart + 2} L${side},${verticalStart} L${side + 2},${verticalStart + 2}`} stroke={color} {...arrowProps} />;
+    case "swap-v":
+      return (
+        <Path
+          d={`M${center},${start + 1.6} V${end - 1.6} M${center - 2},${start + 2} L${center},${start} L${center + 2},${start + 2} M${center - 2},${end - 2} L${center},${end} L${center + 2},${end - 2}`}
+          stroke={color}
+          {...arrowProps}
+        />
+      );
+    default:
+      return null;
   }
+}
+
+function renderSymbol(symbol: IconSpec["symbol"], box: Box, color: string, arrow: IconSpec["arrow"]) {
+  if (!symbol) return null;
+
+  const symbolBox =
+    arrow === "none" || arrow === "swap-h" || arrow === "swap-v"
+      ? box
+      : arrow === "in-v" || arrow === "out-v"
+        ? { x: 10.2, y: 3, width: 10.2, height: 16 }
+        : { x: 4.5, y: 1.1, width: 13, height: 12.2 };
+  const cylinderBox =
+    arrow === "none" || arrow === "swap-h" || arrow === "swap-v"
+      ? { x: 6.6, y: 1.6, width: 8.8, height: 18 }
+      : arrow === "in-v" || arrow === "out-v"
+        ? { x: 12, y: 2.6, width: 7.8, height: 16.2 }
+        : { x: 7.1, y: 0.9, width: 7.8, height: 13.5 };
+
+  switch (symbol) {
+    case "money":
+      return renderMoney(symbolBox, color);
+    case "full-cyl":
+      return renderCylinder(cylinderBox, color, true);
+    case "empty-cyl":
+      return renderCylinder(cylinderBox, color, false);
+    case "receipt":
+      return renderReceipt(symbolBox, color);
+    case "wallet":
+      return renderWallet(symbolBox, color);
+    case "cube":
+      return renderCube(symbolBox, color);
+    case "edit":
+      return renderEdit(symbolBox, color);
+    case "bank-transfer":
+      return renderBankTransfer(symbolBox, color);
+    default:
+      return null;
+  }
+}
+
+function renderMoney(box: Box, color: string) {
+  const x = box.x + 0.5;
+  const y = box.y + 2.1;
+  const w = box.width - 1;
+  const h = box.height - 4.2;
+
+  return (
+    <>
+      <Rect x={x} y={y} width={w} height={h} rx={2} stroke={color} {...vectorProps} />
+      <Circle cx={x + w / 2} cy={y + h / 2} r={1.3} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderCylinder(box: Box, color: string, isFull: boolean) {
+  const x = box.x;
+  const y = box.y;
+  const w = box.width;
+  const h = box.height;
+  const sx = (value: number) => x + (value / 100) * w;
+  const sy = (value: number) => y + (value / 200) * h;
+  const sw = (value: number) => (value / 100) * w;
+  const sh = (value: number) => (value / 200) * h;
+
+  return (
+    <>
+      {isFull ? (
+        <Rect x={sx(15)} y={sy(50)} width={sw(70)} height={sh(130)} rx={sw(10)} fill={color} fillOpacity={0.24} />
+      ) : null}
+      <Rect x={sx(15)} y={sy(50)} width={sw(70)} height={sh(130)} rx={sw(10)} stroke={color} {...cylinderProps} />
+      <Line x1={sx(15)} y1={sy(115)} x2={sx(85)} y2={sy(115)} stroke={color} {...cylinderProps} />
+      <Path
+        d={`M${sx(30)},${sy(50)} V${sy(35)} C${sx(30)},${sy(30)} ${sx(35)},${sy(25)} ${sx(40)},${sy(25)} H${sx(60)} C${sx(65)},${sy(25)} ${sx(70)},${sy(30)} ${sx(70)},${sy(35)} V${sy(50)}`}
+        stroke={color}
+        {...cylinderProps}
+      />
+      <Rect x={sx(25)} y={sy(180)} width={sw(50)} height={sh(10)} rx={sw(2)} fill={color} />
+    </>
+  );
+}
+
+function renderReceipt(box: Box, color: string) {
+  const x = box.x + 2;
+  const y = box.y + 0.6;
+  const w = box.width - 4;
+  const h = box.height - 0.8;
+  const bottom = y + h;
+
+  return (
+    <>
+      <Path
+        d={[
+          `M${x},${y + 1.4}`,
+          `Q${x},${y} ${x + 1.4},${y}`,
+          `H${x + w - 1.4}`,
+          `Q${x + w},${y} ${x + w},${y + 1.4}`,
+          `V${bottom - 2}`,
+          `L${x + w - 1.4},${bottom - 0.6}`,
+          `L${x + w - 2.8},${bottom - 2}`,
+          `L${x + w - 4.2},${bottom - 0.6}`,
+          `L${x + w - 5.6},${bottom - 2}`,
+          `H${x}`,
+          `V${y + 1.4}`,
+        ].join(" ")}
+        stroke={color}
+        {...vectorProps}
+      />
+      <Line x1={x + 1.8} y1={y + 3.5} x2={x + w - 1.8} y2={y + 3.5} stroke={color} {...vectorProps} />
+      <Line x1={x + 1.8} y1={y + 6} x2={x + w - 2.6} y2={y + 6} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderWallet(box: Box, color: string) {
+  const x = box.x + 0.5;
+  const y = box.y + 2.8;
+  const w = box.width - 1;
+  const h = box.height - 4.6;
+
+  return (
+    <>
+      <Path d={`M${x + 1.5},${y + 1} H${x + w - 2.1} Q${x + w},${y + 1} ${x + w},${y + 3}`} stroke={color} {...vectorProps} />
+      <Rect x={x} y={y + 1.5} width={w} height={h} rx={2} stroke={color} {...vectorProps} />
+      <Circle cx={x + w - 2.3} cy={y + h / 2 + 1.5} r={0.7} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderCube(box: Box, color: string) {
+  const x = box.x + 0.3;
+  const y = box.y + 0.5;
+  const w = box.width - 0.6;
+  const h = box.height - 0.6;
+
+  return (
+    <>
+      <Path
+        d={`M${x + 1.2},${y + 4} L${x + w / 2},${y + 1.2} L${x + w - 1.2},${y + 4} L${x + w / 2},${y + 6.8} Z`}
+        stroke={color}
+        {...vectorProps}
+      />
+      <Path d={`M${x + 1.2},${y + 4} V${y + 7.7} L${x + w / 2},${y + h - 1} V${y + 6.8}`} stroke={color} {...vectorProps} />
+      <Path d={`M${x + w - 1.2},${y + 4} V${y + 7.7} L${x + w / 2},${y + h - 1}`} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderEdit(box: Box, color: string) {
+  const x = box.x + 0.5;
+  const y = box.y + 0.2;
+
+  return (
+    <>
+      <Path d={`M${x + 2},${y + 8.9} L${x + 8.1},${y + 2.8}`} stroke={color} {...vectorProps} />
+      <Path d={`M${x + 7.3},${y + 2} L${x + 9.3},${y + 4}`} stroke={color} {...vectorProps} />
+      <Path d={`M${x + 1.5},${y + 9.8} L${x + 3.5},${y + 9.1} L${x + 2.2},${y + 7.8} Z`} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderBankTransfer(box: Box, color: string) {
+  const x = box.x + 0.2;
+  const y = box.y + 0.2;
+  const leftCx = x + 2.1;
+  const rightCx = x + box.width - 2.1;
+  const cy = y + box.height / 2;
+
+  return (
+    <>
+      <Circle cx={leftCx} cy={cy} r={1.25} stroke={color} {...vectorProps} />
+      <Circle cx={rightCx} cy={cy} r={1.25} stroke={color} {...vectorProps} />
+      <Path
+        d={[
+          `M${leftCx + 1.5},${cy}`,
+          `C${x + 4.4},${y + 1.7} ${x + 6.6},${y + 1.7} ${rightCx - 1.5},${cy}`,
+          `C${x + 6.6},${y + box.height - 1.7} ${x + 4.4},${y + box.height - 1.7} ${leftCx + 1.5},${cy}`,
+        ].join(" ")}
+        stroke={color}
+        {...vectorProps}
+      />
+    </>
+  );
 }
