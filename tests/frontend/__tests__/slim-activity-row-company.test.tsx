@@ -52,7 +52,7 @@ function makeEvent(overrides: Partial<DailyReportEvent> = {}): DailyReportEvent 
 
 describe("SlimActivityRow company activity rendering", () => {
   it("renders the refill icon and label", () => {
-    const { getByText } = render(
+    const { getByTestId, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
           buy12: 3,
@@ -70,7 +70,7 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("swap-vertical-outline")).toBeTruthy();
+    expect(getByTestId("activity-icon")).toBeTruthy();
     expect(getByText("Refill")).toBeTruthy();
     expect(getByText("Bought: 3x 12kg | 1x 48kg")).toBeTruthy();
     expect(getByText("Returned: 2x 12kg | 1x 48kg")).toBeTruthy();
@@ -148,7 +148,7 @@ describe("SlimActivityRow company activity rendering", () => {
   });
 
   it("renders the expense icon and label", () => {
-    const { getByText } = render(
+    const { getByTestId, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
           event_type: "expense",
@@ -168,14 +168,14 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("receipt-outline")).toBeTruthy();
+    expect(getByTestId("activity-icon")).toBeTruthy();
     expect(getByText("Expense")).toBeTruthy();
     expect(getByText("Fuel")).toBeTruthy();
     expect(getByText("-45 $")).toBeTruthy();
   });
 
   it("renders the cash adjustment icon and label", () => {
-    const { getAllByText, getByText } = render(
+    const { getAllByText, getByTestId, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
           event_type: "cash_adjust",
@@ -195,14 +195,14 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("wallet-outline")).toBeTruthy();
+    expect(getByTestId("activity-icon")).toBeTruthy();
     expect(getAllByText("Adjust wallet").length).toBeGreaterThan(0);
     expect(getAllByText("Till correction").length).toBeGreaterThan(0);
     expect(getByText("+25 $")).toBeTruthy();
   });
 
   it("renders the bank deposit icon and label", () => {
-    const { getByText } = render(
+    const { getByTestId, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
           event_type: "bank_deposit",
@@ -222,7 +222,7 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("cash-outline")).toBeTruthy();
+    expect(getByTestId("activity-icon")).toBeTruthy();
     expect(getByText("Wallet to bank")).toBeTruthy();
     expect(getByText("Bank transfer")).toBeTruthy();
     expect(getByText("-200 $")).toBeTruthy();

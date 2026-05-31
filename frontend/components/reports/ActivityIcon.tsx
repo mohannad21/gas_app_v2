@@ -1,5 +1,5 @@
 import React from "react";
-import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import type { ActivityKindMeta, IconSpec } from "@/lib/activityKindMeta";
 import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 
@@ -24,8 +24,8 @@ type IconPalette = {
 };
 
 const VIEWBOX_SIZE = 22;
-const STROKE_WIDTH = 2;
-const THIN_STROKE_WIDTH = 1;
+const STROKE_WIDTH = 1.15;
+const THIN_STROKE_WIDTH = 1.15;
 const SYMBOL: Box = { x: 3, y: 3, width: 16, height: 16 };
 
 const vectorProps = {
@@ -77,7 +77,7 @@ function getIconPalette(meta: ActivityKindMeta | null, fallbackColor: string): I
 
 function renderIconSpec(spec: IconSpec, palette: IconPalette, size: number) {
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}>
+    <Svg testID="activity-icon" width={size} height={size} viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}>
       {renderSymbol(spec.symbol, SYMBOL, palette.foreground, spec.arrow)}
       {renderContainedArrow(spec.arrow, palette.foreground, spec.symbol === null)}
     </Svg>
@@ -157,23 +157,36 @@ function renderSymbol(symbol: IconSpec["symbol"], box: Box, color: string, arrow
       return renderCube(symbolBox, color);
     case "edit":
       return renderEdit(symbolBox, color);
-    case "bank-transfer":
-      return renderBankTransfer(symbolBox, color);
+    case "bank-to-wallet":
+      return renderBankWallet(symbolBox, color, "bank-to-wallet");
+    case "wallet-to-bank":
+      return renderBankWallet(symbolBox, color, "wallet-to-bank");
     default:
       return null;
   }
 }
 
 function renderMoney(box: Box, color: string) {
-  const x = box.x + 0.5;
-  const y = box.y + 2.1;
-  const w = box.width - 1;
-  const h = box.height - 4.2;
+  const x = box.x + 0.8;
+  const y = box.y + 1.8;
+  const w = box.width - 1.6;
+  const h = box.height - 3.6;
 
   return (
     <>
-      <Rect x={x} y={y} width={w} height={h} rx={2} stroke={color} {...vectorProps} />
-      <Circle cx={x + w / 2} cy={y + h / 2} r={1.3} stroke={color} {...vectorProps} />
+      <Rect x={x} y={y} width={w} height={h} rx={1.8} stroke={color} {...vectorProps} />
+      <SvgText
+        x={x + w / 2}
+        y={y + h / 2}
+        fill={color}
+        fontSize={Math.min(w, h) * 0.72}
+        fontWeight="700"
+        alignmentBaseline="middle"
+        textAnchor="middle"
+        dominantBaseline="middle"
+      >
+        $
+      </SvgText>
     </>
   );
 }
@@ -206,10 +219,10 @@ function renderCylinder(box: Box, color: string, isFull: boolean) {
 }
 
 function renderReceipt(box: Box, color: string) {
-  const x = box.x + 2;
-  const y = box.y + 0.6;
-  const w = box.width - 4;
-  const h = box.height - 0.8;
+  const x = box.x + 3.2;
+  const y = box.y + 1.4;
+  const w = box.width - 6.4;
+  const h = box.height - 2.4;
   const bottom = y + h;
 
   return (
@@ -220,19 +233,19 @@ function renderReceipt(box: Box, color: string) {
           `Q${x},${y} ${x + 1.4},${y}`,
           `H${x + w - 1.4}`,
           `Q${x + w},${y} ${x + w},${y + 1.4}`,
-          `V${bottom - 2}`,
-          `L${x + w - 1.4},${bottom - 0.6}`,
-          `L${x + w - 2.8},${bottom - 2}`,
-          `L${x + w - 4.2},${bottom - 0.6}`,
-          `L${x + w - 5.6},${bottom - 2}`,
+          `V${bottom - 1.8}`,
+          `L${x + w - 1.2},${bottom - 0.5}`,
+          `L${x + w - 2.4},${bottom - 1.8}`,
+          `L${x + w - 3.6},${bottom - 0.5}`,
+          `L${x + w - 4.8},${bottom - 1.8}`,
           `H${x}`,
           `V${y + 1.4}`,
         ].join(" ")}
         stroke={color}
         {...vectorProps}
       />
-      <Line x1={x + 1.8} y1={y + 3.5} x2={x + w - 1.8} y2={y + 3.5} stroke={color} {...vectorProps} />
-      <Line x1={x + 1.8} y1={y + 6} x2={x + w - 2.6} y2={y + 6} stroke={color} {...vectorProps} />
+      <Line x1={x + 1.8} y1={y + 3.3} x2={x + w - 1.8} y2={y + 3.3} stroke={color} {...vectorProps} />
+      <Line x1={x + 1.8} y1={y + 5.5} x2={x + w - 2.8} y2={y + 5.5} stroke={color} {...vectorProps} />
     </>
   );
 }
@@ -272,38 +285,65 @@ function renderCube(box: Box, color: string) {
 }
 
 function renderEdit(box: Box, color: string) {
-  const x = box.x + 0.5;
-  const y = box.y + 0.2;
+  const x = box.x + 1.5;
+  const y = box.y + 2.4;
+  const w = box.width - 3;
 
   return (
     <>
-      <Path d={`M${x + 2},${y + 8.9} L${x + 8.1},${y + 2.8}`} stroke={color} {...vectorProps} />
-      <Path d={`M${x + 7.3},${y + 2} L${x + 9.3},${y + 4}`} stroke={color} {...vectorProps} />
-      <Path d={`M${x + 1.5},${y + 9.8} L${x + 3.5},${y + 9.1} L${x + 2.2},${y + 7.8} Z`} stroke={color} {...vectorProps} />
+      <Line x1={x} y1={y + 2} x2={x + w} y2={y + 2} stroke={color} {...vectorProps} />
+      <Circle cx={x + w * 0.35} cy={y + 2} r={1.15} stroke={color} {...vectorProps} />
+      <Line x1={x} y1={y + 6} x2={x + w} y2={y + 6} stroke={color} {...vectorProps} />
+      <Circle cx={x + w * 0.68} cy={y + 6} r={1.15} stroke={color} {...vectorProps} />
+      <Line x1={x} y1={y + 10} x2={x + w} y2={y + 10} stroke={color} {...vectorProps} />
+      <Circle cx={x + w * 0.48} cy={y + 10} r={1.15} stroke={color} {...vectorProps} />
     </>
   );
 }
 
-function renderBankTransfer(box: Box, color: string) {
-  const x = box.x + 0.2;
-  const y = box.y + 0.2;
-  const leftCx = x + 2.1;
-  const rightCx = x + box.width - 2.1;
-  const cy = y + box.height / 2;
+function renderBankWallet(box: Box, color: string, direction: "bank-to-wallet" | "wallet-to-bank") {
+  const left = { x: box.x + 0.5, y: box.y + 3.2, width: 6.2, height: 9.8 };
+  const right = { x: box.x + box.width - 6.7, y: box.y + 3.2, width: 6.2, height: 9.8 };
+  const first = direction === "bank-to-wallet" ? left : right;
+  const second = direction === "bank-to-wallet" ? right : left;
 
   return (
     <>
-      <Circle cx={leftCx} cy={cy} r={1.25} stroke={color} {...vectorProps} />
-      <Circle cx={rightCx} cy={cy} r={1.25} stroke={color} {...vectorProps} />
-      <Path
-        d={[
-          `M${leftCx + 1.5},${cy}`,
-          `C${x + 4.4},${y + 1.7} ${x + 6.6},${y + 1.7} ${rightCx - 1.5},${cy}`,
-          `C${x + 6.6},${y + box.height - 1.7} ${x + 4.4},${y + box.height - 1.7} ${leftCx + 1.5},${cy}`,
-        ].join(" ")}
-        stroke={color}
-        {...vectorProps}
-      />
+      {direction === "bank-to-wallet" ? renderMiniBank(first, color) : renderMiniWallet(first, color)}
+      {direction === "bank-to-wallet" ? renderMiniWallet(second, color) : renderMiniBank(second, color)}
+      <Path d={`M${box.x + 7.6},${box.y + 8.2} H${box.x + 8.9} M${box.x + 10.3},${box.y + 8.2} H${box.x + 11.6}`} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderMiniBank(box: Box, color: string) {
+  const x = box.x;
+  const y = box.y;
+  const w = box.width;
+  const h = box.height;
+
+  return (
+    <>
+      <Path d={`M${x + 0.3},${y + 3} L${x + w / 2},${y + 0.8} L${x + w - 0.3},${y + 3}`} stroke={color} {...vectorProps} />
+      <Line x1={x + 1.1} y1={y + 4} x2={x + 1.1} y2={y + h - 1.5} stroke={color} {...vectorProps} />
+      <Line x1={x + w / 2} y1={y + 4} x2={x + w / 2} y2={y + h - 1.5} stroke={color} {...vectorProps} />
+      <Line x1={x + w - 1.1} y1={y + 4} x2={x + w - 1.1} y2={y + h - 1.5} stroke={color} {...vectorProps} />
+      <Line x1={x + 0.5} y1={y + h - 0.7} x2={x + w - 0.5} y2={y + h - 0.7} stroke={color} {...vectorProps} />
+    </>
+  );
+}
+
+function renderMiniWallet(box: Box, color: string) {
+  const x = box.x;
+  const y = box.y;
+  const w = box.width;
+  const h = box.height;
+
+  return (
+    <>
+      <Rect x={x + 0.3} y={y + 3.4} width={w - 0.6} height={h - 4.2} rx={1.4} stroke={color} {...vectorProps} />
+      <Line x1={x + 1.4} y1={y + 2.5} x2={x + w - 1.5} y2={y + 2.5} stroke={color} {...vectorProps} />
+      <Circle cx={x + w - 1.7} cy={y + h / 2 + 1.2} r={0.55} stroke={color} {...vectorProps} />
     </>
   );
 }
