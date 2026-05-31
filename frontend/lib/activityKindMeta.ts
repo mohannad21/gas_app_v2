@@ -1,7 +1,17 @@
 import { ActivityKind } from "./activityKinds";
 
 export type ArrowDirection = "swap-h" | "swap-v" | "in-h" | "out-h" | "in-v" | "out-v" | "none";
-export type IconSymbol = "money" | "full-cyl" | "empty-cyl" | "receipt" | "wallet" | "cube" | "edit" | null;
+export type IconSymbol =
+  | "money"
+  | "full-cyl"
+  | "empty-cyl"
+  | "receipt"
+  | "wallet"
+  | "cube"
+  | "edit"
+  | "bank-to-wallet"
+  | "wallet-to-bank"
+  | null;
 export type IconSpec = { arrow: ArrowDirection; symbol: IconSymbol };
 
 export type ActivityFilterGroup = "customer" | "company" | "expenses" | "ledger";
@@ -129,7 +139,7 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
   expense: {
     label: "Expense",
     labelKey: "activities.expense.label",
-    icon: { arrow: "out-h", symbol: "receipt" },
+    icon: { arrow: "none", symbol: "receipt" },
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
@@ -137,7 +147,7 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
   bank_to_wallet: {
     label: "Bank to wallet",
     labelKey: "activities.bank_to_wallet.label",
-    icon: { arrow: "in-v", symbol: "money" },
+    icon: { arrow: "none", symbol: "bank-to-wallet" },
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
@@ -145,7 +155,7 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
   wallet_to_bank: {
     label: "Wallet to bank",
     labelKey: "activities.wallet_to_bank.label",
-    icon: { arrow: "out-v", symbol: "money" },
+    icon: { arrow: "none", symbol: "wallet-to-bank" },
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
