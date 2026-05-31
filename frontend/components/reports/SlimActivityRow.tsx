@@ -10,7 +10,8 @@ import { getCurrencySymbol } from "@/lib/money";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
-import { normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
+import { t } from "@/lib/i18n/translations";
 import { DailyReportEvent } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
@@ -291,18 +292,16 @@ export default function SlimActivityRow({
   const highlightAnim = useRef(new Animated.Value(0)).current;
   const eventType = String(event?.event_type ?? "event");
   const label = (() => {
-    if (_isCompanyPayment(eventType))
-      return event?.money_direction === "in"
-        ? EVENT_LABELS.COMPANY_PAYMENT_IN
-        : EVENT_LABELS.COMPANY_PAYMENT_OUT;
-    if (eventType === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
-    if (eventType === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
-    if (eventType === "bank_deposit")
-      return event?.transfer_direction === "bank_to_wallet"
-        ? EVENT_LABELS.BANK_TO_WALLET
-        : EVENT_LABELS.WALLET_TO_BANK;
-    if (event?.label) return event.label;
-    return formatEventType(eventType, event?.order_mode);
+    const kind = normalizeEventType(eventType, {
+      order_mode: event?.order_mode ?? undefined,
+      money_direction: event?.money_direction ?? undefined,
+      transfer_direction: event?.transfer_direction ?? undefined,
+    });
+    if (kind) {
+      const meta = ACTIVITY_KIND_META[kind];
+      return t(meta.labelKey) ?? event?.label ?? formatEventType(eventType, event?.order_mode);
+    }
+    return event?.label ?? formatEventType(eventType, event?.order_mode);
   })();
   const counterparty = event?.counterparty;
   const isCustomer = counterparty?.type === "customer";
