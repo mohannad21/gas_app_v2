@@ -541,6 +541,34 @@ Additional cleanup:
 
 ---
 
+## Ticket 10 — Opening Balance Visibility
+
+**Goal:** Replace the dead `init` / `init_balance` / `init_credit` / `init_return` frontend aliases with three canonical, scoped opening-balance activity kinds that display correctly on their respective screens.
+
+**Preconditions:** T9 complete (all legacy aliases removed).
+
+**Background:** The backend posts opening entries via `post_system_init()` with `source_type="system_init"`. These are currently absorbed silently into the running balance in `reports.py` and never surface as visible events. The old frontend aliases (`init`, `init_balance`, `init_credit`, `init_return`) were removed in T9 as dead code.
+
+**Proposed canonical kinds (3 new, making 21 total):**
+
+| Canonical Kind | Scope | Appears On |
+|---|---|---|
+| `init_customer` | customer money, cyl_12, cyl_48 | Customer review page + customer activity table |
+| `init_company` | company money, cyl_12, cyl_48 | Company activity table |
+| `init_inventory` | full_12, empty_12, full_48, empty_48, cash | Daily report only |
+
+**Work:**
+
+- Backend: emit `init_customer`, `init_company`, `init_inventory` as visible event rows in the relevant feed endpoints instead of folding them silently into the running balance
+- Backend: `reports.py` — surface `system_init` entries scoped by kind rather than absorbing them
+- Frontend: add entries for all 3 kinds in `activityKindMeta.ts` (icon, color, label, filter group, scope)
+- Frontend: add display handling on customer review page, company activity table, and daily report
+- Tests: assert each kind appears only on its designated screen; assert balance transitions are correct
+
+**Done when:** Opening balance entries are visible on the correct screens with correct labels and balance transitions; no `system_init` entry is silently dropped without display.
+
+---
+
 ## Future API Route Naming
 
 This is intentionally not part of Tickets 2 or 8 because route names are a public API compatibility decision.
@@ -568,6 +596,7 @@ If canonical aliases are introduced, update frontend API hooks and cache keys su
 | T7 | Frontend Tests | Adapter + display coverage, pre-migration safety net | T4, T5, T6 |
 | T8 | Frontend Adapter | `activityAdapter.ts` emits canonical kinds only | T4, T7 |
 | T9 | Cleanup | Dead aliases removed, `transfer_direction` dropped | T3, T7, T8 |
+| T10 | Opening Balance Visibility | `init_customer`, `init_company`, `init_inventory` canonical kinds; visible on correct screens | T9 |
 
 ---
 
