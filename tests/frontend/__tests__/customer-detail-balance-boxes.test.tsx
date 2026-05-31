@@ -193,7 +193,7 @@ describe("Customer detail balance boxes", () => {
     const { getByText, queryByText } = render(<CustomerDetailsScreen />);
 
     expect(getByText("Money balance: debts 180.00 $ → 280.00 $ debts (on customer)")).toBeTruthy();
-    expect(getByText("12kg balance: credit 10 → 12 credit (for customer)")).toBeTruthy();
+    expect(getByText("12kg balance: credits 10 → 12 credits (for customer)")).toBeTruthy();
     expect(getByText("48kg balance: debts 9 → 12 debts (on customer)")).toBeTruthy();
     expect(queryByText("Money balance: credit 100.00 $ → 0.00 $ (on customer)")).toBeNull();
   });

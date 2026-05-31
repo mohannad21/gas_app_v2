@@ -90,7 +90,7 @@ describe("orderToEvent replacement visible numbers", () => {
       })
     );
     expect(transition(equalExchange.balance_transitions, "money")).toMatchObject({ before: 0, after: 30 });
-    expect(transition(equalExchange.balance_transitions, "cyl_12")).toBeUndefined();
+    expect(transition(equalExchange.balance_transitions, "cyl_12")).toMatchObject({ before: 1, after: 1 });
   });
 
   it("keeps 48kg replacement balances isolated from 12kg balances", () => {

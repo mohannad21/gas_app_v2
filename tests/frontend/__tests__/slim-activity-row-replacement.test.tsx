@@ -56,7 +56,7 @@ describe("SlimActivityRow replacement rendering", () => {
     expect(getByText("Installed: 2x 12kg")).toBeTruthy();
     expect(getByText("Received: 1x 12kg")).toBeTruthy();
     expect(getByText(/Money balance: Settled.*30 \$ debts.*customer/)).toBeTruthy();
-    expect(getByText(/12kg balance: Settled.*1 debts.*customer/)).toBeTruthy();
+    expect(getByText(/12kg balance: Settled.*1 debt.*customer/)).toBeTruthy();
   });
 
   it("omits money and cylinder pills when both customer balances stay settled", () => {
@@ -94,7 +94,7 @@ describe("SlimActivityRow replacement rendering", () => {
     );
 
     expect(queryByText(/Money balance:/)).toBeNull();
-    expect(getByText(/12kg balance: Settled.*1 debts.*customer/)).toBeTruthy();
+    expect(getByText(/12kg balance: Settled.*1 debt.*customer/)).toBeTruthy();
   });
 
   it("renders only 48kg cylinder balance for a 48kg replacement", () => {
@@ -121,7 +121,7 @@ describe("SlimActivityRow replacement rendering", () => {
     expect(getByText("Installed: 1x 48kg")).toBeTruthy();
     expect(getByText("Received: 0x 48kg")).toBeTruthy();
     expect(getByText(/Money balance: Settled.*50 \$ debts.*customer/)).toBeTruthy();
-    expect(getByText(/48kg balance: Settled.*1 debts.*customer/)).toBeTruthy();
+    expect(getByText(/48kg balance: Settled.*1 debt.*customer/)).toBeTruthy();
     expect(queryByText(/12kg balance:/)).toBeNull();
   });
 
@@ -145,7 +145,7 @@ describe("SlimActivityRow replacement rendering", () => {
     );
 
     expect(getByText(/Money balance: debts 30 \$.*70 \$ debts.*customer/)).toBeTruthy();
-    expect(getByText(/12kg balance: debts 1.*2 debts.*customer/)).toBeTruthy();
+    expect(getByText(/12kg balance: debt 1.*2 debts.*customer/)).toBeTruthy();
     expect(queryByText(/Settled.*40 \$ debts/)).toBeNull();
   });
 
@@ -169,12 +169,12 @@ describe("SlimActivityRow replacement rendering", () => {
     );
 
     expect(getByText(/Money balance: Settled.*40 \$ debts.*customer/)).toBeTruthy();
-    expect(getByText(/12kg balance: Settled.*1 debts.*customer/)).toBeTruthy();
+    expect(getByText(/12kg balance: Settled.*1 debt.*customer/)).toBeTruthy();
     expect(queryByText(/debts 30 \$.*70 \$ debts/)).toBeNull();
   });
 
-  it("does not render unchanged non-zero customer pills from direct fields", () => {
-    const { queryByText } = render(
+  it("shows unchanged non-zero customer pills with unchanged wording", () => {
+    const { getByText, queryByText } = render(
       <SlimActivityRow
         event={makeReplacementEvent({
           customer_money_before: 30,
@@ -188,9 +188,9 @@ describe("SlimActivityRow replacement rendering", () => {
       />
     );
 
-    expect(queryByText(/Money balance:/)).toBeNull();
-    expect(queryByText(/12kg balance:/)).toBeNull();
-    expect(queryByText(/unchanged/)).toBeNull();
+    expect(getByText(/Money balance:.*unchanged/)).toBeTruthy();
+    expect(getByText(/12kg balance:.*unchanged/)).toBeTruthy();
+    expect(queryByText(/48kg balance:/)).toBeNull();
   });
 
   it("renders the same pill text from direct fields and balance_transitions fallback", () => {
@@ -226,7 +226,7 @@ describe("SlimActivityRow replacement rendering", () => {
 
     expect(direct.getByText(/Money balance: debts 30 \$.*70 \$ debts.*customer/)).toBeTruthy();
     expect(fallback.getByText(/Money balance: debts 30 \$.*70 \$ debts.*customer/)).toBeTruthy();
-    expect(direct.getByText(/12kg balance: debts 1.*2 debts.*customer/)).toBeTruthy();
-    expect(fallback.getByText(/12kg balance: debts 1.*2 debts.*customer/)).toBeTruthy();
+    expect(direct.getByText(/12kg balance: debt 1.*2 debts.*customer/)).toBeTruthy();
+    expect(fallback.getByText(/12kg balance: debt 1.*2 debts.*customer/)).toBeTruthy();
   });
 });

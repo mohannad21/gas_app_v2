@@ -110,6 +110,7 @@ const dayDetail = {
       created_at: "2025-01-01T09:00:00Z",
       source_id: "cp-1",
       label: "Pay Company",
+      hero_text: "Paid company",
       cash_before: 900,
       cash_after: 800,
       wallet_before: 900,
@@ -286,7 +287,7 @@ describe("ReportsScreen expanded DeltaBox", () => {
     fireEvent.press(getAllByText("Paid company")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
-    fireEvent.press(getAllByText("Bought 2x12kg")[0]);
+    fireEvent.press(getAllByText("Bought: 2x 12kg")[0]);
     expect(getAllByText("12kg Full").length).toBeGreaterThan(0);
   });
 

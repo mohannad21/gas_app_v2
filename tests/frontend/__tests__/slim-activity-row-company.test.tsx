@@ -70,13 +70,13 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("reload-outline")).toBeTruthy();
+    expect(getByText("swap-vertical-outline")).toBeTruthy();
     expect(getByText("Refill")).toBeTruthy();
     expect(getByText("Bought: 3x 12kg | 1x 48kg")).toBeTruthy();
     expect(getByText("Returned: 2x 12kg | 1x 48kg")).toBeTruthy();
   });
 
-  it("uses the backend label for return-only refill rows", () => {
+  it("uses the canonical refill label for return-only refill rows", () => {
     const { getAllByText, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
@@ -98,11 +98,11 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getAllByText("Returned empties").length).toBeGreaterThan(0);
+    expect(getAllByText("Refill").length).toBeGreaterThan(0);
     expect(getByText("Returned: 2x 12kg | 1x 48kg")).toBeTruthy();
   });
 
-  it("renders dist_return_empties with the returned empties label", () => {
+  it("renders dist_return_empties with the canonical empties-to-company label", () => {
     const { getAllByText } = render(
       <SlimActivityRow
         event={makeEvent({
@@ -120,10 +120,10 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getAllByText("Returned empties").length).toBeGreaterThan(0);
+    expect(getAllByText("Empties to company").length).toBeGreaterThan(0);
   });
 
-  it("renders buy_full_from_company with the bought full label", () => {
+  it("renders buy_full_from_company with the canonical buy fulls label", () => {
     const { getAllByText, getByText } = render(
       <SlimActivityRow
         event={makeEvent({
@@ -143,7 +143,7 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getAllByText("Bought full").length).toBeGreaterThan(0);
+    expect(getAllByText("Buy fulls").length).toBeGreaterThan(0);
     expect(getByText("Bought: 4x 12kg | 2x 48kg")).toBeTruthy();
   });
 
@@ -196,7 +196,7 @@ describe("SlimActivityRow company activity rendering", () => {
     );
 
     expect(getByText("wallet-outline")).toBeTruthy();
-    expect(getAllByText("Wallet adjustment").length).toBeGreaterThan(0);
+    expect(getAllByText("Adjust wallet").length).toBeGreaterThan(0);
     expect(getAllByText("Till correction").length).toBeGreaterThan(0);
     expect(getByText("+25 $")).toBeTruthy();
   });
@@ -222,7 +222,7 @@ describe("SlimActivityRow company activity rendering", () => {
       />
     );
 
-    expect(getByText("card-outline")).toBeTruthy();
+    expect(getByText("cash-outline")).toBeTruthy();
     expect(getByText("Wallet to bank")).toBeTruthy();
     expect(getByText("Bank transfer")).toBeTruthy();
     expect(getByText("-200 $")).toBeTruthy();

@@ -147,8 +147,8 @@ describe("activityAdapter company activities", () => {
     expect(event.company_48kg_before).toBe(4);
     expect(event.company_48kg_after).toBe(4);
     expect(transition(event.balance_transitions, "money")).toMatchObject({ before: -150, after: 50 });
-    expect(transition(event.balance_transitions, "cyl_12")).toBeUndefined();
-    expect(transition(event.balance_transitions, "cyl_48")).toBeUndefined();
+    expect(transition(event.balance_transitions, "cyl_12")).toMatchObject({ before: -6, after: -6 });
+    expect(transition(event.balance_transitions, "cyl_48")).toMatchObject({ before: 4, after: 4 });
   });
 
   it("maps dist_return_empties into company cylinder transitions", () => {

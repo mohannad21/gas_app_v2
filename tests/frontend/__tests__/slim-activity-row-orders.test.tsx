@@ -50,7 +50,7 @@ describe("SlimActivityRow order rendering", () => {
     const event = orderToEvent(makeOrder(), { customerName: "Customer A", systemName: "Kitchen" });
     const { getByText, queryByText } = render(<SlimActivityRow event={event} formatMoney={(value) => String(value)} />);
 
-    expect(getByText("Sold full")).toBeTruthy();
+    expect(getByText("Sell full")).toBeTruthy();
     expect(getByText("Customer A")).toBeTruthy();
     expect(getByText("System: Kitchen")).toBeTruthy();
     expect(getByText("Installed: 1x 12kg")).toBeTruthy();
@@ -75,14 +75,14 @@ describe("SlimActivityRow order rendering", () => {
     );
     const { getByText, queryByText } = render(<SlimActivityRow event={event} formatMoney={(value) => String(value)} />);
 
-    expect(getByText("Sold full")).toBeTruthy();
+    expect(getByText("Sell full")).toBeTruthy();
     expect(getByText("Installed: 1x 48kg")).toBeTruthy();
     expect(getByText(/Money balance:.*40 \$ debts.*customer/i)).toBeTruthy();
     expect(queryByText(/12kg balance:/i)).toBeNull();
     expect(queryByText(/48kg balance:/i)).toBeNull();
   });
 
-  it("renders a buy empty 12kg row with an outgoing money pill and no cylinder pills", () => {
+  it("renders a buy empty 12kg row with an outgoing money pill and unchanged cylinder pill", () => {
     const event = orderToEvent(
       makeOrder({
         id: "buy-12",
@@ -100,15 +100,15 @@ describe("SlimActivityRow order rendering", () => {
     );
     const { getByText, queryByText } = render(<SlimActivityRow event={event} formatMoney={(value) => String(value)} />);
 
-    expect(getByText("Bought empty")).toBeTruthy();
+    expect(getByText("Buy empties")).toBeTruthy();
     expect(getByText("Received: 1x 12kg")).toBeTruthy();
     expect(queryByText("Installed: 0x 12kg")).toBeNull();
     expect(getByText(/Money balance:.*10 \$ credit.*customer/i)).toBeTruthy();
-    expect(queryByText(/12kg balance:/i)).toBeNull();
+    expect(getByText(/12kg balance:.*unchanged.*debts 3.*customer/i)).toBeTruthy();
     expect(queryByText(/48kg balance:/i)).toBeNull();
   });
 
-  it("renders a buy empty 48kg row with the correct gas label and no cylinder pills", () => {
+  it("renders a buy empty 48kg row with the correct gas label and unchanged cylinder pill", () => {
     const event = orderToEvent(
       makeOrder({
         id: "buy-48",
@@ -126,11 +126,11 @@ describe("SlimActivityRow order rendering", () => {
     );
     const { getByText, queryByText } = render(<SlimActivityRow event={event} formatMoney={(value) => String(value)} />);
 
-    expect(getByText("Bought empty")).toBeTruthy();
+    expect(getByText("Buy empties")).toBeTruthy();
     expect(getByText("Received: 1x 48kg")).toBeTruthy();
     expect(getByText(/Money balance:.*40 \$ credit.*customer/i)).toBeTruthy();
     expect(queryByText(/12kg balance:/i)).toBeNull();
-    expect(queryByText(/48kg balance:/i)).toBeNull();
+    expect(getByText(/48kg balance:.*unchanged.*debts 2.*customer/i)).toBeTruthy();
   });
 
   it("shows shifted later sell-full money pills after a backdated order changes same-customer history", () => {

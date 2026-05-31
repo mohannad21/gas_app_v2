@@ -257,11 +257,12 @@ const pushEventTransition = (
   if (beforeValue == null || afterValue == null) return;
   const before = Number(beforeValue);
   const after = Number(afterValue);
-  if (before === after) return;
+  if (Math.abs(before) < 0.01 && Math.abs(after) < 0.01) return;
   transitions.push({ scope, component, before, after });
 };
 
 const buildDisplayTransitions = (event: DailyReportEvent) => {
+  if (_isWalletAdjust(event.event_type) || _isInventoryAdjust(event.event_type)) return [];
   const transitions: NonNullable<DailyReportEvent["balance_transitions"]> = [];
   const intent = transitionIntentForEvent(event);
   const isCompanyEvent = intent.startsWith("company_");

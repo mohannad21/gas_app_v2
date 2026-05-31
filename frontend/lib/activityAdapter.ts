@@ -121,7 +121,7 @@ function pushTransition(
   before: number,
   after: number
 ) {
-  if (before === after) return;
+  if (Math.abs(before) < 0.01 && Math.abs(after) < 0.01) return;
   transitions.push(makeBalanceTransition(scope, component, before, after));
 }
 

@@ -111,8 +111,8 @@ describe("SlimActivityRow collection rendering", () => {
 
     expect(getByText("Returned 2x12kg | 1x48kg empties")).toBeTruthy();
     expect(queryByText(/Money balance:/)).toBeNull();
-    expect(getByText(/12kg balance: debts 3.*1 debts.*customer/)).toBeTruthy();
-    expect(getByText(/48kg balance: debts 2.*1 debts.*customer/)).toBeTruthy();
+    expect(getByText(/12kg balance: debts 3.*1 debt.*customer/)).toBeTruthy();
+    expect(getByText(/48kg balance: debts 2.*1 debt.*customer/)).toBeTruthy();
   });
 
   it("shows shifted same-customer payment pills after a backdated collection changes /collections live balances", () => {
@@ -134,8 +134,8 @@ describe("SlimActivityRow collection rendering", () => {
     expect(queryByText(/12kg balance:/)).toBeNull();
   });
 
-  it("suppresses unchanged non-zero collection pills from direct before and after fields", () => {
-    const { queryByText } = render(
+  it("shows unchanged non-zero collection pills with unchanged wording", () => {
+    const { getByText } = render(
       <SlimActivityRow
         event={makeEvent({
           customer_money_before: 30,
@@ -149,9 +149,8 @@ describe("SlimActivityRow collection rendering", () => {
       />
     );
 
-    expect(queryByText(/Money balance:/)).toBeNull();
-    expect(queryByText(/12kg balance:/)).toBeNull();
-    expect(queryByText(/48kg balance:/)).toBeNull();
-    expect(queryByText(/unchanged/)).toBeNull();
+    expect(getByText(/Money balance:.*unchanged/)).toBeTruthy();
+    expect(getByText(/12kg balance:.*unchanged/)).toBeTruthy();
+    expect(getByText(/48kg balance:.*unchanged/)).toBeTruthy();
   });
 });

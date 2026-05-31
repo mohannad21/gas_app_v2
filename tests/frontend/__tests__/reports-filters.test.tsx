@@ -178,9 +178,9 @@ describe("ReportsScreen filters", () => {
 
     fireEvent.press(getByText("Customer Activities"));
     const subtypeRow = getByTestId("reports-filter-subtypes");
-    expect(within(subtypeRow).getByText("Replacement")).toBeTruthy();
-    expect(within(subtypeRow).getByText("Customer paid")).toBeTruthy();
-    expect(queryByText("Paid company")).toBeNull();
+    expect(within(subtypeRow).getByText("Replace")).toBeTruthy();
+    expect(within(subtypeRow).getByText("Payment from customer")).toBeTruthy();
+    expect(queryByText("Payment to company")).toBeNull();
   });
 
   it("filters the visible activity list by selected group", () => {

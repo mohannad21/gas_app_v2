@@ -24,7 +24,7 @@ function makeRefill(overrides: Partial<InventoryRefillSummary> = {}): InventoryR
 }
 
 describe("activityAdapter company balance pills", () => {
-  it("omits unchanged company balance transitions on refill cards", () => {
+  it("includes unchanged non-zero company balance transitions on refill cards", () => {
     const event = refillSummaryToEvent(
       makeRefill({
         buy12: 3,
@@ -42,10 +42,16 @@ describe("activityAdapter company balance pills", () => {
     expect(event.event_type).toBe("refill");
     expect(event.company_before).toBe(-200);
     expect(event.company_after).toBe(-200);
-    expect(event.balance_transitions).toBeUndefined();
+    expect(event.balance_transitions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: "company", component: "money", before: -200, after: -200 }),
+        expect.objectContaining({ scope: "company", component: "cyl_12", before: -6, after: -6 }),
+        expect.objectContaining({ scope: "company", component: "cyl_48", before: -10, after: -10 }),
+      ])
+    );
   });
 
-  it("renders company money transitions and omits unchanged cylinders for buy-full cards", () => {
+  it("renders company money transitions and includes unchanged non-zero cylinders for buy-full cards", () => {
     const event = refillSummaryToEvent(
       makeRefill({
         kind: "buy_iron",
@@ -73,10 +79,10 @@ describe("activityAdapter company balance pills", () => {
         expect.objectContaining({ scope: "company", component: "money", before: -150, after: 50 }),
       ])
     );
-    expect(event.balance_transitions).not.toEqual(
+    expect(event.balance_transitions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ scope: "company", component: "cyl_12" }),
-        expect.objectContaining({ scope: "company", component: "cyl_48" }),
+        expect.objectContaining({ scope: "company", component: "cyl_12", before: -6, after: -6 }),
+        expect.objectContaining({ scope: "company", component: "cyl_48", before: 4, after: 4 }),
       ])
     );
   });

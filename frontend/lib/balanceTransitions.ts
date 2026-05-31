@@ -121,18 +121,20 @@ export function formatCurrentBalanceState(
 
 function getCompactDirectionLabel(scope: BalanceScope, component: BalanceComponent, value: number): string {
   if (Math.abs(value) < 0.01) return "";
-  if (scope === "customer") {
-    return value > 0 ? "debts" : "credit";
-  }
   if (component === "money") {
     return value > 0 ? "debts" : "credit";
   }
-  return value > 0 ? "credit" : "debts";
+  const isSingular = Math.abs(value) === 1;
+  if (scope === "customer") {
+    return value > 0 ? (isSingular ? "debt" : "debts") : (isSingular ? "credit" : "credits");
+  }
+  return value > 0 ? (isSingular ? "credit" : "credits") : (isSingular ? "debt" : "debts");
 }
 
 function getScopeLabel(scope: BalanceScope, component: BalanceComponent, afterValue: number): string {
   const dir = getCompactDirectionLabel(scope, component, afterValue);
-  const preposition = dir === "credit" ? "for" : "on";
+  const isCredit = dir === "credit" || dir === "credits";
+  const preposition = isCredit ? "for" : "on";
   const entity = scope === "customer" ? "customer" : "distributor";
   return `(${preposition} ${entity})`;
 }

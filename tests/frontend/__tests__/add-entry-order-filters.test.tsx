@@ -218,8 +218,8 @@ describe("Add Entry order filters", () => {
   it("renders sell full and buy empty rows from the order pipeline", () => {
     const { getAllByText, getByText } = render(<AddChooserScreen />);
 
-    expect(getAllByText("Sold full").length).toBeGreaterThan(0);
-    expect(getAllByText("Bought empty").length).toBeGreaterThan(0);
+    expect(getAllByText("Sell full").length).toBeGreaterThan(0);
+    expect(getAllByText("Buy empties").length).toBeGreaterThan(0);
     expect(getByText("Installed: 1x 12kg")).toBeTruthy();
     expect(getByText("Installed: 1x 48kg")).toBeTruthy();
     expect(getByText("Received: 1x 12kg")).toBeTruthy();

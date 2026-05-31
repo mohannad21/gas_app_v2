@@ -31,10 +31,10 @@ describe("payment direction wording", () => {
     ).toEqual(["Credit for customer 50 $ (was Debts on customer 100 $)"]);
   });
 
-  it("uses updated report shorthand labels for payment directions", () => {
-    expect(formatEventType("collection_money")).toBe("Customer paid");
-    expect(formatEventType("collection_payout")).toBe("Paid customer");
-    expect(formatEventType("company_payment")).toBe("Paid company");
-    expect(formatEventType("company_buy_iron")).toBe("Bought full");
+  it("uses canonical ACTIVITY_KIND_META labels for activity kinds", () => {
+    expect(formatEventType("collection_money")).toBe("Payment from customer");
+    expect(formatEventType("collection_payout")).toBe("Payment to customer");
+    expect(formatEventType("company_payment")).toBe("Payment to company");
+    expect(formatEventType("company_buy_iron")).toBe("Buy fulls");
   });
 });

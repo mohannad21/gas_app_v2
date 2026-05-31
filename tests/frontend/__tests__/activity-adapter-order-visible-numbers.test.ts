@@ -123,7 +123,7 @@ describe("orderToEvent visible numbers", () => {
     expect(event.customer_48kg_before).toBe(0);
     expect(event.customer_48kg_after).toBe(0);
     expect(transition(event.balance_transitions, "money")).toMatchObject({ before: 0, after: -10 });
-    expect(transition(event.balance_transitions, "cyl_12")).toBeUndefined();
+    expect(transition(event.balance_transitions, "cyl_12")).toMatchObject({ before: 3, after: 3 });
     expect(transition(event.balance_transitions, "cyl_48")).toBeUndefined();
   });
 
@@ -154,7 +154,7 @@ describe("orderToEvent visible numbers", () => {
     expect(event.customer_48kg_after).toBe(2);
     expect(transition(event.balance_transitions, "money")).toMatchObject({ before: 0, after: -40 });
     expect(transition(event.balance_transitions, "cyl_12")).toBeUndefined();
-    expect(transition(event.balance_transitions, "cyl_48")).toBeUndefined();
+    expect(transition(event.balance_transitions, "cyl_48")).toMatchObject({ before: 2, after: 2 });
   });
 
   it("shifts same-customer later money transitions after a backdated sell full while leaving a different customer unchanged", () => {
