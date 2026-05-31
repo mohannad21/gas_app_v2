@@ -10,6 +10,7 @@ import { getCurrencySymbol } from "@/lib/money";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
+import { normalizeEventType } from "@/lib/activityKindMeta";
 import { DailyReportEvent } from "@/types/domain";
 import { getActivityIcon } from "@/components/reports/ActivityIcon";
 
@@ -120,13 +121,13 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
 
 const _ORDER_KINDS = new Set(["order", "replacement", "sell_full", "buy_empty_from_customer"]);
 const _isOrderKind = (et: string) => _ORDER_KINDS.has(et);
-const _isCollectionMoney = (et: string) => et === "collection_money" || et === "payment_from_customer";
-const _isCollectionEmpty = (et: string) => et === "collection_empty" || et === "customer_return_empties";
+const _isCollectionMoney = (et: string) => normalizeEventType(et) === "payment_from_customer";
+const _isCollectionEmpty = (et: string) => normalizeEventType(et) === "customer_return_empties";
 const _isCompanyPayment = (et: string) => et === "company_payment" || et === "payment_to_company" || et === "payment_from_company";
-const _isCompanyBuyFull = (et: string) => et === "company_buy_full" || et === "buy_full_from_company";
-const _isDistReturn = (et: string) => et === "company_return_empties" || et === "dist_return_empties";
-const _isWalletAdjust = (et: string) => et === "cash_adjust" || et === "adjust_wallet";
-const _isInventoryAdjust = (et: string) => et === "adjust" || et === "adjust_inventory";
+const _isCompanyBuyFull = (et: string) => normalizeEventType(et) === "buy_full_from_company";
+const _isDistReturn = (et: string) => normalizeEventType(et) === "dist_return_empties";
+const _isWalletAdjust = (et: string) => normalizeEventType(et) === "adjust_wallet";
+const _isInventoryAdjust = (et: string) => normalizeEventType(et) === "adjust_inventory";
 
 const formatGasSummary = (qty12?: number | null, qty48?: number | null) => {
   const parts: string[] = [];

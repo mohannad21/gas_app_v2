@@ -23,7 +23,7 @@ _EVENT_LABELS: dict[str, str] = {
   AK.PAYMENT_FROM_CUSTOMER: "Payment from customer",
   AK.PAYMENT_TO_CUSTOMER: "Payment to customer",
   AK.CUSTOMER_RETURN_EMPTIES: "Empties from customer",
-  AK.ADJUST_CUSTOMER_BALANCE: "Adjust customer balance",
+  AK.ADJUST_CUSTOMER_BALANCE: "Adjusted customer balance",
   AK.REFILL: "Refill",
   AK.DIST_RETURN_EMPTIES: "Empties to company",
   AK.BUY_FULL_FROM_COMPANY: "Buy fulls",
@@ -51,6 +51,8 @@ def _titleize_event_type(event_type: str) -> str:
 
 
 def _company_payment_label(event: DailyReportEvent) -> str:
+  if event.event_type in (AK.PAYMENT_TO_COMPANY, AK.PAYMENT_FROM_COMPANY):
+    return _EVENT_LABELS[event.event_type]
   paid = _safe_int(event.paid_amount or event.total_cost)
   if paid < 0:
     return "Payment from company"
@@ -338,8 +340,6 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
     if amount:
       return f"Payment to customer {_format_money_major(amount, money_decimals, currency_symbol)}"
     return "Payment to customer"
-  if event.event_type in {AK.ADJUST_CUSTOMER_BALANCE, AK.ADJUST_COMPANY_BALANCE}:
-    return None
   if event.event_type == AK.EXPENSE:
     return event.expense_type or "Expense"
   if event.event_type in {AK.BANK_TO_WALLET, AK.WALLET_TO_BANK}:
