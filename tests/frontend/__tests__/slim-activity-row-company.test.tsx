@@ -227,4 +227,147 @@ describe("SlimActivityRow company activity rendering", () => {
     expect(getByText("Bank transfer")).toBeTruthy();
     expect(getByText("-200 $")).toBeTruthy();
   });
+
+  it("renders payment_from_company label and icon", () => {
+    const { getByTestId, getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "payment_from_company",
+          id: "payment-from-company-1",
+          source_id: "payment-from-company-1",
+          display_name: "Company",
+          label: "Payment from company",
+          context_line: "Payment from company",
+          money_amount: 300,
+          money_direction: "in",
+          counterparty: { type: "company", display_name: "Company", description: null, display: null },
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByTestId("activity-icon")).toBeTruthy();
+    expect(getByText("Payment from company")).toBeTruthy();
+  });
+
+  it("renders payment_from_company canonical money direction", () => {
+    const { getByTestId, getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "payment_from_company",
+          id: "payment-from-company-2",
+          source_id: "payment-from-company-2",
+          display_name: "Company",
+          label: "Payment from company",
+          context_line: "Payment from company",
+          money_amount: 300,
+          money_direction: "in",
+          counterparty: { type: "company", display_name: "Company", description: null, display: null },
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByTestId("activity-icon")).toBeTruthy();
+    expect(getByText("Payment from company")).toBeTruthy();
+    expect(getByText("+300 $")).toBeTruthy();
+  });
+
+  it("bank_deposit + transfer_direction='bank_to_wallet' renders Bank to wallet label and positive amount", () => {
+    const { getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "bank_deposit",
+          id: "bank-btw-1",
+          source_id: "bank-btw-1",
+          display_name: "Bank transfer",
+          label: "Bank to wallet",
+          context_line: "Bank to wallet",
+          money_amount: 200,
+          money_direction: "in",
+          transfer_direction: "bank_to_wallet",
+          wallet_before: 280,
+          wallet_after: 480,
+          counterparty: null,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByText("Bank to wallet")).toBeTruthy();
+    expect(getByText("+200 $")).toBeTruthy();
+  });
+
+  it("canonical event_type 'wallet_to_bank' renders without needing transfer_direction field", () => {
+    const { getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "wallet_to_bank",
+          id: "wtb-canonical-1",
+          source_id: "wtb-canonical-1",
+          display_name: "Bank transfer",
+          label: "Wallet to bank",
+          context_line: "Wallet to bank",
+          money_amount: 150,
+          money_direction: "out",
+          wallet_before: 500,
+          wallet_after: 350,
+          counterparty: null,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByText("Wallet to bank")).toBeTruthy();
+    expect(getByText("-150 $")).toBeTruthy();
+  });
+
+  it("canonical event_type 'bank_to_wallet' renders without needing transfer_direction field", () => {
+    const { getByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "bank_to_wallet",
+          id: "btw-canonical-1",
+          source_id: "btw-canonical-1",
+          display_name: "Bank transfer",
+          label: "Bank to wallet",
+          context_line: "Bank to wallet",
+          money_amount: 150,
+          money_direction: "in",
+          wallet_before: 350,
+          wallet_after: 500,
+          counterparty: null,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByText("Bank to wallet")).toBeTruthy();
+    expect(getByText("+150 $")).toBeTruthy();
+  });
+
+  it("bank direction comes from transfer_direction, not from label text", () => {
+    const { getByText, queryByText } = render(
+      <SlimActivityRow
+        event={makeEvent({
+          event_type: "bank_deposit",
+          id: "bank-anti-label-1",
+          source_id: "bank-anti-label-1",
+          display_name: "Bank transfer",
+          label: "Wallet to bank",
+          context_line: "Wallet to bank",
+          money_amount: 100,
+          money_direction: "in",
+          transfer_direction: "bank_to_wallet",
+          wallet_before: 200,
+          wallet_after: 300,
+          counterparty: null,
+        })}
+        formatMoney={(value) => String(value)}
+      />
+    );
+
+    expect(getByText("+100 $")).toBeTruthy();
+    expect(queryByText("-100 $")).toBeNull();
+  });
 });

@@ -38,3 +38,61 @@ describe("payment direction wording", () => {
     expect(formatEventType("company_buy_iron")).toBe("Buy fulls");
   });
 });
+
+describe("cylinder balance wording (balance_row layout)", () => {
+  it("singular debt: before=0, after=1 on customer", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("customer", "cyl_12", 0, 1)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 1 debt (on customer)"]);
+  });
+
+  it("plural debts: before=0, after=2 on customer", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("customer", "cyl_12", 0, 2)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 2 debts (on customer)"]);
+  });
+
+  it("singular credit: before=0, after=-1 on customer", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("customer", "cyl_12", 0, -1)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 1 credit (for customer)"]);
+  });
+
+  it("plural credits: before=0, after=-2 on customer", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("customer", "cyl_12", 0, -2)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 2 credits (for customer)"]);
+  });
+
+  it("company scope: positive after is credits for distributor", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("company", "cyl_12", 0, 2)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 2 credits (for distributor)"]);
+  });
+
+  it("company scope: negative after is debts on distributor", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("company", "cyl_12", 0, -2)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: Settled → 2 debts (on distributor)"]);
+  });
+
+  it("unchanged non-zero balance shows current state, not a transition", () => {
+    const result = formatBalanceTransitions(
+      [makeBalanceTransition("customer", "cyl_12", 3, 3)],
+      { layout: "balance_row" }
+    );
+    expect(result).toEqual(["12kg balance: unchanged — debts 3 (on customer)"]);
+  });
+});

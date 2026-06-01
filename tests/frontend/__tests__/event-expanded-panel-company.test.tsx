@@ -89,4 +89,27 @@ describe("EventExpandedPanel company activity rendering", () => {
     expect(queryByText("12kg Full")).toBeNull();
     expect(queryByText("48kg Full")).toBeNull();
   });
+
+  it("renders payment_from_company without cylinder boxes", () => {
+    const { queryByText } = render(
+      <EventExpandedPanel
+        ev={{
+          event_type: "payment_from_company",
+          money_direction: "in",
+          money_amount: 300,
+          company_before: 400,
+          company_after: 100,
+          wallet_before: 500,
+          wallet_after: 500,
+        }}
+        formatMoney={formatMoney}
+        formatCount={formatCount}
+      />
+    );
+
+    expect(queryByText("12kg Full")).toBeNull();
+    expect(queryByText("48kg Full")).toBeNull();
+    expect(queryByText("12kg Empty")).toBeNull();
+    expect(queryByText("48kg Empty")).toBeNull();
+  });
 });
