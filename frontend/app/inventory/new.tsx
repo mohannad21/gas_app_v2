@@ -333,10 +333,10 @@ function InventoryAdjustForm({
       const highlightId = entry?.id;
       if (resetAfter && !entry) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust", highlightId });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust_inventory", highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "adjust", highlightId });
+          onSaveSuccess({ effectiveAt, highlightEventType: "adjust_inventory", highlightId });
         } else {
           onSaved();
         }
@@ -572,10 +572,10 @@ function CashAdjustForm({
       const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
       if (resetAfter && !entry) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "cash_adjust", highlightId });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust_wallet", highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "cash_adjust", highlightId });
+          onSaveSuccess({ effectiveAt, highlightEventType: "adjust_wallet", highlightId });
         } else {
           onSaved();
         }

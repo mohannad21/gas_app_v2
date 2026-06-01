@@ -35,7 +35,6 @@ _EVENT_LABELS: dict[str, str] = {
   AK.EXPENSE: "Expense",
   AK.BANK_TO_WALLET: "Bank to wallet",
   AK.WALLET_TO_BANK: "Wallet to bank",
-  "init": "Opening balance",
 }
 
 _ORDER_LABELS: dict[str, str] = {
@@ -64,10 +63,6 @@ def _event_label(event: DailyReportEvent) -> str:
     if event.order_mode:
       return _ORDER_LABELS.get(event.order_mode, "Order")
     return "Order"
-  if event.event_type == AK.REFILL and _is_company_return_only_refill(event):
-    return _EVENT_LABELS[AK.DIST_RETURN_EMPTIES]
-  if event.event_type == AK.REFILL and _is_company_settle_only_refill(event):
-    return _EVENT_LABELS[AK.DIST_RETURN_EMPTIES]
   if event.event_type in {AK.PAYMENT_TO_COMPANY, AK.PAYMENT_FROM_COMPANY}:
     return _company_payment_label(event)
   return _EVENT_LABELS.get(event.event_type, _titleize_event_type(event.event_type))
@@ -111,42 +106,6 @@ def _inventory_adjustment_summary_lines(event: DailyReportEvent) -> list[str]:
     if parts:
       lines.append(f"{gas_label}: {' | '.join(parts)}")
   return lines
-
-
-def _is_company_return_only_refill(event: DailyReportEvent) -> bool:
-  if event.event_type != AK.REFILL:
-    return False
-  buy12 = _safe_int(event.buy12)
-  buy48 = _safe_int(event.buy48)
-  return12 = _safe_int(event.return12)
-  return48 = _safe_int(event.return48)
-  total_cost = _safe_int(event.total_cost)
-  paid_amount = _safe_int(event.paid_amount)
-  has_returns = return12 > 0 or return48 > 0
-  no_buys = buy12 == 0 and buy48 == 0
-  no_money = total_cost == 0 and paid_amount == 0
-  return has_returns and no_buys and no_money
-
-
-def _is_company_receive_only_refill(event: DailyReportEvent) -> bool:
-  if event.event_type != AK.REFILL:
-    return False
-  buy12 = _safe_int(event.buy12)
-  buy48 = _safe_int(event.buy48)
-  return12 = _safe_int(event.return12)
-  return48 = _safe_int(event.return48)
-  total_cost = _safe_int(event.total_cost)
-  paid_amount = _safe_int(event.paid_amount)
-  has_buys = buy12 > 0 or buy48 > 0
-  no_returns = return12 == 0 and return48 == 0
-  no_money = total_cost == 0 and paid_amount == 0
-  return has_buys and no_returns and no_money
-
-
-def _is_company_settle_only_refill(event: DailyReportEvent) -> bool:
-  return _is_company_return_only_refill(event) or _is_company_receive_only_refill(event)
-
-
 
 
 def _apply_ticket_fields(event: DailyReportEvent) -> None:
@@ -275,22 +234,6 @@ def _hero_text_for_event(event: DailyReportEvent, money_decimals: int, currency_
       if qty:
         return f"Bought {qty}x{gas}"
   if event.event_type == AK.REFILL:
-    if _is_company_return_only_refill(event):
-      parts: list[str] = []
-      if event.return12:
-        parts.append(f"{event.return12}x12kg")
-      if event.return48:
-        parts.append(f"{event.return48}x48kg")
-      if parts:
-        return f"Returned {' | '.join(parts)} empties to company"
-    if _is_company_receive_only_refill(event):
-      parts: list[str] = []
-      if event.buy12:
-        parts.append(f"{event.buy12}x12kg")
-      if event.buy48:
-        parts.append(f"{event.buy48}x48kg")
-      if parts:
-        return f"Received {' | '.join(parts)} full from company"
     parts: list[str] = []
     if event.buy12:
       parts.append(f"{event.buy12}x12kg")

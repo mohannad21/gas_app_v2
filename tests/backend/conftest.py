@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,6 +38,11 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         )
 
     monkeypatch.setenv("DATABASE_URL", db_url)
+    previous_db = sys.modules.get("app.db")
+    previous_engine = getattr(previous_db, "engine", None)
+    if previous_engine is not None:
+        previous_engine.dispose()
+
     from app import config as app_config
     app_config.get_settings.cache_clear()
     importlib.reload(app_config)
@@ -49,7 +55,23 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from app import main as app_main
     importlib.reload(app_main)
 
-    app_db.SQLModel.metadata.drop_all(bind=app_db.engine)
+    app_db.engine.dispose()
+    schema_engine = app_db.engine.execution_options(isolation_level="AUTOCOMMIT")
+    with schema_engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(5951042)"))
+        try:
+            conn.execute(text("""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                AND pid <> pg_backend_pid()
+            """))
+            conn.execute(text("SELECT pg_sleep(0.1)"))
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+        finally:
+            conn.execute(text("SELECT pg_advisory_unlock(5951042)"))
+    app_db.engine.dispose()
     app_db.SQLModel.metadata.create_all(bind=app_db.engine)
 
     from app.config import DEFAULT_TENANT_ID
@@ -88,6 +110,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
         test_client.headers.update({"Authorization": f"Bearer {create_access_token('test-user')}"})
         yield test_client
+
+    app_db.engine.dispose()
 
 # --- SHARED HELPERS ---
 

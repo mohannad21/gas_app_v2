@@ -322,7 +322,7 @@ export function RefillForm({
     formState.setPaidNow(totalCost ? totalCost.toString() : "");
   }, [totalCost, formState.paidTouched, formState.setPaidNow]);
 
-  const paidAmountValue = Number(formState.paidAmount) || 0;
+  const paidAmountValue = Number(formState.paidNow) || 0;
   const moneyResult = calcMoneyUiResult(totalCost, paidAmountValue);
 
   const availableEmpty12 = typeof base?.empty12 === "number" ? base.empty12 : null;
@@ -601,7 +601,7 @@ export function RefillForm({
   };
   const adjustPaid = (delta: number) => {
     if (!canEditMoney) return;
-    const current = Number(formState.paidAmount) || 0;
+    const current = Number(formState.paidNow) || 0;
     const next = Math.max(current + delta, 0);
     formState.setPaidTouched(true);
     formState.setPaidNow(String(next));

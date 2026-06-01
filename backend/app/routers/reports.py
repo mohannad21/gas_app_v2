@@ -192,7 +192,7 @@ def list_daily_reports(
       .where(CompanyTransaction.tenant_id == tenant_id)
       .where(CompanyTransaction.day >= start_date)
       .where(CompanyTransaction.day <= end_date)
-      .where(CompanyTransaction.kind.in_([AK.REFILL, AK.DIST_RETURN_EMPTIES, AK.BUY_FULL_FROM_COMPANY]))
+      .where(CompanyTransaction.kind == AK.REFILL)
       .where(CompanyTransaction.deleted_at == None)  # noqa: E711
       .distinct()
     ).all()
@@ -546,14 +546,10 @@ def get_daily_report(
   for txn in company_txns:
     if txn.kind == AK.ADJUST_COMPANY_BALANCE:
       continue
-    # TODO(T9): Remove after migration 2b_backfill_company_kinds has run in all environments
-    _no_buys = (txn.buy12 or 0) == 0 and (txn.buy48 or 0) == 0
-    _has_returns = (txn.return12 or 0) > 0 or (txn.return48 or 0) > 0
-    _txn_event_type = AK.DIST_RETURN_EMPTIES if txn.kind == AK.REFILL and _no_buys and _has_returns else txn.kind
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type=_txn_event_type,
+      event_type=txn.kind,
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,

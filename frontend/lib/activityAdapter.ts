@@ -20,92 +20,6 @@ const BASE: Pick<DailyReportEvent, "wallet_before" | "wallet_after"> = {
   wallet_after: 0,
 };
 
-type BankDepositDisplayDirection = "wallet_to_bank" | "bank_to_wallet";
-
-function takeNonZeroNumber(...values: Array<number | null | undefined>): number | null {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value) && value !== 0) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function parseBankDepositAmountFromText(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const cleaned = String(value).replace(/,/g, "");
-  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function resolveBankDepositDisplayDirection(
-  event: Pick<DailyReportEvent, "transfer_direction" | "money_direction" | "label" | "display_name" | "context_line">
-): BankDepositDisplayDirection | null {
-  if (event.transfer_direction === "wallet_to_bank" || event.transfer_direction === "bank_to_wallet") {
-    return event.transfer_direction;
-  }
-  if (event.money_direction === "out") return "wallet_to_bank";
-  if (event.money_direction === "in") return "bank_to_wallet";
-  const displayText = String(event.label ?? event.display_name ?? event.context_line ?? "");
-  if (/wallet\s*[→-]\s*bank/i.test(displayText)) return "wallet_to_bank";
-  if (/bank\s*[→-]\s*wallet/i.test(displayText)) return "bank_to_wallet";
-  return null;
-}
-
-function buildBankDepositDisplay(direction: BankDepositDisplayDirection, amount: number) {
-  const isOut = direction === "wallet_to_bank";
-  const label = isOut ? "Wallet → Bank" : "Bank → Wallet";
-  return {
-    label,
-    moneyDirection: isOut ? ("out" as const) : ("in" as const),
-    heroText: isOut
-      ? `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to bank`
-      : `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to wallet`,
-  };
-}
-
-export function normalizeBankDepositDisplayEvent(event: DailyReportEvent): DailyReportEvent {
-  if (event.event_type !== "bank_deposit") return event;
-
-  const direction = resolveBankDepositDisplayDirection(event);
-  if (!direction) return event;
-
-  const amountText =
-    event.hero_primary ?? event.hero_text ?? event.label ?? event.display_name ?? event.context_line ?? null;
-  const rawAmount =
-    takeNonZeroNumber(
-      typeof event.money_amount === "number" ? event.money_amount : null,
-      typeof event.money_delta === "number" ? event.money_delta : null,
-      typeof event.total_cost === "number" ? event.total_cost : null,
-      typeof event.money?.amount === "number" ? event.money.amount : null,
-      parseBankDepositAmountFromText(amountText)
-    ) ?? 0;
-  const amount = Math.abs(rawAmount);
-  const display = buildBankDepositDisplay(direction, amount);
-  const moneyAmount =
-    takeNonZeroNumber(typeof event.money_amount === "number" ? event.money_amount : null, amount) ?? 0;
-  const moneyDelta =
-    takeNonZeroNumber(typeof event.money_delta === "number" ? event.money_delta : null, amount) ?? 0;
-  const contextLine = event.context_line && event.context_line.trim() ? event.context_line : display.label;
-  const heroText = event.hero_text && event.hero_text.trim() ? event.hero_text : display.heroText;
-  const heroPrimary = event.hero_primary && event.hero_primary.trim() ? event.hero_primary : display.heroText;
-
-  return {
-    ...event,
-    transfer_direction: direction,
-    label: display.label,
-    display_name: display.label,
-    context_line: contextLine,
-    money_amount: moneyAmount,
-    money_direction: display.moneyDirection,
-    money_delta: moneyDelta,
-    hero_text: heroText,
-    hero_primary: heroPrimary,
-  };
-}
-
 function getCylinderSnapshot(record: Record<string, number> | null | undefined, gas: "12kg" | "48kg") {
   if (!record) return null;
   if (typeof record[gas] === "number") return record[gas];
@@ -137,10 +51,6 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
   if (refill.kind === "buy_full_from_company") return "buy_full_from_company" as const;
   if (refill.kind === "dist_return_empties") return "dist_return_empties" as const;
-  // TODO(T9): remove quantity inference after T2b migration confirmed in all environments
-  const totals = getCompanyInventoryTotals(refill);
-  const totalReturns = totals.return12 + totals.return48;
-  if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "dist_return_empties" as const;
   return "refill" as const;
 }
 
@@ -569,21 +479,23 @@ export function bankDepositToEvent(deposit: BankDeposit): DailyReportEvent {
   const isOut = deposit.direction === "wallet_to_bank";
   const label = isOut ? "Wallet → Bank" : "Bank → Wallet";
   const amount = Math.abs(deposit.amount);
-  const display = buildBankDepositDisplay(deposit.direction, amount);
+  const moneyDirection = isOut ? ("out" as const) : ("in" as const);
+  const heroText = isOut
+    ? `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to bank`
+    : `Transferred ${getCurrencySymbol()}${formatDisplayMoney(amount)} to wallet`;
   return {
     ...BASE,
     event_type: deposit.direction,
     id: deposit.id,
     effective_at: deposit.happened_at,
     created_at: deposit.happened_at,
-    transfer_direction: deposit.direction,
-    context_line: display.label,
-    label: display.label,
-    display_name: display.label,
+    context_line: label,
+    label,
+    display_name: label,
     money_amount: amount,
-    money_direction: display.moneyDirection,
+    money_direction: moneyDirection,
     money_delta: amount,
-    hero_text: display.heroText,
+    hero_text: heroText,
     note: deposit.note ?? null,
   };
 }

@@ -173,7 +173,6 @@ const formatOrderMetric = (event: DailyReportEvent) => {
 const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => string) => {
   const _bhKind = normalizeEventType(event.event_type, {
     order_mode: event.order_mode ?? undefined,
-    transfer_direction: event.transfer_direction ?? undefined,
   });
   // Order and refill have explicit formatting — always apply it first
   if (_isOrderKind(event.event_type)) {
@@ -314,7 +313,6 @@ export default function SlimActivityRow({
   const activityKind = normalizeEventType(eventType, {
     order_mode: event?.order_mode ?? undefined,
     money_direction: event?.money_direction ?? undefined,
-    transfer_direction: event?.transfer_direction ?? undefined,
   });
   const activityMeta = activityKind ? ACTIVITY_KIND_META[activityKind] : null;
   const activityTone = toneForMeta(activityMeta);
@@ -353,7 +351,7 @@ export default function SlimActivityRow({
       : activityKind === "wallet_to_bank"
         ? "out"
         : "none";
-  // bank_deposit without transfer_direction defaults to wallet_to_bank per normalizeEventType.
+  // Bank transfers use canonical event types in T9.
   const _isBankTransfer = activityKind === "bank_to_wallet" || activityKind === "wallet_to_bank";
   const bankTransferAmount =
     _isBankTransfer
@@ -495,7 +493,6 @@ export default function SlimActivityRow({
           eventType={eventType}
           orderMode={event.order_mode}
           moneyDirection={moneyDirection}
-          transferDirection={event.transfer_direction}
           color={dotColor}
           size={40}
         />

@@ -174,7 +174,7 @@ export async function initializeSystem(payload: SystemInitializeInput): Promise<
     sell_iron_price_48: toMinorUnits(payload.sell_iron_price_48 ?? 0),
     buy_iron_price_12: toMinorUnits(payload.buy_iron_price_12 ?? 0),
     buy_iron_price_48: toMinorUnits(payload.buy_iron_price_48 ?? 0),
-    cash_start: toMinorUnits(payload.cash_start),
+    wallet_start: toMinorUnits(payload.wallet_start),
     company_payable_money: toMinorUnits(payload.company_payable_money ?? 0),
     customer_debts: payload.customer_debts?.map((entry) => ({
       ...entry,

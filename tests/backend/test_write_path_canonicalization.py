@@ -84,7 +84,7 @@ def test_inventory_refill_kind_dist_return_stores_dist_return(client) -> None:
     assert txn.kind == "dist_return_empties"
 
 
-def test_reports_day_shim_emits_dist_return_for_legacy_return_only_refill(client) -> None:
+def test_reports_day_uses_stored_refill_kind_for_return_only_refill(client) -> None:
     import app.db as app_db
     from app.config import DEFAULT_TENANT_ID
     from app.models import CompanyTransaction
@@ -113,7 +113,8 @@ def test_reports_day_shim_emits_dist_return_for_legacy_return_only_refill(client
     resp = client.get("/reports/day", params={"date": day.isoformat()})
     assert resp.status_code == 200
     event_types = [event["event_type"] for event in resp.json()["events"]]
-    assert "dist_return_empties" in event_types
+    assert "refill" in event_types
+    assert "dist_return_empties" not in event_types
 
 
 def test_reports_day_does_not_emit_refill_for_dist_return_transaction(client) -> None:
@@ -241,14 +242,10 @@ def test_company_payment_kind_amount_sign_mismatch_returns_422(client) -> None:
     assert resp.status_code == 422
 
 
-def test_company_payment_no_kind_old_client_uses_compatibility_shim(client) -> None:
+def test_company_payment_no_kind_returns_422_kind_required(client) -> None:
     resp = client.post(
         "/company/payments",
         json={"amount": -125, "happened_at": iso_at("2025-10-12"), "note": "old-client-payment"},
     )
-    assert resp.status_code == 201, resp.text
-
-    txn = _company_txn_by_note("old-client-payment")
-    assert txn is not None
-    assert txn.kind == "payment_from_company"
-    assert txn.paid == -125
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "kind_required"

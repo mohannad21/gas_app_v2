@@ -286,8 +286,9 @@ def create_company_payment(
 ) -> CompanyPaymentOut:
   if payload.amount == 0:
     raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
-  # TODO(T9): Remove inference shim — require explicit kind once all clients send it
-  resolved_kind = payload.kind or ("payment_to_company" if payload.amount >= 0 else "payment_from_company")
+  if not payload.kind:
+    raise HTTPException(status_code=422, detail="kind_required")
+  resolved_kind = payload.kind
   if payload.kind == "payment_to_company" and payload.amount < 0:
     raise HTTPException(status_code=422, detail="kind/amount sign mismatch: payment_to_company requires amount >= 0")
   if payload.kind == "payment_from_company" and payload.amount > 0:

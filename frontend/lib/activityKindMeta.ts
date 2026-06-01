@@ -209,41 +209,7 @@ export function normalizeEventType(
     case "wallet_to_bank":
       return raw as ActivityKind;
 
-    case "order":
-      if (ctx.order_mode === "sell_iron") return "sell_full";
-      if (ctx.order_mode === "buy_iron") return "buy_empty_from_customer";
-      return "replacement";
-
-    case "collection_money":
-      return "payment_from_customer";
-    case "collection_payout":
-      return "payment_to_customer";
-    case "collection_empty":
-      return "customer_return_empties";
-    case "customer_adjust":
-      return "adjust_customer_balance";
-
-    case "company_payment":
-      return ctx.money_direction === "in" ? "payment_from_company" : "payment_to_company";
-    case "company_adjustment":
-      return "adjust_company_balance";
-    case "company_buy_iron":
-    case "company_buy_full":
-      return "buy_full_from_company";
-    case "company_return_empties":
-      return "dist_return_empties";
-    case "buy_iron":
-      return "buy_empty_from_customer";
-
-    case "cash_adjust":
-      return "adjust_wallet";
-    case "adjust":
-      return "adjust_inventory";
-
-    case "bank_deposit":
-      return ctx.transfer_direction === "bank_to_wallet" ? "bank_to_wallet" : "wallet_to_bank";
-
-    // init aliases are dead code — removed in T9
+    // init aliases — not canonical, return null
     case "init":
     case "init_balance":
     case "init_credit":
