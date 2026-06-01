@@ -731,7 +731,9 @@ One visible wording system
 
 Hide zeros and redundancy
 - Never show meaningless zero lines.
-- Never show fields that do not apply to the event type.
+- For customer/company event cards, show all non-zero relationship balances, even when a dimension is unchanged by the event.
+- Omit only dimensions that are settled before and settled after.
+- For internal-only activity cards, do not show customer/company balance wording.
 
 Deterministic ordering
 - Users must trust that before/after is correct.
@@ -799,7 +801,73 @@ Aggregate customer balances
 - You owe X customers Y x 12kg full
 - All settled ✅
 
-B. Transition Wording Rules
+B. Activity Card Label, Hero Text, and Balance Wording Contract
+
+Use in:
+- Event Feed
+- expanded event rows
+- any customer/company activity card that explains balance movement
+
+Activity card labels and hero text examples:
+
+| Activity kind | Label | Hero text example | Money balance wording | 12kg balance wording | 48kg balance wording |
+| --- | --- | --- | --- | --- | --- |
+| replacement | Replace | Installed: 2x 12kg<br>Received: 1x 12kg | Money balance: settled -> 100 $ debts (on customer) | 12kg balance: settled -> 1 debt (on customer) | omitted if settled -> settled; otherwise unchanged/changed line |
+| sell_full | Sell full | Sold 3x12kg | Money balance: settled -> 100 $ debts (on customer) | 12kg balance: unchanged 1 debt (on customer) if already owed | omitted if settled -> settled |
+| buy_empty_from_customer | Buy empties | Bought 4x12kg | Money balance: settled -> 40 $ credits (for customer) | 12kg balance: unchanged 1 debt (on customer) if already owed | omitted if settled -> settled |
+| payment_from_customer | Payment from customer | Customer paid $120 | Money balance: 180 $ debts -> 60 $ debts (on customer) | 12kg balance: unchanged 2 debts (on customer) if still owed | omitted if settled -> settled |
+| payment_to_customer | Payment to customer | Paid customer $50 | Money balance: 120 $ credits -> 70 $ credits (for customer) | 12kg balance: unchanged 2 debts (on customer) if still owed | omitted if settled -> settled |
+| customer_return_empties | Empties from customer | Received 2x12kg empties | Money balance: unchanged 180 $ debts (on customer) if still owed | 12kg balance: 3 debts -> 1 debt (on customer) | omitted if settled -> settled |
+| adjust_customer_balance | Adjust customer balance | none | Money balance: 20 $ credits -> settled | 12kg balance: 2 debts -> 1 debt (on customer) | 48kg balance: unchanged 1 debt (on customer) if still owed |
+| refill | Refill | Bought 5x12kg | Money balance: settled -> 400 $ debts (on distributor) | 12kg balance: settled -> 3 debts (on distributor) | omitted if settled -> settled |
+| payment_to_company | Payment to company | Paid company $80 | Money balance: 200 $ debts -> 120 $ debts (on distributor) | 12kg balance: unchanged 3 debts (on distributor) if still owed | omitted if settled -> settled |
+| payment_from_company | Payment from company | Company paid $60 | Money balance: 100 $ credits -> 40 $ credits (for distributor) | 12kg balance: unchanged 3 debts (on distributor) if still owed | omitted if settled -> settled |
+| dist_return_empties | Empties to company | Returned 2x48kg empties | Money balance: unchanged 200 $ debts (on distributor) if still owed | omitted if settled -> settled | 48kg balance: 4 debts -> 2 debts (on distributor) |
+| buy_full_from_company | Buy fulls | Bought 6x12kg full | Money balance: settled -> 250 $ debts (on distributor) | 12kg balance: unchanged 2 debts (on distributor) if still owed | omitted if settled -> settled |
+| adjust_company_balance | Adjust company balance | none | Money balance: 500 $ debts -> 200 $ debts (on distributor) | 12kg balance: settled -> 1 debt (on distributor) | 48kg balance: 1 credit -> 1 debt (on distributor) |
+| expense | Expense | Fuel - $50 | no wording | no wording | no wording |
+| bank_deposit wallet_to_bank | Wallet to bank | Transferred $250 to bank | no wording | no wording | no wording |
+| bank_deposit bank_to_wallet | Bank to wallet | Transferred $175 to wallet | no wording | no wording | no wording |
+| adjust_inventory | Adjust inventory | 12kg: full +2 \| empty -1 | no wording | no wording | no wording |
+| adjust_wallet | Adjust wallet | Wallet change: +$125 | no wording | no wording | no wording |
+
+C. Balance Wording Rules
+
+For every customer or company activity card, evaluate all three relationship balance dimensions:
+- Money balance
+- 12kg balance
+- 48kg balance
+
+Each dimension has a before value and an after value.
+
+Rules:
+- If before is 0 and after is 0, omit that line.
+- If before and after are different, show: `{Dimension}: {before state} -> {after state}`.
+- If before and after are equal and non-zero, show: `{Dimension}: unchanged {current state}`.
+- Use `settled` for zero.
+- Internal-only activities do not show customer/company balance wording.
+
+Customer balance direction:
+- positive money/cylinders = debts (on customer)
+- negative money/cylinders = credits (for customer)
+
+Company balance direction:
+- positive money = debts (on distributor)
+- negative money = credits (for distributor)
+- negative cylinders = debts (on distributor)
+- positive cylinders = credits (for distributor)
+
+Pluralization:
+- 1 debt
+- 2 debts
+- 1 credit
+- 2 credits
+
+D. Superseded Transition Wording Notes
+
+The older notes below are retained only as historical context. The activity card wording contract above is the active wording contract for event cards.
+
+Old transition wording notes
 
 Use in:
 - after-save preview
@@ -814,7 +882,7 @@ Rules
 - settled wording should stay simple and consistent across screens
 - exact final literals are still being cleaned up in the UI
 
-C. Cross-Zero Wording
+Old cross-zero wording notes
 
 Cross-zero must render as two lines:
 - line 1 = action that cleared the old side + settled line
@@ -1448,21 +1516,21 @@ Canonical matrix reference:
 
 ```csv
 "Activity","Current Row Label","Expanded: 12kg Full","Expanded: 12kg Empty","Expanded: 48kg Full","Expanded: 48kg Empty","Expanded: Wallet","Row Balance Transition: Money","Row Balance Transition: 12kg","Row Balance Transition: 48kg","Ledger End: 12kg Full","Ledger End: 12kg Empty","Ledger End: 48kg Full","Ledger End: 48kg Empty","Ledger End: Wallet","Customer Summary Balance: Money","Customer Summary Balance: 12kg","Customer Summary Balance: 48kg","Company Summary Balance: Money","Company Summary Balance: 12kg","Company Summary Balance: 48kg","Day Strip: Sold 12kg","Day Strip: Sold 48kg","Day Strip: Net Today","Review: Last Order","Review: Ordered 12kg","Review: Ordered 48kg"
-"Replacement","Replacement","-inst(12)","+recv(12)","-inst(48)","+recv(48)","+paid","+(total-paid)","+(inst-recv)(12)","+(inst-recv)(48)","-inst(12)","+recv(12)","-inst(48)","+recv(48)","+paid","+(total-paid)","+(inst-recv)(12)","+(inst-recv)(48)",".",".",".","+inst(12)","+inst(48)","+paid","Y","+inst(12)","+inst(48)"
-"Sell full","Sold full","-inst(12)",".","-inst(48)",".","+paid","+(total-paid)",".",".","-inst(12)",".","-inst(48)",".","+paid","+(total-paid)",".",".",".",".",".","+inst(12)","+inst(48)","+paid","Y","+inst(12)","+inst(48)"
-"Buy empty","Bought empty",".","+recv(12)",".","+recv(48)","-paid","-(total-paid)",".",".",".","+recv(12)",".","+recv(48)","-paid","-(total-paid)",".",".",".",".",".",".",".","-paid",".",".","."
-"Payment received","Customer paid",".",".",".",".","+amt","-amt",".",".",".",".",".",".","+amt","-amt",".",".",".",".",".",".",".","+amt",".",".","."
-"Payment payout","Paid customer",".",".",".",".","-amt","+amt",".",".",".",".",".",".","-amt","+amt",".",".",".",".",".",".",".","-amt",".",".","."
-"Return empties","Returned empties",".","+qty12",".","+qty48",".",".","-qty12","-qty48",".","+qty12",".","+qty48",".",".","-qty12","-qty48",".",".",".",".",".",".",".",".","."
-"Customer balance adjustment","Balance adjustment",".",".",".",".",".","+amount_money","+count_12","+count_48",".",".",".",".",".","+amount_money","+count_12","+count_48",".",".",".",".",".",".",".",".","."
+"Replacement","Replace","-inst(12)","+recv(12)","-inst(48)","+recv(48)","+paid","+(total-paid)","+(inst-recv)(12)","+(inst-recv)(48)","-inst(12)","+recv(12)","-inst(48)","+recv(48)","+paid","+(total-paid)","+(inst-recv)(12)","+(inst-recv)(48)",".",".",".","+inst(12)","+inst(48)","+paid","Y","+inst(12)","+inst(48)"
+"Sell full","Sell full","-inst(12)",".","-inst(48)",".","+paid","+(total-paid)",".",".","-inst(12)",".","-inst(48)",".","+paid","+(total-paid)",".",".",".",".",".","+inst(12)","+inst(48)","+paid","Y","+inst(12)","+inst(48)"
+"Buy empty","Buy empties",".","+recv(12)",".","+recv(48)","-paid","-(total-paid)",".",".",".","+recv(12)",".","+recv(48)","-paid","-(total-paid)",".",".",".",".",".",".",".","-paid",".",".","."
+"Payment received","Payment from customer",".",".",".",".","+amt","-amt",".",".",".",".",".",".","+amt","-amt",".",".",".",".",".",".",".","+amt",".",".","."
+"Payment payout","Payment to customer",".",".",".",".","-amt","+amt",".",".",".",".",".",".","-amt","+amt",".",".",".",".",".",".",".","-amt",".",".","."
+"Return empties","Empties from customer",".","+qty12",".","+qty48",".",".","-qty12","-qty48",".","+qty12",".","+qty48",".",".","-qty12","-qty48",".",".",".",".",".",".",".",".","."
+"Customer balance adjustment","Adjust customer balance",".",".",".",".",".","+amount_money","+count_12","+count_48",".",".",".",".",".","+amount_money","+count_12","+count_48",".",".",".",".",".",".",".",".","."
 "Refill","Refill","+buy12","-ret12","+buy48","-ret48","-paid","+(cost-paid)","+(ret-buy12)","+(ret-buy48)","+buy12","-ret12","+buy48","-ret48","-paid",".",".",".","+(cost-paid)","+(ret-buy12)","+(ret-buy48)",".",".",".",".",".","."
-"Buy full","Bought full","+new12",".","+new48",".","-paid","+(cost-paid)",".",".","+new12",".","+new48",".","-paid",".",".",".","+(cost-paid)","unchanged","unchanged",".",".",".",".",".","."
-"Company payment payout","Paid company",".",".",".",".","-amt","-amt",".",".",".",".",".",".","-amt",".",".",".","-amt",".",".",".",".",".",".",".","."
-"Company payment receive","Company paid",".",".",".",".","+amt","+amt",".",".",".",".",".",".","+amt",".",".",".","+amt",".",".",".",".",".",".",".","."
-"Company return empties","Returned empties",".","-qty12",".","-qty48",".",".","+qty12","+qty48",".","-qty12",".","-qty48",".",".",".",".",".","+qty12","+qty48",".",".",".",".",".","."
-"Company balance adjustment","Balance adjustment",".",".",".",".",".","set money","set 12","set 48",".",".",".",".",".",".",".",".","set money","set 12","set 48",".",".",".",".",".","."
-"Adjust inventory","Inventory adjustment","+dF12","+dE12","+dF48","+dE48",".",".",".",".","+dF12","+dE12","+dF48","+dE48",".",".",".",".",".",".",".",".",".",".",".",".","."
-"Adjust wallet","Wallet adjustment",".",".",".",".","+delta",".",".",".",".",".",".",".","+delta",".",".",".",".",".",".",".",".",".",".",".","."
+"Buy full","Buy fulls","+new12",".","+new48",".","-paid","+(cost-paid)",".",".","+new12",".","+new48",".","-paid",".",".",".","+(cost-paid)","unchanged","unchanged",".",".",".",".",".","."
+"Company payment payout","Payment to company",".",".",".",".","-amt","-amt",".",".",".",".",".",".","-amt",".",".",".","-amt",".",".",".",".",".",".",".","."
+"Company payment receive","Payment from company",".",".",".",".","+amt","+amt",".",".",".",".",".",".","+amt",".",".",".","+amt",".",".",".",".",".",".",".","."
+"Company return empties","Empties to company",".","-qty12",".","-qty48",".",".","+qty12","+qty48",".","-qty12",".","-qty48",".",".",".",".",".","+qty12","+qty48",".",".",".",".",".","."
+"Company balance adjustment","Adjust company balance",".",".",".",".",".","set money","set 12","set 48",".",".",".",".",".",".",".",".","set money","set 12","set 48",".",".",".",".",".","."
+"Adjust inventory","Adjust inventory","+dF12","+dE12","+dF48","+dE48",".",".",".",".","+dF12","+dE12","+dF48","+dE48",".",".",".",".",".",".",".",".",".",".",".",".","."
+"Adjust wallet","Adjust wallet",".",".",".",".","+delta",".",".",".",".",".",".",".","+delta",".",".",".",".",".",".",".",".",".",".",".","."
 "Expense","Expense",".",".",".",".","-amt",".",".",".",".",".",".",".","-amt",".",".",".",".",".",".",".",".","-amt",".",".","."
 "Bank to wallet","Bank to wallet",".",".",".",".","+amt",".",".",".",".",".",".",".","+amt",".",".",".",".",".",".",".",".",".",".",".","."
 "Wallet to bank","Wallet to bank",".",".",".",".","-amt",".",".",".",".",".",".",".","-amt",".",".",".",".",".",".",".",".",".",".",".","."

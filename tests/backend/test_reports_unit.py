@@ -241,7 +241,7 @@ def test_customer_adjust_is_grouped_and_reported_as_customer_event(client) -> No
     assert event["source_id"] == adjustment["id"]
     assert event["counterparty"]["type"] == "customer"
     assert event["customer_name"] == "Adjust Customer"
-    assert event["hero_text"] == "Adjusted customer balance"
+    assert event["hero_text"] == "Adjust customer balance"
     assert isinstance(event["wallet_before"], int)
     assert isinstance(event["wallet_after"], int)
     assert event["wallet_before"] == event["wallet_after"]

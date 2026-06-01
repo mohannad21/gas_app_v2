@@ -6,7 +6,14 @@
       "Bash(grep -rn \"wallet.*tab\\\\|ledger.*tab\\\\|TabView\\\\|tab.*wallet\\\\|tab.*ledger\\\\|splitLedger\\\\|walletTab\\\\|ledgerTab\" c:/Users/Mohannad/gas_app_v2/frontend --include=*.tsx --include=*.ts)",
       "Bash(grep -n \"confirmDeleteOrder\\\\|handleDeleteOrder\\\\|removeOrder\" /c/Users/Mohannad/gas_app_v2/frontend/app/orders/[id].tsx)",
       "Bash(grep -n \"confirm\\\\|Alert.alert\\\\|deleteOrder\\\\|handleDelete\" /c/Users/Mohannad/gas_app_v2/frontend/app/customers/[id].tsx)",
-      "Bash(grep -n \"class InventoryInitCreate\" backend/app/schemas/*.py)"
+      "Bash(grep -n \"class InventoryInitCreate\" backend/app/schemas/*.py)",
+      "Bash(git commit -m ' *)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pytest tests/backend/logic/history/test_fixture_sanity.py -v --tb=short)",
+      "Bash(findstr /i \"ticket\\\\|test\\\\|backend\\\\|TODO\\\\|pending\\\\|layer\")",
+      "Bash(python -m pytest tests/backend/logic/history/test_fixture_sanity.py tests/backend/test_customer_order_visible_numbers.py -v)",
+      "Bash(python -m pytest \"tests\\\\backend\\\\logic\\\\history\\\\test_fixture_sanity.py\" \"tests\\\\backend\\\\test_customer_order_visible_numbers.py\" -v)",
+      "Bash(Select-String -Pattern \"●|PASS|FAIL|Tests:|×|√\")",
+      "Bash(Select-Object -First 40)"
     ]
   }
 }

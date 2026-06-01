@@ -37,6 +37,39 @@ Cylinder icons:
   Both are custom assets — not available in Ionicons. Designed and added in T4.
 ```
 
+### Implemented Activity Icon Design Summary
+
+Current renderer:
+- Source file: `frontend/components/reports/ActivityIcon.tsx`
+- Metadata source: `frontend/lib/activityKindMeta.ts`
+- Row integration: `frontend/components/reports/SlimActivityRow.tsx`
+- Icons are rendered as custom `react-native-svg` paths. Activity rows do not use Ionicons for activity-kind icons.
+
+Design rules:
+- Customer activities use horizontal arrows.
+- Company activities use vertical arrows.
+- Customer activity symbols sit above the horizontal arrow and are centered on the arrow axis.
+- Company activity symbols sit beside the vertical arrow and are centered on the arrow axis.
+- Swap activities (`replacement`, `refill`) show bidirectional arrows and do not render a symbol.
+- Internal ledger / treasury activities can render standalone symbols with no arrow.
+- All symbols and arrows use thin, consistent stroke weights so the full icon reads as one visual system.
+- Activity icons are intentionally larger than the original placeholder Ionicons and align visually with the activity label text.
+
+Implemented symbol behavior:
+- `full-cyl` uses the daily-report ledger style full cylinder treatment and must look visibly full.
+- `empty-cyl` uses the same cylinder outline shape but remains hollow.
+- `money` is a banknote with a dollar symbol centered on both the x-axis and y-axis inside the note.
+- `receipt` is used for expense-style activity.
+- `bank-to-wallet` and `wallet-to-bank` are separate symbols, not the same reused icon.
+- `wallet`, `cube`, and `edit` are standalone ledger/adjustment symbols when their activity has `arrow: "none"`.
+
+Approved direction model:
+- Customer incoming: symbol above a right-pointing horizontal arrow.
+- Customer outgoing: symbol above a left-pointing horizontal arrow.
+- Company incoming: symbol beside a downward vertical arrow.
+- Company outgoing: symbol beside an upward vertical arrow.
+- Money, balance adjustment, and ledger icons should stay visually lighter than the row text and must not use bulky filled backgrounds.
+
 ### Activity Table
 
 **Customer activities — `#0ea5e9`**

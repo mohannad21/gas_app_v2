@@ -114,7 +114,20 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\\\\components\\\\reports\\\\\" -File | ForEach-Object { $_.Name })",
       "PowerShell(cd \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\"; git add frontend/app/\\(tabs\\)/add/index.tsx frontend/app/customers/[id].tsx frontend/components/reports/SlimActivityRow.tsx)",
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\frontend\\\\app\\\\orders\\\\new.tsx\" | Measure-Object -Line\\).Lines)",
-      "Bash(dir \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\backend\\\\app\\\\routers\" /b)"
+      "Bash(dir \"c:\\\\Users\\\\Mohannad\\\\gas_app_v2\\\\backend\\\\app\\\\routers\" /b)",
+      "Bash(Get-ChildItem -Path backend/app/schemas -Name)",
+      "Bash(python -m pytest tests/backend/test_collection_visible_numbers.py tests/backend/test_replacement_visible_numbers.py -v)",
+      "Read(//c/Users/Mohannad/**)",
+      "Bash(ls -la /mnt/c/Users/Mohannad/gas_app_v2/backend/app/)",
+      "Read(//mnt/c/Users/Mohannad/gas_app_v2/backend/**)",
+      "Bash(awk '{print $1}')",
+      "Bash(python -c \"import os; print\\('GONE' if not os.path.exists\\('backend/tests'\\) else 'STILL EXISTS'\\)\")",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pytest --version)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Mohannad\\\\gas_app_v2\" -MaxDepth 1 -Filter \"*.md\")",
+      "Bash(Select-Object Name)",
+      "Read(//c/Users/Mohannad/gas_app_v2/**)",
+      "Bash(ls /mnt/c/Users/Mohannad/gas_app_v2/tests/frontend/__tests__/)",
+      "Read(//mnt/c/Users/Mohannad/gas_app_v2/tests/frontend/**)"
     ],
     "additionalDirectories": [
       "\\tmp"
