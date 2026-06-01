@@ -26,10 +26,12 @@ from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
+_REFILL_KINDS = ("refill", "dist_return_empties")
+
 
 def _resolve_active_refill(session: Session, refill_id: str) -> CompanyTransaction | None:
   current = session.get(CompanyTransaction, refill_id)
-  if not current or current.kind != "refill":
+  if not current or current.kind not in _REFILL_KINDS:
     return current
 
   visited: set[str] = set()
@@ -37,7 +39,7 @@ def _resolve_active_refill(session: Session, refill_id: str) -> CompanyTransacti
     visited.add(current.id)
     next_txn = session.exec(
       select(CompanyTransaction)
-      .where(CompanyTransaction.kind == "refill")
+      .where(CompanyTransaction.kind.in_(_REFILL_KINDS))
       .where(CompanyTransaction.reversed_id == current.id)
       .order_by(CompanyTransaction.created_at.desc())
     ).first()
@@ -366,7 +368,7 @@ def create_refill(
       existing = session.exec(
         select(CompanyTransaction)
         .where(CompanyTransaction.request_id == payload.request_id)
-        .where(CompanyTransaction.kind == "refill")
+        .where(CompanyTransaction.kind == payload.kind)
         .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
@@ -376,7 +378,7 @@ def create_refill(
       tenant_id=tenant_id,
       happened_at=happened_at,
       day=derive_day(happened_at),
-      kind="refill",
+      kind=payload.kind,
       buy12=payload.buy12,
       return12=payload.return12,
       buy48=payload.buy48,
@@ -415,7 +417,7 @@ def list_refills(
 ) -> list[InventoryRefillSummary]:
   stmt = (
     select(CompanyTransaction)
-    .where(CompanyTransaction.kind.in_(["refill", "buy_full_from_company"]))
+    .where(CompanyTransaction.kind.in_(["refill", "dist_return_empties", "buy_full_from_company"]))
     .where(CompanyTransaction.tenant_id == tenant_id)
   )
   if not include_deleted:
@@ -477,9 +479,10 @@ def get_refill_details(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> InventoryRefillDetails:
   row = _resolve_active_refill(session, refill_id)
-  if not row or row.tenant_id != tenant_id or row.deleted_at is not None or row.kind != "refill":
+  if not row or row.tenant_id != tenant_id or row.deleted_at is not None or row.kind not in _REFILL_KINDS:
     raise HTTPException(status_code=404, detail="Refill not found")
   return InventoryRefillDetails(
+    kind=row.kind,  # type: ignore[arg-type]
     refill_id=row.id,
     business_date=row.day.isoformat(),
     time_of_day=time_of_day(row.happened_at),
@@ -515,8 +518,9 @@ def update_refill(
   reject_new_shells_for_refill(payload.new12, payload.new48)
   try:
     existing = _resolve_active_refill(session, refill_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind not in _REFILL_KINDS:
       raise HTTPException(status_code=404, detail="Refill not found")
+    resolved_kind = payload.kind if payload.kind is not None else existing.kind
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
 
@@ -526,7 +530,7 @@ def update_refill(
       tenant_id=tenant_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
-      kind=existing.kind,
+      kind=resolved_kind,
       buy12=existing.buy12,
       return12=existing.return12,
       buy48=existing.buy48,
@@ -560,7 +564,7 @@ def update_refill(
       tenant_id=tenant_id,
       happened_at=reversal_happened_at,
       day=reversal_day,
-      kind="refill",
+      kind=resolved_kind,
       buy12=payload.buy12,
       return12=payload.return12,
       buy48=payload.buy48,
@@ -588,6 +592,7 @@ def update_refill(
     raise
   session.refresh(new_txn)
   return InventoryRefillDetails(
+    kind=new_txn.kind,  # type: ignore[arg-type]
     refill_id=new_txn.id,
     business_date=new_txn.day.isoformat(),
     time_of_day=time_of_day(new_txn.happened_at),
@@ -621,7 +626,7 @@ def delete_refill(
 ) -> None:
   try:
     existing = _resolve_active_refill(session, refill_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "refill":
+    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind not in _REFILL_KINDS:
       return
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])

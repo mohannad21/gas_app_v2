@@ -185,14 +185,14 @@ def list_daily_reports(
     session, account="inv", gas_type="48kg", state="empty", unit="count", date_start=start_date, date_end=end_date
   )
   sold_full = _sold_full_by_day(session, date_start=start_date, date_end=end_date)
-  refill_days: set = set(
+  company_inventory_days: set = set(
     row[0] if isinstance(row, tuple) else row
     for row in session.exec(
       select(CompanyTransaction.day)
       .where(CompanyTransaction.tenant_id == tenant_id)
       .where(CompanyTransaction.day >= start_date)
       .where(CompanyTransaction.day <= end_date)
-      .where(CompanyTransaction.kind == AK.REFILL)
+      .where(CompanyTransaction.kind.in_([AK.REFILL, AK.DIST_RETURN_EMPTIES, AK.BUY_FULL_FROM_COMPANY]))
       .where(CompanyTransaction.deleted_at == None)  # noqa: E711
       .distinct()
     ).all()
@@ -338,7 +338,7 @@ def list_daily_reports(
       )
 
     # Company problems
-    if current in company_activity_days or current in refill_days:
+    if current in company_activity_days or current in company_inventory_days:
       company_before, company_after = _company_day_state_bounds(session, day=current)
       problem_lines.extend(
         _snapshot_lines_for_company(
@@ -380,7 +380,7 @@ def list_daily_reports(
         full48=running_full48,
         empty48=running_empty48,
       ),
-      has_refill=current in refill_days,
+      has_refill=current in company_inventory_days,
       problems=[f"{line[0]}-{line[1]}: {line[2]}" if isinstance(line, tuple) else line for line in problem_lines],
       problem_transitions=problem_transitions,
       recalculated=False,
@@ -546,10 +546,14 @@ def get_daily_report(
   for txn in company_txns:
     if txn.kind == AK.ADJUST_COMPANY_BALANCE:
       continue
+    # TODO(T9): Remove after migration 2b_backfill_company_kinds has run in all environments
+    _no_buys = (txn.buy12 or 0) == 0 and (txn.buy48 or 0) == 0
+    _has_returns = (txn.return12 or 0) > 0 or (txn.return48 or 0) > 0
+    _txn_event_type = AK.DIST_RETURN_EMPTIES if txn.kind == AK.REFILL and _no_buys and _has_returns else txn.kind
     event = DailyReportEvent(
       id=txn.id,
       source_id=txn.id,
-      event_type=txn.kind,
+      event_type=_txn_event_type,
       effective_at=_local(txn.happened_at),
       created_at=txn.created_at,
       reason=txn.note,

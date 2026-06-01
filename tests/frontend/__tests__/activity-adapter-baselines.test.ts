@@ -96,25 +96,23 @@ function makeInventoryAdjustment(overrides: Partial<InventoryAdjustment> = {}): 
   };
 }
 
-// PRE-MIGRATION BASELINES: legacy event_type values below intentionally document T7 state.
-// T8 migrates adapter output to canonical ActivityKind values.
-describe("adapter event_type baselines - pre-T8", () => {
+describe("adapter event_type baselines - post-T8 canonical", () => {
   describe("orderToEvent", () => {
-    it('emits legacy "order" for replacement mode (T8 -> "replacement")', () => {
-      expect(orderToEvent(makeOrder({ order_mode: "replacement" })).event_type).toBe("order");
+    it('emits canonical "replacement" for replacement mode', () => {
+      expect(orderToEvent(makeOrder({ order_mode: "replacement" })).event_type).toBe("replacement");
     });
 
-    it('emits legacy "order" for sell_iron mode (T8 -> "sell_full")', () => {
-      expect(orderToEvent(makeOrder({ order_mode: "sell_iron" })).event_type).toBe("order");
+    it('emits canonical "sell_full" for sell_iron mode', () => {
+      expect(orderToEvent(makeOrder({ order_mode: "sell_iron" })).event_type).toBe("sell_full");
     });
 
-    it('emits legacy "order" for buy_iron mode (T8 -> "buy_empty_from_customer")', () => {
-      expect(orderToEvent(makeOrder({ order_mode: "buy_iron" })).event_type).toBe("order");
+    it('emits canonical "buy_empty_from_customer" for buy_iron mode', () => {
+      expect(orderToEvent(makeOrder({ order_mode: "buy_iron" })).event_type).toBe("buy_empty_from_customer");
     });
   });
 
   describe("collectionToEvent", () => {
-    it('emits legacy "collection_money" for payment action (T8 -> "payment_from_customer")', () => {
+    it('emits canonical "payment_from_customer" for payment action', () => {
       const event = collectionToEvent({
         id: "col-1",
         customer_id: "cust-1",
@@ -126,10 +124,10 @@ describe("adapter event_type baselines - pre-T8", () => {
         effective_at: "2026-05-14T10:00:00Z",
         created_at: "2026-05-14T10:00:00Z",
       } as any);
-      expect(event.event_type).toBe("collection_money");
+      expect(event.event_type).toBe("payment_from_customer");
     });
 
-    it('emits legacy "collection_payout" for payout action (T8 -> "payment_to_customer")', () => {
+    it('emits canonical "payment_to_customer" for payout action', () => {
       const event = collectionToEvent({
         id: "col-2",
         customer_id: "cust-1",
@@ -141,10 +139,10 @@ describe("adapter event_type baselines - pre-T8", () => {
         effective_at: "2026-05-14T10:00:00Z",
         created_at: "2026-05-14T10:00:00Z",
       } as any);
-      expect(event.event_type).toBe("collection_payout");
+      expect(event.event_type).toBe("payment_to_customer");
     });
 
-    it('emits legacy "collection_empty" for return action (T8 -> "customer_return_empties")', () => {
+    it('emits canonical "customer_return_empties" for return action', () => {
       const event = collectionToEvent({
         id: "col-3",
         customer_id: "cust-1",
@@ -157,18 +155,18 @@ describe("adapter event_type baselines - pre-T8", () => {
         effective_at: "2026-05-14T10:00:00Z",
         created_at: "2026-05-14T10:00:00Z",
       } as any);
-      expect(event.event_type).toBe("collection_empty");
+      expect(event.event_type).toBe("customer_return_empties");
     });
   });
 
   describe("customerAdjustmentToEvent", () => {
-    it('emits legacy "customer_adjust" (T8 -> "adjust_customer_balance")', () => {
-      expect(customerAdjustmentToEvent(makeCustomerAdjustment()).event_type).toBe("customer_adjust");
+    it('emits canonical "adjust_customer_balance"', () => {
+      expect(customerAdjustmentToEvent(makeCustomerAdjustment()).event_type).toBe("adjust_customer_balance");
     });
   });
 
   describe("companyPaymentToEvent - highest-risk path", () => {
-    it('emits legacy "company_payment" when paying TO company (T8 -> "payment_to_company")', () => {
+    it('emits canonical "payment_to_company" when paying TO company', () => {
       const event = companyPaymentToEvent({
         id: "pay-1",
         amount: 50,
@@ -176,11 +174,11 @@ describe("adapter event_type baselines - pre-T8", () => {
         happened_at: "2026-05-14T10:00:00Z",
         note: null,
       } as any);
-      expect(event.event_type).toBe("company_payment");
+      expect(event.event_type).toBe("payment_to_company");
       expect(event.money_direction).toBe("out");
     });
 
-    it('emits legacy "company_payment" when receiving FROM company (T8 -> "payment_from_company")', () => {
+    it('emits canonical "payment_from_company" when receiving FROM company', () => {
       const event = companyPaymentToEvent({
         id: "pay-2",
         amount: -30,
@@ -188,34 +186,34 @@ describe("adapter event_type baselines - pre-T8", () => {
         happened_at: "2026-05-14T10:00:00Z",
         note: null,
       } as any);
-      expect(event.event_type).toBe("company_payment");
+      expect(event.event_type).toBe("payment_from_company");
       expect(event.money_direction).toBe("in");
     });
   });
 
   describe("companyBalanceAdjustmentToEvent", () => {
-    it('emits legacy "company_adjustment" (T8 -> "adjust_company_balance")', () => {
-      expect(companyBalanceAdjustmentToEvent(makeCompanyAdjustment()).event_type).toBe("company_adjustment");
+    it('emits canonical "adjust_company_balance"', () => {
+      expect(companyBalanceAdjustmentToEvent(makeCompanyAdjustment()).event_type).toBe("adjust_company_balance");
     });
   });
 
   describe("bankDepositToEvent", () => {
-    it('emits legacy "bank_deposit" for wallet_to_bank direction (T8 -> "wallet_to_bank")', () => {
+    it('emits canonical "wallet_to_bank" for wallet_to_bank direction', () => {
       const event = bankDepositToEvent(makeBankDeposit({ direction: "wallet_to_bank" }));
-      expect(event.event_type).toBe("bank_deposit");
+      expect(event.event_type).toBe("wallet_to_bank");
       expect(event.transfer_direction).toBe("wallet_to_bank");
     });
 
-    it('emits legacy "bank_deposit" for bank_to_wallet direction (T8 -> "bank_to_wallet")', () => {
+    it('emits canonical "bank_to_wallet" for bank_to_wallet direction', () => {
       const event = bankDepositToEvent(makeBankDeposit({ direction: "bank_to_wallet" }));
-      expect(event.event_type).toBe("bank_deposit");
+      expect(event.event_type).toBe("bank_to_wallet");
       expect(event.transfer_direction).toBe("bank_to_wallet");
     });
   });
 
   describe("inventoryAdjustmentToEvent", () => {
-    it('emits legacy "adjust" for a single inventory adjustment (T8 -> "adjust_inventory")', () => {
-      expect(inventoryAdjustmentToEvent(makeInventoryAdjustment()).event_type).toBe("adjust");
+    it('emits canonical "adjust_inventory" for a single inventory adjustment', () => {
+      expect(inventoryAdjustmentToEvent(makeInventoryAdjustment()).event_type).toBe("adjust_inventory");
     });
 
     it("hero_text is '<gas>: full +<n> | empty <n>' format", () => {

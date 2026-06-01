@@ -119,6 +119,7 @@ export async function createCompanyPayment(payload: CompanyPaymentCreateInput): 
   const happened_at =
     payload.happened_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/company/payments", {
+    kind: payload.kind,
     amount: toMinorUnits(payload.amount),
     note: payload.note,
     request_id: payload.request_id,

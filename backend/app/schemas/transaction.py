@@ -94,6 +94,7 @@ class CompanyCylinderSettleOut(SQLModel):
 
 
 class CompanyPaymentCreate(SQLModel):
+  kind: Optional[Literal["payment_to_company", "payment_from_company"]] = None
   amount: int
   note: Optional[str] = None
   request_id: Optional[str] = None

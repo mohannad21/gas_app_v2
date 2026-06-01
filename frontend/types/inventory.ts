@@ -66,6 +66,7 @@ export const InventorySnapshotSchema = z.object({
 export type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;
 
 export const InventoryRefillDetailsSchema = z.object({
+  kind: z.enum(["refill", "dist_return_empties"]).default("refill"),
   refill_id: z.string(),
   business_date: z.string(),
   time_of_day: z.enum(["morning", "evening"]).optional(),

@@ -38,6 +38,7 @@ export const CompanyPaymentSchema = z.object({
 });
 export type CompanyPayment = z.infer<typeof CompanyPaymentSchema>;
 export type CompanyPaymentCreateInput = {
+  kind?: "payment_to_company" | "payment_from_company";
   amount: number;
   note?: string;
   date?: string;

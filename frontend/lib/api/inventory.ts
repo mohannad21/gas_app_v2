@@ -36,6 +36,7 @@ export async function initInventory(payload: {
 }
 
 export async function createInventoryRefill(payload: {
+  kind?: "refill" | "dist_return_empties";
   date: string;
   time?: string;
   effective_at?: string;
@@ -55,6 +56,7 @@ export async function createInventoryRefill(payload: {
   const happened_at =
     payload.effective_at ?? buildActivityHappenedAt({ date: payload.date, time: payload.time });
   const { data } = await api.post("/inventory/refill", {
+    kind: payload.kind ?? "refill",
     happened_at,
     buy12: payload.buy12,
     return12: payload.return12,
@@ -108,6 +110,7 @@ export async function getInventoryRefillDetails(refillId: string): Promise<Inven
 export async function updateInventoryRefill(
   refillId: string,
   payload: {
+    kind?: "refill" | "dist_return_empties";
     buy12: number;
     return12: number;
     buy48: number;
@@ -139,6 +142,9 @@ export async function updateInventoryRefill(
   }
   if (payload.debt_cylinders_48 != null) {
     body.debt_cylinders_48 = payload.debt_cylinders_48;
+  }
+  if (payload.kind != null) {
+    body.kind = payload.kind;
   }
   const { data } = await api.put(`/inventory/refills/${refillId}`, body);
   const parsed = parse(InventoryRefillDetailsSchema, data);

@@ -66,6 +66,7 @@ class InventoryInitCreate(SQLModel):
 
 
 class InventoryRefillCreate(SQLModel):
+  kind: Literal["refill", "dist_return_empties"] = "refill"
   happened_at: Optional[datetime] = None
   buy12: int = 0
   return12: int = 0
@@ -122,6 +123,7 @@ class InventoryRefillSummary(SQLModel):
 
 
 class InventoryRefillUpdate(SQLModel):
+  kind: Optional[Literal["refill", "dist_return_empties"]] = None
   buy12: int = 0
   return12: int = 0
   buy48: int = 0
@@ -151,6 +153,7 @@ class InventoryRefillUpdate(SQLModel):
 
 
 class InventoryRefillDetails(SQLModel):
+  kind: Literal["refill", "dist_return_empties"] = "refill"
   refill_id: str
   business_date: str
   time_of_day: Optional[Literal["morning", "evening"]] = None

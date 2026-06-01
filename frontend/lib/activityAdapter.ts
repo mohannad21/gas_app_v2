@@ -135,7 +135,9 @@ export function getCompanyInventoryTotals(refill: InventoryRefillSummary) {
 }
 
 export function getCompanyInventoryEventType(refill: InventoryRefillSummary) {
-  if (refill.kind === "buy_full_from_company" || refill.kind === "buy_iron") return "buy_full_from_company" as const;
+  if (refill.kind === "buy_full_from_company") return "buy_full_from_company" as const;
+  if (refill.kind === "dist_return_empties") return "dist_return_empties" as const;
+  // TODO(T9): remove quantity inference after T2b migration confirmed in all environments
   const totals = getCompanyInventoryTotals(refill);
   const totalReturns = totals.return12 + totals.return48;
   if (totalReturns > 0 && totals.buy12 + totals.buy48 === 0) return "dist_return_empties" as const;
@@ -197,9 +199,14 @@ export function orderToEvent(
   pushTransition(transitions, "customer", "cyl_12", cyl12Before, cyl12After);
   pushTransition(transitions, "customer", "cyl_48", cyl48Before, cyl48After);
 
+  const orderEventType =
+    mode === "sell_iron" ? "sell_full" as const :
+    mode === "buy_iron" ? "buy_empty_from_customer" as const :
+    "replacement" as const;
+
   return {
     ...BASE,
-    event_type: "order",
+    event_type: orderEventType,
     id: order.id,
     effective_at: order.delivered_at,
     created_at: order.created_at,
@@ -251,7 +258,7 @@ export function collectionToEvent(
   let moneyDelta: number | null = null;
 
   if (actionType === "payment") {
-    eventType = "collection_money";
+    eventType = "payment_from_customer";
     contextLine = EVENT_LABELS.COLLECTION_MONEY;
     if (amount > 0) {
       heroText = `Payment ${formatDisplayMoney(amount)}`;
@@ -259,7 +266,7 @@ export function collectionToEvent(
       moneyDelta = amount;
     }
   } else if (actionType === "payout") {
-    eventType = "collection_payout";
+    eventType = "payment_to_customer";
     contextLine = EVENT_LABELS.COLLECTION_PAYOUT;
     if (amount > 0) {
       heroText = `Payout ${formatDisplayMoney(amount)}`;
@@ -267,7 +274,7 @@ export function collectionToEvent(
       moneyDelta = amount;
     }
   } else {
-    eventType = "collection_empty";
+    eventType = "customer_return_empties";
     contextLine = EVENT_LABELS.COLLECTION_EMPTY;
     const parts: string[] = [];
     if (qty12 > 0) parts.push(`${qty12}x12kg`);
@@ -356,7 +363,7 @@ export function customerAdjustmentToEvent(
 
   return {
     ...BASE,
-    event_type: "customer_adjust",
+    event_type: "adjust_customer_balance",
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,
@@ -411,7 +418,7 @@ export function companyBalanceAdjustmentToEvent(adj: CompanyBalanceAdjustment): 
 
   return {
     ...BASE,
-    event_type: "company_adjustment",
+    event_type: "adjust_company_balance",
     id: adj.id,
     effective_at: adj.happened_at,
     created_at: adj.created_at ?? adj.happened_at,
@@ -521,7 +528,7 @@ export function companyPaymentToEvent(payment: CompanyPayment): DailyReportEvent
 
   return {
     ...BASE,
-    event_type: "company_payment",
+    event_type: amount >= 0 ? "payment_to_company" as const : "payment_from_company" as const,
     id: payment.id,
     effective_at: payment.happened_at,
     created_at: payment.happened_at,
@@ -565,7 +572,7 @@ export function bankDepositToEvent(deposit: BankDeposit): DailyReportEvent {
   const display = buildBankDepositDisplay(deposit.direction, amount);
   return {
     ...BASE,
-    event_type: "bank_deposit",
+    event_type: deposit.direction,
     id: deposit.id,
     effective_at: deposit.happened_at,
     created_at: deposit.happened_at,
@@ -589,7 +596,7 @@ export function inventoryAdjustmentToEvent(adj: InventoryAdjustment): DailyRepor
   const heroText = parts.length > 0 ? `${gas}: ${parts.join(" | ")}` : null;
   return {
     ...BASE,
-    event_type: "adjust",
+    event_type: "adjust_inventory",
     id: adj.id,
     effective_at: adj.effective_at,
     created_at: adj.created_at,

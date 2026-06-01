@@ -3,6 +3,7 @@ import { formatTimeHMS, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/d
 
 export type EditRefillEntry = {
   refill_id: string;
+  kind?: "refill" | "dist_return_empties";
   date: string;
   time_of_day?: "morning" | "evening";
   effective_at?: string;

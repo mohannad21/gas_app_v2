@@ -470,6 +470,7 @@ export function RefillForm({
       if (editEntry?.refill_id) {
         await updateRefill.mutateAsync({
           refillId: editEntry.refill_id,
+          kind: formState.isReturnMode ? "dist_return_empties" : "refill",
           buy12: payloadBuy12,
           return12: payloadReturn12,
           buy48: payloadBuy48,
@@ -492,6 +493,7 @@ export function RefillForm({
         });
       } else {
         await createRefill.mutateAsync({
+          kind: formState.isReturnMode ? "dist_return_empties" : "refill",
           date: formState.date,
           time: formState.time,
           buy12: payloadBuy12,

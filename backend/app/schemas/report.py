@@ -55,7 +55,7 @@ class DailyReportCard(SQLModel):
   sold_12kg: int = 0
   sold_48kg: int = 0
   net_today: int = 0
-  has_refill: bool = False
+  has_refill: bool = False  # TODO(T9): rename to has_company_inventory in API and frontend
   wallet_math: DailyReportWalletMath = Field(default_factory=DailyReportWalletMath)
   company_start: int = 0
   company_end: int = 0

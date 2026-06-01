@@ -133,7 +133,7 @@ describe("pipeline: company activities adapter -> SlimActivityRow", () => {
   it('payment_to_company renders canonical label "Payment to company"', () => {
     const event = companyPaymentToEvent(makeCompanyPayment({ amount: 50, live_debt_cash: 100 }));
 
-    expect(event.event_type).toBe("company_payment");
+    expect(event.event_type).toBe("payment_to_company");
     expect(event.money_direction).toBe("out");
 
     const { getAllByText } = render(<SlimActivityRow event={event} formatMoney={fmt} />);
@@ -143,7 +143,7 @@ describe("pipeline: company activities adapter -> SlimActivityRow", () => {
   it('payment_from_company renders canonical label "Payment from company"', () => {
     const event = companyPaymentToEvent(makeCompanyPayment({ amount: -30, live_debt_cash: 70 }));
 
-    expect(event.event_type).toBe("company_payment");
+    expect(event.event_type).toBe("payment_from_company");
     expect(event.money_direction).toBe("in");
 
     const { getAllByText } = render(<SlimActivityRow event={event} formatMoney={fmt} />);
@@ -153,7 +153,7 @@ describe("pipeline: company activities adapter -> SlimActivityRow", () => {
   it('adjust_company_balance renders canonical label "Adjust company balance"', () => {
     const event = companyBalanceAdjustmentToEvent(makeCompanyAdjustment());
 
-    expect(event.event_type).toBe("company_adjustment");
+    expect(event.event_type).toBe("adjust_company_balance");
 
     const { getAllByText } = render(<SlimActivityRow event={event} formatMoney={fmt} />);
     expect(getAllByText("Adjust company balance").length).toBeGreaterThan(0);

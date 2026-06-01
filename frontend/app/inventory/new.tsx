@@ -676,7 +676,13 @@ function CompanyPaymentForm({
   walletBalance: number;
   balanceReady: boolean;
   isSubmitting?: boolean;
-  onCreate: (payload: { date: string; time?: string; amount: number; note?: string }) => Promise<CompanyPayment>;
+  onCreate: (payload: {
+    kind: "payment_to_company" | "payment_from_company";
+    date: string;
+    time?: string;
+    amount: number;
+    note?: string;
+  }) => Promise<CompanyPayment>;
   onSaved: () => void;
   onSaveSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
   onSaveAndAddSuccess?: (details: { effectiveAt: string; highlightEventType?: string; highlightId?: string }) => void;
@@ -746,6 +752,7 @@ function CompanyPaymentForm({
     }
     try {
       const created = await onCreate({
+        kind: paymentDirection === "pay" ? "payment_to_company" : "payment_from_company",
         date: payDate,
         time: payTime,
         amount: normalizedAmount,
@@ -1039,6 +1046,7 @@ export default function InventoryNewScreen() {
     if (!detail) return null;
     return {
       refill_id: detail.refill_id,
+      kind: detail.kind,
       date: detail.business_date,
       time_of_day: detail.time_of_day ?? "morning",
       effective_at: detail.effective_at,
@@ -1061,6 +1069,7 @@ export default function InventoryNewScreen() {
   const company48Balance = companyBalances?.company_cyl_48 ?? 0;
   const paymentTabDisabled = !companyBalanceReady || companyBalance === 0;
   const returnTabDisabled = !companyBalanceReady || (company12Balance >= 0 && company48Balance >= 0);
+  const isEditingReturn = refillDetailsQuery.data?.kind === "dist_return_empties";
   const closeScreen = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
@@ -1099,6 +1108,16 @@ export default function InventoryNewScreen() {
   }, [section, resolveTab]);
 
   useEffect(() => {
+    const detail = refillDetailsQuery.data;
+    if (!detail) return;
+    if (detail.kind === "dist_return_empties") {
+      setActiveTab("return");
+    } else {
+      setActiveTab("refill");
+    }
+  }, [refillDetailsQuery.data]);
+
+  useEffect(() => {
     if (section === "ledger" && activeTab !== "cash" && activeTab !== "inventory") {
       setActiveTab(resolveTab("ledger"));
       return;
@@ -1106,10 +1125,10 @@ export default function InventoryNewScreen() {
     if (activeTab === "payment" && paymentTabDisabled) {
       setActiveTab("refill");
     }
-    if (activeTab === "return" && returnTabDisabled) {
+    if (activeTab === "return" && returnTabDisabled && !isEditingReturn) {
       setActiveTab("refill");
     }
-  }, [activeTab, paymentTabDisabled, returnTabDisabled, section, resolveTab]);
+  }, [activeTab, isEditingReturn, paymentTabDisabled, returnTabDisabled, section, resolveTab]);
 
   return (
     <SafeAreaView style={styles.hubSafeArea} edges={["bottom"]}>
@@ -1139,7 +1158,7 @@ export default function InventoryNewScreen() {
                         ? "Adjust Wallet"
                         : "Adjust Inventory";
             const disabled =
-              tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled : false;
+              tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled && !isEditingReturn : false;
             return (
               <Pressable
                 key={tab}
@@ -1175,7 +1194,7 @@ export default function InventoryNewScreen() {
             onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
             onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             accessoryId={accessoryId}
-            editEntry={activeTab === "refill" ? editRefill : null}
+            editEntry={activeTab === "refill" || activeTab === "return" ? editRefill : null}
             showHeader={false}
             useCard={false}
             mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
