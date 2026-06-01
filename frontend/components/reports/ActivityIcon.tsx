@@ -7,7 +7,6 @@ type Props = {
   eventType: string;
   orderMode?: string | null;
   moneyDirection?: string | null;
-  transferDirection?: string | null;
   color: string;
   size?: number;
 };
@@ -53,14 +52,12 @@ export default function ActivityIcon({
   eventType,
   orderMode,
   moneyDirection,
-  transferDirection,
   color,
   size = 22,
 }: Props) {
   const kind = normalizeEventType(eventType, {
     order_mode: orderMode ?? undefined,
     money_direction: moneyDirection ?? undefined,
-    transfer_direction: transferDirection ?? undefined,
   });
   const meta = kind ? ACTIVITY_KIND_META[kind] : null;
   const spec: IconSpec = meta ? meta.icon : { arrow: "none", symbol: null };
@@ -183,7 +180,6 @@ function renderMoney(box: Box, color: string) {
         fontWeight="700"
         alignmentBaseline="middle"
         textAnchor="middle"
-        dominantBaseline="middle"
       >
         $
       </SvgText>

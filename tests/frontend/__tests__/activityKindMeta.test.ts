@@ -53,61 +53,58 @@ describe("normalizeEventType", () => {
     }
   });
 
-  it('maps legacy "order" to "replacement" with no order_mode', () => {
-    expect(normalizeEventType("order")).toBe("replacement");
+  it('returns null for legacy "order" (alias removed)', () => {
+    expect(normalizeEventType("order")).toBeNull();
+    expect(normalizeEventType("order", { order_mode: "replacement" })).toBeNull();
+    expect(normalizeEventType("order", { order_mode: "sell_iron" })).toBeNull();
+    expect(normalizeEventType("order", { order_mode: "buy_iron" })).toBeNull();
   });
 
-  it('maps legacy "order" using order_mode context', () => {
-    expect(normalizeEventType("order", { order_mode: "replacement" })).toBe("replacement");
-    expect(normalizeEventType("order", { order_mode: "sell_iron" })).toBe("sell_full");
-    expect(normalizeEventType("order", { order_mode: "buy_iron" })).toBe("buy_empty_from_customer");
+  it("returns null for legacy collection aliases (removed)", () => {
+    expect(normalizeEventType("collection_money")).toBeNull();
+    expect(normalizeEventType("collection_payout")).toBeNull();
+    expect(normalizeEventType("collection_empty")).toBeNull();
   });
 
-  it("maps legacy collection aliases", () => {
-    expect(normalizeEventType("collection_money")).toBe("payment_from_customer");
-    expect(normalizeEventType("collection_payout")).toBe("payment_to_customer");
-    expect(normalizeEventType("collection_empty")).toBe("customer_return_empties");
+  it('returns null for legacy "customer_adjust" (alias removed)', () => {
+    expect(normalizeEventType("customer_adjust")).toBeNull();
   });
 
-  it('maps legacy "customer_adjust" to "adjust_customer_balance"', () => {
-    expect(normalizeEventType("customer_adjust")).toBe("adjust_customer_balance");
+  it('returns null for legacy company buy aliases (removed)', () => {
+    expect(normalizeEventType("company_buy_full")).toBeNull();
+    expect(normalizeEventType("company_buy_iron")).toBeNull();
   });
 
-  it('maps legacy "company_buy_full" and "company_buy_iron" to "buy_full_from_company"', () => {
-    expect(normalizeEventType("company_buy_full")).toBe("buy_full_from_company");
-    expect(normalizeEventType("company_buy_iron")).toBe("buy_full_from_company");
+  it('returns null for legacy "buy_iron" (alias removed)', () => {
+    expect(normalizeEventType("buy_iron")).toBeNull();
   });
 
-  it('maps legacy "buy_iron" to "buy_empty_from_customer"', () => {
-    expect(normalizeEventType("buy_iron")).toBe("buy_empty_from_customer");
+  it('returns null for legacy "company_payment" (alias removed)', () => {
+    expect(normalizeEventType("company_payment", { money_direction: "in" })).toBeNull();
+    expect(normalizeEventType("company_payment", { money_direction: "out" })).toBeNull();
+    expect(normalizeEventType("company_payment")).toBeNull();
   });
 
-  it('maps legacy "company_payment" using money_direction', () => {
-    expect(normalizeEventType("company_payment", { money_direction: "in" })).toBe("payment_from_company");
-    expect(normalizeEventType("company_payment", { money_direction: "out" })).toBe("payment_to_company");
-    expect(normalizeEventType("company_payment")).toBe("payment_to_company");
+  it('returns null for legacy "company_adjustment" (alias removed)', () => {
+    expect(normalizeEventType("company_adjustment")).toBeNull();
   });
 
-  it('maps legacy "company_adjustment" to "adjust_company_balance"', () => {
-    expect(normalizeEventType("company_adjustment")).toBe("adjust_company_balance");
+  it('returns null for legacy "company_return_empties" (alias removed)', () => {
+    expect(normalizeEventType("company_return_empties")).toBeNull();
   });
 
-  it('maps legacy "company_return_empties" to "dist_return_empties"', () => {
-    expect(normalizeEventType("company_return_empties")).toBe("dist_return_empties");
+  it('returns null for legacy "cash_adjust" (alias removed)', () => {
+    expect(normalizeEventType("cash_adjust")).toBeNull();
   });
 
-  it('maps legacy "cash_adjust" to "adjust_wallet"', () => {
-    expect(normalizeEventType("cash_adjust")).toBe("adjust_wallet");
+  it('returns null for legacy "adjust" (alias removed)', () => {
+    expect(normalizeEventType("adjust")).toBeNull();
   });
 
-  it('maps legacy "adjust" to "adjust_inventory"', () => {
-    expect(normalizeEventType("adjust")).toBe("adjust_inventory");
-  });
-
-  it('maps legacy "bank_deposit" using transfer_direction', () => {
-    expect(normalizeEventType("bank_deposit", { transfer_direction: "wallet_to_bank" })).toBe("wallet_to_bank");
-    expect(normalizeEventType("bank_deposit", { transfer_direction: "bank_to_wallet" })).toBe("bank_to_wallet");
-    expect(normalizeEventType("bank_deposit")).toBe("wallet_to_bank");
+  it('returns null for legacy "bank_deposit" (alias removed)', () => {
+    expect(normalizeEventType("bank_deposit", { transfer_direction: "wallet_to_bank" })).toBeNull();
+    expect(normalizeEventType("bank_deposit", { transfer_direction: "bank_to_wallet" })).toBeNull();
+    expect(normalizeEventType("bank_deposit")).toBeNull();
   });
 
   it("returns null for unknown strings", () => {

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies } from "@/constants/typography";
 
-const ORDER_KINDS = new Set(["order", "replacement", "sell_full", "buy_empty_from_customer"]);
+const ORDER_KINDS = new Set(["replacement", "sell_full", "buy_empty_from_customer"]);
 
 function DeltaBox({
   testID,
@@ -274,19 +274,19 @@ export default function EventExpandedPanel({
 
   const content = (() => {
     if (ORDER_KINDS.has(eventType) && inferredGasType) return renderGasTriplet(inferredGasType);
-    if ((eventType === "collection_empty" || eventType === "customer_return_empties") && inferredGasType)
+    if (eventType === "customer_return_empties" && inferredGasType)
       return renderSparseGasState(inferredGasType);
-    if (eventType === "collection_money" || eventType === "payment_from_customer" || eventType === "collection_payout" || eventType === "payment_to_customer")
+    if (eventType === "payment_from_customer" || eventType === "payment_to_customer")
       return renderCenteredWalletOnly(eventType);
-    if (eventType === "expense" || eventType === "bank_deposit" || eventType === "bank_to_wallet" || eventType === "wallet_to_bank" || eventType === "cash_adjust" || eventType === "adjust_wallet")
+    if (eventType === "expense" || eventType === "bank_to_wallet" || eventType === "wallet_to_bank" || eventType === "adjust_wallet")
       return renderCenteredWalletOnly(eventType);
-    if (eventType === "refill" || eventType === "company_buy_full" || eventType === "buy_full_from_company") {
+    if (eventType === "refill" || eventType === "buy_full_from_company") {
       if (touches12 && touches48) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "mixed" });
       if (touches12) return renderGasTriplet("12kg");
       if (touches48) return renderGasTriplet("48kg");
       if (hasCash) return renderCenteredWalletOnly(eventType);
     }
-    if (eventType === "adjust" || eventType === "adjust_inventory") {
+    if (eventType === "adjust_inventory") {
       const cylinderBoxes = [
         has12InventoryState ? renderTopStateBox({ key: "adjust-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }) : null,
         has12InventoryState ? renderTopStateBox({ key: "adjust-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }) : null,

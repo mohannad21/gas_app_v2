@@ -127,7 +127,9 @@
       "Bash(Select-Object Name)",
       "Read(//c/Users/Mohannad/gas_app_v2/**)",
       "Bash(ls /mnt/c/Users/Mohannad/gas_app_v2/tests/frontend/__tests__/)",
-      "Read(//mnt/c/Users/Mohannad/gas_app_v2/tests/frontend/**)"
+      "Read(//mnt/c/Users/Mohannad/gas_app_v2/tests/frontend/**)",
+      "Bash(Select-String -Pattern \"init_customer|init_company|init_inventory|system_init\")",
+      "Bash(Select-Object -First 20)"
     ],
     "additionalDirectories": [
       "\\tmp"

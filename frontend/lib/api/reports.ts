@@ -1,5 +1,4 @@
 import { fromMinorUnits } from "@/lib/money";
-import { normalizeBankDepositDisplayEvent } from "@/lib/activityAdapter";
 import {
   DailyReportCard,
   DailyReportCardSchema,
@@ -44,9 +43,8 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
       wallet_in: fromMinorUnits(parsed.audit_summary.wallet_in),
       new_debt: fromMinorUnits(parsed.audit_summary.new_debt),
     },
-    events: parsed.events.map((ev) =>
-      normalizeBankDepositDisplayEvent({
-        ...ev,
+    events: parsed.events.map((ev) => ({
+      ...ev,
       wallet_before: ev.wallet_before != null ? fromMinorUnits(ev.wallet_before) : ev.wallet_before,
       wallet_after: ev.wallet_after != null ? fromMinorUnits(ev.wallet_after) : ev.wallet_after,
       company_before: ev.company_before != null ? fromMinorUnits(ev.company_before) : ev.company_before,
@@ -101,7 +99,6 @@ export async function getDailyReport(date: string): Promise<DailyReportDay> {
           )
         : ev.action_pills,
       balance_transitions: mapBalanceTransitionAmounts(ev.balance_transitions) ?? ev.balance_transitions,
-    })
-    ),
+    })),
   };
 }

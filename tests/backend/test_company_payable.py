@@ -64,6 +64,7 @@ def test_company_payment_affects_cash_and_company(client) -> None:
     resp = client.post(
         "/company/payments",
         json={
+            "kind": "payment_to_company",
             "date": day1.isoformat(),
             "amount": 50,
             "note": "pay supplier",
@@ -123,6 +124,7 @@ def test_option_b_cascade_with_company_payable(client) -> None:
     resp = client.post(
         "/company/payments",
         json={
+            "kind": "payment_to_company",
             "date": day2.isoformat(),
             "amount": 50,
             "note": "pay supplier",
@@ -173,6 +175,7 @@ def test_company_payment_drops_cash_and_payable(client) -> None:
     resp = client.post(
         "/company/payments",
         json={
+            "kind": "payment_to_company",
             "date": day1.isoformat(),
             "amount": 2000,
             "note": "pay supplier",

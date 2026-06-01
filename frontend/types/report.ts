@@ -198,7 +198,6 @@ export const DailyReportEventSchema = z.object({
   money_amount: z.number().nullish(),
   money_direction: z.enum(["in", "out", "none"]).nullish(),
   money_received: z.number().nullish(),
-  transfer_direction: z.enum(["wallet_to_bank", "bank_to_wallet"]).nullish(),
   settlement: Level3SettlementSchema.nullish(),
   open_actions: z.array(Level3ActionSchema).nullish(),
   order_mode: OrderModeSchema.nullish(),
