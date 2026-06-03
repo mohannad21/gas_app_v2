@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id, require_permission
+from app.auth import get_current_user, get_tenant_id, require_permission
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, LedgerEntry
 from app.schemas import CustomerBalanceOut, CustomerCreate, CustomerOut, CustomerUpdate
@@ -74,6 +74,7 @@ def list_customers(
   customers = session.exec(
     select(Customer)
     .where(Customer.tenant_id == tenant_id)
+    .where(Customer.deleted_at == None)  # noqa: E711
     .order_by(Customer.created_at.desc())
   ).all()
   money_map, cyl12_map, cyl48_map = _customer_balances(session)
@@ -163,6 +164,7 @@ def create_customer(
   payload: CustomerCreate,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+  user_id: Annotated[str, Depends(get_current_user)] = "",
 ) -> CustomerOut:
   customer = Customer(
     tenant_id=tenant_id,
@@ -171,6 +173,7 @@ def create_customer(
     address=payload.address,
     note=payload.note,
     created_at=datetime.now(timezone.utc),
+    created_by=user_id,
   )
   session.add(customer)
   session.commit()
@@ -238,12 +241,15 @@ def delete_customer(
   customer_id: str,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+  user_id: Annotated[str, Depends(get_current_user)] = "",
 ) -> None:
   customer = session.get(Customer, customer_id)
   if not customer:
     return
   if customer.tenant_id != tenant_id:
     raise HTTPException(status_code=404, detail="not_found")
+  if customer.deleted_at is not None:
+    return
   has_txn = session.exec(
     select(func.count(CustomerTransaction.id))
     .where(CustomerTransaction.customer_id == customer.id)
@@ -251,6 +257,8 @@ def delete_customer(
   ).first()
   if has_txn and has_txn > 0:
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="customer_has_transactions")
-  session.delete(customer)
+  customer.deleted_at = datetime.now(timezone.utc)
+  customer.deleted_by = user_id
+  session.add(customer)
   session.commit()
 

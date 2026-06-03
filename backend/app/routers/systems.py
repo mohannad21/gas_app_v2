@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from app.auth import get_tenant_id
+from app.auth import get_current_user, get_tenant_id
 from app.db import get_session
 from app.models import Customer, CustomerTransaction, System
 from app.schemas import SystemCreate, SystemOut, SystemUpdate
@@ -35,7 +35,7 @@ def list_systems(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[SystemOut]:
-  stmt = select(System).where(System.tenant_id == tenant_id).order_by(System.created_at.desc())
+  stmt = select(System).where(System.tenant_id == tenant_id).where(System.deleted_at == None).order_by(System.created_at.desc())  # noqa: E711
   if customer_id:
     stmt = stmt.where(System.customer_id == customer_id)
   systems = session.exec(stmt).all()
@@ -62,6 +62,7 @@ def create_system(
   payload: SystemCreate,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+  user_id: Annotated[str, Depends(get_current_user)] = "",
 ) -> SystemOut:
   customer = session.get(Customer, payload.customer_id)
   if not customer or customer.tenant_id != tenant_id:
@@ -74,6 +75,7 @@ def create_system(
     note=payload.note,
     is_active=payload.is_active,
     created_at=datetime.now(timezone.utc),
+    created_by=user_id,
   )
   _apply_security_fields(
     system,
@@ -154,12 +156,15 @@ def delete_system(
   system_id: str,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+  user_id: Annotated[str, Depends(get_current_user)] = "",
 ) -> None:
   system = session.get(System, system_id)
   if not system:
     return
   if system.tenant_id != tenant_id:
     raise HTTPException(status_code=404, detail="System not found")
+  if system.deleted_at is not None:
+    return
   has_orders = session.exec(
     select(CustomerTransaction.id)
     .where(CustomerTransaction.system_id == system_id)
@@ -173,6 +178,8 @@ def delete_system(
       status_code=status.HTTP_409_CONFLICT,
       detail="system_has_orders",
     )
-  session.delete(system)
+  system.deleted_at = datetime.now(timezone.utc)
+  system.deleted_by = user_id
+  session.add(system)
   session.commit()
 

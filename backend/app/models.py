@@ -32,6 +32,12 @@ class User(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class Tenant(SQLModel, table=True):
@@ -60,6 +66,13 @@ class Tenant(SQLModel, table=True):
   owner_name: Optional[str] = Field(default=None, nullable=True)
   phone: Optional[str] = Field(default=None, nullable=True)
   address: Optional[str] = Field(default=None, nullable=True)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class Session(SQLModel, table=True):
@@ -128,6 +141,11 @@ class PlanEntitlement(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class TenantPlanSubscription(SQLModel, table=True):
@@ -164,6 +182,7 @@ class TenantPlanSubscription(SQLModel, table=True):
     default=None,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
+  cancelled_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class TenantPlanOverride(SQLModel, table=True):
@@ -179,6 +198,11 @@ class TenantPlanOverride(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class BillingEvent(SQLModel, table=True):
@@ -197,6 +221,12 @@ class BillingEvent(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
   created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  currency_code: str = Field(default=DEFAULT_CURRENCY_CODE)
 
 
 class Role(SQLModel, table=True):
@@ -256,6 +286,11 @@ class TenantMembership(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class Invite(SQLModel, table=True):
@@ -299,6 +334,12 @@ class Customer(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class System(SQLModel, table=True):
@@ -330,6 +371,12 @@ class System(SQLModel, table=True):
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class SystemTypeOption(SQLModel, table=True):
@@ -342,6 +389,11 @@ class SystemTypeOption(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class PriceCatalog(SQLModel, table=True):
@@ -362,6 +414,12 @@ class PriceCatalog(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class ExpenseCategory(SQLModel, table=True):
@@ -374,6 +432,11 @@ class ExpenseCategory(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
 class Expense(SQLModel, table=True):
@@ -652,4 +715,9 @@ class SystemSettings(SQLModel, table=True):
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
   )
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
 
