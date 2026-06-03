@@ -1,7 +1,7 @@
 # Activity Kind Refactoring — Ticket Plan
 
-**Last updated:** 2026-06-01
-**Status:** T1–T6, T-ICONS, T-ICON-LAYOUT complete. **T2b is next**, then T4-CLEANUP, then T7.
+**Last updated:** 2026-06-03
+**Status:** T1–T9 complete. **T4-CLEANUP** and **T10** pending.
 
 ---
 
@@ -2224,7 +2224,7 @@ If canonical aliases are introduced, update frontend API hooks and cache keys su
 |---|---|---|---|---|
 | T1 | Docs | `ACTIVITY_KIND_NAMING.md` finalized | COMPLETE | — |
 | T2 | Backend | Canonical event types, aligned labels, bank split | COMPLETE | T1 |
-| T2b | Write Path | All write paths store canonical kind at creation time; migration backfills bad rows | PENDING | T2 |
+| T2b | Write Path | All write paths store canonical kind at creation time; migration backfills bad rows | COMPLETE | T2 |
 | T3 | Backend Tests | 18-kind coverage, contract locked | COMPLETE | T2 |
 | T4 | Frontend Metadata | `activityKindMeta.ts`, `normalizeEventType()`, `IconSpec` | COMPLETE (gap) | T1 |
 | T4-CLEANUP | Raw branch cleanup | Remove raw `event_type` branches in SlimActivityRow, EventExpandedPanel, reports/index, customers/[id] | PENDING | T4 |
@@ -2233,9 +2233,9 @@ If canonical aliases are introduced, update frontend API hooks and cache keys su
 | T6-TESTS | Test Fixes | 10 test files updated to match T5+T6 behavior | COMPLETE | T6 |
 | T-ICONS | Icon Renderer | SVG symbol+arrow renderer replacing Ionicons fallback | COMPLETE | T4 |
 | T-ICON-LAYOUT | Icon Layout | Fix left gap, size, and symbol/arrow alignment in row | COMPLETE | T-ICONS |
-| T7 | Frontend Tests | Adapter + display coverage, pre-migration safety net | PENDING | T4-CLEANUP, T5, T6, T-ICONS |
-| T8 | Frontend Adapter | `activityAdapter.ts` emits canonical kinds only | PENDING | T4, T7 |
-| T9 | Cleanup | Dead aliases removed, `transfer_direction` dropped | PENDING | T3, T7, T8 |
+| T7 | Frontend Tests | Adapter + display coverage, pre-migration safety net | COMPLETE | T4-CLEANUP, T5, T6, T-ICONS |
+| T8 | Frontend Adapter | `activityAdapter.ts` emits canonical kinds only | COMPLETE | T4, T7 |
+| T9 | Cleanup | Dead aliases removed, `transfer_direction` dropped | COMPLETE | T3, T7, T8 |
 | T10 | Opening Balance Visibility | `init_customer`, `init_company`, `init_inventory` canonical kinds; visible on correct screens | PENDING | T9 |
 
 ---
@@ -2258,11 +2258,50 @@ These tickets address structural database problems identified in the full schema
 
 ---
 
+### Database Ticket Implementation Guardrails
+
+These rules apply to every DB-T ticket. They exist to prevent later DB work from undoing completed activity-kind refactoring or prior DB tickets.
+
+**Required preflight before editing code:**
+1. Read the current DB ticket and every dependency listed in the table above.
+2. If any touched file also participated in T2/T2b/T8/T9/T10 activity-kind work, read `ACTIVITY_KIND_NAMING.md`, `ACTIVITY_KIND_APPROVAL.md`, and the relevant git commits before changing it.
+3. Inspect history for the files in scope with `git log --oneline -- <files>` and inspect relevant commits with `git show <commit> -- <files>`.
+4. Run `rg` for every symbol being changed (`kind`, `event_type`, `source_type`, table name, helper name, migration id) before deciding whether code is missing or intentionally removed.
+
+**Do not regress completed activity-kind work:**
+- Do not reintroduce legacy report/display aliases removed by T9: `order`, `collection_money`, `collection_payout`, `collection_empty`, `customer_adjust`, `company_payment`, `company_adjustment`, `company_buy_iron`, `company_buy_full`, `company_return_empties`, `cash_adjust` as display kind, `adjust`, or `bank_deposit`.
+- Do not reintroduce `normalizeBankDepositDisplayEvent()`. It was a temporary T8 bank-deposit compatibility shim and was intentionally removed in T9.
+- Do not infer activity identity from amount sign, label text, hero text, or quantities unless the current ticket explicitly names a temporary shim and its removal ticket.
+- After T9, `/company/payments` requires explicit `kind`; missing `kind` returns `422 kind_required`. Do not restore amount-sign inference.
+- `company_transactions.kind`, `customer_transactions.kind`, and report `event_type` values must be canonical `ActivityKind` values, not legacy aliases.
+
+**Keep namespaces separate:**
+- `LedgerSourceType` values in `ledger_entries.source_type` are not display activity kinds. Protected source types include `customer_txn`, `company_txn`, `inventory_adjust`, `expense`, `cash_adjust`, and `system_init`.
+- Renaming tables or models does not automatically rename ledger `source_type` values. In particular, `cash_adjust` and `inventory_adjust` remain stable ledger source discriminators unless a ticket explicitly changes all source rows and all readers together.
+- Add-screen filter/list kinds and API route names are separate namespaces. Do not treat them as report `ActivityKind` values.
+
+**Test interpretation rule:**
+- If a test asserts behavior that a completed ticket intentionally removed, update the stale test. Do not restore removed production code just to satisfy stale assertions.
+- If a test exposes an unclear semantic mismatch, investigate the approved naming/docs before changing production code.
+
+**Migration discipline:**
+- Create new migrations for DB-ticket work. Do not edit existing migrations unless the ticket explicitly says to repair that migration file.
+- Before writing a migration, confirm the latest `down_revision` and whether another unmerged migration already exists in the same branch.
+- Keep each migration scoped to the current ticket; do not bundle unrelated DB cleanup.
+
+---
+
 ## DB-T1 — Ledger Integrity
 
 **Goal:** Fix the ledger's core correctness before anything else. All work is contained to `posting.py` and one migration.
 
 **Why first:** `_insert_ledger_entries()` currently stamps every ledger entry with `DEFAULT_TENANT_ID` regardless of which tenant created the source transaction. In a multi-tenant deployment this produces wrong balances and wrong reports for every tenant except the default one. This is producing incorrect data right now.
+
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Inspect prior activity-kind migrations before touching `source_type` or `kind`; do not reverse correct `customer_transactions.kind` or `company_transactions.kind` canonicalization.
+- Do not touch unrelated router call sites for reversal behavior unless this ticket explicitly includes them.
+- Preserve post-T9 company payment explicit-kind behavior; DB-T1 must not reintroduce amount-sign inference.
 
 **Work:**
 
@@ -2320,6 +2359,12 @@ Fix options (choose one):
 ---
 
 ## DB-T2 — Constraints and Integrity
+
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Check the latest model code and migrations before adding constraints; do not duplicate constraints that already exist.
+- Removing the default on `company_transactions.kind` strengthens the post-T9 explicit-kind contract. Do not add route-level inference as a replacement.
+- Check constraints for `kind` fields must allow canonical `ActivityKind` values only, not legacy aliases removed by T9.
 
 **Goal:** Make the database reject bad data at the schema level. This is migration-only work — no application logic changes except removing one dangerous default.
 
@@ -2385,6 +2430,12 @@ Many columns on `company_transactions` are meaningless for certain kinds (e.g. a
 
 ## DB-T3 — Soft Delete and Audit Trail
 
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Preserve existing tenant filters while adding soft-delete filters; never replace tenant isolation with soft-delete logic.
+- Check every affected router for prior audit/soft-delete work before editing so existing behavior is extended, not overwritten.
+- Do not reintroduce `init*` activity aliases or visible `system_init` behavior while changing delete/report queries.
+
 **Goal:** Enable safe deletion of core entities and fill all missing audit trail columns. All changes are additive — no existing data or behavior is modified.
 
 **Work:**
@@ -2433,6 +2484,12 @@ Add `currency_code: str` (default `DEFAULT_CURRENCY_CODE`) to `billing_events`. 
 
 ## DB-T4 — Tenant Isolation of Config Tables
 
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Confirm whether DB-T1 already removed `DEFAULT_TENANT_ID` from ledger posting before adding tenant backfills elsewhere.
+- Do not use `DEFAULT_TENANT_ID` as a new runtime fallback for tenant-owned rows; it is allowed only for explicit one-time backfills described by the ticket.
+- When updating routers, preserve canonical activity `kind`/`event_type` behavior and explicit company-payment `kind` validation.
+
 **Goal:** Ensure every tenant-owned piece of data belongs to a tenant. Currently prices, expense categories, system settings, sessions, and tenant-specific roles are shared globally or under-scoped.
 
 **Work:**
@@ -2475,6 +2532,13 @@ Composite same-tenant foreign keys are possible, but they require careful schema
 ## DB-T5 — Performance and Structural Cleanup
 
 **Precondition:** T8 and T9 of the activity kind refactoring must be complete before removing `customer_transactions.mode`.
+
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Before removing `customer_transactions.mode`, run `rg "\.mode|mode\b|order_mode"` across backend, frontend, and tests; classify each remaining reference before deleting the column.
+- Do not remove `company_transactions.kind` or `customer_transactions.kind`; they are canonical activity identity fields and remain required after T9.
+- The `cash_adjustments` table rename must not rename `ledger_entries.source_type = "cash_adjust"` unless a dedicated ledger-source migration explicitly updates every writer and reader.
+- If removing `group_id`, prove it is unused with `rg "group_id"` across routers, posting, reports, tests, scripts, and migrations.
 
 **Goal:** Fix the timestamp race condition, add missing indexes, and clean up structural debt accumulated during development.
 
@@ -2553,6 +2617,13 @@ Both `cash_adjustments` and `expenses` have a `group_id` column. Verify whether 
 
 **Precondition:** DB-T5 complete (stable schema). Activity kind refactoring T8/T9 complete (canonical kinds in place).
 
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Verify DB-T5 structural changes first, especially table/model names and whether `customer_transactions.mode` has already been removed.
+- Cost-layer logic must branch on canonical `kind` values (`refill`, `buy_full_from_company`, `replacement`, `sell_full`) and never on legacy aliases or display labels.
+- Do not infer company inventory activity identity from quantities; use the stored canonical `CompanyTransaction.kind`.
+- When touching posting, preserve DB-T1 tenant propagation and reversal linkage.
+
 **Goal:** Record the actual purchase cost of each cylinder batch and use it to calculate real gross profit per sale. Currently the system has no concept of "what did this specific cylinder cost to buy" — profit reports use today's price from the catalog, which is wrong when prices have changed since the last refill.
 
 **How it works:** Every refill creates a cost layer recording the price and quantity of that batch. Sales consume from the oldest layer first (FIFO). Each sale transaction records the weighted average cost of the cylinders it consumed. Gross profit = `total - (installed × buy_price_snapshot)`.
@@ -2623,6 +2694,13 @@ Only include rows where `buy_price_snapshot IS NOT NULL` (i.e. sales after this 
 ## DB-T7 — Dedicated Bank Transfers Table
 
 **Precondition:** DB-T5 complete (stable schema, `wallet_adjustments` rename done). Activity kind refactoring T2 complete (canonical bank event types in API).
+
+**Preflight / anti-regression:**
+- Apply the shared Database Ticket Implementation Guardrails before editing.
+- Verify T8/T9 bank split state before touching bank-transfer display/report code: production reports must use `wallet_to_bank` and `bank_to_wallet`, not `bank_deposit`.
+- Do not reintroduce `transfer_direction` or `bank_deposit` display compatibility shims removed by T9.
+- Route direction from the stored bank-transfer `direction` column only; do not infer from labels, signs, or hero text.
+- Moving deposits out of `expenses` must preserve expense reporting for real expenses and must not reintroduce `expenses.kind = "deposit"` as a runtime path after cleanup.
 
 **Goal:** Bank transfers (currently stored as `expenses.kind="deposit"`) are moved to a dedicated `bank_transfers` table. After this ticket, `expenses` stores only real business expenses (fuel, insurance, food, etc.).
 

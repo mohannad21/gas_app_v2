@@ -47,7 +47,7 @@ export type CompanyPaymentCreateInput = {
   request_id?: string;
 };
 
-export const CompanyBuyIronSchema = z.object({
+export const CompanyBuyFullSchema = z.object({
   id: z.string(),
   happened_at: z.string(),
   new12: z.number(),
@@ -56,8 +56,8 @@ export const CompanyBuyIronSchema = z.object({
   paid_amount: z.number(),
   note: z.string().nullish(),
 });
-export type CompanyBuyIron = z.infer<typeof CompanyBuyIronSchema>;
-export type CompanyBuyIronCreateInput = {
+export type CompanyBuyFull = z.infer<typeof CompanyBuyFullSchema>;
+export type CompanyBuyFullCreateInput = {
   new12: number;
   new48: number;
   total_cost: number;

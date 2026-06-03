@@ -335,7 +335,11 @@ def test_company_payment_payout_expanded_details(client) -> None:
 
     resp = client.post(
         "/company/payments",
-        json={"amount": 80, "happened_at": iso_at(day.isoformat(), "morning")},
+        json={
+            "amount": 80,
+            "kind": "payment_to_company",
+            "happened_at": iso_at(day.isoformat(), "morning"),
+        },
     )
     assert resp.status_code == 201, resp.text
 
@@ -353,7 +357,11 @@ def test_company_payment_receive_expanded_details(client) -> None:
 
     resp = client.post(
         "/company/payments",
-        json={"amount": -65, "happened_at": iso_at(day.isoformat(), "morning")},
+        json={
+            "amount": -65,
+            "kind": "payment_from_company",
+            "happened_at": iso_at(day.isoformat(), "morning"),
+        },
     )
     assert resp.status_code == 201, resp.text
 
@@ -370,15 +378,19 @@ def test_return_empties_to_company_expanded_details(client) -> None:
     _bootstrap_day(client, day=day)
 
     resp = client.post(
-        "/company/cylinders/settle",
+        "/inventory/refill",
         json={
-            "gas_type": "12kg",
-            "quantity": 4,
-            "direction": "return_empty",
+            "kind": "dist_return_empties",
+            "buy12": 0,
+            "return12": 4,
+            "buy48": 0,
+            "return48": 0,
+            "total_cost": 0,
+            "paid_amount": 0,
             "happened_at": iso_at(day.isoformat(), "morning"),
         },
     )
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 200, resp.text
 
     event = _get_event(client, day=day, event_type="dist_return_empties")
     _assert_wallet(event, before=START_WALLET, after=START_WALLET)

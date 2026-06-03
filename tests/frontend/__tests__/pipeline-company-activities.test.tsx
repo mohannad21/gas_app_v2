@@ -94,6 +94,7 @@ describe("pipeline: company activities adapter -> SlimActivityRow", () => {
   it('dist_return_empties renders "Empties to company", not "Refill"', () => {
     const event = refillSummaryToEvent(
       makeRefill({
+        kind: "dist_return_empties",
         buy12: 0,
         buy48: 0,
         return12: 2,

@@ -32,10 +32,10 @@ describe("payment direction wording", () => {
   });
 
   it("uses canonical ACTIVITY_KIND_META labels for activity kinds", () => {
-    expect(formatEventType("collection_money")).toBe("Payment from customer");
-    expect(formatEventType("collection_payout")).toBe("Payment to customer");
-    expect(formatEventType("company_payment")).toBe("Payment to company");
-    expect(formatEventType("company_buy_iron")).toBe("Buy fulls");
+    expect(formatEventType("payment_from_customer")).toBe("Payment from customer");
+    expect(formatEventType("payment_to_customer")).toBe("Payment to customer");
+    expect(formatEventType("payment_to_company")).toBe("Payment to company");
+    expect(formatEventType("buy_full_from_company")).toBe("Buy fulls");
   });
 });
 

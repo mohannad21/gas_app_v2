@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 # These tests verify DELETE endpoints for two company activities:
-#   DELETE /company/buy_iron/{id}
-#   DELETE /company/cylinders/settle/{id}
+#   DELETE /company/buy_iron/{id} (route path unchanged; future rename tracked separately)
+#   DELETE /inventory/refills/{id} for dist_return_empties
 
 from .helpers import (
     DAY0,
@@ -19,8 +19,8 @@ def _inv(client, date=DAY1) -> dict:
     return get_daily_card(client, date)["inventory_end"]
 
 
-class TestDeleteBuyIron:
-    def test_delete_buy_iron_reverts_inventory(self, client, baseline):
+class TestDeleteBuyFullFromCompany:
+    def test_delete_buy_full_from_company_reverts_inventory(self, client, baseline):
         # Post buy_iron: full12 goes from 100 → 105
         result = post_buy_full_from_company(
             client,
@@ -57,7 +57,7 @@ class TestDeleteReturnEmptiesToCompany:
         inv = _inv(client)
         assert inv["empty12"] == 47
 
-        r = client.delete(f"/company/cylinders/settle/{result['id']}")
+        r = client.delete(f"/inventory/refills/{result['id']}")
         assert r.status_code == 204, f"Expected 204, got {r.status_code}: {r.text}"
 
         # After delete, inventory should revert

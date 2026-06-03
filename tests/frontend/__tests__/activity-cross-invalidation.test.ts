@@ -16,7 +16,7 @@ jest.mock("@/lib/api", () => ({
   createCompanyPayment: jest.fn(),
   deleteCompanyPayment: jest.fn(),
   listCompanyPayments: jest.fn(),
-  createCompanyBuyIron: jest.fn(),
+  createBuyFullFromCompany: jest.fn(),
   createInventoryAdjust: jest.fn(),
   createInventoryRefill: jest.fn(),
   deleteInventoryAdjustment: jest.fn(),

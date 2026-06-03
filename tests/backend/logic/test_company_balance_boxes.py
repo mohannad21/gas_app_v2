@@ -222,7 +222,7 @@ class TestPaymentFromCompany:
         # money: -500 + 300 = -200 (they still owe us 200)
         _assert_company(client, money=-200, cyl12=0, cyl48=0)
 
-    def test_receive_full_amount_settles_debt(self, client, baseline):
+    def test_receive_payment_full_amount_settles_debt(self, client, baseline):
         # Overpay by 400 → company owes us 400
         post_payment_to_company(client, amount=2400, happened_at=at(DAY1, 9, 0))
         # Receive all 400 back

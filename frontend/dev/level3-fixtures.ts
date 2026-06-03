@@ -8,7 +8,7 @@ const baseEvent = {
 export const level3Fixtures: DailyReportEvent[] = [
   {
     ...baseEvent,
-    event_type: "order",
+    event_type: "replacement",
     effective_at: "2026-02-14T09:00:00Z",
     created_at: "2026-02-14T09:00:00Z",
     source_id: "evt-replace-settled",
@@ -37,7 +37,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "order",
+    event_type: "replacement",
     effective_at: "2026-02-14T09:30:00Z",
     created_at: "2026-02-14T09:30:00Z",
     source_id: "evt-replace-unsettled",
@@ -93,7 +93,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "order",
+    event_type: "replacement",
     effective_at: "2026-02-14T10:00:00Z",
     created_at: "2026-02-14T10:00:00Z",
     source_id: "evt-replace-owe-full",
@@ -140,7 +140,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "order",
+    event_type: "sell_full",
     effective_at: "2026-02-14T10:30:00Z",
     created_at: "2026-02-14T10:30:00Z",
     source_id: "evt-sell-full",
@@ -165,7 +165,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "order",
+    event_type: "buy_empty_from_customer",
     effective_at: "2026-02-14T11:00:00Z",
     created_at: "2026-02-14T11:00:00Z",
     source_id: "evt-buy-empty",
@@ -199,7 +199,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "collection_money",
+    event_type: "payment_from_customer",
     effective_at: "2026-02-14T12:00:00Z",
     created_at: "2026-02-14T12:00:00Z",
     source_id: "evt-late-pay",
@@ -231,7 +231,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "collection_empty",
+    event_type: "customer_return_empties",
     effective_at: "2026-02-14T12:30:00Z",
     created_at: "2026-02-14T12:30:00Z",
     source_id: "evt-late-return",
@@ -291,7 +291,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "company_payment",
+    event_type: "payment_to_company",
     effective_at: "2026-02-14T14:00:00Z",
     created_at: "2026-02-14T14:00:00Z",
     source_id: "evt-company-payment",
@@ -323,7 +323,7 @@ export const level3Fixtures: DailyReportEvent[] = [
   },
   {
     ...baseEvent,
-    event_type: "adjust",
+    event_type: "adjust_inventory",
     effective_at: "2026-02-14T15:30:00Z",
     created_at: "2026-02-14T15:30:00Z",
     source_id: "evt-adjust",

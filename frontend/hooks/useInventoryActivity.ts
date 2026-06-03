@@ -18,7 +18,7 @@ export type InventoryActivityItem =
       data: InventoryAdjustment;
     }
   | {
-      kind: "cash_adjustment";
+      kind: "adjust_wallet";
       created_at: string;
       is_deleted: boolean;
       data: CashAdjustment;
@@ -53,7 +53,7 @@ export function useInventoryActivity(date: string, includeDeleted?: boolean) {
     }));
 
     const cashItems = (cashAdjustmentsQuery.data ?? []).map((adjustment) => ({
-      kind: "cash_adjustment" as const,
+      kind: "adjust_wallet" as const,
       created_at: adjustment.effective_at,
       is_deleted: Boolean(adjustment.is_deleted),
       data: adjustment,

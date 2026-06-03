@@ -70,29 +70,6 @@ class ExpenseOut(SQLModel):
   is_deleted: bool = False
 
 
-class CompanyCylinderSettleCreate(SQLModel):
-  gas_type: str
-  quantity: int
-  direction: Literal["receive_full", "return_empty"]
-  happened_at: Optional[datetime] = None
-  note: Optional[str] = None
-  request_id: Optional[str] = None
-
-  @field_validator("quantity")
-  @classmethod
-  def _validate_non_negative(cls, value: Optional[int], info) -> Optional[int]:
-    return _non_negative(value, info.field_name)
-
-
-class CompanyCylinderSettleOut(SQLModel):
-  id: str
-  happened_at: datetime
-  gas_type: str
-  quantity: int
-  direction: Literal["receive_full", "return_empty"]
-  note: Optional[str] = None
-
-
 class CompanyPaymentCreate(SQLModel):
   kind: Optional[Literal["payment_to_company", "payment_from_company"]] = None
   amount: int
@@ -115,7 +92,7 @@ class CompanyPaymentOut(SQLModel):
   live_debt_cash: Optional[int] = None
 
 
-class CompanyBuyIronCreate(SQLModel):
+class CompanyBuyFullCreate(SQLModel):
   new12: int = 0
   new48: int = 0
   total_cost: int = 0
@@ -134,7 +111,7 @@ class CompanyBuyIronCreate(SQLModel):
     return _non_negative(value, info.field_name)
 
 
-class CompanyBuyIronOut(SQLModel):
+class CompanyBuyFullOut(SQLModel):
   id: str
   happened_at: datetime
   new12: int

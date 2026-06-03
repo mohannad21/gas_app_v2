@@ -114,7 +114,7 @@ describe("ReportsScreen filters", () => {
       recalculated: false,
       events: [
         makeEvent({
-          event_type: "order",
+          event_type: "replacement",
           source_id: "order-1",
           customer_name: "Osama",
           label: "Replacement",
@@ -124,17 +124,17 @@ describe("ReportsScreen filters", () => {
           gas_type: "12kg",
         }),
         makeEvent({
-          event_type: "collection_money",
+          event_type: "payment_from_customer",
           source_id: "collection-1",
           customer_name: "Adam",
-          label: "Customer paid",
+          label: "Payment from customer",
           money_amount: 50,
         }),
         makeEvent({
-          event_type: "company_payment",
+          event_type: "payment_to_company",
           source_id: "company-payment-1",
           display_name: "Company",
-          label: "Paid company",
+          label: "Payment to company",
           money_amount: 200,
         }),
         makeEvent({
@@ -144,7 +144,7 @@ describe("ReportsScreen filters", () => {
           label: "Expense",
         }),
         makeEvent({
-          event_type: "cash_adjust",
+          event_type: "adjust_wallet",
           source_id: "cash-adjust-1",
           label: "Wallet adjustment",
           reason: "Manual wallet fix",
@@ -184,22 +184,22 @@ describe("ReportsScreen filters", () => {
   });
 
   it("filters the visible activity list by selected group", () => {
-    const { getByText, queryByText } = render(<ReportsScreen />);
+    const { getAllByText, getByText, queryByText } = render(<ReportsScreen />);
 
-    expect(getByText("Installed: 1x 12kg")).toBeTruthy();
-    expect(getByText("Payment to company 200.00 $")).toBeTruthy();
+    expect(getAllByText("Replace").length).toBeGreaterThan(0);
+    expect(getByText("Payment to company")).toBeTruthy();
     expect(getByText("Fuel")).toBeTruthy();
 
     fireEvent.press(getByText("Expenses"));
 
     expect(getByText("Fuel")).toBeTruthy();
-    expect(queryByText("Installed: 1x 12kg")).toBeNull();
-    expect(queryByText("Payment to company 200.00 $")).toBeNull();
+    expect(queryByText("Replace")).toBeNull();
+    expect(queryByText("Payment to company")).toBeNull();
 
     fireEvent.press(getByText("Expenses"));
 
-    expect(getByText("Installed: 1x 12kg")).toBeTruthy();
-    expect(getByText("Payment to company 200.00 $")).toBeTruthy();
+    expect(getAllByText("Replace").length).toBeGreaterThan(0);
+    expect(getByText("Payment to company")).toBeTruthy();
   });
 
   it("hides empty filter groups when the selected day only has one kind of activity", () => {
@@ -207,7 +207,7 @@ describe("ReportsScreen filters", () => {
       ...mockHookState.v2DayByDate["2025-01-01"],
       events: [
         makeEvent({
-          event_type: "order",
+          event_type: "replacement",
           source_id: "order-only-1",
           customer_name: "Osama",
           label: "Replacement",

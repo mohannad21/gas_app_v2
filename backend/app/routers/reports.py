@@ -565,14 +565,9 @@ def get_daily_report(
     event_source_keys[id(event)] = [("company_txn", txn.id)]
 
   for exp in expenses:
-    transfer_direction = (
-      "bank_to_wallet"
-      if exp.kind == "deposit" and exp.paid_from == "bank"
-      else "wallet_to_bank" if exp.kind == "deposit" else None
-    )
     event_type = (
       AK.BANK_TO_WALLET
-      if transfer_direction == "bank_to_wallet"
+      if exp.kind == "deposit" and exp.paid_from == "bank"
       else AK.WALLET_TO_BANK if exp.kind == "deposit" else AK.EXPENSE
     )
     event = DailyReportEvent(
@@ -583,7 +578,6 @@ def get_daily_report(
       created_at=exp.created_at,
       total_cost=exp.amount,
       expense_type=expense_categories[exp.category_id].name if exp.kind == AK.EXPENSE and exp.category_id and exp.category_id in expense_categories else None,
-      transfer_direction=transfer_direction,
       reason=exp.note,
     )
     events.append(event)

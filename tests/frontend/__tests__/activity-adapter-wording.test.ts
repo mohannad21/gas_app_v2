@@ -104,7 +104,7 @@ describe("activity adapter wording", () => {
         date: "2026-05-05",
         effective_at: "2026-05-05T10:00:00Z",
         created_at: "2026-05-05T10:00:00Z",
-        kind: "buy_iron",
+        kind: "buy_full_from_company",
         buy12: 1,
         buy48: 0,
         return12: 0,

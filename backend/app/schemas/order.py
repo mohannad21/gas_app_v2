@@ -104,7 +104,7 @@ class CollectionCreate(SQLModel):
 
 
 class CollectionUpdate(SQLModel):
-  action_type: Optional[Literal["payment", "payout", "return"]] = None
+  action_type: Literal["payment", "payout", "return"]
   amount_money: Optional[int] = None
   qty_12kg: Optional[int] = None
   qty_48kg: Optional[int] = None

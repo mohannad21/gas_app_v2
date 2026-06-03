@@ -54,7 +54,7 @@ describe("activityAdapter company balance pills", () => {
   it("renders company money transitions and includes unchanged non-zero cylinders for buy-full cards", () => {
     const event = refillSummaryToEvent(
       makeRefill({
-        kind: "buy_iron",
+        kind: "buy_full_from_company",
         buy12: 2,
         buy48: 1,
         new12: 2,

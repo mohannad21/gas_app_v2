@@ -32,7 +32,7 @@ import {
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
 import {
-  useCreateCompanyBuyIron,
+  useCreateBuyFullFromCompany,
   useCreateRefill,
   useInitInventory,
   useInventoryLatest,
@@ -202,7 +202,7 @@ export function RefillForm({
     { delta: -1, label: "-", position: "left" },
     { delta: 1, label: "+", position: "right" },
   ];
-  const createCompanyBuyIron = useCreateCompanyBuyIron();
+  const createBuyFullFromCompany = useCreateBuyFullFromCompany();
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
   const initInventory = useInitInventory();
@@ -431,7 +431,7 @@ export function RefillForm({
     !base ||
     return12Invalid ||
     return48Invalid ||
-    createCompanyBuyIron.isPending ||
+    createBuyFullFromCompany.isPending ||
     createRefill.isPending ||
     updateRefill.isPending ||
     initInventory.isPending;
@@ -482,7 +482,7 @@ export function RefillForm({
           debt_cylinders_48: liveCompanyNet48,
         });
       } else if (formState.isBuyMode) {
-        await createCompanyBuyIron.mutateAsync({
+        await createBuyFullFromCompany.mutateAsync({
           date: formState.date,
           time: formState.time,
           new12: payloadBuy12,
@@ -624,9 +624,9 @@ export function RefillForm({
       onSave={() => handleSave(false)}
       onSaveAndAdd={!useCard ? () => handleSave(true) : undefined}
       saveDisabled={disableSave}
-      saving={formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending}
-      saveLoading={(formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending) && pendingAction === "save"}
-      saveAndAddLoading={(formState.isBuyMode ? createCompanyBuyIron.isPending : createRefill.isPending) && pendingAction === "saveAndAdd"}
+      saving={formState.isBuyMode ? createBuyFullFromCompany.isPending : createRefill.isPending}
+      saveLoading={(formState.isBuyMode ? createBuyFullFromCompany.isPending : createRefill.isPending) && pendingAction === "save"}
+      saveAndAddLoading={(formState.isBuyMode ? createBuyFullFromCompany.isPending : createRefill.isPending) && pendingAction === "saveAndAdd"}
     />
   );
 

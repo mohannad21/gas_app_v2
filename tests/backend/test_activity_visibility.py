@@ -142,11 +142,11 @@ def test_refill_appears_in_day_report(client) -> None:
     )
 
 
-def test_buy_iron_appears_in_day_report(client) -> None:
+def test_buy_full_from_company_appears_in_day_report(client) -> None:
     today = datetime.now(timezone.utc).date().isoformat()
     init_inventory(client, date=today, full12=10, empty12=5, full48=0, empty48=0)
 
-    buy_iron_resp = client.post(
+    buy_full_resp = client.post(
         "/company/buy_iron",
         json={
             "happened_at": f"{today}T12:00:00",
@@ -157,20 +157,20 @@ def test_buy_iron_appears_in_day_report(client) -> None:
             "note": "visibility test",
         },
     )
-    assert buy_iron_resp.status_code == 201
-    buy_iron_id = buy_iron_resp.json()["id"]
+    assert buy_full_resp.status_code == 201
+    buy_full_id = buy_full_resp.json()["id"]
 
     _assert_in_day_report(
         client,
         today,
-        lambda event: event.get("event_type") == "buy_full_from_company" and event.get("source_id") == buy_iron_id,
+        lambda event: event.get("event_type") == "buy_full_from_company" and event.get("source_id") == buy_full_id,
     )
 
     refills_resp = client.get("/inventory/refills")
     assert refills_resp.status_code == 200
     refills = refills_resp.json()
     assert any(
-        refill["refill_id"] == buy_iron_id and refill["kind"] == "buy_full_from_company"
+        refill["refill_id"] == buy_full_id and refill["kind"] == "buy_full_from_company"
         for refill in refills
     )
 
@@ -183,6 +183,7 @@ def test_company_payment_appears_in_day_report(client) -> None:
         json={
             "happened_at": f"{today}T12:00:00",
             "amount": 200,
+            "kind": "payment_to_company",
             "note": "visibility test",
         },
     )

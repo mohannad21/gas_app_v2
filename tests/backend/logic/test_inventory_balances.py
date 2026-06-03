@@ -219,8 +219,8 @@ class TestInventoryRefill:
 # Outright purchase — adds full cylinders only, no empty exchange.
 # full += new, empty unchanged
 
-class TestInventoryBuyIron:
-    def test_buy_iron_12kg(self, client, baseline):
+class TestInventoryBuyFullFromCompany:
+    def test_buy_full_12kg(self, client, baseline):
         post_buy_full_from_company(
             client,
             new12=5, new48=0,
@@ -229,7 +229,7 @@ class TestInventoryBuyIron:
         )
         _assert_inv(client, full12=105, empty12=50, full48=50, empty48=30)
 
-    def test_buy_iron_48kg(self, client, baseline):
+    def test_buy_full_48kg(self, client, baseline):
         post_buy_full_from_company(
             client,
             new12=0, new48=3,
@@ -238,7 +238,7 @@ class TestInventoryBuyIron:
         )
         _assert_inv(client, full12=100, empty12=50, full48=53, empty48=30)
 
-    def test_buy_iron_both_gas_types(self, client, baseline):
+    def test_buy_full_both_gas_types(self, client, baseline):
         post_buy_full_from_company(
             client,
             new12=4, new48=2,

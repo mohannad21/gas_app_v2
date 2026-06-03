@@ -15,7 +15,7 @@ describe("EventExpandedPanel collection boxes", () => {
     const { getByText, queryByText } = render(
       <EventExpandedPanel
         ev={{
-          event_type: "collection_money",
+          event_type: "payment_from_customer",
           wallet_before: 1000,
           wallet_after: 1070,
         }}
@@ -35,7 +35,7 @@ describe("EventExpandedPanel collection boxes", () => {
     const { getByText, queryByText } = render(
       <EventExpandedPanel
         ev={{
-          event_type: "collection_payout",
+          event_type: "payment_to_customer",
           wallet_before: 1000,
           wallet_after: 960,
         }}
@@ -55,7 +55,7 @@ describe("EventExpandedPanel collection boxes", () => {
     const { getByText, queryByText } = render(
       <EventExpandedPanel
         ev={{
-          event_type: "collection_empty",
+          event_type: "customer_return_empties",
           gas_type: "12kg",
           inventory_before: { full12: null, empty12: 5, full48: null, empty48: null },
           inventory_after: { full12: null, empty12: 7, full48: null, empty48: null },
@@ -76,7 +76,7 @@ describe("EventExpandedPanel collection boxes", () => {
     const { getByText, queryByText } = render(
       <EventExpandedPanel
         ev={{
-          event_type: "collection_empty",
+          event_type: "customer_return_empties",
           gas_type: "48kg",
           inventory_before: { full12: null, empty12: null, full48: null, empty48: 2 },
           inventory_after: { full12: null, empty12: null, full48: null, empty48: 3 },

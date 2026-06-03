@@ -154,6 +154,7 @@ describe("activityAdapter company activities", () => {
   it("maps dist_return_empties into company cylinder transitions", () => {
     const event = refillSummaryToEvent(
       makeRefill({
+        kind: "dist_return_empties",
         return12: 2,
         return48: 1,
         live_debt_cash: 0,
@@ -177,7 +178,7 @@ describe("activityAdapter company activities", () => {
   it("maps adjust_company_balance into company balance transitions", () => {
     const event = companyBalanceAdjustmentToEvent(makeCompanyAdjustment());
 
-    expect(event.event_type).toBe("company_adjustment");
+    expect(event.event_type).toBe("adjust_company_balance");
     expect(event.label).toBe("Balance adjustment");
     expect(event.hero_text).toBe("Money 20.00 | 12kg 2 | 48kg 1");
     expect(event.company_before).toBe(100);

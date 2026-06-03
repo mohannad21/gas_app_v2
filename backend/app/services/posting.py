@@ -7,7 +7,6 @@ from typing import Iterable, Optional
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
 from app.models import (
   CompanyTransaction,
   CashAdjustment,
@@ -160,6 +159,7 @@ def derive_day(happened_at: datetime) -> datetime.date:
 def _insert_ledger_entries(
   session: Session,
   *,
+  tenant_id: str,
   source_type: str,
   source_id: str,
   happened_at: datetime,
@@ -171,7 +171,7 @@ def _insert_ledger_entries(
     if line.amount == 0:
       continue
     entry = LedgerEntry(
-      tenant_id=DEFAULT_TENANT_ID,
+      tenant_id=tenant_id,
       source_type=source_type,
       source_id=source_id,
       happened_at=happened_at,
@@ -388,6 +388,7 @@ def post_customer_transaction(session: Session, txn: CustomerTransaction) -> lis
   lines = build_customer_lines(txn)
   return _insert_ledger_entries(
     session,
+    tenant_id=txn.tenant_id,
     source_type="customer_txn",
     source_id=txn.id,
     happened_at=txn.happened_at,
@@ -569,6 +570,7 @@ def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[
   lines = build_company_lines(txn)
   return _insert_ledger_entries(
     session,
+    tenant_id=txn.tenant_id,
     source_type="company_txn",
     source_id=txn.id,
     happened_at=txn.happened_at,
@@ -606,6 +608,7 @@ def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> lis
   lines = build_inventory_adjustment_lines(adj)
   return _insert_ledger_entries(
     session,
+    tenant_id=adj.tenant_id,
     source_type="inventory_adjust",
     source_id=adj.id,
     happened_at=adj.happened_at,
@@ -637,6 +640,7 @@ def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
   lines = build_expense_lines(expense)
   return _insert_ledger_entries(
     session,
+    tenant_id=expense.tenant_id,
     source_type="expense",
     source_id=expense.id,
     happened_at=expense.happened_at,
@@ -656,6 +660,7 @@ def post_cash_adjustment(session: Session, adjustment: CashAdjustment) -> list[L
   lines = build_cash_adjustment_lines(adjustment)
   return _insert_ledger_entries(
     session,
+    tenant_id=adjustment.tenant_id,
     source_type="cash_adjust",
     source_id=adjustment.id,
     happened_at=adjustment.happened_at,
@@ -667,6 +672,7 @@ def post_cash_adjustment(session: Session, adjustment: CashAdjustment) -> list[L
 def post_system_init(
   session: Session,
   *,
+  tenant_id: str,
   source_id: str,
   happened_at: datetime,
   day: datetime.date,
@@ -674,6 +680,7 @@ def post_system_init(
 ) -> list[LedgerEntry]:
   return _insert_ledger_entries(
     session,
+    tenant_id=tenant_id,
     source_type="system_init",
     source_id=source_id,
     happened_at=happened_at,
@@ -699,6 +706,13 @@ def reverse_source(
       LedgerEntry.source_id == source_id,
     )
   ).all()
+  if not originals:
+    return []
+  tenant_id = originals[0].tenant_id
+  orig_by_key: dict[tuple, str] = {
+    (row.account, row.gas_type, row.state, row.unit, row.customer_id): row.id
+    for row in originals
+  }
   lines = [
     LedgerLine(
       account=row.account,
@@ -711,12 +725,17 @@ def reverse_source(
     )
     for row in originals
   ]
-  return _insert_ledger_entries(
+  reversal_entries = _insert_ledger_entries(
     session,
+    tenant_id=tenant_id,
     source_type=reversal_source_type,
     source_id=reversal_source_id,
     happened_at=happened_at,
     day=day,
     lines=lines,
   )
+  for entry in reversal_entries:
+    key = (entry.account, entry.gas_type, entry.state, entry.unit, entry.customer_id)
+    entry.reversal_of_id = orig_by_key.get(key)
+  return reversal_entries
 

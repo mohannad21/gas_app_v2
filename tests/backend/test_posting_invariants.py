@@ -395,7 +395,11 @@ def test_company_payment_invariants(client) -> None:
 
     resp = client.post(
         "/company/payments",
-        json={"happened_at": iso_at(day.isoformat(), "evening"), "amount": 40},
+        json={
+            "happened_at": iso_at(day.isoformat(), "evening"),
+            "amount": 40,
+            "kind": "payment_to_company",
+        },
     )
     assert resp.status_code == 201
 

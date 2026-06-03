@@ -2,7 +2,7 @@ import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 const mockCreateRefillMutateAsync = jest.fn().mockResolvedValue({});
-const mockCreateCompanyBuyIronMutateAsync = jest.fn().mockResolvedValue({});
+const mockCreateBuyFullFromCompanyMutateAsync = jest.fn().mockResolvedValue({});
 const mockUpdateRefillMutateAsync = jest.fn().mockResolvedValue({});
 const mockInitInventoryMutateAsync = jest.fn().mockResolvedValue({});
 
@@ -15,7 +15,7 @@ jest.mock("@expo/vector-icons", () => ({
 }));
 
 jest.mock("@/hooks/useInventory", () => ({
-  useCreateCompanyBuyIron: () => ({ mutateAsync: mockCreateCompanyBuyIronMutateAsync, isPending: false }),
+  useCreateBuyFullFromCompany: () => ({ mutateAsync: mockCreateBuyFullFromCompanyMutateAsync, isPending: false }),
   useCreateRefill: () => ({ mutateAsync: mockCreateRefillMutateAsync, isPending: false }),
   useInitInventory: () => ({ mutateAsync: mockInitInventoryMutateAsync, isPending: false }),
   useInventoryRefillDetails: () => ({ data: null }),
@@ -64,7 +64,7 @@ import { RefillForm, sanitizeBuyCountInput } from "@/components/AddRefillModal";
 describe("AddRefillModal company activity behavior", () => {
   beforeEach(() => {
     mockCreateRefillMutateAsync.mockClear();
-    mockCreateCompanyBuyIronMutateAsync.mockClear();
+    mockCreateBuyFullFromCompanyMutateAsync.mockClear();
     mockUpdateRefillMutateAsync.mockClear();
     mockInitInventoryMutateAsync.mockClear();
   });
@@ -91,12 +91,12 @@ describe("AddRefillModal company activity behavior", () => {
     fireEvent.press(getByText("Save"));
 
     await waitFor(() => {
-      expect(mockCreateCompanyBuyIronMutateAsync).toHaveBeenCalledWith(
+      expect(mockCreateBuyFullFromCompanyMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           new12: 1,
           new48: 0,
           total_cost: 75,
-          paid_amount: 0,
+          paid_amount: 75,
         })
       );
     });

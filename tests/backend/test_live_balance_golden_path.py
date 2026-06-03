@@ -174,6 +174,7 @@ def test_company_balance_after_payment_delete(client) -> None:
         client,
         {
             "amount": 200,
+            "kind": "payment_to_company",
             "happened_at": f"{day.isoformat()}T10:00:00",
         },
     )
@@ -181,6 +182,7 @@ def test_company_balance_after_payment_delete(client) -> None:
         client,
         {
             "amount": 100,
+            "kind": "payment_to_company",
             "happened_at": f"{day.isoformat()}T11:00:00",
         },
     )

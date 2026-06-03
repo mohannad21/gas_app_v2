@@ -159,7 +159,11 @@ def _post_refill(
 def _post_company_payment(client, *, happened_at: str, amount: int) -> str:
     resp = client.post(
         "/company/payments",
-        json={"happened_at": happened_at, "amount": amount},
+        json={
+            "happened_at": happened_at,
+            "amount": amount,
+            "kind": "payment_to_company" if amount >= 0 else "payment_from_company",
+        },
     )
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]

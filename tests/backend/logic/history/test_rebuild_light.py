@@ -28,15 +28,15 @@ from ..helpers import (
 )
 from .helpers import (
     delete_bank_deposit,
-    delete_buy_iron,
+    delete_buy_full,
     delete_collection,
     delete_company_balance_adjustment,
     delete_company_payment,
     delete_customer_adjustment,
-    delete_cylinder_settle,
     delete_expense,
     delete_inventory_adjustment,
     delete_order,
+    delete_refill,
     delete_wallet_adjustment,
     take_snapshot,
 )
@@ -374,7 +374,7 @@ class TestInsertReturnEmptiesFromCustomerCascade:
 # Wallet −150 all days. Inventory full12 +3 on all days.
 # Company money unchanged (fully paid). Excluded from net_today.
 
-class TestInsertBuyIronCascade:
+class TestInsertBuyFullFromCompanyCascade:
     def _insert(self, client, world) -> dict:
         return post_buy_full_from_company(
             client, new12=3, new48=0,
@@ -392,7 +392,7 @@ class TestInsertBuyIronCascade:
     def test_delete_reverts_to_snapshot(self, client, world):
         snap = _snap(client, world)
         result = self._insert(client, world)
-        delete_buy_iron(client, result["id"])
+        delete_buy_full(client, result["id"])
         after = _snap(client, world)
         assert after["day1_card"]["wallet_end"] == snap["day1_card"]["wallet_end"]
         assert after["day2_card"]["wallet_end"] == snap["day2_card"]["wallet_end"]
@@ -422,7 +422,7 @@ class TestInsertReturnEmptiesToCompanyCascade:
     def test_delete_reverts_to_snapshot(self, client, world):
         snap = _snap(client, world)
         result = self._insert(client, world)
-        delete_cylinder_settle(client, result["id"])
+        delete_refill(client, result["id"])
         after = _snap(client, world)
         assert after["day1_card"]["inventory_end"]["empty12"] == snap["day1_card"]["inventory_end"]["empty12"]
         assert after["company"]["company_cyl_12"] == snap["company"]["company_cyl_12"]

@@ -12,14 +12,12 @@ from app.schemas import (
   CompanyBalanceAdjustmentOut,
   CompanyBalanceAdjustmentUpdate,
   CompanyBalancesOut,
-  CompanyBuyIronCreate,
-  CompanyBuyIronOut,
-  CompanyCylinderSettleCreate,
-  CompanyCylinderSettleOut,
+  CompanyBuyFullCreate,
+  CompanyBuyFullOut,
   CompanyPaymentCreate,
   CompanyPaymentOut,
 )
-from app.services.ledger import boundary_for_source, boundary_from_entries, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
+from app.services.ledger import boundary_for_source, snapshot_company_debts, sum_company_cylinders, sum_company_money, sum_inventory
 from app.services.posting import allocate_happened_at, derive_day, parse_happened_at_parts, post_company_transaction, reverse_source
 from app.utils.locks import acquire_company_lock, acquire_inventory_locks
 
@@ -133,145 +131,6 @@ def _company_adjustment_out(row: CompanyTransaction, session: Session) -> Compan
     note=row.note,
     is_deleted=row.deleted_at is not None,
   )
-
-@router.post("/cylinders/settle", response_model=CompanyCylinderSettleOut, status_code=status.HTTP_201_CREATED)
-def settle_company_cylinders(
-  payload: CompanyCylinderSettleCreate,
-  session: Session = Depends(get_session),
-  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> CompanyCylinderSettleOut:
-  if payload.quantity <= 0:
-    raise HTTPException(status_code=400, detail="quantity_must_be_positive")
-
-  happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
-  buy12 = return12 = buy48 = return48 = 0
-  if payload.gas_type == "12kg":
-    if payload.direction == "receive_full":
-      buy12 = payload.quantity
-    else:
-      return12 = payload.quantity
-  else:
-    if payload.direction == "receive_full":
-      buy48 = payload.quantity
-    else:
-      return48 = payload.quantity
-
-  try:
-    acquire_company_lock(session)
-    acquire_inventory_locks(session, [payload.gas_type])
-    if payload.request_id:
-      existing = session.exec(
-        select(CompanyTransaction)
-        .where(CompanyTransaction.request_id == payload.request_id)
-        .where(CompanyTransaction.tenant_id == tenant_id)
-      ).first()
-      if existing:
-        if payload.gas_type == "12kg":
-          quantity = existing.buy12 or existing.return12
-          direction = "receive_full" if existing.buy12 else "return_empty"
-        else:
-          quantity = existing.buy48 or existing.return48
-          direction = "receive_full" if existing.buy48 else "return_empty"
-        return CompanyCylinderSettleOut(
-          id=existing.id,
-          happened_at=existing.happened_at,
-          gas_type=payload.gas_type,
-          quantity=quantity,
-          direction=direction,  # type: ignore[arg-type]
-          note=existing.note,
-        )
-
-    txn = CompanyTransaction(
-      tenant_id=tenant_id,
-      happened_at=happened_at,
-      day=derive_day(happened_at),
-      kind="refill" if payload.direction == "receive_full" else "dist_return_empties",
-      buy12=buy12,
-      return12=return12,
-      buy48=buy48,
-      return48=return48,
-      total=0,
-      paid=0,
-      note=payload.note,
-      request_id=payload.request_id,
-    )
-    session.add(txn)
-    entries = post_company_transaction(session, txn)
-    boundary = boundary_from_entries(entries)
-    snapshot = snapshot_company_debts(session, up_to=txn.happened_at, boundary=boundary)
-    txn.debt_cash = snapshot["debt_cash"]
-    txn.debt_cylinders_12 = snapshot["debt_cylinders_12"]
-    txn.debt_cylinders_48 = snapshot["debt_cylinders_48"]
-    session.commit()
-  except Exception:
-    session.rollback()
-    raise
-  session.refresh(txn)
-
-  return CompanyCylinderSettleOut(
-    id=txn.id,
-    happened_at=txn.happened_at,
-    gas_type=payload.gas_type,
-    quantity=payload.quantity,
-    direction=payload.direction,
-    note=txn.note,
-  )
-
-
-@router.delete(
-  "/cylinders/settle/{settle_id}",
-  status_code=status.HTTP_204_NO_CONTENT,
-  dependencies=[Depends(require_permission("company:write"))],
-)
-def delete_company_cylinder_settle(
-  settle_id: str,
-  session: Session = Depends(get_session),
-  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> None:
-  try:
-    existing = session.get(CompanyTransaction, settle_id)
-    if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind not in ("refill", "dist_return_empties"):
-      raise HTTPException(status_code=404, detail="Cylinder settle not found")
-    acquire_company_lock(session)
-    acquire_inventory_locks(session, ["12kg", "48kg"])
-    reversal = CompanyTransaction(
-      tenant_id=tenant_id,
-      happened_at=existing.happened_at,
-      day=existing.day,
-      kind=existing.kind,
-      buy12=existing.buy12,
-      return12=existing.return12,
-      buy48=existing.buy48,
-      return48=existing.return48,
-      new12=existing.new12,
-      new48=existing.new48,
-      total=existing.total,
-      paid=existing.paid,
-      debt_cash=existing.debt_cash,
-      debt_cylinders_12=existing.debt_cylinders_12,
-      debt_cylinders_48=existing.debt_cylinders_48,
-      note=f"Reversal of {existing.id}",
-      deleted_at=datetime.now(timezone.utc),
-      reversal_source_id=existing.id,
-    )
-    session.add(reversal)
-    reverse_source(
-      session,
-      source_type="company_txn",
-      source_id=existing.id,
-      reversal_source_type="company_txn",
-      reversal_source_id=reversal.id,
-      happened_at=reversal.happened_at,
-      day=reversal.day,
-      note=reversal.note,
-    )
-    existing.deleted_at = datetime.now(timezone.utc)
-    session.add(existing)
-    session.commit()
-  except Exception:
-    session.rollback()
-    raise
-
 
 @router.post(
   "/payments",
@@ -610,16 +469,17 @@ def update_company_balance_adjustment(
 
 
 @router.post(
+  # Legacy route name kept for compatibility; future ticket will add /buy_full_from_company.
   "/buy_iron",
-  response_model=CompanyBuyIronOut,
+  response_model=CompanyBuyFullOut,
   status_code=status.HTTP_201_CREATED,
   dependencies=[Depends(require_permission("company:write"))],
 )
-def create_company_buy_iron(
-  payload: CompanyBuyIronCreate,
+def create_buy_full_from_company(
+  payload: CompanyBuyFullCreate,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
-) -> CompanyBuyIronOut:
+) -> CompanyBuyFullOut:
   if payload.new12 <= 0 and payload.new48 <= 0:
     raise HTTPException(status_code=400, detail="quantity_must_be_positive")
 
@@ -649,7 +509,7 @@ def create_company_buy_iron(
         .where(CompanyTransaction.tenant_id == tenant_id)
       ).first()
       if existing:
-        return CompanyBuyIronOut(
+        return CompanyBuyFullOut(
           id=existing.id,
           happened_at=existing.happened_at,
           new12=existing.new12,
@@ -679,7 +539,7 @@ def create_company_buy_iron(
     raise
   session.refresh(txn)
 
-  return CompanyBuyIronOut(
+  return CompanyBuyFullOut(
     id=txn.id,
     happened_at=txn.happened_at,
     new12=txn.new12,
@@ -691,19 +551,19 @@ def create_company_buy_iron(
 
 
 @router.delete(
-  "/buy_iron/{buy_iron_id}",
+  "/buy_iron/{buy_full_id}",
   status_code=status.HTTP_204_NO_CONTENT,
   dependencies=[Depends(require_permission("company:write"))],
 )
-def delete_company_buy_iron(
-  buy_iron_id: str,
+def delete_buy_full_from_company(
+  buy_full_id: str,
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
   try:
-    existing = session.get(CompanyTransaction, buy_iron_id)
+    existing = session.get(CompanyTransaction, buy_full_id)
     if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None or existing.kind != "buy_full_from_company":
-      raise HTTPException(status_code=404, detail="Buy iron not found")
+      raise HTTPException(status_code=404, detail="Buy full from company not found")
     acquire_company_lock(session)
     acquire_inventory_locks(session, ["12kg", "48kg"])
     reversal = CompanyTransaction(

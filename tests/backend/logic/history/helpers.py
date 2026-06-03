@@ -63,14 +63,9 @@ def delete_bank_deposit(client, deposit_id: str) -> None:
     assert r.status_code == 204, f"delete_bank_deposit failed: {r.status_code} {r.text}"
 
 
-def delete_buy_iron(client, buy_iron_id: str) -> None:
-    r = client.delete(f"/company/buy_iron/{buy_iron_id}")
-    assert r.status_code == 204, f"delete_buy_iron failed: {r.status_code} {r.text}"
-
-
-def delete_cylinder_settle(client, settle_id: str) -> None:
-    r = client.delete(f"/company/cylinders/settle/{settle_id}")
-    assert r.status_code == 204, f"delete_cylinder_settle failed: {r.status_code} {r.text}"
+def delete_buy_full(client, buy_full_id: str) -> None:
+    r = client.delete(f"/company/buy_iron/{buy_full_id}")
+    assert r.status_code == 204, f"delete_buy_full failed: {r.status_code} {r.text}"
 
 
 # --- Snapshot ────────────────────────────────────────────────────────────────
