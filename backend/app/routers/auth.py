@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from app.auth import create_access_token, get_current_user
 from app.config import DEFAULT_TENANT_ID, get_settings
 from app.db import get_session
-from app.models import ActivationChallenge, Session as DbSession, Tenant, User
+from app.models import ActivationChallenge, Role, Session as DbSession, Tenant, TenantMembership, User
 from app.schemas import (
   ActivateRequest,
   ChangePasswordRequest,
@@ -28,6 +28,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _REFRESH_TOKEN_EXPIRES_DAYS = 30
 _OTP_EXPIRES_MINUTES = 30
 _OTP_LENGTH = 6
+_ROLE_OWNER_ID = "00000000-0000-0000-role-000000000001"
 
 
 def _generate_otp() -> str:
@@ -53,7 +54,6 @@ def developer_create_user(
 
   with session.begin():
     user = User(
-      tenant_id=DEFAULT_TENANT_ID,
       phone=payload.phone,
     )
     session.add(user)
@@ -64,6 +64,14 @@ def developer_create_user(
       tenant.name = payload.name
       tenant.owner_user_id = user.id
       session.add(tenant)
+
+    if session.get(Role, _ROLE_OWNER_ID):
+      session.add(TenantMembership(
+        tenant_id=DEFAULT_TENANT_ID,
+        user_id=user.id,
+        role_id=_ROLE_OWNER_ID,
+        is_active=True,
+      ))
 
     code = _generate_otp()
     challenge = ActivationChallenge(
@@ -129,8 +137,17 @@ def login(
     if not verify_password(payload.password, user.password_hash):
       raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
 
+    membership = session.exec(
+      select(TenantMembership)
+      .where(TenantMembership.user_id == user.id)
+      .where(TenantMembership.is_active == True)  # noqa: E712
+    ).first()
+    if not membership:
+      raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_found")
+
     db_session = DbSession(
       user_id=user.id,
+      tenant_id=membership.tenant_id,
       expires_at=datetime.now(timezone.utc) + timedelta(days=_REFRESH_TOKEN_EXPIRES_DAYS),
       user_agent=request.headers.get("user-agent"),
     )

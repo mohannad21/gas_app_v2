@@ -21,22 +21,26 @@ from app.utils.time import business_tz
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
 
-def _get_category(session: Session, name: str) -> ExpenseCategory:
-  existing = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == name)).first()
+def _get_category(session: Session, name: str, tenant_id: str) -> ExpenseCategory:
+  existing = session.exec(
+    select(ExpenseCategory)
+    .where(ExpenseCategory.tenant_id == tenant_id)
+    .where(ExpenseCategory.name == name)
+  ).first()
   if existing:
     return existing
-  category = ExpenseCategory(name=name)
+  category = ExpenseCategory(tenant_id=tenant_id, name=name)
   session.add(category)
   session.commit()
   session.refresh(category)
   return category
 
 
-def _get_category_name(session: Session, category_id: Optional[str]) -> str:
+def _get_category_name(session: Session, category_id: Optional[str], tenant_id: str) -> str:
   if not category_id:
     return "Other"
   cat = session.get(ExpenseCategory, category_id)
-  return cat.name if cat else "Other"
+  return cat.name if cat and cat.tenant_id == tenant_id else "Other"
 
 
 @router.get("", response_model=list[ExpenseOut])
@@ -74,10 +78,17 @@ def list_expenses(
   ).limit(limit)
   rows = session.exec(stmt).all()
   # exclude cash adjustments
-  cash_cat = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == "Cash Adjustment")).first()
+  cash_cat = session.exec(
+    select(ExpenseCategory)
+    .where(ExpenseCategory.tenant_id == tenant_id)
+    .where(ExpenseCategory.name == "Cash Adjustment")
+  ).first()
   if cash_cat:
     rows = [row for row in rows if row.category_id != cash_cat.id]
-  cats = {cat.id: cat.name for cat in session.exec(select(ExpenseCategory)).all()}
+  cats = {
+    cat.id: cat.name
+    for cat in session.exec(select(ExpenseCategory).where(ExpenseCategory.tenant_id == tenant_id)).all()
+  }
   return [
     ExpenseOut(
       id=row.id,
@@ -111,7 +122,7 @@ def create_expense(
     raise HTTPException(status_code=400, detail="Invalid date format") from exc
   if payload.amount <= 0:
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
-  category = _get_category(session, payload.expense_type)
+  category = _get_category(session, payload.expense_type, tenant_id)
   fallback_happened_at = parse_happened_at_parts(date_str=payload.date, time_str="12:00:00")
   happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at or fallback_happened_at)
   expense = Expense(
@@ -207,7 +218,7 @@ def update_expense(
     raise HTTPException(status_code=404, detail="expense_not_found")
 
   new_date_str = payload.date or expense.day.isoformat()
-  new_expense_type = payload.expense_type or _get_category_name(session, expense.category_id)
+  new_expense_type = payload.expense_type or _get_category_name(session, expense.category_id, tenant_id)
   new_amount = payload.amount if payload.amount is not None else expense.amount
   new_note = payload.note if payload.note is not None else expense.note
   new_happened_at = payload.happened_at or expense.happened_at
@@ -248,7 +259,7 @@ def update_expense(
   expense.deleted_at = datetime.now(timezone.utc)
   session.add(expense)
 
-  new_category = _get_category(session, new_expense_type)
+  new_category = _get_category(session, new_expense_type, tenant_id)
   if payload.happened_at is not None:
     normalized_happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=new_happened_at)
   else:
@@ -272,7 +283,10 @@ def update_expense(
   session.commit()
   session.refresh(new_expense)
 
-  cats = {cat.id: cat.name for cat in session.exec(select(ExpenseCategory)).all()}
+  cats = {
+    cat.id: cat.name
+    for cat in session.exec(select(ExpenseCategory).where(ExpenseCategory.tenant_id == tenant_id)).all()
+  }
   return ExpenseOut(
     id=new_expense.id,
     date=new_expense.day.isoformat(),
@@ -286,8 +300,15 @@ def update_expense(
 
 
 @router.get("/categories", response_model=list[ExpenseCategoryOut])
-def list_expense_categories(session: Session = Depends(get_session)) -> list[ExpenseCategoryOut]:
-  rows = session.exec(select(ExpenseCategory).order_by(ExpenseCategory.name)).all()
+def list_expense_categories(
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> list[ExpenseCategoryOut]:
+  rows = session.exec(
+    select(ExpenseCategory)
+    .where(ExpenseCategory.tenant_id == tenant_id)
+    .order_by(ExpenseCategory.name)
+  ).all()
   return [
     ExpenseCategoryOut(id=row.id, name=row.name, is_active=row.is_active, created_at=row.created_at)
     for row in rows
@@ -303,14 +324,19 @@ def list_expense_categories(session: Session = Depends(get_session)) -> list[Exp
 def create_expense_category(
   payload: ExpenseCategoryCreate,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> ExpenseCategoryOut:
   name = payload.name.strip()
   if not name:
     raise HTTPException(status_code=400, detail="name_required")
-  existing = session.exec(select(ExpenseCategory).where(ExpenseCategory.name == name)).first()
+  existing = session.exec(
+    select(ExpenseCategory)
+    .where(ExpenseCategory.tenant_id == tenant_id)
+    .where(ExpenseCategory.name == name)
+  ).first()
   if existing:
     raise HTTPException(status_code=409, detail="category_exists")
-  row = ExpenseCategory(name=name)
+  row = ExpenseCategory(tenant_id=tenant_id, name=name)
   session.add(row)
   session.commit()
   session.refresh(row)
@@ -326,9 +352,10 @@ def toggle_expense_category(
   category_id: str,
   payload: ExpenseCategoryToggle,
   session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> ExpenseCategoryOut:
   row = session.get(ExpenseCategory, category_id)
-  if not row:
+  if not row or row.tenant_id != tenant_id:
     raise HTTPException(status_code=404, detail="category_not_found")
   row.is_active = payload.is_active
   session.add(row)

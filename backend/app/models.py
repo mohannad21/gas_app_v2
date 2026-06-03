@@ -19,7 +19,6 @@ class User(SQLModel, table=True):
   __tablename__ = "users"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
-  tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", nullable=True, index=True)
   phone: Optional[str] = Field(default=None, nullable=True, index=True)
   password_hash: Optional[str] = Field(default=None, nullable=True)
   is_active: bool = Field(default=False)
@@ -80,6 +79,7 @@ class Session(SQLModel, table=True):
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   user_id: str = Field(foreign_key="users.id", index=True)
+  tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", nullable=True, index=True)
   created_at: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
@@ -233,6 +233,7 @@ class Role(SQLModel, table=True):
   __tablename__ = "roles"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: Optional[str] = Field(default=None, foreign_key="tenants.id", nullable=True, index=True)
   name: str = Field(index=True)
   is_system: bool = Field(default=False)
   description: Optional[str] = Field(default=None, nullable=True)
@@ -383,7 +384,8 @@ class SystemTypeOption(SQLModel, table=True):
   __tablename__ = "system_type_options"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
-  name: str = Field(sa_column=sa.Column(sa.String, unique=True))
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  name: str = Field(index=True)
   is_active: bool = Field(default=True, index=True)
   created_at: datetime = Field(
     default_factory=_utcnow,
@@ -400,6 +402,7 @@ class PriceCatalog(SQLModel, table=True):
   __tablename__ = "price_catalog"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
   effective_from: datetime = Field(
     default_factory=_utcnow,
     sa_column=sa.Column(sa.DateTime(timezone=True), index=True),
@@ -426,7 +429,8 @@ class ExpenseCategory(SQLModel, table=True):
   __tablename__ = "expense_categories"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
-  name: str = Field(sa_column=sa.Column(sa.String, unique=True))
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  name: str = Field(index=True)
   is_active: bool = Field(default=True, index=True)
   created_at: datetime = Field(
     default_factory=_utcnow,
@@ -707,7 +711,10 @@ class CashAdjustment(SQLModel, table=True):
 class SystemSettings(SQLModel, table=True):
   __tablename__ = "system_settings"
 
-  id: str = Field(default="system", primary_key=True)
+  id: str = Field(default_factory=_uuid, primary_key=True)
+  tenant_id: str = Field(
+    sa_column=sa.Column(sa.String, sa.ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+  )
   is_setup_completed: bool = Field(default=False)
   currency_code: str = Field(default=DEFAULT_CURRENCY_CODE)
   money_decimals: int = Field(default=2)

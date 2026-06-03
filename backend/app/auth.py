@@ -64,11 +64,15 @@ def get_tenant_id(
   user_id: Annotated[str, Depends(get_current_user)],
   session: Annotated[Session, Depends(get_session)],
 ) -> str:
-  from app.models import User
-  user = session.get(User, user_id)
-  if not user or not user.tenant_id:
+  from app.models import TenantMembership
+  membership = session.exec(
+    select(TenantMembership)
+    .where(TenantMembership.user_id == user_id)
+    .where(TenantMembership.is_active == True)  # noqa: E712
+  ).first()
+  if not membership:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_found")
-  return user.tenant_id
+  return membership.tenant_id
 
 
 def get_user_permissions(

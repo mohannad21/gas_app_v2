@@ -88,7 +88,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     with _SeedSession(app_db.engine) as seed:
         seed.add(Plan(id="test-plan", name="Test Plan"))
         seed.add(Tenant(id=DEFAULT_TENANT_ID, name="Test Tenant", status="active"))
-        seed.add(User(id="test-user", tenant_id=DEFAULT_TENANT_ID))
+        seed.add(User(id="test-user"))
         seed.add(TenantPlanSubscription(
             tenant_id=DEFAULT_TENANT_ID, plan_id="test-plan",
             status="active", started_at=datetime.now(timezone.utc),

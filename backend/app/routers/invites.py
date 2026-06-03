@@ -28,6 +28,15 @@ def _membership_for_user(session: Session, tenant_id: str, user_id: str) -> Tena
   ).first()
 
 
+def _active_membership_for_user(session: Session, user_id: str) -> TenantMembership | None:
+  return session.exec(
+    select(TenantMembership)
+    .where(TenantMembership.user_id == user_id)
+    .where(TenantMembership.is_active == True)  # noqa: E712
+    .order_by(TenantMembership.created_at.desc())
+  ).first()
+
+
 @router.post("/activate", response_model=LoginResponse)
 def activate_invite(
   payload: InviteActivateRequest,
@@ -53,13 +62,14 @@ def activate_invite(
       raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_role")
 
     user = session.exec(select(User).where(User.phone == invite.phone)).first()
-    if user and user.tenant_id and user.tenant_id != invite.tenant_id:
-      raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="user_belongs_to_other_tenant")
+    if user:
+      active_membership = _active_membership_for_user(session, user.id)
+      if active_membership and active_membership.tenant_id != invite.tenant_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="user_belongs_to_other_tenant")
 
     password_hash = hash_password(payload.password)
     if user is None:
       user = User(
-        tenant_id=invite.tenant_id,
         phone=invite.phone,
         password_hash=password_hash,
         is_active=True,
@@ -67,7 +77,6 @@ def activate_invite(
       session.add(user)
       session.flush()
     else:
-      user.tenant_id = invite.tenant_id
       user.password_hash = password_hash
       user.is_active = True
       user.must_change_password = False
@@ -96,6 +105,7 @@ def activate_invite(
 
     db_session = DbSession(
       user_id=user.id,
+      tenant_id=invite.tenant_id,
       expires_at=now + timedelta(days=_REFRESH_TOKEN_EXPIRES_DAYS),
       user_agent=request.headers.get("user-agent"),
     )

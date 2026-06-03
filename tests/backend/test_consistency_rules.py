@@ -11,10 +11,14 @@ Covers:
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from sqlmodel import Session, select
 
+from app.config import DEFAULT_TENANT_ID
+from app.models import Customer, CustomerTransaction, LedgerEntry, System, Tenant
+from app.services.posting import derive_day, post_customer_transaction
 from tests.backend.conftest import (
     create_customer,
     create_order,
@@ -31,6 +35,7 @@ from tests.backend.conftest import (
 
 DAY = date(2026, 6, 1)
 DAY2 = DAY + timedelta(days=1)
+OTHER_TENANT_ID = "00000000-0000-0000-0000-000000000099"
 
 
 def _init(client, *, day: date = DAY, cash: int = 1000) -> None:
@@ -673,6 +678,74 @@ class TestDayBoxBalanceAdjustments:
         assert row_after["net_today"] == net_before
         assert row_after["sold_12kg"] == row_before["sold_12kg"]
         assert row_after["sold_48kg"] == row_before["sold_48kg"]
+
+
+def test_post_customer_transaction_rejects_cross_tenant_customer(client) -> None:
+    from app import db as app_db
+
+    happened_at = datetime(2025, 1, 2, 10, 0, tzinfo=timezone.utc)
+    with Session(app_db.engine) as session:
+        session.add(Tenant(id=OTHER_TENANT_ID, name="Other Tenant", status="active"))
+        session.flush()
+        customer = Customer(tenant_id=OTHER_TENANT_ID, name="Other Customer")
+        session.add(customer)
+        session.flush()
+        txn = CustomerTransaction(
+            tenant_id=DEFAULT_TENANT_ID,
+            customer_id=customer.id,
+            happened_at=happened_at,
+            day=derive_day(happened_at),
+            kind="payment_from_customer",
+            paid=100,
+        )
+        session.add(txn)
+        session.flush()
+
+        with pytest.raises(ValueError, match="Cross-tenant FK violation"):
+            post_customer_transaction(session, txn)
+
+        entries = session.exec(select(LedgerEntry)).all()
+        assert entries == []
+
+
+def test_post_customer_transaction_rejects_cross_tenant_system(client) -> None:
+    from app import db as app_db
+
+    happened_at = datetime(2025, 1, 2, 10, 0, tzinfo=timezone.utc)
+    with Session(app_db.engine) as session:
+        session.add(Tenant(id=OTHER_TENANT_ID, name="Other Tenant", status="active"))
+        session.flush()
+        customer = Customer(tenant_id=DEFAULT_TENANT_ID, name="Default Customer")
+        session.add(customer)
+        session.flush()
+        system = System(
+            tenant_id=OTHER_TENANT_ID,
+            customer_id=customer.id,
+            name="Other System",
+            gas_type="12kg",
+        )
+        session.add(system)
+        session.flush()
+        txn = CustomerTransaction(
+            tenant_id=DEFAULT_TENANT_ID,
+            customer_id=customer.id,
+            system_id=system.id,
+            happened_at=happened_at,
+            day=derive_day(happened_at),
+            kind="replacement",
+            gas_type="12kg",
+            installed=1,
+            total=100,
+            paid=100,
+        )
+        session.add(txn)
+        session.flush()
+
+        with pytest.raises(ValueError, match="Cross-tenant FK violation"):
+            post_customer_transaction(session, txn)
+
+        entries = session.exec(select(LedgerEntry)).all()
+        assert entries == []
 
     def test_company_balance_adjustment_does_not_change_net(self, client) -> None:
         _init(client)

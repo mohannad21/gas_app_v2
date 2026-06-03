@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Annotated, Callable, Dict, Iterable, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from app.config import DEFAULT_TENANT_ID
+from app.auth import get_tenant_id
 from app.constants import DEFAULT_CURRENCY_CODE
 from app.db import get_session
 from app.models import (
@@ -39,15 +39,18 @@ from app.utils.time import business_date_start_utc
 router = APIRouter(prefix="/system", tags=["system"])
 
 @router.get("/settings", response_model=SystemSettingsOut)
-def get_system_settings(session: Session = Depends(get_session)) -> SystemSettingsOut:
+def get_system_settings(
+    session: Session = Depends(get_session),
+    tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> SystemSettingsOut:
     """
     Returns settings or a 'not completed' state for new users.
     This triggers the frontend welcome screen if no record exists.
     """
-    settings = session.get(SystemSettings, "system")
+    settings = session.exec(select(SystemSettings).where(SystemSettings.tenant_id == tenant_id)).first()
     if not settings:
         return SystemSettingsOut(
-            id="system",
+            id="",
             is_setup_completed=False,
             currency_code=DEFAULT_CURRENCY_CODE,
             money_decimals=2,
@@ -65,9 +68,10 @@ def get_system_settings(session: Session = Depends(get_session)) -> SystemSettin
 def update_system_settings(
     payload: SystemSettingsUpdate,
     session: Session = Depends(get_session),
+    tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> SystemSettingsOut:
     """Update currency_code and/or money_decimals after initialization."""
-    settings = session.get(SystemSettings, "system")
+    settings = session.exec(select(SystemSettings).where(SystemSettings.tenant_id == tenant_id)).first()
     if not settings:
         raise HTTPException(status_code=400, detail="system_not_initialized")
     if payload.currency_code is not None:
@@ -86,17 +90,21 @@ def update_system_settings(
     )
 
 @router.post("/initialize", response_model=SystemSettingsOut)
-def initialize_system(payload: SystemInitialize, session: Session = Depends(get_session)):
+def initialize_system(
+    payload: SystemInitialize,
+    session: Session = Depends(get_session),
+    tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+):
     """
     One-time setup to initialize the ledger with starting balances 
     and mark setup as completed.
     """
-    settings = session.get(SystemSettings, "system")
+    settings = session.exec(select(SystemSettings).where(SystemSettings.tenant_id == tenant_id)).first()
     if settings and settings.is_setup_completed:
         raise HTTPException(status_code=400, detail="system_already_initialized")
     
     if not settings:
-        settings = SystemSettings(id="system", is_setup_completed=False, created_at=datetime.now(timezone.utc))
+        settings = SystemSettings(tenant_id=tenant_id, is_setup_completed=False, created_at=datetime.now(timezone.utc))
 
     now = datetime.now(timezone.utc)
     day = derive_day(now)
@@ -105,6 +113,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
     # 1. Seed price catalog
     prices = [
         PriceCatalog(
+            tenant_id=tenant_id,
             gas_type="12kg",
             sell_price=payload.sell_price_12,
             buy_price=payload.buy_price_12,
@@ -115,6 +124,7 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
             created_at=now,
         ),
         PriceCatalog(
+            tenant_id=tenant_id,
             gas_type="48kg",
             sell_price=payload.sell_price_48,
             buy_price=payload.buy_price_48,
@@ -165,13 +175,13 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
         add_line(customer_lines, "cust_cylinders_debts", entry.cyl_48, gas_type="48kg", state="empty", unit="count", customer_id=entry.customer_id)
 
     # Post to Ledger
-    post_system_init(session, tenant_id=DEFAULT_TENANT_ID, source_id="system_init:inventory", happened_at=init_at, day=day, lines=inventory_lines)
-    post_system_init(session, tenant_id=DEFAULT_TENANT_ID, source_id="system_init:company", happened_at=init_at, day=day, lines=company_lines)
+    post_system_init(session, tenant_id=tenant_id, source_id="system_init:inventory", happened_at=init_at, day=day, lines=inventory_lines)
+    post_system_init(session, tenant_id=tenant_id, source_id="system_init:company", happened_at=init_at, day=day, lines=company_lines)
     for customer_id, customer_lines in customer_line_groups.items():
         if customer_lines:
             post_system_init(
                 session,
-                tenant_id=DEFAULT_TENANT_ID,
+                tenant_id=tenant_id,
                 source_id=f"system_init:customer:{customer_id}",
                 happened_at=init_at,
                 day=day,

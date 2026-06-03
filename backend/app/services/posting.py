@@ -10,10 +10,12 @@ from sqlmodel import Session, select
 from app.models import (
   CompanyTransaction,
   CashAdjustment,
+  Customer,
   CustomerTransaction,
   Expense,
   InventoryAdjustment,
   LedgerEntry,
+  System,
 )
 from app.utils.time import business_date_from_utc, business_date_start_utc, business_tz, to_utc_naive
 
@@ -187,6 +189,14 @@ def _insert_ledger_entries(
     session.add(entry)
     entries.append(entry)
   return entries
+
+
+def _assert_same_tenant(source_name: str, source_tenant_id: str, ref_name: str, ref_tenant_id: str) -> None:
+  if source_tenant_id != ref_tenant_id:
+    raise ValueError(
+      f"Cross-tenant FK violation: {source_name}.tenant_id={source_tenant_id!r} "
+      f"!= {ref_name}.tenant_id={ref_tenant_id!r}"
+    )
 
 
 def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
@@ -385,6 +395,13 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
 
 
 def post_customer_transaction(session: Session, txn: CustomerTransaction) -> list[LedgerEntry]:
+  customer = session.get(Customer, txn.customer_id)
+  if customer:
+    _assert_same_tenant("txn", txn.tenant_id, "customer", customer.tenant_id)
+  if txn.system_id:
+    system = session.get(System, txn.system_id)
+    if system:
+      _assert_same_tenant("txn", txn.tenant_id, "system", system.tenant_id)
   lines = build_customer_lines(txn)
   return _insert_ledger_entries(
     session,

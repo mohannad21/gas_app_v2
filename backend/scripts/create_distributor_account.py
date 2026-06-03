@@ -96,7 +96,6 @@ def main() -> None:
             if existing_user is None:
                 user = User(
                     id=str(uuid4()),
-                    tenant_id=tenant.id,
                     phone=phone,
                     password_hash=hash_password(password),
                     is_active=True,
@@ -106,7 +105,6 @@ def main() -> None:
                 session.flush()
             else:
                 user = existing_user
-                user.tenant_id = tenant.id
                 user.password_hash = hash_password(password)
                 user.is_active = True
                 user.must_change_password = True
@@ -139,7 +137,9 @@ def main() -> None:
             session.add(membership)
 
             if reset_setup:
-                settings = session.get(SystemSettings, "system")
+                settings = session.exec(
+                    select(SystemSettings).where(SystemSettings.tenant_id == tenant.id)
+                ).first()
                 if settings is not None:
                     settings.is_setup_completed = False
                     session.add(settings)
