@@ -17,6 +17,7 @@ from app.auth import get_tenant_id
 from app.constants import DEFAULT_CURRENCY_CODE
 from app.db import get_session
 from app.models import (
+  BankTransfer,
   CompanyTransaction,
   Customer,
   CustomerTransaction,
@@ -284,7 +285,6 @@ def list_daily_reports(
     .where(Expense.tenant_id == tenant_id)
     .where(Expense.day >= start_date)
     .where(Expense.day <= end_date)
-    .where(Expense.kind == AK.EXPENSE)
     .where(Expense.deleted_at == None)  # noqa: E711
     .group_by(Expense.day)
   ).all()
@@ -450,6 +450,13 @@ def get_daily_report(
     .where(InventoryAdjustment.deleted_at == None)  # noqa: E711
   ).all()
 
+  bank_transfers = session.exec(
+    select(BankTransfer)
+    .where(BankTransfer.tenant_id == tenant_id)
+    .where(BankTransfer.day == report_day)
+    .where(BankTransfer.deleted_at == None)  # noqa: E711
+  ).all()
+
   # Get customer and system lookups
   customer_ids = {txn.customer_id for txn in customer_txns if txn.customer_id}
   customer_ids.update({e.customer_id for e in entries if e.customer_id})
@@ -567,24 +574,34 @@ def get_daily_report(
     event_source_keys[id(event)] = [("company_txn", txn.id)]
 
   for exp in expenses:
-    event_type = (
-      AK.BANK_TO_WALLET
-      if exp.kind == "deposit" and exp.paid_from == "bank"
-      else AK.WALLET_TO_BANK if exp.kind == "deposit" else AK.EXPENSE
-    )
     event = DailyReportEvent(
       id=exp.id,
       source_id=exp.id,
-      event_type=event_type,
+      event_type=AK.EXPENSE,
       effective_at=_local(exp.happened_at),
       created_at=exp.created_at,
       total_cost=exp.amount,
-      expense_type=expense_categories[exp.category_id].name if exp.kind == AK.EXPENSE and exp.category_id and exp.category_id in expense_categories else None,
+      expense_type=expense_categories[exp.category_id].name if exp.category_id and exp.category_id in expense_categories else None,
       reason=exp.note,
     )
     events.append(event)
     event_sort_ids[id(event)] = exp.id or ""
     event_source_keys[id(event)] = [("expense", exp.id)]
+
+  for bt in bank_transfers:
+    event_type = AK.WALLET_TO_BANK if bt.direction == "wallet_to_bank" else AK.BANK_TO_WALLET
+    event = DailyReportEvent(
+      id=bt.id,
+      source_id=bt.id,
+      event_type=event_type,
+      effective_at=_local(bt.happened_at),
+      created_at=bt.created_at,
+      total_cost=bt.amount,
+      reason=bt.note,
+    )
+    events.append(event)
+    event_sort_ids[id(event)] = bt.id or ""
+    event_source_keys[id(event)] = [("bank_transfer", bt.id)]
 
   for ca in cash_adjustments:
     source_entries = entries_by_source.get(("cash_adjust", ca.id), [])

@@ -512,7 +512,6 @@ class Expense(SQLModel, table=True):
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
-  kind: str = Field(index=True)  # "expense" | "deposit"
   category_id: Optional[str] = Field(default=None, foreign_key="expense_categories.id")
   amount: int
   paid_from: Optional[str] = Field(default=None)  # "cash" | "bank" for expenses
@@ -526,6 +525,41 @@ class Expense(SQLModel, table=True):
   reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
   reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
   is_reversed: bool = Field(default=False, index=True)
+
+
+class BankTransfer(SQLModel, table=True):
+  __tablename__ = "bank_transfers"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  direction: str  # "wallet_to_bank" | "bank_to_wallet"
+  amount: int
+  note: Optional[str] = Field(default=None, nullable=True)
+  happened_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True)
+  )
+  day: date = Field(sa_column=sa.Column(sa.Date, nullable=False, index=True))
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+  updated_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+  )
+  updated_by: Optional[str] = Field(default=None, nullable=True)
+  deleted_at: Optional[datetime] = Field(
+    default=None,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),
+  )
+  deleted_by: Optional[str] = Field(default=None, nullable=True)
+  reversal_source_id: Optional[str] = Field(default=None, nullable=True, index=True)
+  reversed_id: Optional[str] = Field(default=None, nullable=True, index=True)
+  request_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(sa.String, nullable=True),
+  )
 
 
 class CustomerTransaction(SQLModel, table=True):

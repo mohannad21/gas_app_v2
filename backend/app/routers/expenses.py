@@ -54,7 +54,6 @@ def list_expenses(
 ) -> list[ExpenseOut]:
   stmt = (
     select(Expense)
-    .where(Expense.kind == "expense")
     .where(Expense.tenant_id == tenant_id)
   )
   if date:
@@ -130,7 +129,6 @@ def create_expense(
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
-    kind="expense",
     category_id=category.id,
     amount=payload.amount,
     paid_from="cash",
@@ -166,8 +164,6 @@ def delete_expense(
   expense = session.get(Expense, expense_id)
   if not expense or expense.tenant_id != tenant_id:
     raise HTTPException(status_code=404, detail="expense_not_found")
-  if expense.kind != "expense":
-    raise HTTPException(status_code=404, detail="expense_not_found")
   if expense.deleted_at is not None:
     return
   reversal_happened_at = expense.happened_at
@@ -177,7 +173,6 @@ def delete_expense(
     request_id=None,
     happened_at=reversal_happened_at,
     day=reversal_day,
-    kind=expense.kind,
     category_id=expense.category_id,
     amount=expense.amount,
     paid_from=expense.paid_from,
@@ -214,7 +209,7 @@ def update_expense(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> ExpenseOut:
   expense = session.get(Expense, expense_id)
-  if not expense or expense.tenant_id != tenant_id or expense.kind != "expense" or expense.deleted_at is not None:
+  if not expense or expense.tenant_id != tenant_id or expense.deleted_at is not None:
     raise HTTPException(status_code=404, detail="expense_not_found")
 
   new_date_str = payload.date or expense.day.isoformat()
@@ -236,7 +231,6 @@ def update_expense(
     request_id=None,
     happened_at=expense.happened_at,
     day=expense.day,
-    kind=expense.kind,
     category_id=expense.category_id,
     amount=expense.amount,
     paid_from=expense.paid_from,
@@ -271,7 +265,6 @@ def update_expense(
     request_id=None,
     happened_at=normalized_happened_at,
     day=derive_day(normalized_happened_at),
-    kind="expense",
     category_id=new_category.id,
     amount=new_amount,
     paid_from="cash",

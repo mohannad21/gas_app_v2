@@ -10,7 +10,7 @@ from typing import Optional
 from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
-from app.models import Expense, LedgerEntry
+from app.models import LedgerEntry
 from app.schemas import BalanceTransition, DailyAuditSummary, DailyReportEvent, ReportInventoryState, ReportInventoryTotals
 from app.services.ledger import sum_ledger
 
@@ -443,12 +443,8 @@ def _net_by_day(
   Excludes:
   - system initialization opening balances
   - company transactions
-  - wallet/bank transfers (Expense.kind == "deposit")
+  - wallet/bank transfers
   """
-  expense_ids = (
-    select(Expense.id)
-    .where(Expense.kind == "expense")
-  )
   rows = session.exec(
     select(
       LedgerEntry.day,
@@ -461,10 +457,7 @@ def _net_by_day(
     .where(
       or_(
         LedgerEntry.source_type == "customer_txn",
-        and_(
-          LedgerEntry.source_type == "expense",
-          LedgerEntry.source_id.in_(expense_ids),
-        ),
+        LedgerEntry.source_type == "expense",
       )
     )
     .group_by(LedgerEntry.day)

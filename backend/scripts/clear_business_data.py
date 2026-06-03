@@ -6,8 +6,8 @@ Keeps intact:
 
 Deletes:
   ledger_entries, customer_transactions, company_transactions,
-  inventory_adjustments, wallet_adjustments, expenses, systems, customers,
-  price_catalog, system_type_options, expense_categories.
+  inventory_adjustments, wallet_adjustments, bank_transfers, expenses, systems,
+  customers, price_catalog, system_type_options, expense_categories.
 
 Also resets system_settings.is_setup_completed → False so the distributor
 goes through onboarding again.
@@ -63,7 +63,8 @@ def clear_for_tenant(conn, tenant_id: str) -> None:
     conn.execute(text("DELETE FROM inventory_adjustments WHERE tenant_id = :tid"), {"tid": tenant_id})
     # 5. Wallet adjustments
     conn.execute(text("DELETE FROM wallet_adjustments WHERE tenant_id = :tid"), {"tid": tenant_id})
-    # 6. Expenses (includes bank deposits stored as kind='deposit')
+    # 6. Bank transfers and expenses
+    conn.execute(text("DELETE FROM bank_transfers WHERE tenant_id = :tid"), {"tid": tenant_id})
     conn.execute(text("DELETE FROM expenses WHERE tenant_id = :tid"), {"tid": tenant_id})
     # 7. Systems (references customers — delete before customers)
     conn.execute(text("DELETE FROM systems WHERE tenant_id = :tid"), {"tid": tenant_id})

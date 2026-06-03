@@ -6,10 +6,10 @@ from sqlmodel import Session, select
 
 from app.auth import get_tenant_id
 from app.db import get_session
-from app.models import WalletAdjustment, Expense
+from app.models import BankTransfer, WalletAdjustment
 from app.services.ledger import sum_cash
 from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
-from app.services.posting import allocate_happened_at, derive_day, post_cash_adjustment, post_expense, reverse_source
+from app.services.posting import allocate_happened_at, derive_day, post_bank_transfer, post_cash_adjustment, reverse_source
 
 router = APIRouter(prefix="/cash", tags=["cash"])
 
@@ -31,10 +31,6 @@ def _resolve_active_cash_adjustment(session: Session, adjust_id: str) -> WalletA
       break
     current = next_adjustment
   return current
-
-
-def _transfer_direction(expense: Expense) -> str:
-  return "bank_to_wallet" if expense.paid_from == "bank" else "wallet_to_bank"
 
 
 @router.get("/adjustments", response_model=list[CashAdjustmentRow])
@@ -235,28 +231,27 @@ def list_bank_deposits(
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[BankDepositOut]:
   stmt = (
-    select(Expense)
-    .where(Expense.kind == "deposit")
-    .where(Expense.tenant_id == tenant_id)
+    select(BankTransfer)
+    .where(BankTransfer.tenant_id == tenant_id)
   )
   if not include_deleted:
-    stmt = stmt.where(Expense.deleted_at == None)  # noqa: E711
+    stmt = stmt.where(BankTransfer.deleted_at == None)  # noqa: E711
   if date:
     try:
       day = datetime.fromisoformat(date).date()
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
-    stmt = stmt.where(Expense.day == day)
+    stmt = stmt.where(BankTransfer.day == day)
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
-    stmt = stmt.where(Expense.happened_at < cursor_dt)
+    stmt = stmt.where(BankTransfer.happened_at < cursor_dt)
   stmt = stmt.order_by(
-    Expense.happened_at.desc(),
-    Expense.created_at.desc(),
-    Expense.id.desc(),
+    BankTransfer.happened_at.desc(),
+    BankTransfer.created_at.desc(),
+    BankTransfer.id.desc(),
   ).limit(limit)
   rows = session.exec(stmt).all()
   return [
@@ -265,7 +260,7 @@ def list_bank_deposits(
       happened_at=row.happened_at,
       created_at=row.created_at,
       amount=row.amount,
-      direction=_transfer_direction(row),
+      direction=row.direction,
       note=row.note,
       is_deleted=row.deleted_at is not None,
     )
@@ -283,9 +278,9 @@ def create_bank_deposit(
     raise HTTPException(status_code=400, detail="amount_must_be_positive")
   if payload.request_id:
     existing = session.exec(
-      select(Expense)
-      .where(Expense.request_id == payload.request_id)
-      .where(Expense.tenant_id == tenant_id)
+      select(BankTransfer)
+      .where(BankTransfer.request_id == payload.request_id)
+      .where(BankTransfer.tenant_id == tenant_id)
     ).first()
     if existing:
       return BankDepositOut(
@@ -293,7 +288,7 @@ def create_bank_deposit(
         happened_at=existing.happened_at,
         created_at=existing.created_at,
         amount=existing.amount,
-        direction=_transfer_direction(existing),
+        direction=existing.direction,
         note=existing.note,
       )
   happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
@@ -308,29 +303,26 @@ def create_bank_deposit(
           "attempt": payload.amount,
         },
       )
-  expense = Expense(
+  txn = BankTransfer(
     tenant_id=tenant_id,
     request_id=payload.request_id,
     happened_at=happened_at,
     day=derive_day(happened_at),
-    kind="deposit",
-    category_id=None,
-    amount=payload.amount,
-    paid_from="bank" if payload.direction == "bank_to_wallet" else "cash",
-    note=payload.note,
-    vendor=None,
-  )
-  session.add(expense)
-  post_expense(session, expense)
-  session.commit()
-  session.refresh(expense)
-  return BankDepositOut(
-    id=expense.id,
-    happened_at=expense.happened_at,
-    created_at=expense.created_at,
-    amount=expense.amount,
     direction=payload.direction,
-    note=expense.note,
+    amount=payload.amount,
+    note=payload.note,
+  )
+  session.add(txn)
+  post_bank_transfer(session, txn)
+  session.commit()
+  session.refresh(txn)
+  return BankDepositOut(
+    id=txn.id,
+    happened_at=txn.happened_at,
+    created_at=txn.created_at,
+    amount=txn.amount,
+    direction=txn.direction,
+    note=txn.note,
   )
 
 
@@ -340,31 +332,26 @@ def delete_bank_deposit(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> None:
-  existing = session.get(Expense, deposit_id)
+  existing = session.get(BankTransfer, deposit_id)
   if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     return
-  reversal_happened_at = existing.happened_at
-  reversal_day = existing.day
-  reversal = Expense(
+  reversal = BankTransfer(
     tenant_id=tenant_id,
     request_id=None,
-    happened_at=reversal_happened_at,
-    day=reversal_day,
-    kind=existing.kind,
-    category_id=existing.category_id,
+    happened_at=existing.happened_at,
+    day=existing.day,
+    direction=existing.direction,
     amount=existing.amount,
-    paid_from=existing.paid_from,
     note=f"Reversal of {existing.id}",
-    vendor=None,
     deleted_at=datetime.now(timezone.utc),
     reversal_source_id=existing.id,
   )
   session.add(reversal)
   reverse_source(
     session,
-    source_type="expense",
+    source_type="bank_transfer",
     source_id=existing.id,
-    reversal_source_type="expense",
+    reversal_source_type="bank_transfer",
     reversal_source_id=reversal.id,
     happened_at=reversal.happened_at,
     day=reversal.day,

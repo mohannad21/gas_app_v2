@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.models import (
+  BankTransfer,
   CompanyTransaction,
   Customer,
   CustomerTransaction,
@@ -68,6 +69,7 @@ def normalize_happened_at(value: Optional[datetime]) -> datetime:
 
 
 _REPORTABLE_HAPPENED_AT_MODELS = (
+  BankTransfer,
   CustomerTransaction,
   CompanyTransaction,
   InventoryAdjustment,
@@ -724,22 +726,15 @@ def post_inventory_adjustment(session: Session, adj: InventoryAdjustment) -> lis
 
 
 def build_expense_lines(expense: Expense) -> list[LedgerLine]:
-  lines: list[LedgerLine] = []
-  if expense.kind == "expense":
-    if expense.paid_from == "bank":
-      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-expense.amount))
-    else:
-      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
-    lines.append(LedgerLine(account=ACCOUNT_EXPENSE, unit=UNIT_MONEY, amount=expense.amount))
-  elif expense.kind == "deposit":
-    if expense.paid_from == "bank":
-      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-expense.amount))
-      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=expense.amount))
-    else:
-      lines.append(LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount))
-      lines.append(LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=expense.amount))
-
-  return lines
+  if expense.paid_from == "bank":
+    return [
+      LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-expense.amount),
+      LedgerLine(account=ACCOUNT_EXPENSE, unit=UNIT_MONEY, amount=expense.amount),
+    ]
+  return [
+    LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-expense.amount),
+    LedgerLine(account=ACCOUNT_EXPENSE, unit=UNIT_MONEY, amount=expense.amount),
+  ]
 
 
 def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
@@ -751,6 +746,31 @@ def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
     source_id=expense.id,
     happened_at=expense.happened_at,
     day=expense.day,
+    lines=lines,
+  )
+
+
+def build_bank_transfer_lines(txn: BankTransfer) -> list[LedgerLine]:
+  if txn.direction == "wallet_to_bank":
+    return [
+      LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=-txn.amount),
+      LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=txn.amount),
+    ]
+  return [
+    LedgerLine(account=ACCOUNT_BANK, unit=UNIT_MONEY, amount=-txn.amount),
+    LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=txn.amount),
+  ]
+
+
+def post_bank_transfer(session: Session, txn: BankTransfer) -> list[LedgerEntry]:
+  lines = build_bank_transfer_lines(txn)
+  return _insert_ledger_entries(
+    session,
+    tenant_id=txn.tenant_id,
+    source_type="bank_transfer",
+    source_id=txn.id,
+    happened_at=txn.happened_at,
+    day=txn.day,
     lines=lines,
   )
 

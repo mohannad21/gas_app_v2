@@ -15,7 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.config import DEFAULT_TENANT_ID
 from app.db import engine
-from app.models import WalletAdjustment, CompanyTransaction, CustomerTransaction, Expense, InventoryAdjustment
+from app.models import BankTransfer, WalletAdjustment, CompanyTransaction, CustomerTransaction, Expense, InventoryAdjustment
 from app.services.posting import allocate_happened_at, derive_day
 from tests.backend.conftest import create_customer, create_system, init_inventory
 
@@ -133,10 +133,10 @@ def test_same_second_api_writes_store_monotonic_happened_at_across_models(client
             select(WalletAdjustment).where(WalletAdjustment.note == "mixed-cash")
         ).one()
         expense_row = session.exec(
-            select(Expense).where(Expense.kind == "expense").where(Expense.note == "mixed-expense")
+            select(Expense).where(Expense.note == "mixed-expense")
         ).one()
         transfer_row = session.exec(
-            select(Expense).where(Expense.kind == "deposit").where(Expense.note == "mixed-transfer")
+            select(BankTransfer).where(BankTransfer.note == "mixed-transfer")
         ).one()
         inventory_row = session.exec(
             select(InventoryAdjustment).where(InventoryAdjustment.note == "mixed-inventory")
