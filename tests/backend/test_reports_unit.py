@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from conftest import init_inventory
 from conftest import create_customer, create_system, create_order
 from app.db import engine
-from app.models import CashAdjustment, LedgerEntry
+from app.models import LedgerEntry
 
 
 def test_cash_replay_ordering_tiebreak(client) -> None:
@@ -47,13 +47,13 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
     assert resp.status_code == 201
 
     with Session(engine) as session:
-        rows = session.exec(text("select id, delta_cash from cash_adjustments")).all()
+        rows = session.exec(text("select id, delta_cash from wallet_adjustments")).all()
         adj_a_id = next(row[0] for row in rows if row[1] == 10)
         adj_b_id = next(row[0] for row in rows if row[1] == 20)
         session.execute(
             text(
                 """
-                update cash_adjustments
+                update wallet_adjustments
                 set id = :new_id,
                     happened_at = :ts,
                     created_at = :ts,
@@ -66,7 +66,7 @@ def test_cash_adjust_tiebreaker_uses_ledger_id(client) -> None:
         session.execute(
             text(
                 """
-                update cash_adjustments
+                update wallet_adjustments
                 set id = :new_id,
                     happened_at = :ts,
                     created_at = :ts,

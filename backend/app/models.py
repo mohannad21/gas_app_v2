@@ -443,12 +443,24 @@ class ExpenseCategory(SQLModel, table=True):
   updated_by: Optional[str] = Field(default=None, nullable=True)
 
 
+class TransactionGroup(SQLModel, table=True):
+  __tablename__ = "transaction_groups"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  kind: str = Field(index=True)
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+  created_by: Optional[str] = Field(default=None, nullable=True)
+
+
 class Expense(SQLModel, table=True):
   __tablename__ = "expenses"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   tenant_id: str = Field(foreign_key="tenants.id", index=True)
-  group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
     sa_column=sa.Column(sa.String, nullable=True),
@@ -669,12 +681,11 @@ class LedgerEntry(SQLModel, table=True):
   )
 
 
-class CashAdjustment(SQLModel, table=True):
-  __tablename__ = "cash_adjustments"
+class WalletAdjustment(SQLModel, table=True):
+  __tablename__ = "wallet_adjustments"
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   tenant_id: str = Field(foreign_key="tenants.id", index=True)
-  group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
     sa_column=sa.Column(sa.String, nullable=True),

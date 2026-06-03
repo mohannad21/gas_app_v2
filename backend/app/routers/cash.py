@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.auth import get_tenant_id
 from app.db import get_session
-from app.models import CashAdjustment, Expense
+from app.models import WalletAdjustment, Expense
 from app.services.ledger import sum_cash
 from app.schemas import BankDepositCreate, BankDepositOut, CashAdjustCreate, CashAdjustUpdate, CashAdjustmentRow
 from app.services.posting import allocate_happened_at, derive_day, post_cash_adjustment, post_expense, reverse_source
@@ -14,8 +14,8 @@ from app.services.posting import allocate_happened_at, derive_day, post_cash_adj
 router = APIRouter(prefix="/cash", tags=["cash"])
 
 
-def _resolve_active_cash_adjustment(session: Session, adjust_id: str) -> CashAdjustment | None:
-  current = session.get(CashAdjustment, adjust_id)
+def _resolve_active_cash_adjustment(session: Session, adjust_id: str) -> WalletAdjustment | None:
+  current = session.get(WalletAdjustment, adjust_id)
   if not current:
     return None
 
@@ -23,9 +23,9 @@ def _resolve_active_cash_adjustment(session: Session, adjust_id: str) -> CashAdj
   while current.deleted_at is not None and current.id not in visited:
     visited.add(current.id)
     next_adjustment = session.exec(
-      select(CashAdjustment)
-      .where(CashAdjustment.reversed_id == current.id)
-      .order_by(CashAdjustment.created_at.desc())
+      select(WalletAdjustment)
+      .where(WalletAdjustment.reversed_id == current.id)
+      .order_by(WalletAdjustment.created_at.desc())
     ).first()
     if not next_adjustment:
       break
@@ -46,25 +46,25 @@ def list_cash_adjustments(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> list[CashAdjustmentRow]:
-  stmt = select(CashAdjustment).where(CashAdjustment.tenant_id == tenant_id)
+  stmt = select(WalletAdjustment).where(WalletAdjustment.tenant_id == tenant_id)
   if date:
     try:
       day = datetime.fromisoformat(date).date()
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid date format") from exc
-    stmt = stmt.where(CashAdjustment.day == day)
+    stmt = stmt.where(WalletAdjustment.day == day)
   if not include_deleted:
-    stmt = stmt.where(CashAdjustment.deleted_at == None)  # noqa: E711
+    stmt = stmt.where(WalletAdjustment.deleted_at == None)  # noqa: E711
   if before:
     try:
       cursor_dt = datetime.fromisoformat(before)
     except ValueError as exc:
       raise HTTPException(status_code=400, detail="Invalid before date format") from exc
-    stmt = stmt.where(CashAdjustment.happened_at < cursor_dt)
+    stmt = stmt.where(WalletAdjustment.happened_at < cursor_dt)
   stmt = stmt.order_by(
-    CashAdjustment.happened_at.desc(),
-    CashAdjustment.created_at.desc(),
-    CashAdjustment.id.desc(),
+    WalletAdjustment.happened_at.desc(),
+    WalletAdjustment.created_at.desc(),
+    WalletAdjustment.id.desc(),
   ).limit(limit)
   rows = session.exec(stmt).all()
   return [
@@ -90,9 +90,9 @@ def create_cash_adjustment(
     raise HTTPException(status_code=400, detail="delta_cash_required")
   if payload.request_id:
     existing = session.exec(
-      select(CashAdjustment)
-      .where(CashAdjustment.request_id == payload.request_id)
-      .where(CashAdjustment.tenant_id == tenant_id)
+      select(WalletAdjustment)
+      .where(WalletAdjustment.request_id == payload.request_id)
+      .where(WalletAdjustment.tenant_id == tenant_id)
     ).first()
     if existing:
       return CashAdjustmentRow(
@@ -104,7 +104,7 @@ def create_cash_adjustment(
         is_deleted=existing.deleted_at is not None,
       )
   happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
-  adjustment = CashAdjustment(
+  adjustment = WalletAdjustment(
     tenant_id=tenant_id,
     request_id=payload.request_id,
     happened_at=happened_at,
@@ -133,13 +133,13 @@ def update_cash_adjustment(
   session: Session = Depends(get_session),
   tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
 ) -> CashAdjustmentRow:
-  existing = session.get(CashAdjustment, adjust_id)
+  existing = session.get(WalletAdjustment, adjust_id)
   if not existing or existing.tenant_id != tenant_id or existing.deleted_at is not None:
     raise HTTPException(status_code=404, detail="Adjustment not found")
 
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
-  reversal = CashAdjustment(
+  reversal = WalletAdjustment(
     tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
@@ -165,7 +165,7 @@ def update_cash_adjustment(
 
   new_amount = payload.delta_cash if payload.delta_cash is not None else existing.delta_cash
   new_note = payload.reason if payload.reason is not None else existing.note
-  new_adjustment = CashAdjustment(
+  new_adjustment = WalletAdjustment(
     tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,
@@ -199,7 +199,7 @@ def delete_cash_adjustment(
     return
   reversal_happened_at = existing.happened_at
   reversal_day = existing.day
-  reversal = CashAdjustment(
+  reversal = WalletAdjustment(
     tenant_id=tenant_id,
     request_id=None,
     happened_at=reversal_happened_at,

@@ -8,7 +8,6 @@ from app.auth import get_tenant_id
 from app.constants import DEFAULT_CURRENCY_CODE
 from app.db import get_session
 from app.models import (
-    CashAdjustment,
     CompanyTransaction,
     CustomerTransaction,
     Expense,
@@ -16,6 +15,7 @@ from app.models import (
     LedgerEntry,
     PriceCatalog,
     SystemSettings,
+    WalletAdjustment,
 )
 from app.schemas import (
     LedgerHealthIssue,
@@ -251,7 +251,7 @@ def ledger_health_check(session: Session = Depends(get_session)) -> SystemHealth
     mismatch_count += _check_intents(session=session, source_type="company_txn", rows=list(session.exec(select(CompanyTransaction)).all()), builder=build_company_lines, issues=issues)
     mismatch_count += _check_intents(session=session, source_type="inventory_adjust", rows=list(session.exec(select(InventoryAdjustment)).all()), builder=build_inventory_adjustment_lines, issues=issues)
     mismatch_count += _check_intents(session=session, source_type="expense", rows=list(session.exec(select(Expense)).all()), builder=build_expense_lines, issues=issues)
-    mismatch_count += _check_intents(session=session, source_type="cash_adjust", rows=list(session.exec(select(CashAdjustment)).all()), builder=build_cash_adjustment_lines, issues=issues)
+    mismatch_count += _check_intents(session=session, source_type="cash_adjust", rows=list(session.exec(select(WalletAdjustment)).all()), builder=build_cash_adjustment_lines, issues=issues)
 
     return SystemHealthCheckOut(
         ok=mismatch_count == 0,

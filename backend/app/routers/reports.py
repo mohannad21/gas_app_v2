@@ -17,7 +17,6 @@ from app.auth import get_tenant_id
 from app.constants import DEFAULT_CURRENCY_CODE
 from app.db import get_session
 from app.models import (
-  CashAdjustment,
   CompanyTransaction,
   Customer,
   CustomerTransaction,
@@ -27,6 +26,7 @@ from app.models import (
   LedgerEntry,
   System,
   SystemSettings,
+  WalletAdjustment,
 )
 from app.schemas import (
   DailyReportCard,
@@ -289,12 +289,12 @@ def list_daily_reports(
   expenses_by_day = {row[0]: int(row[1] or 0) for row in expense_rows}
 
   adjustment_rows = session.exec(
-    select(CashAdjustment.day, func.coalesce(func.sum(CashAdjustment.delta_cash), 0))
-    .where(CashAdjustment.tenant_id == tenant_id)
-    .where(CashAdjustment.day >= start_date)
-    .where(CashAdjustment.day <= end_date)
-    .where(CashAdjustment.deleted_at == None)  # noqa: E711
-    .group_by(CashAdjustment.day)
+    select(WalletAdjustment.day, func.coalesce(func.sum(WalletAdjustment.delta_cash), 0))
+    .where(WalletAdjustment.tenant_id == tenant_id)
+    .where(WalletAdjustment.day >= start_date)
+    .where(WalletAdjustment.day <= end_date)
+    .where(WalletAdjustment.deleted_at == None)  # noqa: E711
+    .group_by(WalletAdjustment.day)
   ).all()
   adjustments_by_day = {row[0]: int(row[1] or 0) for row in adjustment_rows}
 
@@ -435,10 +435,10 @@ def get_daily_report(
   ).all()
 
   cash_adjustments = session.exec(
-    select(CashAdjustment)
-    .where(CashAdjustment.tenant_id == tenant_id)
-    .where(CashAdjustment.day == report_day)
-    .where(CashAdjustment.deleted_at == None)  # noqa: E711
+    select(WalletAdjustment)
+    .where(WalletAdjustment.tenant_id == tenant_id)
+    .where(WalletAdjustment.day == report_day)
+    .where(WalletAdjustment.deleted_at == None)  # noqa: E711
   ).all()
 
   inventory_adjustments = session.exec(

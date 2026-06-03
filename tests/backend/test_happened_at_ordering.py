@@ -15,7 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.config import DEFAULT_TENANT_ID
 from app.db import engine
-from app.models import CashAdjustment, CompanyTransaction, CustomerTransaction, Expense, InventoryAdjustment
+from app.models import WalletAdjustment, CompanyTransaction, CustomerTransaction, Expense, InventoryAdjustment
 from app.services.posting import allocate_happened_at, derive_day
 from tests.backend.conftest import create_customer, create_system, init_inventory
 
@@ -30,7 +30,7 @@ def test_allocate_happened_at_assigns_monotonic_microseconds_within_same_second_
     with Session(engine) as session:
         first = allocate_happened_at(session, tenant_id=DEFAULT_TENANT_ID, value=bucket)
         session.add(
-            CashAdjustment(
+            WalletAdjustment(
                 tenant_id=DEFAULT_TENANT_ID,
                 happened_at=first,
                 day=derive_day(first),
@@ -42,7 +42,7 @@ def test_allocate_happened_at_assigns_monotonic_microseconds_within_same_second_
 
         second = allocate_happened_at(session, tenant_id=DEFAULT_TENANT_ID, value=bucket)
         session.add(
-            CashAdjustment(
+            WalletAdjustment(
                 tenant_id=DEFAULT_TENANT_ID,
                 happened_at=second,
                 day=derive_day(second),
@@ -130,7 +130,7 @@ def test_same_second_api_writes_store_monotonic_happened_at_across_models(client
 
     with Session(engine) as session:
         cash_row = session.exec(
-            select(CashAdjustment).where(CashAdjustment.note == "mixed-cash")
+            select(WalletAdjustment).where(WalletAdjustment.note == "mixed-cash")
         ).one()
         expense_row = session.exec(
             select(Expense).where(Expense.kind == "expense").where(Expense.note == "mixed-expense")

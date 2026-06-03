@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+import hashlib
+import struct
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.models import (
   CompanyTransaction,
-  CashAdjustment,
   Customer,
   CustomerTransaction,
   Expense,
   InventoryAdjustment,
   LedgerEntry,
   System,
+  WalletAdjustment,
 )
 from app.utils.time import business_date_from_utc, business_date_start_utc, business_tz, to_utc_naive
 
@@ -39,7 +42,6 @@ ACCOUNT_CUST_CYL = "cust_cylinders_debts"
 ACCOUNT_COMPANY_MONEY = "company_money_debts"
 ACCOUNT_COMPANY_CYL = "company_cylinders_debts"
 ACCOUNT_EXPENSE = "expense"
-ACCOUNT_CASH_ADJUST = "cash_adjustments"
 
 UNIT_MONEY = "money"
 UNIT_COUNT = "count"
@@ -68,8 +70,13 @@ _REPORTABLE_HAPPENED_AT_MODELS = (
   CompanyTransaction,
   InventoryAdjustment,
   Expense,
-  CashAdjustment,
+  WalletAdjustment,
 )
+
+
+def _tenant_lock_key(tenant_id: str) -> int:
+  digest = hashlib.md5(tenant_id.encode()).digest()
+  return struct.unpack_from(">q", digest)[0]
 
 
 def allocate_happened_at(
@@ -90,6 +97,8 @@ def allocate_happened_at(
   normalized = normalize_happened_at(value)
   if normalized.microsecond != 0:
     return normalized
+
+  session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _tenant_lock_key(tenant_id)})
 
   bucket_start = normalized.replace(microsecond=0)
   bucket_end = bucket_start + timedelta(seconds=1)
@@ -666,14 +675,14 @@ def post_expense(session: Session, expense: Expense) -> list[LedgerEntry]:
   )
 
 
-def build_cash_adjustment_lines(adjustment: CashAdjustment) -> list[LedgerLine]:
+def build_cash_adjustment_lines(adjustment: WalletAdjustment) -> list[LedgerLine]:
   return [
     LedgerLine(account=ACCOUNT_CASH, unit=UNIT_MONEY, amount=adjustment.delta_cash, note=adjustment.note),
-    LedgerLine(account=ACCOUNT_CASH_ADJUST, unit=UNIT_MONEY, amount=-adjustment.delta_cash, note=adjustment.note),
+    LedgerLine(account="cash_adjustments", unit=UNIT_MONEY, amount=-adjustment.delta_cash, note=adjustment.note),
   ]
 
 
-def post_cash_adjustment(session: Session, adjustment: CashAdjustment) -> list[LedgerEntry]:
+def post_cash_adjustment(session: Session, adjustment: WalletAdjustment) -> list[LedgerEntry]:
   lines = build_cash_adjustment_lines(adjustment)
   return _insert_ledger_entries(
     session,
