@@ -384,7 +384,7 @@ class Expense(SQLModel, table=True):
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+    sa_column=sa.Column(sa.String, nullable=True),
   )
   # `happened_at` is the business/event time used for timeline/report ordering.
   # Hidden microseconds may be auto-assigned by allocate_happened_at(...) when
@@ -430,7 +430,7 @@ class CustomerTransaction(SQLModel, table=True):
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+    sa_column=sa.Column(sa.String, nullable=True),
   )
   # Business/event time chosen by the user. Daily reporting sorts primarily by
   # this field, not by created_at.
@@ -482,7 +482,7 @@ class CompanyTransaction(SQLModel, table=True):
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+    sa_column=sa.Column(sa.String, nullable=True),
   )
   # Business/event time chosen by the user. Hidden microseconds may be
   # allocated automatically so same-second company activities keep a stable
@@ -503,7 +503,7 @@ class CompanyTransaction(SQLModel, table=True):
   )
   updated_by: Optional[str] = Field(default=None, nullable=True)
   day: date = Field(sa_column=sa.Column(sa.Date, index=True))
-  kind: str = Field(default="refill", index=True)  # "refill" | "dist_return_empties" | "buy_full_from_company" | "payment_to_company" | "payment_from_company" | "adjust_company_balance"
+  kind: str = Field(index=True)  # "refill" | "dist_return_empties" | "buy_full_from_company" | "payment_to_company" | "payment_from_company" | "adjust_company_balance"
   buy12: int = Field(default=0)
   return12: int = Field(default=0)
   buy48: int = Field(default=0)
@@ -534,7 +534,7 @@ class InventoryAdjustment(SQLModel, table=True):
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+    sa_column=sa.Column(sa.String, nullable=True),
   )
   # Business/event time for inventory changes.
   happened_at: datetime = Field(
@@ -610,7 +610,7 @@ class CashAdjustment(SQLModel, table=True):
   group_id: Optional[str] = Field(default=None, index=True)
   request_id: Optional[str] = Field(
     default=None,
-    sa_column=sa.Column(sa.String, unique=True, nullable=True),
+    sa_column=sa.Column(sa.String, nullable=True),
   )
   # Business/event time for the wallet adjustment.
   happened_at: datetime = Field(
