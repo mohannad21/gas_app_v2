@@ -40,7 +40,7 @@ const dayDetail = {
   recalculated: false,
   events: [
     {
-      event_type: "collection_money",
+      event_type: "payment_from_customer",
       effective_at: "2025-01-01T07:30:00Z",
       created_at: "2025-01-01T07:30:00Z",
       source_id: "pay-1",
@@ -56,7 +56,7 @@ const dayDetail = {
       balance_transitions: [],
     },
     {
-      event_type: "order",
+      event_type: "replacement",
       effective_at: "2025-01-01T08:00:00Z",
       created_at: "2025-01-01T08:00:00Z",
       source_id: "order-1",
@@ -83,7 +83,7 @@ const dayDetail = {
       balance_transitions: [],
     },
     {
-      event_type: "collection_empty",
+      event_type: "customer_return_empties",
       effective_at: "2025-01-01T08:30:00Z",
       created_at: "2025-01-01T08:30:00Z",
       source_id: "return-group-1",
@@ -105,12 +105,12 @@ const dayDetail = {
       balance_transitions: [],
     },
     {
-      event_type: "company_payment",
+      event_type: "payment_to_company",
       effective_at: "2025-01-01T09:00:00Z",
       created_at: "2025-01-01T09:00:00Z",
       source_id: "cp-1",
       label: "Pay Company",
-      hero_text: "Paid company",
+      hero_text: "Payment to company",
       cash_before: 900,
       cash_after: 800,
       wallet_before: 900,
@@ -124,7 +124,7 @@ const dayDetail = {
       balance_transitions: [],
     },
     {
-      event_type: "company_buy_iron",
+      event_type: "buy_full_from_company",
       effective_at: "2025-01-01T10:00:00Z",
       created_at: "2025-01-01T10:00:00Z",
       source_id: "cbi-1",
@@ -170,7 +170,7 @@ const dayDetail = {
       balance_transitions: [],
     },
     {
-      event_type: "bank_deposit",
+      event_type: "wallet_to_bank",
       effective_at: "2025-01-01T12:00:00Z",
       created_at: "2025-01-01T12:00:00Z",
       source_id: "deposit-1",
@@ -284,7 +284,7 @@ describe("ReportsScreen expanded DeltaBox", () => {
   it("renders company relationship boxes for company payment and buy iron", () => {
     const { getAllByText } = renderReportsScreen();
 
-    fireEvent.press(getAllByText("Paid company")[0]);
+    fireEvent.press(getAllByText("Payment to company")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
 
     fireEvent.press(getAllByText("Bought: 2x 12kg")[0]);
@@ -299,10 +299,10 @@ describe("ReportsScreen expanded DeltaBox", () => {
 
     fireEvent.press(getAllByText("Returned 1x12kg | 3x48kg empties")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
-    expect(rowChildTestIds(getByTestId("collection_empty-cash-row"))).toEqual([
-      "collection_empty-cash-left",
-      "collection_empty-cash",
-      "collection_empty-cash-right",
+    expect(rowChildTestIds(getByTestId("customer_return_empties-cash-row"))).toEqual([
+      "customer_return_empties-cash-left",
+      "customer_return_empties-cash",
+      "customer_return_empties-cash-right",
     ]);
   });
 
@@ -326,10 +326,10 @@ describe("ReportsScreen expanded DeltaBox", () => {
 
     fireEvent.press(getAllByText("Transferred ₪500 to bank")[0]);
     expect(getAllByText("Wallet").length).toBeGreaterThan(0);
-    expect(rowChildTestIds(getByTestId("bank_deposit-cash-row"))).toEqual([
-      "bank_deposit-cash-left",
-      "bank_deposit-cash",
-      "bank_deposit-cash-right",
+    expect(rowChildTestIds(getByTestId("wallet_to_bank-cash-row"))).toEqual([
+      "wallet_to_bank-cash-left",
+      "wallet_to_bank-cash",
+      "wallet_to_bank-cash-right",
     ]);
     expect(queryByText("Received ₪500")).toBeNull();
   });

@@ -201,13 +201,13 @@ describe("adapter event_type baselines - post-T8 canonical", () => {
     it('emits canonical "wallet_to_bank" for wallet_to_bank direction', () => {
       const event = bankDepositToEvent(makeBankDeposit({ direction: "wallet_to_bank" }));
       expect(event.event_type).toBe("wallet_to_bank");
-      expect(event.transfer_direction).toBe("wallet_to_bank");
+      expect(event.money_direction).toBe("out");
     });
 
     it('emits canonical "bank_to_wallet" for bank_to_wallet direction', () => {
       const event = bankDepositToEvent(makeBankDeposit({ direction: "bank_to_wallet" }));
       expect(event.event_type).toBe("bank_to_wallet");
-      expect(event.transfer_direction).toBe("bank_to_wallet");
+      expect(event.money_direction).toBe("in");
     });
   });
 

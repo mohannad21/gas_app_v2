@@ -112,7 +112,7 @@ def test_collection_rejects_negative_amounts(client) -> None:
     assert "amount_money_must_be_non_negative" in resp.text
 
 
-def test_company_buy_iron_rejects_negative_counts(client) -> None:
+def test_buy_full_from_company_rejects_negative_counts(client) -> None:
     resp = client.post(
         "/company/buy_iron",
         json={
@@ -133,6 +133,7 @@ def test_company_payment_allows_negative_amount(client) -> None:
         json={
             "date": "2025-10-11",
             "amount": -50,
+            "kind": "payment_from_company",
             "note": "refund",
         },
     )

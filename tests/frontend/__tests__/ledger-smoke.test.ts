@@ -4,9 +4,7 @@
  * Verifies that:
  * 1. getDailyReport correctly converts monetary fields from minor units to
  *    major units while leaving inventory counts untouched.
- * 2. normalizeBankDepositDisplayEvent produces the correct amount, direction,
- *    hero_text, and context_line for bank_deposit events coming from the
- *    backend.
+ * 2. bankDepositToEvent emits canonical wallet_to_bank / bank_to_wallet events.
  * 3. Event cards receive the right wallet_before/wallet_after and inventory
  *    transition values after the API transformation.
  *
@@ -15,7 +13,7 @@
  */
 
 import { api, getDailyReport } from "@/lib/api";
-import { normalizeBankDepositDisplayEvent } from "@/lib/activityAdapter";
+import { bankDepositToEvent } from "@/lib/activityAdapter";
 import type { DailyReportEvent } from "@/types/domain";
 
 // ── mock axios instance ───────────────────────────────────────────────────────
@@ -190,145 +188,48 @@ describe("getDailyReport — inventory count fields (no conversion)", () => {
   });
 });
 
-// ── normalizeBankDepositDisplayEvent ─────────────────────────────────────────
+// ── bankDepositToEvent ───────────────────────────────────────────────────────
 
-/** Build a minimal DailyReportEvent in MAJOR units (already converted by getDailyReport). */
-function makeBankDepositEvent(overrides: Partial<DailyReportEvent> = {}): DailyReportEvent {
+/** Build a minimal bank transfer input for the add-screen adapter. */
+function makeBankDeposit(overrides: Record<string, unknown> = {}) {
   return {
-    event_type: "bank_deposit",
-    source_id: "dep-1",
-    effective_at: "2025-03-01T14:00:00Z",
+    id: "dep-1",
+    happened_at: "2025-03-01T14:00:00Z",
     created_at: "2025-03-01T14:00:00Z",
-    transfer_direction: "wallet_to_bank",
-    money_amount: 30,     // major units (e.g. ₪30.00)
-    money_delta: 30,
-    wallet_before: 114,     // major units
-    wallet_after: 84,
-    notes: [],
-    open_actions: [],
-    remaining_actions: [],
-    action_pills: [],
-    balance_transitions: [],
+    direction: "wallet_to_bank",
+    amount: 30,
+    note: null,
     ...overrides,
-  } as unknown as DailyReportEvent;
+  } as Parameters<typeof bankDepositToEvent>[0];
 }
 
-describe("normalizeBankDepositDisplayEvent", () => {
-  it("returns non-bank-deposit events unchanged", () => {
-    const ev = { event_type: "order" } as DailyReportEvent;
-    expect(normalizeBankDepositDisplayEvent(ev)).toBe(ev);
-  });
+describe("bankDepositToEvent", () => {
+  it("emits canonical wallet_to_bank events", () => {
+    const result = bankDepositToEvent(makeBankDeposit({ direction: "wallet_to_bank", amount: 30 }));
 
-  it("sets label, display_name, and money_direction for wallet_to_bank", () => {
-    const ev = makeBankDepositEvent({ transfer_direction: "wallet_to_bank", money_amount: 30 });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
+    expect(result.event_type).toBe("wallet_to_bank");
     expect(result.label).toBe("Wallet → Bank");
     expect(result.display_name).toBe("Wallet → Bank");
     expect(result.money_direction).toBe("out");
-    expect(result.transfer_direction).toBe("wallet_to_bank");
+    expect(result.money_amount).toBe(30);
+    expect(result.money_delta).toBe(30);
   });
 
-  it("sets label, display_name, and money_direction for bank_to_wallet", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: "bank_to_wallet",
-      money_amount: 10,
-      money_delta: 10,
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
+  it("emits canonical bank_to_wallet events", () => {
+    const result = bankDepositToEvent(makeBankDeposit({ direction: "bank_to_wallet", amount: 10 }));
 
+    expect(result.event_type).toBe("bank_to_wallet");
     expect(result.label).toBe("Bank → Wallet");
+    expect(result.display_name).toBe("Bank → Wallet");
     expect(result.money_direction).toBe("in");
+    expect(result.money_amount).toBe(10);
   });
 
-  it("uses money_amount as the amount source when non-zero", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: "wallet_to_bank",
-      money_amount: 80,
-      money_delta: 0,
-      total_cost: 0,
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    expect(result.money_amount).toBe(80);
-  });
-
-  it("falls back to money_delta when money_amount is 0", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: "wallet_to_bank",
-      money_amount: 0,
-      money_delta: 55,
-      total_cost: 0,
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    expect(result.money_amount).toBe(55);
-  });
-
-  it("preserves backend context_line that contains embedded time", () => {
-    // Backend sends "Wallet → Bank · 14:30:00" — the time is embedded in context_line
-    const ev = makeBankDepositEvent({
-      transfer_direction: "wallet_to_bank",
-      context_line: "Wallet → Bank · 14:30:00",
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    // Must keep the full string (time must not be stripped)
-    expect(result.context_line).toBe("Wallet → Bank · 14:30:00");
-  });
-
-  it("fills in context_line from label when backend sends empty string", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: "wallet_to_bank",
-      context_line: "",
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
+  it("sets display fields from canonical direction", () => {
+    const result = bankDepositToEvent(makeBankDeposit({ direction: "wallet_to_bank", amount: 30 }));
 
     expect(result.context_line).toBe("Wallet → Bank");
-  });
-
-  it("preserves non-empty hero_text from backend", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: "wallet_to_bank",
-      money_amount: 30,
-      hero_text: "Transferred ₪30.00 to bank",
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    expect(result.hero_text).toBe("Transferred ₪30.00 to bank");
-  });
-
-  it("resolves direction from money_direction when transfer_direction is missing", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: undefined,
-      money_direction: "out",
-      money_amount: 20,
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    expect(result.transfer_direction).toBe("wallet_to_bank");
-    expect(result.money_direction).toBe("out");
-  });
-
-  it("resolves direction from label text when both direction fields are missing", () => {
-    const ev = makeBankDepositEvent({
-      transfer_direction: undefined,
-      money_direction: undefined,
-      label: "Wallet → Bank",
-      money_amount: 15,
-    });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    expect(result.transfer_direction).toBe("wallet_to_bank");
-  });
-
-  it("does not alter wallet_before / wallet_after (these are pre-converted by getDailyReport)", () => {
-    const ev = makeBankDepositEvent({ wallet_before: 114, wallet_after: 84 });
-    const result = normalizeBankDepositDisplayEvent(ev);
-
-    // wallet_before/wallet_after are set before normalization and must not change
-    expect(result.wallet_before).toBe(114);
-    expect(result.wallet_after).toBe(84);
+    expect(result.hero_text).toContain("to bank");
   });
 });
 
@@ -352,21 +253,21 @@ describe("getDailyReport — full scenario event chain", () => {
    */
 
   const backendEvents = [
-    makeBackendEvent({ event_type: "order", gas_type: "12kg",
+    makeBackendEvent({ event_type: "replacement", gas_type: "12kg",
       wallet_before: 10_000, wallet_after: 10_300,
       inventory_before: { full12: 50, empty12: 10, full48: 20, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 12, full48: 20, empty48: 5 },
     }),
-    makeBackendEvent({ event_type: "order", gas_type: "48kg",
+    makeBackendEvent({ event_type: "sell_full", gas_type: "48kg",
       wallet_before: 10_300, wallet_after: 10_700,
       inventory_before: { full12: 48, empty12: 12, full48: 20, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 12, full48: 19, empty48: 5 },
     }),
-    makeBackendEvent({ event_type: "collection_money",
+    makeBackendEvent({ event_type: "payment_from_customer",
       wallet_before: 10_700, wallet_after: 10_900,
       customer_money_before: 30_000, customer_money_after: 10_000,
     }),
-    makeBackendEvent({ event_type: "collection_empty",
+    makeBackendEvent({ event_type: "customer_return_empties",
       wallet_before: 10_900, wallet_after: 10_900,
       inventory_before: { full12: 48, empty12: 12, full48: 19, empty48: 5 },
       inventory_after:  { full12: 48, empty12: 15, full48: 19, empty48: 5 },
@@ -374,7 +275,7 @@ describe("getDailyReport — full scenario event chain", () => {
     makeBackendEvent({ event_type: "expense",
       wallet_before: 10_900, wallet_after: 10_400,
     }),
-    makeBackendEvent({ event_type: "cash_adjust",
+    makeBackendEvent({ event_type: "adjust_wallet",
       wallet_before: 10_400, wallet_after: 11_400,
     }),
     makeBackendEvent({ event_type: "refill",
@@ -383,7 +284,7 @@ describe("getDailyReport — full scenario event chain", () => {
       inventory_after:  { full12: 53, empty12: 13, full48: 20, empty48: 5 },
       total_cost: 200_000, paid_amount: 80_000,
     }),
-    makeBackendEvent({ event_type: "company_payment",
+    makeBackendEvent({ event_type: "payment_to_company",
       wallet_before: 10_600, wallet_after: 10_100,
       money_amount: 50_000,
     }),
@@ -400,14 +301,14 @@ describe("getDailyReport — full scenario event chain", () => {
     const evs = result.events;
 
     const cases: [string, number, number][] = [
-      ["order 12kg",        100.0, 103.0],
-      ["order 48kg",        103.0, 107.0],
-      ["collection_money",  107.0, 109.0],
-      ["collection_empty",  109.0, 109.0],
-      ["expense",           109.0, 104.0],
-      ["cash_adjust",       104.0, 114.0],
-      ["refill",            114.0, 106.0],
-      ["company_payment",   106.0, 101.0],
+      ["replacement 12kg",        100.0, 103.0],
+      ["sell_full 48kg",          103.0, 107.0],
+      ["payment_from_customer",   107.0, 109.0],
+      ["customer_return_empties", 109.0, 109.0],
+      ["expense",                 109.0, 104.0],
+      ["adjust_wallet",           104.0, 114.0],
+      ["refill",                  114.0, 106.0],
+      ["payment_to_company",      106.0, 101.0],
     ];
 
     cases.forEach(([label, expectedBefore, expectedAfter], i) => {
@@ -441,9 +342,9 @@ describe("getDailyReport — full scenario event chain", () => {
     expect(evs[6].inventory_after?.full48).toBe(20);
   });
 
-  it("converts customer_money_before/after for collection_money event", async () => {
+  it("converts customer_money_before/after for payment_from_customer event", async () => {
     const result = await getDailyReport("2025-03-01");
-    const ev = result.events[2]; // collection_money (T3)
+    const ev = result.events[2]; // payment_from_customer (T3)
 
     expect(ev.customer_money_before).toBeCloseTo(300.0); // 30_000 / 100
     expect(ev.customer_money_after).toBeCloseTo(100.0);  // 10_000 / 100
@@ -457,9 +358,9 @@ describe("getDailyReport — full scenario event chain", () => {
     expect(ev.paid_amount).toBeCloseTo(800.0); // 80_000 / 100
   });
 
-  it("converts money_amount for company_payment event", async () => {
+  it("converts money_amount for payment_to_company event", async () => {
     const result = await getDailyReport("2025-03-01");
-    const ev = result.events[7]; // company_payment (T8)
+    const ev = result.events[7]; // payment_to_company (T8)
 
     expect(ev.money_amount).toBeCloseTo(500.0); // 50_000 / 100
   });

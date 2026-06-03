@@ -724,7 +724,7 @@ function CompanyPaymentForm({
     {
       mode: amountValue > 0 ? "transition" : "current",
       collapseAllSettled: true,
-      intent: "company_payment",
+      intent: "company_payment_txn",
       formatMoney: (value) => formatDisplayMoney(value),
     }
   );
@@ -761,12 +761,13 @@ function CompanyPaymentForm({
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: payDate, time: payTime }) ?? payDate;
       const highlightId = created?.id;
+      const resolvedHighlightType = paymentDirection === "pay" ? "payment_to_company" : "payment_from_company";
       if (resetAfter) {
         resetForm();
-        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "company_payment", highlightId });
+        onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: resolvedHighlightType, highlightId });
       } else {
         if (onSaveSuccess) {
-          onSaveSuccess({ effectiveAt, highlightEventType: "company_payment", highlightId });
+          onSaveSuccess({ effectiveAt, highlightEventType: resolvedHighlightType, highlightId });
         } else {
           onSaved();
         }

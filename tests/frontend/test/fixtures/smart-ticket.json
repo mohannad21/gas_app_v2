@@ -118,7 +118,7 @@
     "name": "company-payment",
     "expectOk": false,
     "ctx": {
-      "eventType": "company_payment",
+      "eventType": "payment_to_company",
       "paymentAmount": 250,
       "ev": { "company_before": 1000, "company_after": 750, "is_balanced": true, "action_lines": [] }
     },
@@ -169,7 +169,7 @@
     "name": "company-buy-iron",
     "expectOk": true,
     "ctx": {
-      "eventType": "company_buy_iron",
+      "eventType": "buy_full_from_company",
       "buy12": 10,
       "buy48": 5,
       "ev": { "paid_now": 800, "is_balanced": true, "action_lines": [] }

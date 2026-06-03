@@ -122,7 +122,7 @@ def test_company_refill_live_fields_after_earlier_payment_deleted(client) -> Non
     pytest.skip("delete endpoint not yet implemented")
 
 
-def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None:
+def test_buy_full_from_company_live_cylinders_not_affected_by_history_changes(client) -> None:
     day = date(2025, 10, 14)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=0, full48=0, empty48=0)
 
@@ -140,7 +140,7 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
     )
     assert first_refill.status_code == 200
 
-    buy_iron = client.post(
+    buy_full = client.post(
         "/company/buy_iron",
         json={
             "happened_at": f"{day.isoformat()}T10:00:00",
@@ -150,7 +150,7 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
             "paid_amount": 0,
         },
     )
-    assert buy_iron.status_code == 201
+    assert buy_full.status_code == 201
 
     second_refill = client.post(
         "/inventory/refill",
@@ -168,6 +168,6 @@ def test_buy_iron_live_cylinders_not_affected_by_history_changes(client) -> None
 
     refills = client.get("/inventory/refills")
     assert refills.status_code == 200
-    buy_iron_row = next(item for item in refills.json() if item.get("kind") == "buy_full_from_company")
-    assert buy_iron_row["live_debt_cylinders_12"] == 3
-    assert buy_iron_row["kind"] == "buy_full_from_company"
+    buy_full_row = next(item for item in refills.json() if item.get("kind") == "buy_full_from_company")
+    assert buy_full_row["live_debt_cylinders_12"] == 3
+    assert buy_full_row["kind"] == "buy_full_from_company"

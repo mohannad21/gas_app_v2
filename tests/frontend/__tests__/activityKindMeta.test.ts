@@ -102,8 +102,6 @@ describe("normalizeEventType", () => {
   });
 
   it('returns null for legacy "bank_deposit" (alias removed)', () => {
-    expect(normalizeEventType("bank_deposit", { transfer_direction: "wallet_to_bank" })).toBeNull();
-    expect(normalizeEventType("bank_deposit", { transfer_direction: "bank_to_wallet" })).toBeNull();
     expect(normalizeEventType("bank_deposit")).toBeNull();
   });
 

@@ -264,6 +264,7 @@ def test_day_orders_feed_by_effective_then_created_then_tiebreaker(client) -> No
         "/company/payments",
         json={
             "amount": 500,
+            "kind": "payment_to_company",
             "note": "company payment",
             "happened_at": f"{day.isoformat()}T10:42:00",
         },
@@ -385,7 +386,12 @@ def test_day_formats_report_times_in_business_timezone_for_entry_flows(client) -
 
     resp = client.post(
         "/company/payments",
-        json={"happened_at": company_payment_at, "amount": 50, "note": "tz company"},
+        json={
+            "happened_at": company_payment_at,
+            "amount": 50,
+            "kind": "payment_to_company",
+            "note": "tz company",
+        },
     )
     assert resp.status_code == 201
 
@@ -433,13 +439,23 @@ def test_day_payment_wording_is_direction_aware(client) -> None:
 
     resp = client.post(
         "/company/payments",
-        json={"amount": 500, "note": "pay company", "happened_at": f"{day.isoformat()}T11:00:00"},
+        json={
+            "amount": 500,
+            "kind": "payment_to_company",
+            "note": "pay company",
+            "happened_at": f"{day.isoformat()}T11:00:00",
+        },
     )
     assert resp.status_code == 201
 
     resp = client.post(
         "/company/payments",
-        json={"amount": -200, "note": "receive company", "happened_at": f"{day.isoformat()}T12:00:00"},
+        json={
+            "amount": -200,
+            "kind": "payment_from_company",
+            "note": "receive company",
+            "happened_at": f"{day.isoformat()}T12:00:00",
+        },
     )
     assert resp.status_code == 201
 

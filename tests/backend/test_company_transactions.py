@@ -92,6 +92,7 @@ def test_company_payment_delete_recomputes_balance_and_hides_payment(client) -> 
         json={
             "happened_at": f"{day.isoformat()}T10:00:00",
             "amount": 40,
+            "kind": "payment_to_company",
             "note": "partial payment",
         },
     )

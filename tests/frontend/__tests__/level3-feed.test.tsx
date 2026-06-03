@@ -31,7 +31,7 @@ describe("Level 3 feed rendering", () => {
     level3Fixtures.forEach((event) => {
       const { queryByText } = render(<SlimActivityRow event={event} />);
       const hasSystem = queryByText(/System:/i) !== null;
-      const shouldHaveSystem = event.event_type === "order" && event.order_mode === "replacement";
+      const shouldHaveSystem = event.event_type === "replacement";
       expect(hasSystem).toBe(shouldHaveSystem);
     });
   });
@@ -83,10 +83,10 @@ describe("Level 3 feed rendering", () => {
 
   it("keeps non-expense row titles unchanged", () => {
     const event = {
-      event_type: "company_payment",
-      label: "Paid company",
+      event_type: "payment_to_company",
+      label: "Payment to company",
       display_name: "Company",
-      context_line: "Paid company · 13:04",
+      context_line: "Payment to company · 13:04",
       money_direction: "out",
       money_amount: 50,
       status: "none",

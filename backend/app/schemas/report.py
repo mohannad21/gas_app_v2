@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from sqlmodel import Field, SQLModel
 
-from .common import GasType, OrderMode, TransferDirection
+from .common import GasType, OrderMode
 
 
 class ReportInventoryTotals(SQLModel):
@@ -138,7 +138,6 @@ class DailyReportEvent(SQLModel):
   system_name: Optional[str] = None
   system_type: Optional[str] = None
   expense_type: Optional[str] = None
-  transfer_direction: Optional[TransferDirection] = None
   reason: Optional[str] = None
   buy12: Optional[int] = None
   return12: Optional[int] = None

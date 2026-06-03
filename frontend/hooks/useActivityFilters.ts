@@ -9,10 +9,10 @@ export type CustomerActivityFilter =
   | "sell_full"
   | "buy_empty"
   | "adjustment";
-export type CompanyActivityFilter = "refill" | "company_payment" | "received_from_company" | "buy_full" | "company_return" | "adjustment";
+export type CompanyActivityFilter = "refill" | "payment_to_company" | "payment_from_company" | "buy_full" | "company_return" | "adjustment";
 export type ExpensePrimaryFilter = "expense" | "wallet_to_bank" | "bank_to_wallet";
 export type ExpenseCategoryFilter = string;
-export type LedgerActivityFilter = "inventory_adjustment" | "cash_adjustment";
+export type LedgerActivityFilter = "inventory_adjustment" | "adjust_wallet";
 
 export function useActivityFilters() {
   const [mode, setMode] = useState<AddMode>("customer_activities");

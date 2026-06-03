@@ -108,7 +108,12 @@ def test_same_second_api_writes_store_monotonic_happened_at_across_models(client
 
     company = client.post(
         "/company/payments",
-        json={"happened_at": visible_at, "amount": 50, "note": "mixed-company"},
+        json={
+            "happened_at": visible_at,
+            "amount": 50,
+            "kind": "payment_to_company",
+            "note": "mixed-company",
+        },
     )
     assert company.status_code == 201
 
@@ -309,7 +314,12 @@ def test_daily_report_orders_same_second_mixed_activity_cards_newest_first(clien
 
     company = client.post(
         "/company/payments",
-        json={"happened_at": visible_at, "amount": 50, "note": "mixed-report-company"},
+        json={
+            "happened_at": visible_at,
+            "amount": 50,
+            "kind": "payment_to_company",
+            "note": "mixed-report-company",
+        },
     )
     assert company.status_code == 201
 

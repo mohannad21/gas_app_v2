@@ -54,6 +54,7 @@ def test_company_payable_zeroes_after_payment(client) -> None:
         json={
             "date": today,
             "amount": 500,
+            "kind": "payment_to_company",
             "note": "settle",
         },
     )

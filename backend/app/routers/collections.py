@@ -65,6 +65,8 @@ def _build_collection_transactions(
   request_id: Optional[str] = None,
   tenant_id: str,
 ) -> list[CustomerTransaction]:
+  # action_type values are legacy input aliases: "payment"->payment_from_customer,
+  # "payout"->payment_to_customer, "return"->customer_return_empties.
   current_money, current_cyl_12, current_cyl_48 = _current_customer_state(
     session,
     customer_id=customer_id,
@@ -336,13 +338,7 @@ def update_collection(
     if not txns:
       raise HTTPException(status_code=404, detail="Collection not found")
     base = txns[0]
-    action_type = payload_data.get("action_type") or (
-      "payment"
-      if base.kind == "payment_from_customer"
-      else "payout"
-      if base.kind == "payment_to_customer"
-      else "return"
-    )
+    action_type = payload.action_type
     amount_money = payload_data.get("amount_money")
     qty_12kg = payload_data.get("qty_12kg")
     qty_48kg = payload_data.get("qty_48kg")

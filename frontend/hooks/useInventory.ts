@@ -1,5 +1,5 @@
 import {
-  createCompanyBuyIron,
+  createBuyFullFromCompany,
   createInventoryAdjust,
   createInventoryRefill,
   deleteInventoryAdjustment,
@@ -77,10 +77,10 @@ export function useCreateRefill() {
   });
 }
 
-export function useCreateCompanyBuyIron() {
+export function useCreateBuyFullFromCompany() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createCompanyBuyIron,
+    mutationFn: createBuyFullFromCompany,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["inventory", "refills"] });

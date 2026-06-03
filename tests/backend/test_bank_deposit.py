@@ -40,7 +40,6 @@ def test_wallet_to_bank_reduces_wallet_and_appears_in_timeline(client) -> None:
     assert transfer_event["reason"] == "transfer out"
     assert transfer_event["label"] == "Wallet to bank"
     assert transfer_event["hero_text"].endswith("to bank")
-    assert transfer_event["transfer_direction"] == "wallet_to_bank"
     assert transfer_event["money_direction"] == "none"
 
     listing = client.get("/cash/bank_deposits", params={"date": day1.isoformat()})
@@ -102,7 +101,6 @@ def test_bank_to_wallet_increases_wallet_and_appears_in_timeline(client) -> None
     assert transfer_event["wallet_after"] == 120
     assert transfer_event["label"] == "Bank to wallet"
     assert transfer_event["hero_text"].endswith("to wallet")
-    assert transfer_event["transfer_direction"] == "bank_to_wallet"
 
 
 def test_bank_deposit_ordering_vs_expense_same_day(client) -> None:

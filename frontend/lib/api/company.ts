@@ -9,9 +9,9 @@ import {
   CompanyBalanceAdjustmentCreateInput,
   CompanyBalanceAdjustmentUpdateInput,
   CompanyBalanceAdjustmentSchema,
-  CompanyBuyIron,
-  CompanyBuyIronCreateInput,
-  CompanyBuyIronSchema,
+  CompanyBuyFull,
+  CompanyBuyFullCreateInput,
+  CompanyBuyFullSchema,
   CompanyPayment,
   CompanyPaymentCreateInput,
   CompanyPaymentSchema,
@@ -142,7 +142,7 @@ export async function deleteCompanyPayment(paymentId: string): Promise<void> {
   await api.delete(`/company/payments/${paymentId}`);
 }
 
-export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): Promise<CompanyBuyIron> {
+export async function createBuyFullFromCompany(payload: CompanyBuyFullCreateInput): Promise<CompanyBuyFull> {
   const happened_at =
     payload.happened_at ??
     buildActivityHappenedAt({ date: payload.date, time: payload.time });
@@ -155,7 +155,7 @@ export async function createCompanyBuyIron(payload: CompanyBuyIronCreateInput): 
     note: payload.note,
     request_id: payload.request_id,
   });
-  const parsed = parse(CompanyBuyIronSchema, data);
+  const parsed = parse(CompanyBuyFullSchema, data);
   return {
     ...parsed,
     total_cost: fromMinorUnits(parsed.total_cost),

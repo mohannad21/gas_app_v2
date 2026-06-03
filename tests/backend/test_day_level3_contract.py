@@ -204,43 +204,24 @@ def test_level3_company_refill_unsettled_actions(client) -> None:
     ]
 
 
-def test_level3_company_settle_receive_full_is_distinguishable(client) -> None:
-    day = date(2025, 11, 5)
-    init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
-
-    resp = client.post(
-        "/company/cylinders/settle",
-        json={
-            "happened_at": iso_at(day.isoformat(), "morning"),
-            "gas_type": "12kg",
-            "quantity": 3,
-            "direction": "receive_full",
-        },
-    )
-    assert resp.status_code == 201
-
-    report = client.get("/reports/day", params={"date": day.isoformat()})
-    assert report.status_code == 200
-    event = next(event for event in report.json()["events"] if event["event_type"] == "refill")
-
-    assert event["label"] == "Empties to company"
-    assert event["hero_text"] == "Received 3x12kg full from company"
-
-
-def test_level3_company_settle_return_empty_is_distinguishable(client) -> None:
+def test_level3_dist_return_empties_is_distinguishable(client) -> None:
     day = date(2025, 11, 6)
     init_inventory(client, date=(day - timedelta(days=1)).isoformat(), full12=10, empty12=5, full48=6, empty48=3)
 
     resp = client.post(
-        "/company/cylinders/settle",
+        "/inventory/refill",
         json={
+            "kind": "dist_return_empties",
             "happened_at": iso_at(day.isoformat(), "morning"),
-            "gas_type": "48kg",
-            "quantity": 2,
-            "direction": "return_empty",
+            "buy12": 0,
+            "return12": 0,
+            "buy48": 0,
+            "return48": 2,
+            "total_cost": 0,
+            "paid_amount": 0,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
 
     report = client.get("/reports/day", params={"date": day.isoformat()})
     assert report.status_code == 200

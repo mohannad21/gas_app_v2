@@ -4,8 +4,9 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from app.db import get_session
+from app.config import DEFAULT_TENANT_ID
 from app.constants import DEFAULT_CURRENCY_CODE
+from app.db import get_session
 from app.models import (
     CashAdjustment,
     CompanyTransaction,
@@ -128,43 +129,54 @@ def initialize_system(payload: SystemInitialize, session: Session = Depends(get_
         session.add(p)
 
     # 2. Prepare opening balances in ledger
-    lines: List[LedgerLine] = []
+    inventory_lines: List[LedgerLine] = []
+    company_lines: List[LedgerLine] = []
 
-    def add_line(account: str, amount: int, gas_type: Optional[str] = None, 
-                 state: Optional[str] = None, unit: str = "money", 
+    def add_line(target: List[LedgerLine], account: str, amount: int, gas_type: Optional[str] = None,
+                 state: Optional[str] = None, unit: str = "money",
                  customer_id: Optional[str] = None) -> None:
         if amount == 0:
             return
-        lines.append(LedgerLine(
+        target.append(LedgerLine(
             account=account, amount=amount, gas_type=gas_type, 
             state=state, unit=unit, customer_id=customer_id
         ))
 
     # Assets
-    add_line("inv", payload.full_12, gas_type="12kg", state="full", unit="count")
-    add_line("inv", payload.empty_12, gas_type="12kg", state="empty", unit="count")
-    add_line("inv", payload.full_48, gas_type="48kg", state="full", unit="count")
-    add_line("inv", payload.empty_48, gas_type="48kg", state="empty", unit="count")
-    add_line("cash", payload.wallet_start, unit="money")
+    add_line(inventory_lines, "inv", payload.full_12, gas_type="12kg", state="full", unit="count")
+    add_line(inventory_lines, "inv", payload.empty_12, gas_type="12kg", state="empty", unit="count")
+    add_line(inventory_lines, "inv", payload.full_48, gas_type="48kg", state="full", unit="count")
+    add_line(inventory_lines, "inv", payload.empty_48, gas_type="48kg", state="empty", unit="count")
+    add_line(inventory_lines, "cash", payload.wallet_start, unit="money")
 
     # Company Debts
-    add_line("company_money_debts", payload.company_payable_money, unit="money")
+    add_line(company_lines, "company_money_debts", payload.company_payable_money, unit="money")
     net_company_12 = payload.company_full_12kg - payload.company_empty_12kg
     net_company_48 = payload.company_full_48kg - payload.company_empty_48kg
-    add_line("company_cylinders_debts", net_company_12, gas_type="12kg", unit="count")
-    add_line("company_cylinders_debts", net_company_48, gas_type="48kg", unit="count")
+    add_line(company_lines, "company_cylinders_debts", net_company_12, gas_type="12kg", unit="count")
+    add_line(company_lines, "company_cylinders_debts", net_company_48, gas_type="48kg", unit="count")
 
     # Customer Debts
+    customer_line_groups: dict[str, List[LedgerLine]] = {}
     for entry in (payload.customer_debts or []):
-        if entry.money:
-            add_line("cust_money_debts", entry.money, unit="money", customer_id=entry.customer_id)
-        if entry.cyl_12:
-            add_line("cust_cylinders_debts", entry.cyl_12, gas_type="12kg", state="empty", unit="count", customer_id=entry.customer_id)
-        if entry.cyl_48:
-            add_line("cust_cylinders_debts", entry.cyl_48, gas_type="48kg", state="empty", unit="count", customer_id=entry.customer_id)
+        customer_lines = customer_line_groups.setdefault(entry.customer_id, [])
+        add_line(customer_lines, "cust_money_debts", entry.money, unit="money", customer_id=entry.customer_id)
+        add_line(customer_lines, "cust_cylinders_debts", entry.cyl_12, gas_type="12kg", state="empty", unit="count", customer_id=entry.customer_id)
+        add_line(customer_lines, "cust_cylinders_debts", entry.cyl_48, gas_type="48kg", state="empty", unit="count", customer_id=entry.customer_id)
 
     # Post to Ledger
-    post_system_init(session, source_id="system_init", happened_at=init_at, day=day, lines=lines)
+    post_system_init(session, tenant_id=DEFAULT_TENANT_ID, source_id="system_init:inventory", happened_at=init_at, day=day, lines=inventory_lines)
+    post_system_init(session, tenant_id=DEFAULT_TENANT_ID, source_id="system_init:company", happened_at=init_at, day=day, lines=company_lines)
+    for customer_id, customer_lines in customer_line_groups.items():
+        if customer_lines:
+            post_system_init(
+                session,
+                tenant_id=DEFAULT_TENANT_ID,
+                source_id=f"system_init:customer:{customer_id}",
+                happened_at=init_at,
+                day=day,
+                lines=customer_lines,
+            )
 
     # 3. Finalize Settings
     settings.is_setup_completed = True

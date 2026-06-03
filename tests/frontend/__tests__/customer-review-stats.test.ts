@@ -134,7 +134,6 @@ function makeEvent(overrides: Partial<DailyReportEvent> = {}): DailyReportEvent 
     money_amount: null,
     money_direction: null,
     money_received: null,
-    transfer_direction: null,
     settlement: null,
     open_actions: null,
     order_mode: "replacement",

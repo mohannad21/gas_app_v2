@@ -410,6 +410,7 @@ class TestDayBoxCompanyActivities:
             json={
                 "happened_at": iso_at(DAY.isoformat(), "midday"),
                 "amount": 200,
+                "kind": "payment_to_company",
                 "note": "pay off refill",
             },
         )

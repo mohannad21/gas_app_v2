@@ -81,10 +81,10 @@ type CustomerActivityFilter =
   | "buy_empty"
   | "adjustment";
 
-type CompanyActivityFilter = "refill" | "company_payment" | "received_from_company" | "buy_full" | "company_return" | "adjustment";
+type CompanyActivityFilter = "refill" | "payment_to_company" | "payment_from_company" | "buy_full" | "company_return" | "adjustment";
 type ExpensePrimaryFilter = "expense" | "wallet_to_bank" | "bank_to_wallet";
 type ExpenseCategoryFilter = string;
-type LedgerActivityFilter = "inventory_adjustment" | "cash_adjustment";
+type LedgerActivityFilter = "inventory_adjustment" | "adjust_wallet";
 type PriceSaveStatusTone = "success" | "warning" | "error";
 type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
@@ -145,7 +145,7 @@ type CompanyActivityListItem =
     }
   | {
       id: string;
-      kind: "company_payment";
+      kind: "company_payment_txn";
       sortAt: string;
       createdAt: string;
       is_deleted: boolean;
@@ -153,7 +153,7 @@ type CompanyActivityListItem =
     }
   | {
       id: string;
-      kind: "company_adjustment";
+      kind: "adjust_company_balance";
       sortAt: string;
       createdAt: string;
       is_deleted: boolean;
@@ -173,7 +173,7 @@ type LedgerAdjustmentListItem =
     }
   | {
       id: string;
-      kind: "cash_adjustment";
+      kind: "adjust_wallet";
       sortAt: string;
       createdAt: string;
       is_deleted: boolean;
@@ -196,8 +196,8 @@ const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] =
 
 const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
   { id: "refill", label: EVENT_LABELS.REFILL },
-  { id: "company_payment", label: EVENT_LABELS.COMPANY_PAYMENT_OUT },
-  { id: "received_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN },
+  { id: "payment_to_company", label: EVENT_LABELS.COMPANY_PAYMENT_OUT },
+  { id: "payment_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN },
   { id: "buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL },
   { id: "company_return", label: EVENT_LABELS.COMPANY_RETURN },
   { id: "adjustment", label: EVENT_LABELS.COMPANY_ADJUSTMENT },
@@ -211,7 +211,7 @@ const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
 
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
   { id: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT },
-  { id: "cash_adjustment", label: EVENT_LABELS.WALLET_ADJUSTMENT },
+  { id: "adjust_wallet", label: EVENT_LABELS.WALLET_ADJUSTMENT },
 ];
 const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "created_desc",
@@ -432,16 +432,16 @@ const formatDateTime = (value?: string) => {
         data: refill,
       }));
     const companyPaymentItems = (companyPaymentsQuery.data ?? []).map((payment) => ({
-        id: `company-payment-${payment.id}`,
-        kind: "company_payment" as const,
-        sortAt: payment.happened_at ?? payment.created_at,
-        createdAt: payment.created_at ?? payment.happened_at,
-        is_deleted: Boolean(payment.is_deleted),
-        data: payment,
-      }));
+      id: `company-payment-${payment.id}`,
+      kind: "company_payment_txn" as const,
+      sortAt: payment.happened_at ?? payment.created_at,
+      createdAt: payment.created_at ?? payment.happened_at,
+      is_deleted: Boolean(payment.is_deleted),
+      data: payment,
+    }));
     const companyAdjustmentItems = (companyAdjustmentsQuery.data ?? []).map((adjustment) => ({
       id: `company-adjustment-${adjustment.id}`,
-      kind: "company_adjustment" as const,
+      kind: "adjust_company_balance" as const,
       sortAt: adjustment.happened_at ?? adjustment.created_at,
       createdAt: adjustment.created_at ?? adjustment.happened_at,
       is_deleted: Boolean(adjustment.is_deleted),
@@ -488,7 +488,7 @@ const formatDateTime = (value?: string) => {
       });
       const cashItems = (allCashAdjustmentsQuery.data ?? []).map<LedgerAdjustmentListItem>((adjustment) => ({
         id: `cash-adjustment-${adjustment.id}`,
-        kind: "cash_adjustment",
+        kind: "adjust_wallet",
         sortAt: adjustment.effective_at ?? adjustment.created_at,
         createdAt: adjustment.created_at ?? adjustment.effective_at,
         is_deleted: Boolean(adjustment.is_deleted),
@@ -683,10 +683,10 @@ const formatDateTime = (value?: string) => {
     const options: { id: CompanyActivityFilter; label: string }[] = [];
     for (const entry of companyActivityItems) {
       let filterId: CompanyActivityFilter;
-      if (entry.kind === "company_adjustment") {
+      if (entry.kind === "adjust_company_balance") {
         filterId = "adjustment";
-      } else if (entry.kind === "company_payment") {
-        filterId = (entry.data?.amount ?? 0) < 0 ? "received_from_company" : "company_payment";
+      } else if (entry.kind === "company_payment_txn") {
+        filterId = (entry.data?.amount ?? 0) < 0 ? "payment_from_company" : "payment_to_company";
       } else {
         const totalBuys =
           Number(entry.data.buy12 ?? 0) +
@@ -747,13 +747,13 @@ const formatDateTime = (value?: string) => {
       }
       case "adjustment": {
         const hasMoney = companyActivityItems.some(
-          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_money ?? 0) !== 0
+          (entry) => entry.kind === "adjust_company_balance" && Number(entry.data.delta_money ?? 0) !== 0
         );
         const has12 = companyActivityItems.some(
-          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_cylinder_12 ?? 0) !== 0
+          (entry) => entry.kind === "adjust_company_balance" && Number(entry.data.delta_cylinder_12 ?? 0) !== 0
         );
         const has48 = companyActivityItems.some(
-          (entry) => entry.kind === "company_adjustment" && Number(entry.data.delta_cylinder_48 ?? 0) !== 0
+          (entry) => entry.kind === "adjust_company_balance" && Number(entry.data.delta_cylinder_48 ?? 0) !== 0
         );
         return [
           hasMoney ? { id: "money", label: "Money" } : null,
@@ -771,7 +771,7 @@ const formatDateTime = (value?: string) => {
         if (!companyActivityFilter) {
           return true;
         }
-        if (entry.kind === "company_adjustment") {
+        if (entry.kind === "adjust_company_balance") {
           if (companyActivityFilter !== "adjustment") return false;
           if (!companyActivityLevel2) return true;
           return (
@@ -780,10 +780,10 @@ const formatDateTime = (value?: string) => {
             (companyActivityLevel2 === "48kg" && Number(entry.data.delta_cylinder_48 ?? 0) !== 0)
           );
         }
-        if (entry.kind === "company_payment") {
+        if (entry.kind === "company_payment_txn") {
           const isIncoming = (entry.data?.amount ?? 0) < 0;
-          if (companyActivityFilter === "company_payment") return !isIncoming;
-          if (companyActivityFilter === "received_from_company") return isIncoming;
+          if (companyActivityFilter === "payment_to_company") return !isIncoming;
+          if (companyActivityFilter === "payment_from_company") return isIncoming;
           return false;
         }
         const refill = entry.data;
@@ -887,7 +887,7 @@ const formatDateTime = (value?: string) => {
       ledgerActivityFilters.filter((option) =>
         option.id === "inventory_adjustment"
           ? ledgerAdjustmentItems.some((entry) => entry.kind === "inventory_adjustment")
-          : ledgerAdjustmentItems.some((entry) => entry.kind === "cash_adjustment")
+          : ledgerAdjustmentItems.some((entry) => entry.kind === "adjust_wallet")
       ),
     [ledgerAdjustmentItems]
   );
@@ -1569,7 +1569,7 @@ const formatDateTime = (value?: string) => {
               contentContainerStyle={{ gap: 0 }}
               renderItem={({ item: entry }) => {
                 const fmtMoney = (v: number) => formatDisplayMoney(v);
-                if (entry.kind === "company_payment") {
+                if (entry.kind === "company_payment_txn") {
                   return (
                     <SlimActivityRow
                       event={companyPaymentToEvent(entry.data)}
@@ -1582,7 +1582,7 @@ const formatDateTime = (value?: string) => {
                     />
                   );
                 }
-                if (entry.kind === "company_adjustment") {
+                if (entry.kind === "adjust_company_balance") {
                   return (
                     <SlimActivityRow
                     event={companyBalanceAdjustmentToEvent(entry.data)}

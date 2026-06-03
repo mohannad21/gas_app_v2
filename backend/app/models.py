@@ -569,17 +569,6 @@ class InventoryAdjustment(SQLModel, table=True):
 
 class LedgerEntry(SQLModel, table=True):
   __tablename__ = "ledger_entries"
-  __table_args__ = (
-    sa.UniqueConstraint(
-      "source_type",
-      "source_id",
-      "account",
-      "gas_type",
-      "state",
-      "unit",
-      name="uq_ledger_source_account",
-    ),
-  )
 
   id: str = Field(default_factory=_uuid, primary_key=True, index=True)
   tenant_id: str = Field(foreign_key="tenants.id", index=True)
@@ -603,6 +592,14 @@ class LedgerEntry(SQLModel, table=True):
   unit: str = Field(index=True)
   amount: int
   note: Optional[str] = Field(default=None, nullable=True)
+  reversal_of_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(
+      sa.String,
+      sa.ForeignKey("ledger_entries.id", use_alter=True, name="fk_ledger_reversal_of"),
+      nullable=True,
+    ),
+  )
 
 
 class CashAdjustment(SQLModel, table=True):

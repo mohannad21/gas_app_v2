@@ -181,7 +181,6 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
 type NormalizeContext = {
   order_mode?: string;
   money_direction?: string;
-  transfer_direction?: string;
 };
 
 export function normalizeEventType(
@@ -225,11 +224,9 @@ export function getReportSubtype(event: {
   event_type: string;
   order_mode?: string;
   money_direction?: string;
-  transfer_direction?: string;
 }): ActivityKind | null {
   return normalizeEventType(event.event_type, {
     order_mode: event.order_mode,
     money_direction: event.money_direction,
-    transfer_direction: event.transfer_direction,
   });
 }

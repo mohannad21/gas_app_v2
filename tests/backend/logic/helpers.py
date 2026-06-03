@@ -168,18 +168,42 @@ def post_buy_full_from_company(client, new12, new48, total_cost, paid_amount, ha
 
 
 def post_return_empties_to_company(client, gas_type, quantity, happened_at):
-    r = client.post("/company/cylinders/settle", json={
-        "gas_type": gas_type,
-        "quantity": quantity,
-        "direction": "return_empty",
+    payload = {
+        "kind": "dist_return_empties",
+        "buy12": 0,
+        "return12": quantity if gas_type == "12kg" else 0,
+        "buy48": 0,
+        "return48": quantity if gas_type == "48kg" else 0,
+        "total_cost": 0,
+        "paid_amount": 0,
         "happened_at": happened_at,
-    })
+    }
+    r = client.post("/inventory/refill", json=payload)
     assert r.status_code < 300, r.text
-    return r.json()
+    list_resp = client.get("/inventory/refills", params={"limit": 200})
+    assert list_resp.status_code < 300, list_resp.text
+    rows = list_resp.json()
+    for row in rows:
+        if (
+            row.get("kind") == "dist_return_empties"
+            and row.get("return12") == payload["return12"]
+            and row.get("return48") == payload["return48"]
+            and str(row.get("effective_at", "")).startswith(happened_at)
+        ):
+            return {**row, "id": row["refill_id"]}
+    for row in rows:
+        if (
+            row.get("kind") == "dist_return_empties"
+            and row.get("return12") == payload["return12"]
+            and row.get("return48") == payload["return48"]
+        ):
+            return {**row, "id": row["refill_id"]}
+    raise AssertionError("created dist_return_empties row not found")
 
 
 def post_payment_to_company(client, amount, happened_at):
     r = client.post("/company/payments", json={
+        "kind": "payment_to_company",
         "amount": amount,
         "happened_at": happened_at,
     })
@@ -194,6 +218,7 @@ def post_payment_to_company(client, amount, happened_at):
 # update this helper — the test assertion must still reflect the business rule.
 def post_payment_from_company(client, amount, happened_at):
     r = client.post("/company/payments", json={
+        "kind": "payment_from_company",
         "amount": -amount,
         "happened_at": happened_at,
     })

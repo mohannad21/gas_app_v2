@@ -119,7 +119,7 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_buy_iron_from_company_excluded(self, client, baseline):
+    def test_buy_full_from_company_excluded(self, client, baseline):
         post_buy_full_from_company(
             client,
             new12=5, new48=0,

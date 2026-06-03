@@ -103,7 +103,6 @@ const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> =>
   const kind = normalizeEventType(String(event?.event_type ?? ""), {
     order_mode: event?.order_mode,
     money_direction: event?.money_direction,
-    transfer_direction: event?.transfer_direction,
   });
   if (kind) return ACTIVITY_KIND_META[kind].filterGroup as Exclude<ActivityFilterGroupKey, "all">;
   return "customer";
@@ -113,7 +112,6 @@ const getEventSubtype = (event: any): ActivitySubtypeOption => {
   const kind = normalizeEventType(String(event?.event_type ?? ""), {
     order_mode: event?.order_mode,
     money_direction: event?.money_direction,
-    transfer_direction: event?.transfer_direction,
   });
   if (kind) return { key: kind, label: ACTIVITY_KIND_META[kind].label };
   const raw = String(event?.event_type ?? "activity");
@@ -1005,7 +1003,6 @@ function _Deleted_EventExpandedPanel_SeeComponentsFolder({
   const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
   const _evKind = normalizeEventType(eventType, {
     order_mode: ev?.order_mode,
-    transfer_direction: ev?.transfer_direction,
     money_direction: ev?.money_direction,
   });
 

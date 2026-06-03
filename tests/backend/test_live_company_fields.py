@@ -95,6 +95,7 @@ def test_company_payment_live_debt_cash_correct(client) -> None:
         json={
             "happened_at": f"{day.isoformat()}T10:00:00",
             "amount": 200,
+            "kind": "payment_to_company",
         },
     )
     assert payment_resp.status_code == 201

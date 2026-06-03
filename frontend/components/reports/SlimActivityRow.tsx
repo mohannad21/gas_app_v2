@@ -253,15 +253,9 @@ const transitionIntentForEvent = (event: DailyReportEvent) => {
   if (_isCollectionEmpty(event.event_type)) return "customer_return" as const;
   if (_isDistReturn(event.event_type)) return "company_settle" as const;
   if (_tiKind === "adjust_customer_balance") return "customer_adjust" as const;
-  if (_isCompanyPayment(event.event_type)) return "company_payment" as const;
+  if (_isCompanyPayment(event.event_type)) return "company_payment_txn" as const;
   if (_isCompanyBuyFull(event.event_type)) return "company_buy_full" as const;
-  if (_tiKind === "refill") {
-    const isSettleOnly =
-      event.label === "Returned empties" ||
-      (!(event.buy12 || event.buy48) && !!(event.return12 || event.return48) &&
-        !event.total_cost && !event.paid_amount);
-    return isSettleOnly ? ("company_settle" as const) : ("company_refill" as const);
-  }
+  if (_tiKind === "refill") return "company_refill" as const;
   return "generic" as const;
 };
 
