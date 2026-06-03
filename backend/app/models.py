@@ -456,6 +456,33 @@ class TransactionGroup(SQLModel, table=True):
   created_by: Optional[str] = Field(default=None, nullable=True)
 
 
+class InventoryCostLayer(SQLModel, table=True):
+  __tablename__ = "inventory_cost_layers"
+
+  id: str = Field(default_factory=_uuid, primary_key=True, index=True)
+  tenant_id: str = Field(foreign_key="tenants.id", index=True)
+  gas_type: str = Field(index=True)
+  buy_price: int
+  quantity_total: int
+  quantity_remaining: int
+  acquired_at: datetime = Field(
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, index=True)
+  )
+  source_id: Optional[str] = Field(
+    default=None,
+    sa_column=sa.Column(
+      sa.String,
+      sa.ForeignKey("company_transactions.id", use_alter=True, name="fk_cost_layer_source"),
+      nullable=True,
+      index=True,
+    ),
+  )
+  created_at: datetime = Field(
+    default_factory=_utcnow,
+    sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+  )
+
+
 class Expense(SQLModel, table=True):
   __tablename__ = "expenses"
 
@@ -543,6 +570,7 @@ class CustomerTransaction(SQLModel, table=True):
   debt_cylinders_12: int = Field(default=0)
   debt_cylinders_48: int = Field(default=0)
   note: Optional[str] = Field(default=None, nullable=True)
+  buy_price_snapshot: Optional[int] = Field(default=None, nullable=True)
   deleted_at: Optional[datetime] = Field(
     default=None,
     sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True, index=True),

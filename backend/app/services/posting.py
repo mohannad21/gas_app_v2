@@ -16,7 +16,9 @@ from app.models import (
   CustomerTransaction,
   Expense,
   InventoryAdjustment,
+  InventoryCostLayer,
   LedgerEntry,
+  PriceCatalog,
   System,
   WalletAdjustment,
 )
@@ -403,6 +405,46 @@ def build_customer_lines(txn: CustomerTransaction) -> list[LedgerLine]:
   return lines
 
 
+def _consume_cost_layers(
+  session: Session,
+  *,
+  tenant_id: str,
+  gas_type: str,
+  quantity: int,
+) -> Optional[int]:
+  """Consume `quantity` full cylinders from FIFO cost layers.
+
+  Returns the weighted-average buy price per cylinder (minor currency units),
+  or None if no layers exist (pre-migration inventory with no cost data).
+  """
+  if quantity <= 0:
+    return None
+  layers = session.exec(
+    select(InventoryCostLayer)
+    .where(InventoryCostLayer.tenant_id == tenant_id)
+    .where(InventoryCostLayer.gas_type == gas_type)
+    .where(InventoryCostLayer.quantity_remaining > 0)
+    .order_by(InventoryCostLayer.acquired_at.asc())
+  ).all()
+  if not layers:
+    return None
+  remaining = quantity
+  total_cost = 0
+  total_consumed = 0
+  for layer in layers:
+    if remaining == 0:
+      break
+    take = min(layer.quantity_remaining, remaining)
+    total_cost += take * layer.buy_price
+    total_consumed += take
+    layer.quantity_remaining -= take
+    session.add(layer)
+    remaining -= take
+  if total_consumed == 0:
+    return None
+  return round(total_cost / total_consumed)
+
+
 def post_customer_transaction(session: Session, txn: CustomerTransaction) -> list[LedgerEntry]:
   customer = session.get(Customer, txn.customer_id)
   if customer:
@@ -411,6 +453,16 @@ def post_customer_transaction(session: Session, txn: CustomerTransaction) -> lis
     system = session.get(System, txn.system_id)
     if system:
       _assert_same_tenant("txn", txn.tenant_id, "system", system.tenant_id)
+  if txn.kind in ("replacement", "sell_full") and txn.installed and txn.gas_type:
+    snapshot = _consume_cost_layers(
+      session,
+      tenant_id=txn.tenant_id,
+      gas_type=txn.gas_type,
+      quantity=txn.installed,
+    )
+    if snapshot is not None and txn.buy_price_snapshot is None:
+      txn.buy_price_snapshot = snapshot
+      session.add(txn)
   lines = build_customer_lines(txn)
   return _insert_ledger_entries(
     session,
@@ -592,9 +644,34 @@ def build_company_lines(txn: CompanyTransaction) -> list[LedgerLine]:
   return lines
 
 
+def _create_cost_layers_for_refill(session: Session, txn: CompanyTransaction) -> None:
+  for gas_type, quantity in (("12kg", txn.buy12), ("48kg", txn.buy48)):
+    if quantity <= 0:
+      continue
+    price_row = session.exec(
+      select(PriceCatalog)
+      .where(PriceCatalog.tenant_id == txn.tenant_id)
+      .where(PriceCatalog.gas_type == gas_type)
+      .where(PriceCatalog.effective_from <= txn.happened_at)
+      .order_by(PriceCatalog.effective_from.desc())
+      .limit(1)
+    ).first()
+    if not price_row:
+      continue
+    session.add(InventoryCostLayer(
+      tenant_id=txn.tenant_id,
+      gas_type=gas_type,
+      buy_price=price_row.buy_price,
+      quantity_total=quantity,
+      quantity_remaining=quantity,
+      acquired_at=txn.happened_at,
+      source_id=txn.id,
+    ))
+
+
 def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[LedgerEntry]:
   lines = build_company_lines(txn)
-  return _insert_ledger_entries(
+  entries = _insert_ledger_entries(
     session,
     tenant_id=txn.tenant_id,
     source_type="company_txn",
@@ -603,6 +680,9 @@ def post_company_transaction(session: Session, txn: CompanyTransaction) -> list[
     day=txn.day,
     lines=lines,
   )
+  if txn.kind == "refill":
+    _create_cost_layers_for_refill(session, txn)
+  return entries
 
 
 def build_inventory_adjustment_lines(adj: InventoryAdjustment) -> list[LedgerLine]:

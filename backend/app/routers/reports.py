@@ -35,6 +35,8 @@ from app.schemas import (
   DailyReportEvent,
   ReportInventoryState,
   ReportInventoryTotals,
+  RevenueReportOut,
+  RevenueReportRow,
 )
 from app.services.reports_aggregates import (
   _date_range,
@@ -757,4 +759,50 @@ def get_daily_report(
     inventory_end=_sum_inventory_at_day_end(session, report_day),
     audit_summary=audit_summary,
     events=events,
+  )
+
+
+@router.get("/revenue", response_model=RevenueReportOut)
+def get_revenue_report(
+  from_date: str = Query(alias="from"),
+  to_date: str = Query(alias="to"),
+  session: Session = Depends(get_session),
+  tenant_id: Annotated[str, Depends(get_tenant_id)] = "",
+) -> RevenueReportOut:
+  try:
+    start = date.fromisoformat(from_date)
+    end = date.fromisoformat(to_date)
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail="invalid_date_format") from exc
+
+  txns = session.exec(
+    select(CustomerTransaction)
+    .where(CustomerTransaction.tenant_id == tenant_id)
+    .where(CustomerTransaction.kind.in_(["replacement", "sell_full"]))
+    .where(CustomerTransaction.buy_price_snapshot != None)  # noqa: E711
+    .where(CustomerTransaction.deleted_at == None)  # noqa: E711
+    .where(CustomerTransaction.day >= start)
+    .where(CustomerTransaction.day <= end)
+    .order_by(CustomerTransaction.day.asc())
+  ).all()
+
+  by_day: dict[date, list[CustomerTransaction]] = {}
+  for txn in txns:
+    by_day.setdefault(txn.day, []).append(txn)
+
+  rows = [
+    RevenueReportRow(
+      date=d.isoformat(),
+      gross_profit=sum(t.total - (t.installed * t.buy_price_snapshot) for t in day_txns),
+      transaction_count=len(day_txns),
+    )
+    for d, day_txns in sorted(by_day.items())
+  ]
+
+  return RevenueReportOut(
+    from_date=from_date,
+    to_date=to_date,
+    total_gross_profit=sum(r.gross_profit for r in rows),
+    total_transaction_count=sum(r.transaction_count for r in rows),
+    rows=rows,
   )

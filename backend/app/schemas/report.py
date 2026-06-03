@@ -172,3 +172,17 @@ class DailyReportDay(SQLModel):
   inventory_end: ReportInventoryTotals
   audit_summary: DailyAuditSummary
   events: list[DailyReportEvent]
+
+
+class RevenueReportRow(SQLModel):
+  date: str
+  gross_profit: int
+  transaction_count: int
+
+
+class RevenueReportOut(SQLModel):
+  from_date: str
+  to_date: str
+  total_gross_profit: int
+  total_transaction_count: int
+  rows: list[RevenueReportRow] = Field(default_factory=list)
