@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from sqlalchemy import text
+from sqlalchemy import create_engine as _sa_create_engine, text
+from sqlalchemy.pool import NullPool
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,12 +20,70 @@ BACKEND_ROOT = ROOT / "backend"
 ENV_TEST = BACKEND_ROOT / ".env.test"
 if ENV_TEST.exists():
     load_dotenv(ENV_TEST, override=True)
-    database_url_test = os.getenv("DATABASE_URL_TEST")
-    if database_url_test:
-        os.environ["DATABASE_URL"] = database_url_test
 
-@pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+database_url_test = os.getenv("DATABASE_URL_TEST")
+if database_url_test:
+    os.environ["DATABASE_URL"] = database_url_test
+
+_TEST_PERMISSIONS = [
+    "customers:write", "collections:write", "company:write",
+    "orders:write", "inventory:write", "expenses:write",
+    "settings:write", "workers:manage", "prices:write",
+]
+
+_AUTH_TABLES = frozenset({
+    "plans",
+    "tenants",
+    "users",
+    "roles",
+    "role_permissions",
+    "tenant_memberships",
+    "tenant_plan_subscriptions",
+})
+
+_SEED_IDS = {
+    "plans": "test-plan",
+    "tenants": None,
+    "users": "test-user",
+    "roles": "test-role",
+}
+
+
+def _seed_test_auth(engine) -> None:
+    from app.config import DEFAULT_TENANT_ID
+    from app.models import Plan, Role, RolePermission, Tenant, TenantMembership, TenantPlanSubscription, User
+    from datetime import datetime, timezone
+    from sqlmodel import Session, delete
+
+    with Session(engine) as seed:
+        # merge() upserts by PK — safe to call even if rows already exist
+        seed.merge(Plan(id="test-plan", name="Test Plan"))
+        seed.merge(Tenant(id=DEFAULT_TENANT_ID, name="Test Tenant", status="active"))
+        seed.merge(User(id="test-user"))
+        seed.merge(Role(id="test-role", name="Test Admin"))
+        seed.flush()
+
+        # auto-ID rows: delete first so we can re-insert cleanly
+        seed.exec(delete(TenantMembership).where(TenantMembership.user_id == "test-user"))
+        seed.exec(delete(RolePermission).where(RolePermission.role_id == "test-role"))
+        seed.exec(delete(TenantPlanSubscription).where(TenantPlanSubscription.tenant_id == DEFAULT_TENANT_ID))
+        seed.flush()
+
+        seed.add(TenantPlanSubscription(
+            tenant_id=DEFAULT_TENANT_ID, plan_id="test-plan",
+            status="active", started_at=datetime.now(timezone.utc),
+        ))
+        for code in _TEST_PERMISSIONS:
+            seed.add(RolePermission(role_id="test-role", permission_code=code))
+        seed.add(TenantMembership(
+            tenant_id=DEFAULT_TENANT_ID, user_id="test-user",
+            role_id="test-role", is_active=True,
+        ))
+        seed.commit()
+
+
+@pytest.fixture(scope="session")
+def client() -> TestClient:
     db_url = os.getenv("DATABASE_URL_TEST") or os.getenv("DATABASE_URL")
     if not db_url:
         pytest.skip("DATABASE_URL_TEST is not set. Tests require a Postgres database.")
@@ -37,23 +95,13 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             "Set DATABASE_URL_TEST or ALLOW_TEST_DB_DROP=1 if you really intend to wipe it."
         )
 
-    monkeypatch.setenv("DATABASE_URL", db_url)
-    previous_db = sys.modules.get("app.db")
-    previous_engine = getattr(previous_db, "engine", None)
-    if previous_engine is not None:
-        previous_engine.dispose()
+    os.environ["DATABASE_URL"] = db_url
 
     from app import config as app_config
     app_config.get_settings.cache_clear()
-    importlib.reload(app_config)
     from app import db as app_db
-    importlib.reload(app_db)
-    from app import models as app_models
-    # Clear SQLModel metadata before reloading models to avoid table redefinition errors.
-    app_db.SQLModel.metadata.clear()
-    importlib.reload(app_models)
     from app import main as app_main
-    importlib.reload(app_main)
+    import app.models  # noqa: F401 — registers all models in SQLModel.metadata before create_all
 
     app_db.engine.dispose()
     schema_engine = app_db.engine.execution_options(isolation_level="AUTOCOMMIT")
@@ -71,37 +119,14 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             conn.execute(text("CREATE SCHEMA public"))
         finally:
             conn.execute(text("SELECT pg_advisory_unlock(5951042)"))
+
+    # NullPool: each session gets a fresh connection that closes immediately after use.
+    # This eliminates pool-held connections that deadlock against TRUNCATE in teardown.
     app_db.engine.dispose()
+    app_db.engine = _sa_create_engine(db_url, poolclass=NullPool)
     app_db.SQLModel.metadata.create_all(bind=app_db.engine)
 
-    from app.config import DEFAULT_TENANT_ID
-    from app.models import Plan, Role, RolePermission, Tenant, TenantMembership, TenantPlanSubscription, User
-    from datetime import datetime, timezone
-    from sqlmodel import Session as _SeedSession
-
-    _TEST_PERMISSIONS = [
-        "customers:write", "collections:write", "company:write",
-        "orders:write", "inventory:write", "expenses:write",
-        "settings:write", "workers:manage", "prices:write",
-    ]
-
-    with _SeedSession(app_db.engine) as seed:
-        seed.add(Plan(id="test-plan", name="Test Plan"))
-        seed.add(Tenant(id=DEFAULT_TENANT_ID, name="Test Tenant", status="active"))
-        seed.add(User(id="test-user"))
-        seed.add(TenantPlanSubscription(
-            tenant_id=DEFAULT_TENANT_ID, plan_id="test-plan",
-            status="active", started_at=datetime.now(timezone.utc),
-        ))
-        seed.add(Role(id="test-role", name="Test Admin"))
-        seed.flush()
-        for code in _TEST_PERMISSIONS:
-            seed.add(RolePermission(role_id="test-role", permission_code=code))
-        seed.add(TenantMembership(
-            tenant_id=DEFAULT_TENANT_ID, user_id="test-user",
-            role_id="test-role", is_active=True,
-        ))
-        seed.commit()
+    _seed_test_auth(app_db.engine)
 
     app_factory = getattr(app_main, "create_app", None)
     app = app_factory() if callable(app_factory) else app_main.app
@@ -112,6 +137,41 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         yield test_client
 
     app_db.engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def clean_tables(request) -> None:
+    if "client" not in request.fixturenames:
+        yield
+        return
+    if "shared_world" in request.fixturenames or "shared_baseline" in request.fixturenames:
+        yield
+        return
+    _ = request.getfixturevalue("client")
+    import app.db as app_db
+    from app.config import DEFAULT_TENANT_ID
+
+    def clean_data() -> None:
+        data_tables = ", ".join(
+            t.name
+            for t in app_db.SQLModel.metadata.sorted_tables
+            if t.name not in _AUTH_TABLES
+        )
+        with app_db.engine.begin() as conn:
+            if data_tables:
+                conn.execute(text(f"TRUNCATE TABLE {data_tables} CASCADE"))
+            # Clean up any extra auth rows created by cross-tenant tests.
+            conn.execute(text("DELETE FROM tenants WHERE id != :id"), {"id": DEFAULT_TENANT_ID})
+            conn.execute(text("DELETE FROM users WHERE id != :id"), {"id": "test-user"})
+            conn.execute(text("DELETE FROM roles WHERE id != :id"), {"id": "test-role"})
+            conn.execute(text("DELETE FROM plans WHERE id != :id"), {"id": "test-plan"})
+
+    if "world" in request.fixturenames and request.node.path.name == "test_fixture_sanity.py":
+        clean_data()
+    yield
+    clean_data()
+    # Auth seed rows survive, so no per-test reseed is needed.
+
 
 # --- SHARED HELPERS ---
 
@@ -154,7 +214,6 @@ def create_customer(
     assert resp.status_code == 201
     customer_id = resp.json()["id"]
 
-    # Apply optional starting balances via customer adjustments.
     if starting_money or starting_12kg or starting_48kg:
         adjustment_payload = {
             "customer_id": customer_id,
@@ -197,18 +256,17 @@ def create_order(
     paid_amount: float = 0.0,
 ) -> str:
     payload = {
-        "customer_id": customer_id, 
-        "system_id": system_id, 
+        "customer_id": customer_id,
+        "system_id": system_id,
         "happened_at": delivered_at,
         "gas_type": gas_type,
-        "cylinders_installed": installed, 
+        "cylinders_installed": installed,
         "cylinders_received": received,
-        "price_total": int(price_total), 
+        "price_total": int(price_total),
         "paid_amount": int(paid_amount),
     }
     resp = client.post("/orders", json=payload)
     if resp.status_code != 201:
-        # This will now print the actual validation error (e.g., 'No price found' or 'Negative stock')
         print(f"\n[DEBUG] Order Creation Failed: {resp.status_code}")
         print(f"[DEBUG] Response Body: {resp.text}")
     assert resp.status_code == 201
@@ -223,7 +281,6 @@ def get_daily_row(client, date_str: str) -> dict[str, Any]:
     return row
 
 def assert_inventory(snapshot: dict[str, Any], *, full12: int, empty12: int, full48: int, empty48: int) -> None:
-    # Note: Ensure the keys in snapshot match your API response (e.g., 'full_12kg' vs 'full12')
     assert snapshot["full12"] == full12
     assert snapshot["empty12"] == empty12
     assert snapshot["full48"] == full48
