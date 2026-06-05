@@ -35,53 +35,53 @@ def _net(client, date=DAY1) -> int:
 # System initialization entries are excluded, so baseline net_today = 0.
 
 class TestNetTodayContributing:
-    def test_replacement_paid_contributes(self, client, baseline):
+    def test_replacement_paid_contributes(self, client, shared_baseline):
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=3, cylinders_received=2,
             price_total=300, paid_amount=100,
             happened_at=at(DAY1),
         )
         assert _net(client) == 100
 
-    def test_sell_full_paid_contributes(self, client, baseline):
+    def test_sell_full_paid_contributes(self, client, shared_baseline):
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=2,
             price_total=400, paid_amount=200,
             happened_at=at(DAY1),
         )
         assert _net(client) == 200
 
-    def test_buy_empty_paid_reduces_net(self, client, baseline):
+    def test_buy_empty_paid_reduces_net(self, client, shared_baseline):
         # We pay the customer for their empties → net decreases
         post_buy_empty(
-            client, baseline["customer_c_id"], "12kg",
+            client, shared_baseline["customer_c_id"], "12kg",
             cylinders_received=5,
             price_total=100, paid_amount=50,
             happened_at=at(DAY1),
         )
         assert _net(client) == -50
 
-    def test_payment_from_customer_contributes(self, client, baseline):
+    def test_payment_from_customer_contributes(self, client, shared_baseline):
         post_payment_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             amount=150,
             happened_at=at(DAY1),
         )
         assert _net(client) == 150
 
-    def test_payout_to_customer_reduces_net(self, client, baseline):
+    def test_payout_to_customer_reduces_net(self, client, shared_baseline):
         post_payout_to_customer(
-            client, baseline["customer_c_id"],
+            client, shared_baseline["customer_c_id"],
             amount=80,
             happened_at=at(DAY1),
         )
         assert _net(client) == -80
 
-    def test_expense_reduces_net(self, client, baseline):
+    def test_expense_reduces_net(self, client, shared_baseline):
         post_expense(
-            client, baseline["expense_category_id"],
+            client, shared_baseline["expense_category_id"],
             amount=75,
             happened_at=at(DAY1),
         )
@@ -93,23 +93,23 @@ class TestNetTodayContributing:
 # and non-cash activities must not affect net_today.
 
 class TestNetTodayExcluded:
-    def test_return_empties_from_customer_excluded(self, client, baseline):
+    def test_return_empties_from_customer_excluded(self, client, shared_baseline):
         post_return_empties_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             qty_12kg=3, qty_48kg=0,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_customer_balance_adjustment_excluded(self, client, baseline):
+    def test_customer_balance_adjustment_excluded(self, client, shared_baseline):
         post_customer_balance_adjustment(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             money_balance=700, cylinder_balance_12kg=5, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_refill_excluded(self, client, baseline):
+    def test_refill_excluded(self, client, shared_baseline):
         post_refill(
             client,
             buy12=10, return12=5,
@@ -119,7 +119,7 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_buy_full_from_company_excluded(self, client, baseline):
+    def test_buy_full_from_company_excluded(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=5, new48=0,
@@ -128,7 +128,7 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_return_empties_to_company_excluded(self, client, baseline):
+    def test_return_empties_to_company_excluded(self, client, shared_baseline):
         # Create cylinder debt on DAY0 so the return on DAY1 is valid
         post_refill(
             client,
@@ -143,14 +143,14 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_payment_to_company_excluded(self, client, baseline):
+    def test_payment_to_company_excluded(self, client, shared_baseline):
         post_payment_to_company(
             client, amount=500,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_payment_from_company_excluded(self, client, baseline):
+    def test_payment_from_company_excluded(self, client, shared_baseline):
         # Set company balance negative on DAY0 so receive on DAY1 is valid
         post_company_balance_adjustment(
             client,
@@ -163,7 +163,7 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_company_balance_adjustment_excluded(self, client, baseline):
+    def test_company_balance_adjustment_excluded(self, client, shared_baseline):
         post_company_balance_adjustment(
             client,
             money_balance=500, cylinder_balance_12=0, cylinder_balance_48=0,
@@ -171,28 +171,28 @@ class TestNetTodayExcluded:
         )
         assert _net(client) == 0
 
-    def test_wallet_to_bank_excluded(self, client, baseline):
+    def test_wallet_to_bank_excluded(self, client, shared_baseline):
         post_wallet_to_bank(
             client, amount=200,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_bank_to_wallet_excluded(self, client, baseline):
+    def test_bank_to_wallet_excluded(self, client, shared_baseline):
         post_bank_to_wallet(
             client, amount=100,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_wallet_adjustment_excluded(self, client, baseline):
+    def test_wallet_adjustment_excluded(self, client, shared_baseline):
         post_wallet_adjustment(
             client, delta_cash=500,
             happened_at=at(DAY1),
         )
         assert _net(client) == 0
 
-    def test_inventory_adjustment_excluded(self, client, baseline):
+    def test_inventory_adjustment_excluded(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="12kg",
             delta_full=10, delta_empty=0,
@@ -204,43 +204,43 @@ class TestNetTodayExcluded:
 # --- Cumulative ───────────────────────────────────────────────────────────────
 
 class TestNetTodayCumulative:
-    def test_all_contributing_activities_accumulate(self, client, baseline):
+    def test_all_contributing_activities_accumulate(self, client, shared_baseline):
         # replacement paid=100   → +100
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=3, cylinders_received=2,
             price_total=300, paid_amount=100,
             happened_at=at(DAY1, 9, 0),
         )
         # sell_full paid=200     → +200
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=2,
             price_total=400, paid_amount=200,
             happened_at=at(DAY1, 9, 1),
         )
         # buy_empty paid=50      → -50
         post_buy_empty(
-            client, baseline["customer_c_id"], "12kg",
+            client, shared_baseline["customer_c_id"], "12kg",
             cylinders_received=5,
             price_total=100, paid_amount=50,
             happened_at=at(DAY1, 9, 2),
         )
         # payment from customer=150  → +150
         post_payment_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             amount=150,
             happened_at=at(DAY1, 9, 3),
         )
         # payout to customer=80  → -80
         post_payout_to_customer(
-            client, baseline["customer_c_id"],
+            client, shared_baseline["customer_c_id"],
             amount=80,
             happened_at=at(DAY1, 9, 4),
         )
         # expense=75             → -75
         post_expense(
-            client, baseline["expense_category_id"],
+            client, shared_baseline["expense_category_id"],
             amount=75,
             happened_at=at(DAY1, 9, 5),
         )

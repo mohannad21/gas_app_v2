@@ -29,14 +29,14 @@ def _assert_ledger(client, date, *, wallet_end, full12, empty12, full48, empty48
 
 # ---Replacement ---
 
-def test_replacement_12kg(client, baseline):
+def test_replacement_12kg(client, shared_baseline):
     """
     Replacement (12kg): deliver 2 full cylinders, collect 2 empties, receive partial cash.
     wallet += paid_amount (cash received now, not price_total).
     full12 -= installed; empty12 += received. 48kg untouched.
     """
-    cid = baseline["customer_a_id"]
-    post_replacement(client, cid, baseline["customer_a_system_12kg"], "12kg",
+    cid = shared_baseline["customer_a_id"]
+    post_replacement(client, cid, shared_baseline["customer_a_system_12kg"], "12kg",
                      cylinders_installed=2, cylinders_received=2,
                      price_total=200, paid_amount=150,
                      happened_at=at(DAY1, 9, 0))
@@ -45,13 +45,13 @@ def test_replacement_12kg(client, baseline):
                    full12=98, empty12=52, full48=50, empty48=30)
 
 
-def test_replacement_48kg(client, baseline):
+def test_replacement_48kg(client, shared_baseline):
     """
     Replacement (48kg): deliver 1 full cylinder, collect 1 empty, receive full cash.
     wallet += paid_amount. full48 -= installed; empty48 += received. 12kg untouched.
     """
-    cid = baseline["customer_a_id"]
-    post_replacement(client, cid, baseline["customer_a_system_48kg"], "48kg",
+    cid = shared_baseline["customer_a_id"]
+    post_replacement(client, cid, shared_baseline["customer_a_system_48kg"], "48kg",
                      cylinders_installed=1, cylinders_received=1,
                      price_total=500, paid_amount=500,
                      happened_at=at(DAY1, 9, 0))
@@ -60,13 +60,13 @@ def test_replacement_48kg(client, baseline):
                    full12=100, empty12=50, full48=49, empty48=31)
 
 
-def test_replacement_zero_payment(client, baseline):
+def test_replacement_zero_payment(client, shared_baseline):
     """
     Replacement with zero cash collected today (fully on credit).
     wallet unchanged (paid_amount=0). Inventory still changes — cylinders moved.
     """
-    cid = baseline["customer_a_id"]
-    post_replacement(client, cid, baseline["customer_a_system_12kg"], "12kg",
+    cid = shared_baseline["customer_a_id"]
+    post_replacement(client, cid, shared_baseline["customer_a_system_12kg"], "12kg",
                      cylinders_installed=2, cylinders_received=1,
                      price_total=200, paid_amount=0,
                      happened_at=at(DAY1, 9, 0))
@@ -77,13 +77,13 @@ def test_replacement_zero_payment(client, baseline):
 
 # ---Sell full ---──
 
-def test_sell_full_12kg(client, baseline):
+def test_sell_full_12kg(client, shared_baseline):
     """
     Sell full (12kg): deliver cylinders, customer keeps them (no empty return).
     wallet += paid_amount. full12 -= installed. empty12 untouched.
     """
-    cid = baseline["customer_c_id"]
-    post_sell_full(client, cid, baseline["customer_c_system_12kg"], "12kg",
+    cid = shared_baseline["customer_c_id"]
+    post_sell_full(client, cid, shared_baseline["customer_c_system_12kg"], "12kg",
                    cylinders_installed=3, price_total=300, paid_amount=300,
                    happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
@@ -91,13 +91,13 @@ def test_sell_full_12kg(client, baseline):
                    full12=97, empty12=50, full48=50, empty48=30)
 
 
-def test_sell_full_48kg(client, baseline):
+def test_sell_full_48kg(client, shared_baseline):
     """
     Sell full (48kg): deliver cylinders, customer keeps them.
     wallet += paid_amount. full48 -= installed. empty48 untouched.
     """
-    cid = baseline["customer_c_id"]
-    post_sell_full(client, cid, baseline["customer_c_system_48kg"], "48kg",
+    cid = shared_baseline["customer_c_id"]
+    post_sell_full(client, cid, shared_baseline["customer_c_system_48kg"], "48kg",
                    cylinders_installed=1, price_total=600, paid_amount=400,
                    happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
@@ -107,12 +107,12 @@ def test_sell_full_48kg(client, baseline):
 
 # ---Buy empty ---──
 
-def test_buy_empty_12kg(client, baseline):
+def test_buy_empty_12kg(client, shared_baseline):
     """
     Buy empty (12kg): we purchase empty cylinders from customer and pay them.
     wallet -= paid_amount. empty12 += received. full12 untouched.
     """
-    cid = baseline["customer_a_id"]
+    cid = shared_baseline["customer_a_id"]
     post_buy_empty(client, cid, "12kg",
                    cylinders_received=4, price_total=80, paid_amount=80,
                    happened_at=at(DAY1, 9, 0))
@@ -121,12 +121,12 @@ def test_buy_empty_12kg(client, baseline):
                    full12=100, empty12=54, full48=50, empty48=30)
 
 
-def test_buy_empty_48kg(client, baseline):
+def test_buy_empty_48kg(client, shared_baseline):
     """
     Buy empty (48kg): we purchase empty cylinders from customer and pay them.
     wallet -= paid_amount. empty48 += received. full48 untouched.
     """
-    cid = baseline["customer_a_id"]
+    cid = shared_baseline["customer_a_id"]
     post_buy_empty(client, cid, "48kg",
                    cylinders_received=2, price_total=200, paid_amount=200,
                    happened_at=at(DAY1, 9, 0))
@@ -137,36 +137,36 @@ def test_buy_empty_48kg(client, baseline):
 
 # ---Collections ---
 
-def test_payment_from_customer(client, baseline):
+def test_payment_from_customer(client, shared_baseline):
     """
     Customer pays us cash (no cylinders).
     wallet += amount. Inventory entirely untouched.
     """
-    cid = baseline["customer_a_id"]
+    cid = shared_baseline["customer_a_id"]
     post_payment_from_customer(client, cid, amount=300, happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
                    wallet_end=1300,
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_payout_to_customer(client, baseline):
+def test_payout_to_customer(client, shared_baseline):
     """
     We pay customer cash (refund or credit settlement).
     wallet -= amount. Inventory entirely untouched.
     """
-    cid = baseline["customer_b_id"]
+    cid = shared_baseline["customer_b_id"]
     post_payout_to_customer(client, cid, amount=200, happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
                    wallet_end=800,
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_return_empties_from_customer_12kg(client, baseline):
+def test_return_empties_from_customer_12kg(client, shared_baseline):
     """
     Customer returns empty 12kg cylinders — no money exchanged.
     wallet unchanged. empty12 += qty_12kg. All other inventory untouched.
     """
-    cid = baseline["customer_a_id"]
+    cid = shared_baseline["customer_a_id"]
     post_return_empties_from_customer(client, cid, qty_12kg=3, qty_48kg=0,
                                       happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
@@ -174,12 +174,12 @@ def test_return_empties_from_customer_12kg(client, baseline):
                    full12=100, empty12=53, full48=50, empty48=30)
 
 
-def test_return_empties_from_customer_48kg(client, baseline):
+def test_return_empties_from_customer_48kg(client, shared_baseline):
     """
     Customer returns empty 48kg cylinders — no money exchanged.
     wallet unchanged. empty48 += qty_48kg. All other inventory untouched.
     """
-    cid = baseline["customer_a_id"]
+    cid = shared_baseline["customer_a_id"]
     post_return_empties_from_customer(client, cid, qty_12kg=0, qty_48kg=2,
                                       happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
@@ -187,12 +187,12 @@ def test_return_empties_from_customer_48kg(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=32)
 
 
-def test_customer_balance_adjustment(client, baseline):
+def test_customer_balance_adjustment(client, shared_baseline):
     """
     Customer balance adjustment: sets the customer's ledger balance directly.
     No cash changes hands, no cylinders move. wallet and inventory both unchanged.
     """
-    cid = baseline["customer_c_id"]
+    cid = shared_baseline["customer_c_id"]
     post_customer_balance_adjustment(client, cid,
                                      money_balance=100, cylinder_balance_12kg=2, cylinder_balance_48kg=0,
                                      happened_at=at(DAY1, 9, 0))
@@ -203,7 +203,7 @@ def test_customer_balance_adjustment(client, baseline):
 
 # ---Refill ---─────
 
-def test_refill_12kg(client, baseline):
+def test_refill_12kg(client, shared_baseline):
     """
     Refill (12kg only): receive full cylinders from company, return empties, pay partially.
     wallet -= paid_amount. full12 += buy12; empty12 -= return12. 48kg untouched.
@@ -216,7 +216,7 @@ def test_refill_12kg(client, baseline):
                    full12=110, empty12=45, full48=50, empty48=30)
 
 
-def test_refill_48kg(client, baseline):
+def test_refill_48kg(client, shared_baseline):
     """
     Refill (48kg only): receive full cylinders from company, return empties, pay partially.
     wallet -= paid_amount. full48 += buy48; empty48 -= return48. 12kg untouched.
@@ -231,7 +231,7 @@ def test_refill_48kg(client, baseline):
 
 # ---Company cylinder settle ───────────────────────────────────────────────────
 
-def test_buy_full_from_company_12kg(client, baseline):
+def test_buy_full_from_company_12kg(client, shared_baseline):
     """
     Buy full 12kg cylinders from company: we purchase cylinders and pay now.
     wallet -= paid_amount. full12 += new12. All other inventory untouched.
@@ -244,7 +244,7 @@ def test_buy_full_from_company_12kg(client, baseline):
                    full12=110, empty12=50, full48=50, empty48=30)
 
 
-def test_buy_full_from_company_48kg(client, baseline):
+def test_buy_full_from_company_48kg(client, shared_baseline):
     """
     Buy full 48kg cylinders from company: we purchase cylinders and pay now.
     wallet -= paid_amount. full48 += new48. All other inventory untouched.
@@ -257,7 +257,7 @@ def test_buy_full_from_company_48kg(client, baseline):
                    full12=100, empty12=50, full48=55, empty48=30)
 
 
-def test_return_empties_to_company_12kg(client, baseline):
+def test_return_empties_to_company_12kg(client, shared_baseline):
     """
     Return empty 12kg cylinders to company (cylinder settle, no payment here).
     wallet unchanged. empty12 -= quantity. All other inventory untouched.
@@ -268,7 +268,7 @@ def test_return_empties_to_company_12kg(client, baseline):
                    full12=100, empty12=42, full48=50, empty48=30)
 
 
-def test_return_empties_to_company_48kg(client, baseline):
+def test_return_empties_to_company_48kg(client, shared_baseline):
     """
     Return empty 48kg cylinders to company (cylinder settle, no payment here).
     wallet unchanged. empty48 -= quantity. All other inventory untouched.
@@ -279,7 +279,7 @@ def test_return_empties_to_company_48kg(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=26)
 
 
-def test_payment_to_company(client, baseline):
+def test_payment_to_company(client, shared_baseline):
     """
     We pay company in cash. wallet -= amount. Inventory entirely untouched.
     """
@@ -289,7 +289,7 @@ def test_payment_to_company(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_payment_from_company(client, baseline):
+def test_payment_from_company(client, shared_baseline):
     """
     Company pays us cash. wallet += amount. Inventory entirely untouched.
     NOTE: if this test fails with a 4xx error, verify the sign convention in
@@ -301,7 +301,7 @@ def test_payment_from_company(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_company_balance_adjustment(client, baseline):
+def test_company_balance_adjustment(client, shared_baseline):
     """
     Company balance adjustment: sets company's ledger balance directly.
     No cash changes hands, no cylinders move. wallet and inventory both unchanged.
@@ -317,11 +317,11 @@ def test_company_balance_adjustment(client, baseline):
 
 # ---Expense ---────
 
-def test_expense(client, baseline):
+def test_expense(client, shared_baseline):
     """
     Business expense: cash leaves the wallet. wallet -= amount. Inventory untouched.
     """
-    cat_id = baseline["expense_category_id"]
+    cat_id = shared_baseline["expense_category_id"]
     post_expense(client, expense_type_id=cat_id, amount=150, happened_at=at(DAY1, 9, 0))
     _assert_ledger(client, DAY1,
                    wallet_end=850,
@@ -330,7 +330,7 @@ def test_expense(client, baseline):
 
 # ---Cash / bank ---
 
-def test_wallet_to_bank(client, baseline):
+def test_wallet_to_bank(client, shared_baseline):
     """
     Transfer from on-hand wallet to bank. wallet -= amount.
     Inventory untouched. (Bank balance is external; not tracked in wallet_end.)
@@ -341,7 +341,7 @@ def test_wallet_to_bank(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_bank_to_wallet(client, baseline):
+def test_bank_to_wallet(client, shared_baseline):
     """
     Transfer from bank to on-hand wallet. wallet += amount. Inventory untouched.
     """
@@ -351,7 +351,7 @@ def test_bank_to_wallet(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_wallet_adjustment_positive(client, baseline):
+def test_wallet_adjustment_positive(client, shared_baseline):
     """
     Positive wallet adjustment (e.g. found cash, correction).
     wallet += delta_cash. Inventory untouched.
@@ -362,7 +362,7 @@ def test_wallet_adjustment_positive(client, baseline):
                    full12=100, empty12=50, full48=50, empty48=30)
 
 
-def test_wallet_adjustment_negative(client, baseline):
+def test_wallet_adjustment_negative(client, shared_baseline):
     """
     Negative wallet adjustment (e.g. correction for over-counted cash).
     wallet += delta_cash (delta is negative). Inventory untouched.
@@ -375,7 +375,7 @@ def test_wallet_adjustment_negative(client, baseline):
 
 # ---Inventory adjustment ──────────────────────────────────────────────────────
 
-def test_inventory_adjustment_12kg(client, baseline):
+def test_inventory_adjustment_12kg(client, shared_baseline):
     """
     Inventory adjustment (12kg): direct delta to full and empty counts.
     wallet unchanged. full12 += delta_full; empty12 += delta_empty. 48kg untouched.
@@ -387,7 +387,7 @@ def test_inventory_adjustment_12kg(client, baseline):
                    full12=105, empty12=47, full48=50, empty48=30)
 
 
-def test_inventory_adjustment_48kg(client, baseline):
+def test_inventory_adjustment_48kg(client, shared_baseline):
     """
     Inventory adjustment (48kg): direct delta to full and empty counts.
     wallet unchanged. full48 += delta_full; empty48 += delta_empty. 12kg untouched.

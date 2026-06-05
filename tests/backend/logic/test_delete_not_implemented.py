@@ -20,7 +20,7 @@ def _inv(client, date=DAY1) -> dict:
 
 
 class TestDeleteBuyFullFromCompany:
-    def test_delete_buy_full_from_company_reverts_inventory(self, client, baseline):
+    def test_delete_buy_full_from_company_reverts_inventory(self, client, shared_baseline):
         # Post buy_iron: full12 goes from 100 → 105
         result = post_buy_full_from_company(
             client,
@@ -40,7 +40,7 @@ class TestDeleteBuyFullFromCompany:
 
 
 class TestDeleteReturnEmptiesToCompany:
-    def test_delete_return_empties_reverts_inventory(self, client, baseline):
+    def test_delete_return_empties_reverts_inventory(self, client, shared_baseline):
         # Create cylinder debt on DAY0 via refill
         post_refill(
             client,

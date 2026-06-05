@@ -44,14 +44,14 @@ def _assert_inv(client, *, full12, empty12, full48, empty48, date=DAY1):
 # --- Baseline sanity ─────────────────────────────────────────────────────────
 
 class TestInventoryBaseline:
-    def test_baseline_inventory_on_day0(self, client, baseline):
+    def test_baseline_inventory_on_day0(self, client, shared_baseline):
         inv = get_daily_card(client, DAY0)["inventory_end"]
         assert inv["full12"] == 100
         assert inv["empty12"] == 50
         assert inv["full48"] == 50
         assert inv["empty48"] == 30
 
-    def test_baseline_carries_forward_to_day1(self, client, baseline):
+    def test_baseline_carries_forward_to_day1(self, client, shared_baseline):
         # No activity on DAY1 — inventory_end should equal baseline
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
@@ -61,28 +61,28 @@ class TestInventoryBaseline:
 # full -= installed, empty += received
 
 class TestInventoryReplacement:
-    def test_replacement_12kg(self, client, baseline):
+    def test_replacement_12kg(self, client, shared_baseline):
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=3, cylinders_received=2,
             price_total=300, paid_amount=300,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=97, empty12=52, full48=50, empty48=30)
 
-    def test_replacement_48kg(self, client, baseline):
+    def test_replacement_48kg(self, client, shared_baseline):
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=2, cylinders_received=1,
             price_total=400, paid_amount=400,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=48, empty48=31)
 
-    def test_replacement_no_empties_received(self, client, baseline):
+    def test_replacement_no_empties_received(self, client, shared_baseline):
         # cylinders_received=0: full decreases, empty unchanged
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=4, cylinders_received=0,
             price_total=400, paid_amount=400,
             happened_at=at(DAY1),
@@ -95,18 +95,18 @@ class TestInventoryReplacement:
 # full -= installed, empty unchanged
 
 class TestInventorySellFull:
-    def test_sell_full_12kg(self, client, baseline):
+    def test_sell_full_12kg(self, client, shared_baseline):
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=5,
             price_total=500, paid_amount=500,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=95, empty12=50, full48=50, empty48=30)
 
-    def test_sell_full_48kg(self, client, baseline):
+    def test_sell_full_48kg(self, client, shared_baseline):
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=3,
             price_total=600, paid_amount=600,
             happened_at=at(DAY1),
@@ -119,18 +119,18 @@ class TestInventorySellFull:
 # empty += cylinders_received, full unchanged
 
 class TestInventoryBuyEmpty:
-    def test_buy_empty_12kg(self, client, baseline):
+    def test_buy_empty_12kg(self, client, shared_baseline):
         post_buy_empty(
-            client, baseline["customer_c_id"], "12kg",
+            client, shared_baseline["customer_c_id"], "12kg",
             cylinders_received=6,
             price_total=60, paid_amount=60,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=56, full48=50, empty48=30)
 
-    def test_buy_empty_48kg(self, client, baseline):
+    def test_buy_empty_48kg(self, client, shared_baseline):
         post_buy_empty(
-            client, baseline["customer_c_id"], "48kg",
+            client, shared_baseline["customer_c_id"], "48kg",
             cylinders_received=4,
             price_total=80, paid_amount=80,
             happened_at=at(DAY1),
@@ -143,25 +143,25 @@ class TestInventoryBuyEmpty:
 # empty += qty, full unchanged
 
 class TestInventoryReturnEmpties:
-    def test_return_12kg(self, client, baseline):
+    def test_return_12kg(self, client, shared_baseline):
         post_return_empties_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             qty_12kg=5, qty_48kg=0,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=55, full48=50, empty48=30)
 
-    def test_return_48kg(self, client, baseline):
+    def test_return_48kg(self, client, shared_baseline):
         post_return_empties_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             qty_12kg=0, qty_48kg=3,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=33)
 
-    def test_return_both_gas_types(self, client, baseline):
+    def test_return_both_gas_types(self, client, shared_baseline):
         post_return_empties_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             qty_12kg=4, qty_48kg=2,
             happened_at=at(DAY1),
         )
@@ -173,7 +173,7 @@ class TestInventoryReturnEmpties:
 # full += buy, empty -= return (per gas type)
 
 class TestInventoryRefill:
-    def test_refill_12kg_only(self, client, baseline):
+    def test_refill_12kg_only(self, client, shared_baseline):
         post_refill(
             client,
             buy12=10, return12=5,
@@ -183,7 +183,7 @@ class TestInventoryRefill:
         )
         _assert_inv(client, full12=110, empty12=45, full48=50, empty48=30)
 
-    def test_refill_48kg_only(self, client, baseline):
+    def test_refill_48kg_only(self, client, shared_baseline):
         post_refill(
             client,
             buy12=0, return12=0,
@@ -193,7 +193,7 @@ class TestInventoryRefill:
         )
         _assert_inv(client, full12=100, empty12=50, full48=54, empty48=28)
 
-    def test_refill_both_gas_types(self, client, baseline):
+    def test_refill_both_gas_types(self, client, shared_baseline):
         post_refill(
             client,
             buy12=8, return12=3,
@@ -203,7 +203,7 @@ class TestInventoryRefill:
         )
         _assert_inv(client, full12=108, empty12=47, full48=55, empty48=28)
 
-    def test_refill_no_return(self, client, baseline):
+    def test_refill_no_return(self, client, shared_baseline):
         # return=0: full increases, empty unchanged
         post_refill(
             client,
@@ -220,7 +220,7 @@ class TestInventoryRefill:
 # full += new, empty unchanged
 
 class TestInventoryBuyFullFromCompany:
-    def test_buy_full_12kg(self, client, baseline):
+    def test_buy_full_12kg(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=5, new48=0,
@@ -229,7 +229,7 @@ class TestInventoryBuyFullFromCompany:
         )
         _assert_inv(client, full12=105, empty12=50, full48=50, empty48=30)
 
-    def test_buy_full_48kg(self, client, baseline):
+    def test_buy_full_48kg(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=0, new48=3,
@@ -238,7 +238,7 @@ class TestInventoryBuyFullFromCompany:
         )
         _assert_inv(client, full12=100, empty12=50, full48=53, empty48=30)
 
-    def test_buy_full_both_gas_types(self, client, baseline):
+    def test_buy_full_both_gas_types(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=4, new48=2,
@@ -253,7 +253,7 @@ class TestInventoryBuyFullFromCompany:
 # empty -= quantity, full unchanged
 
 class TestInventoryReturnToCompany:
-    def test_return_12kg_empties_to_company(self, client, baseline):
+    def test_return_12kg_empties_to_company(self, client, shared_baseline):
         # Create cylinder debt first on DAY0
         post_refill(
             client,
@@ -269,7 +269,7 @@ class TestInventoryReturnToCompany:
         # empty12: 50 - 4 = 46; full unchanged at 105 (100 + 5 from DAY0 refill)
         _assert_inv(client, full12=105, empty12=46, full48=50, empty48=30)
 
-    def test_return_48kg_empties_to_company(self, client, baseline):
+    def test_return_48kg_empties_to_company(self, client, shared_baseline):
         post_refill(
             client,
             buy12=0, return12=0,
@@ -289,7 +289,7 @@ class TestInventoryReturnToCompany:
 # Direct correction to inventory counts. delta_full and delta_empty can be + or -.
 
 class TestInventoryAdjustment:
-    def test_adjustment_12kg_positive(self, client, baseline):
+    def test_adjustment_12kg_positive(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="12kg",
             delta_full=5, delta_empty=3,
@@ -297,7 +297,7 @@ class TestInventoryAdjustment:
         )
         _assert_inv(client, full12=105, empty12=53, full48=50, empty48=30)
 
-    def test_adjustment_12kg_negative(self, client, baseline):
+    def test_adjustment_12kg_negative(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="12kg",
             delta_full=-10, delta_empty=-5,
@@ -305,7 +305,7 @@ class TestInventoryAdjustment:
         )
         _assert_inv(client, full12=90, empty12=45, full48=50, empty48=30)
 
-    def test_adjustment_48kg_positive(self, client, baseline):
+    def test_adjustment_48kg_positive(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="48kg",
             delta_full=4, delta_empty=2,
@@ -313,7 +313,7 @@ class TestInventoryAdjustment:
         )
         _assert_inv(client, full12=100, empty12=50, full48=54, empty48=32)
 
-    def test_adjustment_48kg_negative(self, client, baseline):
+    def test_adjustment_48kg_negative(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="48kg",
             delta_full=-5, delta_empty=-3,
@@ -321,7 +321,7 @@ class TestInventoryAdjustment:
         )
         _assert_inv(client, full12=100, empty12=50, full48=45, empty48=27)
 
-    def test_adjustment_full_only(self, client, baseline):
+    def test_adjustment_full_only(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="12kg",
             delta_full=8, delta_empty=0,
@@ -334,38 +334,38 @@ class TestInventoryAdjustment:
 # None of these should change any inventory count.
 
 class TestInventoryExcluded:
-    def test_payment_from_customer_excluded(self, client, baseline):
+    def test_payment_from_customer_excluded(self, client, shared_baseline):
         post_payment_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             amount=500,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_payout_to_customer_excluded(self, client, baseline):
+    def test_payout_to_customer_excluded(self, client, shared_baseline):
         post_payout_to_customer(
-            client, baseline["customer_c_id"],
+            client, shared_baseline["customer_c_id"],
             amount=100,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_customer_balance_adjustment_excluded(self, client, baseline):
+    def test_customer_balance_adjustment_excluded(self, client, shared_baseline):
         post_customer_balance_adjustment(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             money_balance=700, cylinder_balance_12kg=7, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_payment_to_company_excluded(self, client, baseline):
+    def test_payment_to_company_excluded(self, client, shared_baseline):
         post_payment_to_company(
             client, amount=500,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_company_balance_adjustment_excluded(self, client, baseline):
+    def test_company_balance_adjustment_excluded(self, client, shared_baseline):
         post_company_balance_adjustment(
             client,
             money_balance=500, cylinder_balance_12=0, cylinder_balance_48=0,
@@ -373,29 +373,29 @@ class TestInventoryExcluded:
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_expense_excluded(self, client, baseline):
+    def test_expense_excluded(self, client, shared_baseline):
         post_expense(
-            client, baseline["expense_category_id"],
+            client, shared_baseline["expense_category_id"],
             amount=100,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_wallet_to_bank_excluded(self, client, baseline):
+    def test_wallet_to_bank_excluded(self, client, shared_baseline):
         post_wallet_to_bank(
             client, amount=200,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_bank_to_wallet_excluded(self, client, baseline):
+    def test_bank_to_wallet_excluded(self, client, shared_baseline):
         post_bank_to_wallet(
             client, amount=100,
             happened_at=at(DAY1),
         )
         _assert_inv(client, full12=100, empty12=50, full48=50, empty48=30)
 
-    def test_wallet_adjustment_excluded(self, client, baseline):
+    def test_wallet_adjustment_excluded(self, client, shared_baseline):
         post_wallet_adjustment(
             client, delta_cash=500,
             happened_at=at(DAY1),
@@ -406,17 +406,17 @@ class TestInventoryExcluded:
 # --- Cumulative ───────────────────────────────────────────────────────────────
 
 class TestInventoryCumulative:
-    def test_mixed_activities_accumulate(self, client, baseline):
+    def test_mixed_activities_accumulate(self, client, shared_baseline):
         # replacement 12kg: installed=3, received=2 → full12=97, empty12=52
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=3, cylinders_received=2,
             price_total=300, paid_amount=300,
             happened_at=at(DAY1, 9, 0),
         )
         # sell full 48kg: installed=2 → full48=48
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=2,
             price_total=400, paid_amount=400,
             happened_at=at(DAY1, 9, 1),
@@ -432,7 +432,7 @@ class TestInventoryCumulative:
         )
         # buy empty 12kg: received=3 → empty12=50
         post_buy_empty(
-            client, baseline["customer_c_id"], "12kg",
+            client, shared_baseline["customer_c_id"], "12kg",
             cylinders_received=3,
             price_total=30, paid_amount=30,
             happened_at=at(DAY1, 9, 3),

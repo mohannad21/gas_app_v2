@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 
 from .helpers import (
     DAY0, at,
@@ -9,6 +10,16 @@ from .helpers import (
     post_customer_balance_adjustment,
     post_system,
 )
+
+_AUTH_TABLES = frozenset({
+    "plans",
+    "tenants",
+    "users",
+    "roles",
+    "role_permissions",
+    "tenant_memberships",
+    "tenant_plan_subscriptions",
+})
 
 
 @pytest.fixture()
@@ -76,3 +87,64 @@ def baseline(client):
         "customer_c_system_48kg": customer_c_system_48kg,
         "expense_category_id": expense_category_id,
     }
+
+
+@pytest.fixture(scope="module")
+def shared_baseline(client):
+    baseline_data = baseline.__wrapped__(client)
+
+    import app.db as app_db
+
+    snapshot: dict[str, set] = {}
+    with app_db.engine.connect() as conn:
+        for table in app_db.SQLModel.metadata.sorted_tables:
+            if table.name in _AUTH_TABLES:
+                continue
+            if "id" in table.c:
+                rows = conn.execute(table.select().with_only_columns(table.c.id)).fetchall()
+                snapshot[table.name] = {row[0] for row in rows}
+            else:
+                snapshot[table.name] = set()
+    baseline_data["_snapshot"] = snapshot
+
+    yield baseline_data
+
+    from app.config import DEFAULT_TENANT_ID
+
+    data_tables = ", ".join(
+        table.name
+        for table in app_db.SQLModel.metadata.sorted_tables
+        if table.name not in _AUTH_TABLES
+    )
+    with app_db.engine.begin() as conn:
+        if data_tables:
+            conn.execute(text(f"TRUNCATE TABLE {data_tables} CASCADE"))
+        conn.execute(text("DELETE FROM tenants WHERE id != :id"), {"id": DEFAULT_TENANT_ID})
+        conn.execute(text("DELETE FROM users WHERE id != :id"), {"id": "test-user"})
+        conn.execute(text("DELETE FROM roles WHERE id != :id"), {"id": "test-role"})
+        conn.execute(text("DELETE FROM plans WHERE id != :id"), {"id": "test-plan"})
+
+
+@pytest.fixture(autouse=True)
+def _baseline_cleanup(request):
+    """Per-test cleanup for shared_baseline: removes test rows, preserves baseline rows."""
+    if "shared_baseline" not in request.fixturenames:
+        yield
+        return
+    yield
+    shared = request.getfixturevalue("shared_baseline")
+    snapshot = shared["_snapshot"]
+
+    import app.db as app_db
+
+    with app_db.engine.begin() as conn:
+        for table in reversed(app_db.SQLModel.metadata.sorted_tables):
+            if table.name in _AUTH_TABLES:
+                continue
+            if "id" not in table.c:
+                continue
+            baseline_ids = snapshot.get(table.name, set())
+            if baseline_ids:
+                conn.execute(table.delete().where(table.c.id.not_in(baseline_ids)))
+            else:
+                conn.execute(table.delete())

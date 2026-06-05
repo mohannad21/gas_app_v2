@@ -25,7 +25,7 @@ def _assert_company(client, *, money, cyl12, cyl48):
 # --- Baseline sanity ─────────────────────────────────────────────────────────
 
 class TestBaselineCompany:
-    def test_company_baseline(self, client, baseline):
+    def test_company_baseline(self, client, shared_baseline):
         # Baseline: we owe company 2000, no cylinder debt
         _assert_company(client, money=2000, cyl12=0, cyl48=0)
 
@@ -34,7 +34,7 @@ class TestBaselineCompany:
 # Cylinder sign: negative = we owe the company cylinders (took more than returned)
 
 class TestRefill:
-    def test_refill_partial_payment_increases_money_debt(self, client, baseline):
+    def test_refill_partial_payment_increases_money_debt(self, client, shared_baseline):
         post_refill(
             client,
             buy12=10, return12=5,
@@ -47,7 +47,7 @@ class TestRefill:
         # cyl48: return48 - buy48 = 2 - 4 = -2
         _assert_company(client, money=2600, cyl12=-5, cyl48=-2)
 
-    def test_refill_full_payment_no_money_change(self, client, baseline):
+    def test_refill_full_payment_no_money_change(self, client, shared_baseline):
         post_refill(
             client,
             buy12=6, return12=6,
@@ -58,7 +58,7 @@ class TestRefill:
         # money: 2000; cyl12: 6-6=0; cyl48: 3-3=0
         _assert_company(client, money=2000, cyl12=0, cyl48=0)
 
-    def test_refill_no_return_max_cylinder_debt(self, client, baseline):
+    def test_refill_no_return_max_cylinder_debt(self, client, shared_baseline):
         post_refill(
             client,
             buy12=8, return12=0,
@@ -69,7 +69,7 @@ class TestRefill:
         # money: 2000 + 400 = 2400; cyl12: 0 - 8 = -8
         _assert_company(client, money=2400, cyl12=-8, cyl48=0)
 
-    def test_refill_only_12kg(self, client, baseline):
+    def test_refill_only_12kg(self, client, shared_baseline):
         post_refill(
             client,
             buy12=5, return12=2,
@@ -80,7 +80,7 @@ class TestRefill:
         # money: 2000 + 200 = 2200; cyl12: 2 - 5 = -3
         _assert_company(client, money=2200, cyl12=-3, cyl48=0)
 
-    def test_refill_only_48kg(self, client, baseline):
+    def test_refill_only_48kg(self, client, shared_baseline):
         post_refill(
             client,
             buy12=0, return12=0,
@@ -96,7 +96,7 @@ class TestRefill:
 # buy_iron is an outright purchase — no cylinder exchange, no cylinder debt created
 
 class TestBuyFullFromCompany:
-    def test_buy_full_partial_payment(self, client, baseline):
+    def test_buy_full_partial_payment(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=5, new48=2,
@@ -106,7 +106,7 @@ class TestBuyFullFromCompany:
         # money: 2000 + (700 - 300) = 2400; cylinders unaffected
         _assert_company(client, money=2400, cyl12=0, cyl48=0)
 
-    def test_buy_full_no_payment(self, client, baseline):
+    def test_buy_full_no_payment(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=3, new48=0,
@@ -116,7 +116,7 @@ class TestBuyFullFromCompany:
         # money: 2000 + 300 = 2300; cylinders unaffected
         _assert_company(client, money=2300, cyl12=0, cyl48=0)
 
-    def test_buy_full_full_payment(self, client, baseline):
+    def test_buy_full_full_payment(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=4, new48=1,
@@ -126,7 +126,7 @@ class TestBuyFullFromCompany:
         # money: 2000 + 0 = 2000; cylinders unaffected
         _assert_company(client, money=2000, cyl12=0, cyl48=0)
 
-    def test_buy_full_only_48kg(self, client, baseline):
+    def test_buy_full_only_48kg(self, client, shared_baseline):
         post_buy_full_from_company(
             client,
             new12=0, new48=3,
@@ -140,7 +140,7 @@ class TestBuyFullFromCompany:
 # --- Return empties to company ───────────────────────────────────────────────
 
 class TestReturnEmptiesToCompany:
-    def test_return_12kg_reduces_cylinder_debt(self, client, baseline):
+    def test_return_12kg_reduces_cylinder_debt(self, client, shared_baseline):
         # Create cylinder debt via refill: take 10, return 0 → cyl12 = -10
         post_refill(
             client,
@@ -153,7 +153,7 @@ class TestReturnEmptiesToCompany:
         # cyl12: -10 + 4 = -6; money unchanged at 2000
         _assert_company(client, money=2000, cyl12=-6, cyl48=0)
 
-    def test_return_48kg_reduces_cylinder_debt(self, client, baseline):
+    def test_return_48kg_reduces_cylinder_debt(self, client, shared_baseline):
         post_refill(
             client,
             buy12=0, return12=0,
@@ -165,7 +165,7 @@ class TestReturnEmptiesToCompany:
         # cyl48: -6 + 3 = -3; money unchanged at 2000
         _assert_company(client, money=2000, cyl12=0, cyl48=-3)
 
-    def test_return_does_not_affect_money(self, client, baseline):
+    def test_return_does_not_affect_money(self, client, shared_baseline):
         post_refill(
             client,
             buy12=5, return12=0,
@@ -181,22 +181,22 @@ class TestReturnEmptiesToCompany:
 # --- Payment to company ──────────────────────────────────────────────────────
 
 class TestPaymentToCompany:
-    def test_payment_reduces_money_debt(self, client, baseline):
+    def test_payment_reduces_money_debt(self, client, shared_baseline):
         post_payment_to_company(client, amount=500, happened_at=at(DAY1))
         # money: 2000 - 500 = 1500; cylinders unchanged
         _assert_company(client, money=1500, cyl12=0, cyl48=0)
 
-    def test_payment_full_clears_debt(self, client, baseline):
+    def test_payment_full_clears_debt(self, client, shared_baseline):
         post_payment_to_company(client, amount=2000, happened_at=at(DAY1))
         # money: 2000 - 2000 = 0
         _assert_company(client, money=0, cyl12=0, cyl48=0)
 
-    def test_payment_overpayment_goes_negative(self, client, baseline):
+    def test_payment_overpayment_goes_negative(self, client, shared_baseline):
         post_payment_to_company(client, amount=2500, happened_at=at(DAY1))
         # money: 2000 - 2500 = -500 (company owes us)
         _assert_company(client, money=-500, cyl12=0, cyl48=0)
 
-    def test_payment_does_not_affect_cylinders(self, client, baseline):
+    def test_payment_does_not_affect_cylinders(self, client, shared_baseline):
         post_refill(
             client,
             buy12=5, return12=0,
@@ -214,7 +214,7 @@ class TestPaymentToCompany:
 # The UI disables "Receive" when companyBalance >= 0.
 
 class TestPaymentFromCompany:
-    def test_receive_reduces_negative_debt(self, client, baseline):
+    def test_receive_reduces_negative_debt(self, client, shared_baseline):
         # First overpay to make company owe us: 2000 - 2500 = -500
         post_payment_to_company(client, amount=2500, happened_at=at(DAY1, 9, 0))
         # Company now owes us 500. We receive 300 back.
@@ -222,7 +222,7 @@ class TestPaymentFromCompany:
         # money: -500 + 300 = -200 (they still owe us 200)
         _assert_company(client, money=-200, cyl12=0, cyl48=0)
 
-    def test_receive_payment_full_amount_settles_debt(self, client, baseline):
+    def test_receive_payment_full_amount_settles_debt(self, client, shared_baseline):
         # Overpay by 400 → company owes us 400
         post_payment_to_company(client, amount=2400, happened_at=at(DAY1, 9, 0))
         # Receive all 400 back
@@ -230,7 +230,7 @@ class TestPaymentFromCompany:
         # money: -400 + 400 = 0
         _assert_company(client, money=0, cyl12=0, cyl48=0)
 
-    def test_receive_does_not_affect_cylinders(self, client, baseline):
+    def test_receive_does_not_affect_cylinders(self, client, shared_baseline):
         # Set a state where company owes us and we have cylinder debt
         post_company_balance_adjustment(
             client,
@@ -247,7 +247,7 @@ class TestPaymentFromCompany:
 # Internally it reads the current balance and posts the difference needed.
 
 class TestCompanyBalanceAdjustment:
-    def test_adjustment_sets_all_dimensions(self, client, baseline):
+    def test_adjustment_sets_all_dimensions(self, client, shared_baseline):
         post_company_balance_adjustment(
             client,
             money_balance=500, cylinder_balance_12=3, cylinder_balance_48=2,
@@ -256,7 +256,7 @@ class TestCompanyBalanceAdjustment:
         # money set TO 500 (not 2000+500); cyl12 set TO 3; cyl48 set TO 2
         _assert_company(client, money=500, cyl12=3, cyl48=2)
 
-    def test_adjustment_negative_target(self, client, baseline):
+    def test_adjustment_negative_target(self, client, shared_baseline):
         post_company_balance_adjustment(
             client,
             money_balance=-1000, cylinder_balance_12=-2, cylinder_balance_48=0,
@@ -265,7 +265,7 @@ class TestCompanyBalanceAdjustment:
         # money set TO -1000; cyl12 set TO -2
         _assert_company(client, money=-1000, cyl12=-2, cyl48=0)
 
-    def test_adjustment_sets_not_accumulates(self, client, baseline):
+    def test_adjustment_sets_not_accumulates(self, client, shared_baseline):
         # Two adjustments: second one wins, does not stack on top of first
         post_company_balance_adjustment(
             client,

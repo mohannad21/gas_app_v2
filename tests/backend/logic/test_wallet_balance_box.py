@@ -32,15 +32,15 @@ def _wallet_end(client, date=DAY1) -> int:
 # --- Non-cash activities must not affect wallet ───────────────────────────────
 
 class TestWalletUnchangedByNonCashActivities:
-    def test_return_empties_from_customer(self, client, baseline):
+    def test_return_empties_from_customer(self, client, shared_baseline):
         post_return_empties_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             qty_12kg=3, qty_48kg=0,
             happened_at=at(DAY1),
         )
         assert _wallet_end(client) == 1000
 
-    def test_return_empties_to_company(self, client, baseline):
+    def test_return_empties_to_company(self, client, shared_baseline):
         # First create cylinder debt so the return is valid
         post_refill(
             client,
@@ -56,7 +56,7 @@ class TestWalletUnchangedByNonCashActivities:
         # refill had paid=0 so wallet unchanged; return empties has no cash effect
         assert _wallet_end(client) == 1000
 
-    def test_inventory_adjustment(self, client, baseline):
+    def test_inventory_adjustment(self, client, shared_baseline):
         post_inventory_adjustment(
             client, gas_type="12kg",
             delta_full=10, delta_empty=-5,
@@ -64,15 +64,15 @@ class TestWalletUnchangedByNonCashActivities:
         )
         assert _wallet_end(client) == 1000
 
-    def test_customer_balance_adjustment(self, client, baseline):
+    def test_customer_balance_adjustment(self, client, shared_baseline):
         post_customer_balance_adjustment(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             money_balance=700, cylinder_balance_12kg=7, cylinder_balance_48kg=0,
             happened_at=at(DAY1),
         )
         assert _wallet_end(client) == 1000
 
-    def test_company_balance_adjustment(self, client, baseline):
+    def test_company_balance_adjustment(self, client, shared_baseline):
         post_company_balance_adjustment(
             client,
             money_balance=3000, cylinder_balance_12=5, cylinder_balance_48=0,
@@ -84,13 +84,13 @@ class TestWalletUnchangedByNonCashActivities:
 # --- Wallet accumulates correctly across all cash-affecting activities ─────────
 
 class TestWalletCumulative:
-    def test_all_cash_activities_in_one_day(self, client, baseline):
+    def test_all_cash_activities_in_one_day(self, client, shared_baseline):
         # Baseline wallet: 1000
         # Each step shows running wallet after the activity.
 
         # 1. Replacement: paid=100 → wallet += 100 → 1100
         post_replacement(
-            client, baseline["customer_c_id"], baseline["customer_c_system_12kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_12kg"],
             "12kg", cylinders_installed=3, cylinders_received=2,
             price_total=300, paid_amount=100,
             happened_at=at(DAY1, 9, 0),
@@ -98,7 +98,7 @@ class TestWalletCumulative:
 
         # 2. Sell full: paid=200 → wallet += 200 → 1300
         post_sell_full(
-            client, baseline["customer_c_id"], baseline["customer_c_system_48kg"],
+            client, shared_baseline["customer_c_id"], shared_baseline["customer_c_system_48kg"],
             "48kg", cylinders_installed=2,
             price_total=400, paid_amount=200,
             happened_at=at(DAY1, 9, 1),
@@ -106,7 +106,7 @@ class TestWalletCumulative:
 
         # 3. Buy empty: paid=50 → wallet -= 50 → 1250
         post_buy_empty(
-            client, baseline["customer_c_id"], "12kg",
+            client, shared_baseline["customer_c_id"], "12kg",
             cylinders_received=5,
             price_total=100, paid_amount=50,
             happened_at=at(DAY1, 9, 2),
@@ -114,14 +114,14 @@ class TestWalletCumulative:
 
         # 4. Payment from customer: amount=150 → wallet += 150 → 1400
         post_payment_from_customer(
-            client, baseline["customer_a_id"],
+            client, shared_baseline["customer_a_id"],
             amount=150,
             happened_at=at(DAY1, 9, 3),
         )
 
         # 5. Payout to customer: amount=80 → wallet -= 80 → 1320
         post_payout_to_customer(
-            client, baseline["customer_c_id"],
+            client, shared_baseline["customer_c_id"],
             amount=80,
             happened_at=at(DAY1, 9, 4),
         )
@@ -157,7 +157,7 @@ class TestWalletCumulative:
 
         # 10. Expense: amount=75 → wallet -= 75 → 845
         post_expense(
-            client, baseline["expense_category_id"],
+            client, shared_baseline["expense_category_id"],
             amount=75,
             happened_at=at(DAY1, 9, 9),
         )
