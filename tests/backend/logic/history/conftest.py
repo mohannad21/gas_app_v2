@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 
 from ..helpers import (
     DAY0,
@@ -25,6 +26,16 @@ from ..helpers import (
     post_wallet_adjustment,
     post_wallet_to_bank,
 )
+
+_AUTH_TABLES = frozenset({
+    "plans",
+    "tenants",
+    "users",
+    "roles",
+    "role_permissions",
+    "tenant_memberships",
+    "tenant_plan_subscriptions",
+})
 
 
 @pytest.fixture()
@@ -233,3 +244,28 @@ def world(client):
         "expected_sold_12kg": {DAY1: 2, DAY2: 0, DAY3: 3},
         "expected_sold_48kg": {DAY1: 0, DAY2: 2, DAY3: 0},
     }
+
+
+@pytest.fixture(scope="module")
+def shared_world(client):
+    """Module-scoped world for read-only sanity tests.
+    Built once per test file. Do not use in tests that mutate world data.
+    """
+    world_data = world.__wrapped__(client)
+    yield world_data
+
+    import app.db as app_db
+    from app.config import DEFAULT_TENANT_ID
+
+    data_tables = ", ".join(
+        t.name
+        for t in app_db.SQLModel.metadata.sorted_tables
+        if t.name not in _AUTH_TABLES
+    )
+    with app_db.engine.begin() as conn:
+        if data_tables:
+            conn.execute(text(f"TRUNCATE TABLE {data_tables} CASCADE"))
+        conn.execute(text("DELETE FROM tenants WHERE id != :id"), {"id": DEFAULT_TENANT_ID})
+        conn.execute(text("DELETE FROM users WHERE id != :id"), {"id": "test-user"})
+        conn.execute(text("DELETE FROM roles WHERE id != :id"), {"id": "test-role"})
+        conn.execute(text("DELETE FROM plans WHERE id != :id"), {"id": "test-plan"})
