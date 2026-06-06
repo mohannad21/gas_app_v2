@@ -168,15 +168,22 @@ describe("ReportsScreen filters", () => {
 
   it("replaces day summary with group and subtype filters", () => {
     const { getByText, queryByText, getByTestId } = render(<ReportsScreen />);
+    const groupRow = within(getByTestId("reports-filter-groups"));
 
     expect(queryByText("Day summary")).toBeNull();
     expect(queryByText("All")).toBeNull();
-    expect(getByText("Customer Activities")).toBeTruthy();
-    expect(getByText("Company Activities")).toBeTruthy();
-    expect(getByText("Expenses")).toBeTruthy();
-    expect(getByText("Ledger Adjustments")).toBeTruthy();
+    expect(groupRow.getByText("Customer")).toBeTruthy();
+    expect(groupRow.getByText("Company")).toBeTruthy();
+    expect(groupRow.getByText("Money")).toBeTruthy();
+    expect(groupRow.getByText("Ledger")).toBeTruthy();
+    expect(groupRow.getAllByText(/Customer|Company|Money|Ledger/).map((node) => node.props.children)).toEqual([
+      "Customer",
+      "Company",
+      "Money",
+      "Ledger",
+    ]);
 
-    fireEvent.press(getByText("Customer Activities"));
+    fireEvent.press(groupRow.getByText("Customer"));
     const subtypeRow = getByTestId("reports-filter-subtypes");
     expect(within(subtypeRow).getByText("Replace")).toBeTruthy();
     expect(within(subtypeRow).getByText("Payment from customer")).toBeTruthy();
@@ -190,13 +197,13 @@ describe("ReportsScreen filters", () => {
     expect(getByText("Payment to company")).toBeTruthy();
     expect(getByText("Fuel")).toBeTruthy();
 
-    fireEvent.press(getByText("Expenses"));
+    fireEvent.press(getByText("Money"));
 
     expect(getByText("Fuel")).toBeTruthy();
     expect(queryByText("Replace")).toBeNull();
     expect(queryByText("Payment to company")).toBeNull();
 
-    fireEvent.press(getByText("Expenses"));
+    fireEvent.press(getByText("Money"));
 
     expect(getAllByText("Replace").length).toBeGreaterThan(0);
     expect(getByText("Payment to company")).toBeTruthy();
@@ -219,11 +226,8 @@ describe("ReportsScreen filters", () => {
       ],
     };
 
-    const { queryByTestId, queryByText } = render(<ReportsScreen />);
+    const { queryByTestId } = render(<ReportsScreen />);
 
     expect(queryByTestId("reports-filter-groups")).toBeNull();
-    expect(queryByText("Company Activities")).toBeNull();
-    expect(queryByText("Expenses")).toBeNull();
-    expect(queryByText("Ledger Adjustments")).toBeNull();
   });
 });

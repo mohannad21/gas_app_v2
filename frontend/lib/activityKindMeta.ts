@@ -230,3 +230,10 @@ export function getReportSubtype(event: {
     money_direction: event.money_direction,
   });
 }
+
+export const FILTER_GROUP_LABELS: Record<"customer" | "company" | "expenses" | "ledger", string> = {
+  customer: "Customer",
+  company: "Company",
+  expenses: "Money",
+  ledger: "Ledger",
+};

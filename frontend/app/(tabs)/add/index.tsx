@@ -58,6 +58,15 @@ import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
 import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeYMDHM, toDateKey } from "@/lib/date";
+import { FILTER_GROUP_LABELS } from "@/lib/activityKindMeta";
+import {
+  isCompanyTabFiltered,
+  isCustomerTabFiltered,
+  isLedgerTabFiltered,
+  isMoneyTabFiltered,
+  resolveFilterLabel,
+} from "@/lib/filterHelpers";
+import { getKindOptions, getSubFilterOptions } from "@/lib/filterOptions";
 import {
   PriceInputs,
   createDefaultPriceInputs,
@@ -185,34 +194,75 @@ function formatPriceGasList(items: string[]) {
 }
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
-  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
-  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
-  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
-  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
-  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
-  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
-  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
+  ...getKindOptions("customer")
+    .map((option) => {
+      const id =
+        option.id === "payment_from_customer"
+          ? "late_payment"
+          : option.id === "payment_to_customer"
+            ? "payout"
+            : option.id === "customer_return_empties"
+              ? "return_empties"
+              : option.id === "buy_empty_from_customer"
+                ? "buy_empty"
+                : option.id === "adjust_customer_balance"
+                  ? "adjustment"
+                  : option.id;
+      return { id: id as CustomerActivityFilter, label: resolveFilterLabel(id, "customer") };
+    }),
 ];
 
 const companyActivityFilters: { id: CompanyActivityFilter; label: string }[] = [
-  { id: "refill", label: EVENT_LABELS.REFILL },
-  { id: "payment_to_company", label: EVENT_LABELS.COMPANY_PAYMENT_OUT },
-  { id: "payment_from_company", label: EVENT_LABELS.COMPANY_PAYMENT_IN },
-  { id: "buy_full", label: EVENT_LABELS.COMPANY_BUY_FULL },
-  { id: "company_return", label: EVENT_LABELS.COMPANY_RETURN },
-  { id: "adjustment", label: EVENT_LABELS.COMPANY_ADJUSTMENT },
+  ...getKindOptions("company")
+    .map((option) => {
+      const id =
+        option.id === "buy_full_from_company"
+          ? "buy_full"
+          : option.id === "dist_return_empties"
+            ? "company_return"
+            : option.id === "adjust_company_balance"
+              ? "adjustment"
+              : option.id;
+      return { id: id as CompanyActivityFilter, label: resolveFilterLabel(id, "company") };
+    }),
 ];
 
 const expensePrimaryFilters: { id: ExpensePrimaryFilter; label: string }[] = [
-  { id: "expense", label: EVENT_LABELS.EXPENSE },
-  { id: "wallet_to_bank", label: EVENT_LABELS.WALLET_TO_BANK },
-  { id: "bank_to_wallet", label: EVENT_LABELS.BANK_TO_WALLET },
+  ...getKindOptions("expenses")
+    .map((option) => ({ id: option.id as ExpensePrimaryFilter, label: resolveFilterLabel(option.id) })),
 ];
 
 const ledgerActivityFilters: { id: LedgerActivityFilter; label: string }[] = [
-  { id: "inventory_adjustment", label: EVENT_LABELS.INVENTORY_ADJUSTMENT },
-  { id: "adjust_wallet", label: EVENT_LABELS.WALLET_ADJUSTMENT },
+  ...getKindOptions("ledger")
+    .map((option) => {
+      const id = option.id === "adjust_inventory" ? "inventory_adjustment" : option.id;
+      return { id: id as LedgerActivityFilter, label: resolveFilterLabel(id) };
+    }),
 ];
+const CUSTOMER_FILTER_TO_KIND: Record<CustomerActivityFilter, string> = {
+  replacement: "replacement",
+  late_payment: "payment_from_customer",
+  payout: "payment_to_customer",
+  return_empties: "customer_return_empties",
+  sell_full: "sell_full",
+  buy_empty: "buy_empty_from_customer",
+  adjustment: "adjust_customer_balance",
+};
+
+const matchesCustomerDebtCreditSubFilter = (item: CustomerActivityListItem, subFilterId: string) => {
+  if (item.kind !== "order") return false;
+  const moneyDiff = (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0);
+  const cylDiff = (item.data.cylinders_installed ?? 0) - (item.data.cylinders_received ?? 0);
+  switch (subFilterId) {
+    case "money_debt": return moneyDiff > 0;
+    case "money_credit": return moneyDiff < 0;
+    case "12kg_debt": return item.data.gas_type === "12kg" && cylDiff > 0;
+    case "12kg_credit": return item.data.gas_type === "12kg" && cylDiff < 0;
+    case "48kg_debt": return item.data.gas_type === "48kg" && cylDiff > 0;
+    case "48kg_credit": return item.data.gas_type === "48kg" && cylDiff < 0;
+    default: return true;
+  }
+};
 const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "created_desc",
   "created_asc",
@@ -244,7 +294,6 @@ export default function AddChooserScreen() {
     setLedgerActivityFilter,
   } = useActivityFilters();
   const [customerActivityLevel2, setCustomerActivityLevel2] = useState<string | null>(null);
-  const [customerActivityLevel3, setCustomerActivityLevel3] = useState<string | null>(null);
   const [companyActivityLevel2, setCompanyActivityLevel2] = useState<string | null>(null);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
@@ -537,22 +586,15 @@ const formatDateTime = (value?: string) => {
   }, [customerSearchScopedItems]);
   const customerActivityLevel2Options = useMemo(() => {
     if (!customerActivityFilter) return [] as { id: string; label: string }[];
+    const options = getSubFilterOptions("customer", CUSTOMER_FILTER_TO_KIND[customerActivityFilter]);
     switch (customerActivityFilter) {
-      case "replacement": {
-        const systemsById = new Map((systemsQuery.data ?? []).map((system) => [system.id, system.name]));
-        const seen = new Set<string>();
-        const options: { id: string; label: string }[] = [];
-        for (const item of customerSearchScopedItems) {
-          if (item.kind !== "order" || item.filterId !== "replacement" || !item.data.system_id) continue;
-          if (seen.has(item.data.system_id)) continue;
-          seen.add(item.data.system_id);
-          options.push({
-            id: item.data.system_id,
-            label: systemsById.get(item.data.system_id) ?? item.data.system_id,
-          });
-        }
-        return options;
-      }
+      case "replacement":
+      case "sell_full":
+        return options.filter((option) =>
+          customerSearchScopedItems.some(
+            (item) => item.filterId === customerActivityFilter && matchesCustomerDebtCreditSubFilter(item, option.id)
+          )
+        );
       case "return_empties": {
         const has12 = customerSearchScopedItems.some(
           (item) => item.kind === "collection" && item.filterId === "return_empties" && Number(item.data.qty_12kg ?? 0) > 0
@@ -560,23 +602,16 @@ const formatDateTime = (value?: string) => {
         const has48 = customerSearchScopedItems.some(
           (item) => item.kind === "collection" && item.filterId === "return_empties" && Number(item.data.qty_48kg ?? 0) > 0
         );
-        return [
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) => (option.id === "12kg" && has12) || (option.id === "48kg" && has48));
       }
-      case "buy_empty":
-      case "sell_full": {
+      case "buy_empty": {
         const has12 = customerSearchScopedItems.some(
           (item) => item.kind === "order" && item.filterId === customerActivityFilter && item.data.gas_type === "12kg"
         );
         const has48 = customerSearchScopedItems.some(
           (item) => item.kind === "order" && item.filterId === customerActivityFilter && item.data.gas_type === "48kg"
         );
-        return [
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) => (option.id === "12kg" && has12) || (option.id === "48kg" && has48));
       }
       case "adjustment": {
         const hasMoney = customerSearchScopedItems.some(
@@ -588,74 +623,25 @@ const formatDateTime = (value?: string) => {
         const has48 = customerSearchScopedItems.some(
           (item) => item.kind === "adjustment" && Number(item.data.count_48kg ?? 0) !== 0
         );
-        return [
-          hasMoney ? { id: "money", label: "Money" } : null,
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) =>
+          (option.id === "money" && hasMoney) || (option.id === "12kg" && has12) || (option.id === "48kg" && has48)
+        );
       }
       default:
         return [];
     }
-  }, [customerActivityFilter, customerSearchScopedItems, systemsQuery.data]);
-  const customerActivityLevel3Options = useMemo(() => {
-    if (customerActivityFilter !== "replacement") return [] as { id: string; label: string }[];
-    const scope = customerSearchScopedItems.filter(
-      (item) =>
-        item.kind === "order" &&
-        item.filterId === "replacement" &&
-        (customerActivityLevel2 === null || item.data.system_id === customerActivityLevel2)
-    );
-    const check = (id: string, label: string, predicate: (item: any) => boolean) =>
-      scope.some(predicate) ? { id, label } : null;
-    return [
-      check("money_debt", "Money debt", (item) => (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0) > 0),
-      check("money_credit", "Money credit", (item) => (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0) < 0),
-      check("12kg_debt", "12kg debt", (item) => item.data.gas_type === "12kg" && (item.data.cylinders_installed ?? 0) > (item.data.cylinders_received ?? 0)),
-      check("12kg_credit", "12kg credit", (item) => item.data.gas_type === "12kg" && (item.data.cylinders_installed ?? 0) < (item.data.cylinders_received ?? 0)),
-      check("48kg_debt", "48kg debt", (item) => item.data.gas_type === "48kg" && (item.data.cylinders_installed ?? 0) > (item.data.cylinders_received ?? 0)),
-      check("48kg_credit", "48kg credit", (item) => item.data.gas_type === "48kg" && (item.data.cylinders_installed ?? 0) < (item.data.cylinders_received ?? 0)),
-    ].filter((opt): opt is { id: string; label: string } => opt !== null);
-  }, [customerActivityFilter, customerActivityLevel2, customerSearchScopedItems]);
+  }, [customerActivityFilter, customerSearchScopedItems]);
   const filteredCustomerActivityItems = useMemo(
     () =>
       sortVisibleItems(customerSearchScopedItems.filter((item) => {
         if (customerActivityFilter && item.filterId !== customerActivityFilter) {
           return false;
         }
-        if (!customerActivityFilter || !customerActivityLevel2) {
-          if (customerActivityFilter === "replacement" && customerActivityLevel3) {
-            if (item.kind !== "order") return true;
-            const moneyDiff = (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0);
-            const cylDiff = (item.data.cylinders_installed ?? 0) - (item.data.cylinders_received ?? 0);
-            switch (customerActivityLevel3) {
-              case "money_debt": return moneyDiff > 0;
-              case "money_credit": return moneyDiff < 0;
-              case "12kg_debt": return item.data.gas_type === "12kg" && cylDiff > 0;
-              case "12kg_credit": return item.data.gas_type === "12kg" && cylDiff < 0;
-              case "48kg_debt": return item.data.gas_type === "48kg" && cylDiff > 0;
-              case "48kg_credit": return item.data.gas_type === "48kg" && cylDiff < 0;
-              default: return true;
-            }
-          }
-          return true;
-        }
+        if (!customerActivityFilter || !customerActivityLevel2) return true;
         switch (customerActivityFilter) {
-          case "replacement": {
-            if (item.kind !== "order" || item.data.system_id !== customerActivityLevel2) return false;
-            if (!customerActivityLevel3) return true;
-            const moneyDiff = (item.data.price_total ?? 0) - (item.data.paid_amount ?? 0);
-            const cylDiff = (item.data.cylinders_installed ?? 0) - (item.data.cylinders_received ?? 0);
-            switch (customerActivityLevel3) {
-              case "money_debt": return moneyDiff > 0;
-              case "money_credit": return moneyDiff < 0;
-              case "12kg_debt": return item.data.gas_type === "12kg" && cylDiff > 0;
-              case "12kg_credit": return item.data.gas_type === "12kg" && cylDiff < 0;
-              case "48kg_debt": return item.data.gas_type === "48kg" && cylDiff > 0;
-              case "48kg_credit": return item.data.gas_type === "48kg" && cylDiff < 0;
-              default: return true;
-            }
-          }
+          case "replacement":
+          case "sell_full":
+            return matchesCustomerDebtCreditSubFilter(item, customerActivityLevel2);
           case "return_empties":
             return (
               item.kind === "collection" &&
@@ -663,7 +649,6 @@ const formatDateTime = (value?: string) => {
                 (customerActivityLevel2 === "48kg" && Number(item.data.qty_48kg ?? 0) > 0))
             );
           case "buy_empty":
-          case "sell_full":
             return item.kind === "order" && item.data.gas_type === customerActivityLevel2;
           case "adjustment":
             return (
@@ -676,7 +661,7 @@ const formatDateTime = (value?: string) => {
             return true;
         }
       })),
-    [customerActivityFilter, customerActivityLevel2, customerActivityLevel3, customerSearchScopedItems, sortVisibleItems]
+    [customerActivityFilter, customerActivityLevel2, customerSearchScopedItems, sortVisibleItems]
   );
   const availableCompanyActivityFilters = useMemo(() => {
     const seen = new Set<CompanyActivityFilter>();
@@ -1298,6 +1283,24 @@ const formatDateTime = (value?: string) => {
       : isExpenses
         ? "+ Add Money Activity"
         : "+ New Ledger Adjustment";
+  const showFilterBadge = isCustomerActivities
+    ? isCustomerTabFiltered({
+        customerActivityFilter,
+        customerActivityLevel2,
+      })
+    : isCompanyActivities
+      ? isCompanyTabFiltered({
+          companyActivityFilter,
+          companyActivityLevel2,
+        })
+      : isExpenses
+        ? isMoneyTabFiltered({
+            expensePrimaryFilter,
+            expenseCategoryFilter,
+          })
+        : isLedgerTabFiltered({
+            ledgerActivityFilter,
+          });
 
   return (
     <View style={styles.container}>
@@ -1307,7 +1310,7 @@ const formatDateTime = (value?: string) => {
           style={[styles.segmentBtn, isCustomerActivities && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isCustomerActivities && styles.segmentTextActive]}>
-            Customer{"\n"}Activities
+            {FILTER_GROUP_LABELS.customer}
           </Text>
         </Pressable>
         <Pressable
@@ -1315,18 +1318,18 @@ const formatDateTime = (value?: string) => {
           style={[styles.segmentBtn, isCompanyActivities && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isCompanyActivities && styles.segmentTextActive]}>
-            Company{"\n"}Activities
+            {FILTER_GROUP_LABELS.company}
           </Text>
         </Pressable>
         <Pressable onPress={() => setMode("expenses")} style={[styles.segmentBtn, isExpenses && styles.segmentActive]}>
-          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>Money{"\n"}Activities</Text>
+          <Text style={[styles.segmentText, isExpenses && styles.segmentTextActive]}>{FILTER_GROUP_LABELS.expenses}</Text>
         </Pressable>
         <Pressable
           onPress={() => setMode("ledger_adjustments")}
           style={[styles.segmentBtn, isLedgerAdjustments && styles.segmentActive]}
         >
           <Text style={[styles.segmentText, isLedgerAdjustments && styles.segmentTextActive]}>
-            Ledger{"\n"}Adjustments
+            {FILTER_GROUP_LABELS.ledger}
           </Text>
         </Pressable>
       </View>
@@ -1337,6 +1340,7 @@ const formatDateTime = (value?: string) => {
         </Pressable>
         <Pressable style={styles.utilityIconButton} onPress={() => setFiltersVisible((current) => !current)}>
           <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
+          {showFilterBadge ? <View style={styles.filterBadge} /> : null}
         </Pressable>
         <Pressable style={styles.utilityIconButton} onPress={openSortPicker}>
           <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
@@ -1357,7 +1361,6 @@ const formatDateTime = (value?: string) => {
               onChange={(next) => {
                 setCustomerActivityFilter(next);
                 setCustomerActivityLevel2(null);
-                setCustomerActivityLevel3(null);
               }}
             />
           ) : null}
@@ -1365,18 +1368,7 @@ const formatDateTime = (value?: string) => {
             <FilterChipRow
               options={customerActivityLevel2Options}
               value={customerActivityLevel2}
-              onChange={(next) => {
-                setCustomerActivityLevel2(next);
-                setCustomerActivityLevel3(null);
-              }}
-              contentContainerStyle={styles.secondaryFilterRow}
-            />
-          ) : null}
-          {customerActivityFilter === "replacement" && customerActivityLevel3Options.length > 1 ? (
-            <FilterChipRow
-              options={customerActivityLevel3Options}
-              value={customerActivityLevel3}
-              onChange={setCustomerActivityLevel3}
+              onChange={setCustomerActivityLevel2}
               contentContainerStyle={styles.secondaryFilterRow}
             />
           ) : null}
@@ -2426,6 +2418,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#d7dde4",
+    position: "relative",
+  },
+  filterBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
   },
   sortPickerOverlay: {
     flex: 1,

@@ -8,6 +8,8 @@ import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
 import { normalizeEventType } from "@/lib/activityKindMeta";
+import { isCustomerReviewFiltered, resolveFilterLabel } from "@/lib/filterHelpers";
+import { getKindOptions, getSubFilterOptions } from "@/lib/filterOptions";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCollections, useDeleteCollection } from "@/hooks/useCollections";
@@ -43,14 +45,47 @@ type ActivityFilter =
 type ActivitySortMode = "created_desc" | "created_asc" | "effective_desc" | "effective_asc";
 
 const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
-  { id: "replacement", label: EVENT_LABELS.ORDER_REPLACEMENT },
-  { id: "late_payment", label: EVENT_LABELS.COLLECTION_MONEY },
-  { id: "payout", label: EVENT_LABELS.COLLECTION_PAYOUT },
-  { id: "return_empties", label: EVENT_LABELS.COLLECTION_EMPTY },
-  { id: "buy_empty", label: EVENT_LABELS.ORDER_BUY_EMPTY },
-  { id: "sell_full", label: EVENT_LABELS.ORDER_SELL_FULL },
-  { id: "adjustment", label: EVENT_LABELS.CUSTOMER_ADJUSTMENT },
+  ...getKindOptions("customer")
+    .map((option) => {
+      const id =
+        option.id === "payment_from_customer"
+          ? "late_payment"
+          : option.id === "payment_to_customer"
+            ? "payout"
+            : option.id === "customer_return_empties"
+              ? "return_empties"
+              : option.id === "buy_empty_from_customer"
+                ? "buy_empty"
+                : option.id === "adjust_customer_balance"
+                  ? "adjustment"
+                  : option.id;
+      return { id: id as ActivityFilter, label: resolveFilterLabel(id, "customer") };
+    }),
 ];
+
+const CUSTOMER_FILTER_TO_KIND: Record<ActivityFilter, string> = {
+  replacement: "replacement",
+  late_payment: "payment_from_customer",
+  payout: "payment_to_customer",
+  return_empties: "customer_return_empties",
+  buy_empty: "buy_empty_from_customer",
+  sell_full: "sell_full",
+  adjustment: "adjust_customer_balance",
+};
+
+const matchesDebtCreditSubFilter = (event: DailyReportEvent, subFilterId: string) => {
+  const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
+  const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
+  switch (subFilterId) {
+    case "money_debt": return moneyDiff > 0;
+    case "money_credit": return moneyDiff < 0;
+    case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
+    case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
+    case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
+    case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
+    default: return true;
+  }
+};
 
 const formatCurrency = (value: number) => {
   const abs = Math.abs(value);
@@ -184,7 +219,6 @@ export default function CustomerDetailsScreen() {
   const customerId = Array.isArray(id) ? id[0] : id;
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter | null>(null);
   const [selectedLevel2, setSelectedLevel2] = useState<string | null>(null);
-  const [selectedLevel3, setSelectedLevel3] = useState<string | null>(null);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activitySortMode, setActivitySortMode] = useState<ActivitySortMode>("created_desc");
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
@@ -297,68 +331,39 @@ export default function CustomerDetailsScreen() {
 
   const level2Options = useMemo(() => {
     if (!selectedFilter) return [] as { id: string; label: string }[];
+    const options = getSubFilterOptions("customer", CUSTOMER_FILTER_TO_KIND[selectedFilter]);
     switch (selectedFilter) {
-      case "replacement": {
-        const options: { id: string; label: string }[] = [];
-        for (const system of systems) {
-          const hasReplacement = orders.some(
-            (order) => !order.is_deleted && order.order_mode === "replacement" && order.system_id === system.id
-          );
-          if (hasReplacement) {
-            options.push({ id: system.id, label: system.name });
-          }
-        }
-        return options;
-      }
+      case "replacement":
+      case "sell_full":
+        return options.filter((option) =>
+          activities.some((event) => {
+            const kind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
+            return kind === CUSTOMER_FILTER_TO_KIND[selectedFilter] && matchesDebtCreditSubFilter(event, option.id);
+          })
+        );
       case "return_empties": {
         const has12 = collections.some((item) => item.action_type === "return" && Number(item.qty_12kg ?? 0) > 0);
         const has48 = collections.some((item) => item.action_type === "return" && Number(item.qty_48kg ?? 0) > 0);
-        return [
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) => (option.id === "12kg" && has12) || (option.id === "48kg" && has48));
       }
-      case "buy_empty":
-      case "sell_full": {
+      case "buy_empty": {
         const mode = selectedFilter === "buy_empty" ? "buy_iron" : "sell_iron";
         const has12 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "12kg");
         const has48 = orders.some((order) => !order.is_deleted && order.order_mode === mode && order.gas_type === "48kg");
-        return [
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) => (option.id === "12kg" && has12) || (option.id === "48kg" && has48));
       }
       case "adjustment": {
         const hasMoney = adjustments.some((item) => Number(item.amount_money ?? 0) !== 0);
         const has12 = adjustments.some((item) => Number(item.count_12kg ?? 0) !== 0);
         const has48 = adjustments.some((item) => Number(item.count_48kg ?? 0) !== 0);
-        return [
-          hasMoney ? { id: "money", label: "Money" } : null,
-          has12 ? { id: "12kg", label: "12kg" } : null,
-          has48 ? { id: "48kg", label: "48kg" } : null,
-        ].filter(Boolean) as { id: string; label: string }[];
+        return options.filter((option) =>
+          (option.id === "money" && hasMoney) || (option.id === "12kg" && has12) || (option.id === "48kg" && has48)
+        );
       }
       default:
         return [];
     }
-  }, [adjustments, collections, orders, selectedFilter, systems]);
-
-  const level3Options = useMemo(() => {
-    if (selectedFilter !== "replacement") return [] as { id: string; label: string }[];
-    const scope = orders.filter(
-      (o) => !o.is_deleted && o.order_mode === "replacement" && (selectedLevel2 === null || o.system_id === selectedLevel2)
-    );
-    const check = (id: string, label: string, predicate: (o: any) => boolean) =>
-      scope.some(predicate) ? { id, label } : null;
-    return [
-      check("money_debt", "Money debt", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) > 0),
-      check("money_credit", "Money credit", (o) => (o.price_total ?? 0) - (o.paid_amount ?? 0) < 0),
-      check("12kg_debt", "12kg debt", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
-      check("12kg_credit", "12kg credit", (o) => o.gas_type === "12kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
-      check("48kg_debt", "48kg debt", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) > (o.cylinders_received ?? 0)),
-      check("48kg_credit", "48kg credit", (o) => o.gas_type === "48kg" && (o.cylinders_installed ?? 0) < (o.cylinders_received ?? 0)),
-    ].filter((opt): opt is { id: string; label: string } => opt !== null);
-  }, [selectedFilter, selectedLevel2, orders]);
+  }, [activities, adjustments, collections, orders, selectedFilter]);
 
   const filteredActivities = useMemo(() => {
     let next = activities;
@@ -399,44 +404,12 @@ export default function CustomerDetailsScreen() {
       });
     }
     if (!selectedFilter || !selectedLevel2) {
-      if (selectedFilter === "replacement" && selectedLevel3) {
-        return sortCustomerActivityEventsByMode(next.filter((event) => {
-          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
-          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
-          switch (selectedLevel3) {
-            case "money_debt": return moneyDiff > 0;
-            case "money_credit": return moneyDiff < 0;
-            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
-            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
-            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
-            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
-            default: return true;
-          }
-        }), activitySortMode);
-      }
       return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
     switch (selectedFilter) {
-      case "replacement": {
-        const l2Filtered = next.filter((event) => {
-          const matchingOrder = orders.find((order) => order.id === event.id);
-          return matchingOrder?.system_id === selectedLevel2;
-        });
-        if (!selectedLevel3) return sortCustomerActivityEventsByMode(l2Filtered, activitySortMode);
-        return sortCustomerActivityEventsByMode(l2Filtered.filter((event) => {
-          const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
-          const cylDiff = (event.order_installed ?? 0) - (event.order_received ?? 0);
-          switch (selectedLevel3) {
-            case "money_debt": return moneyDiff > 0;
-            case "money_credit": return moneyDiff < 0;
-            case "12kg_debt": return event.gas_type === "12kg" && cylDiff > 0;
-            case "12kg_credit": return event.gas_type === "12kg" && cylDiff < 0;
-            case "48kg_debt": return event.gas_type === "48kg" && cylDiff > 0;
-            case "48kg_credit": return event.gas_type === "48kg" && cylDiff < 0;
-            default: return true;
-          }
-        }), activitySortMode);
-      }
+      case "replacement":
+      case "sell_full":
+        return sortCustomerActivityEventsByMode(next.filter((event) => matchesDebtCreditSubFilter(event, selectedLevel2)), activitySortMode);
       case "return_empties":
         return sortCustomerActivityEventsByMode(next.filter(
           (event) =>
@@ -444,7 +417,6 @@ export default function CustomerDetailsScreen() {
             (selectedLevel2 === "48kg" && Number(event.return48 ?? 0) > 0)
         ), activitySortMode);
       case "buy_empty":
-      case "sell_full":
         return sortCustomerActivityEventsByMode(next.filter((event) => event.gas_type === selectedLevel2), activitySortMode);
       case "adjustment":
         return sortCustomerActivityEventsByMode(next.filter(
@@ -459,8 +431,12 @@ export default function CustomerDetailsScreen() {
       default:
         return sortCustomerActivityEventsByMode(next, activitySortMode);
     }
-  }, [activities, activitySortMode, adjustments, collections, orders, selectedFilter, selectedLevel2, selectedLevel3]);
+  }, [activities, activitySortMode, adjustments, collections, orders, selectedFilter, selectedLevel2]);
   const openSortPicker = () => setSortPickerVisible(true);
+  const showFilterBadge = isCustomerReviewFiltered({
+    selectedFilter,
+    selectedLevel2,
+  });
 
   if (customersQuery.isLoading) {
     return (
@@ -754,6 +730,7 @@ export default function CustomerDetailsScreen() {
         <View style={styles.activityToolbar}>
           <Pressable style={styles.toolbarIconButton} onPress={() => setFiltersVisible((current) => !current)}>
             <Ionicons name="filter-outline" size={18} color="#0a7ea4" />
+            {showFilterBadge ? <View style={styles.filterBadge} /> : null}
           </Pressable>
           <Pressable style={styles.toolbarIconButton} onPress={openSortPicker}>
             <Ionicons name="swap-vertical-outline" size={18} color="#0a7ea4" />
@@ -768,7 +745,6 @@ export default function CustomerDetailsScreen() {
           onChange={(next) => {
             setSelectedFilter(next);
             setSelectedLevel2(null);
-            setSelectedLevel3(null);
           }}
           style={styles.filterScroll}
           contentContainerStyle={styles.filterRow}
@@ -779,20 +755,7 @@ export default function CustomerDetailsScreen() {
         <FilterChipRow
           options={level2Options}
           value={selectedLevel2}
-          onChange={(next) => {
-            setSelectedLevel2(next);
-            setSelectedLevel3(null);
-          }}
-          style={styles.filterScroll}
-          contentContainerStyle={styles.secondaryFilterRow}
-        />
-      ) : null}
-
-      {filtersVisible && selectedFilter === "replacement" && level3Options.length > 1 ? (
-        <FilterChipRow
-          options={level3Options}
-          value={selectedLevel3}
-          onChange={setSelectedLevel3}
+          onChange={setSelectedLevel2}
           style={styles.filterScroll}
           contentContainerStyle={styles.secondaryFilterRow}
         />
@@ -1101,6 +1064,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#d7dde4",
+    position: "relative",
+  },
+  filterBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
   },
   sortPickerOverlay: {
     flex: 1,

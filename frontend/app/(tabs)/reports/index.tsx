@@ -31,7 +31,7 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatEventType } from "@/lib/reports/utils";
-import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS, normalizeEventType } from "@/lib/activityKindMeta";
 import EventExpandedPanel from "@/components/reports/EventExpandedPanel";
 import { buildHappenedAt, toDateKey } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
@@ -93,11 +93,12 @@ const sortReportEventsNewestFirst = (events: any[]) =>
   });
 
 const ACTIVITY_GROUP_OPTIONS: Record<Exclude<ActivityFilterGroupKey, "all">, ActivityFilterOption> = {
-  customer: { key: "customer", label: "Customer Activities" },
-  company: { key: "company", label: "Company Activities" },
-  expenses: { key: "expenses", label: "Expenses" },
-  ledger: { key: "ledger", label: "Ledger Adjustments" },
+  customer: { key: "customer", label: FILTER_GROUP_LABELS.customer },
+  company: { key: "company", label: FILTER_GROUP_LABELS.company },
+  expenses: { key: "expenses", label: FILTER_GROUP_LABELS.expenses },
+  ledger: { key: "ledger", label: FILTER_GROUP_LABELS.ledger },
 };
+const ACTIVITY_GROUP_ORDER: ActivityFilterGroupKey[] = ["customer", "company", "expenses", "ledger"];
 
 const getEventGroupKey = (event: any): Exclude<ActivityFilterGroupKey, "all"> => {
   const kind = normalizeEventType(String(event?.event_type ?? ""), {
@@ -344,7 +345,7 @@ export default function ReportsScreen() {
       seen.add(groupKey);
       options.push(ACTIVITY_GROUP_OPTIONS[groupKey]);
     }
-    return options;
+    return options.sort((left, right) => ACTIVITY_GROUP_ORDER.indexOf(left.key) - ACTIVITY_GROUP_ORDER.indexOf(right.key));
   }, [rawSelectedEvents]);
   const availableSubtypeOptions = useMemo(() => {
     if (!activityGroupFilter) return [] as ActivitySubtypeOption[];
