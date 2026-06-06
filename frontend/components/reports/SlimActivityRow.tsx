@@ -21,7 +21,6 @@ type ActivityTone = "customer" | "company" | "money" | "ledger";
 type SlimActivityRowProps = {
   event: DailyReportEvent;
   formatMoney?: (value: number) => string;
-  onEdit?: () => void;
   onDelete?: () => void;
   isDeleted?: boolean;
   showCreatedAt?: boolean;
@@ -294,7 +293,6 @@ const buildDisplayTransitions = (event: DailyReportEvent) => {
 export default function SlimActivityRow({
   event,
   formatMoney,
-  onEdit,
   onDelete,
   isDeleted,
   showCreatedAt,
@@ -455,7 +453,7 @@ export default function SlimActivityRow({
           ? styles.pillMoneyText
           : styles.pillLedgerText;
 
-  const hasActions = !!(onEdit || onDelete);
+  const hasActions = !!onDelete;
 
   useEffect(() => {
     if (!highlight) {
@@ -625,16 +623,6 @@ export default function SlimActivityRow({
             </View>
             {hasActions ? (
               <View style={styles.actionBtns}>
-                {onEdit ? (
-                  <Pressable
-                    onPress={isDeleted ? undefined : onEdit}
-                    style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                    accessibilityLabel="Edit"
-                  >
-                    <Ionicons name="create-outline" size={16} color={isDeleted ? "#94a3b8" : "#0a7ea4"} />
-                    <Text style={[styles.actionBtnText, isDeleted && styles.actionBtnTextDisabled]}>Edit</Text>
-                  </Pressable>
-                ) : null}
                 {onDelete ? (
                   <Pressable
                     onPress={isDeleted ? undefined : onDelete}

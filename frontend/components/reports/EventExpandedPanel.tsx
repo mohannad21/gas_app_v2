@@ -11,11 +11,7 @@ function DeltaBox({
   after,
   format,
   accent,
-  smallDelta,
   compact,
-  valueStyle,
-  badgeTone,
-  singleValue,
   showNoChange,
 }: {
   testID?: string;
@@ -24,47 +20,32 @@ function DeltaBox({
   after: number;
   format: (v: number) => string;
   accent?: string;
-  smallDelta?: boolean;
   compact?: boolean;
-  valueStyle?: any;
-  badgeTone?: "good" | "bad";
-  singleValue?: number;
   showNoChange?: boolean;
 }) {
   const delta = (after ?? 0) - (before ?? 0);
-  const showSingle = typeof singleValue === "number";
-  const isNoChange = !!showNoChange && !showSingle && delta === 0;
+  const isNoChange = !!showNoChange && delta === 0;
   const badgeStyle =
     isNoChange
       ? styles.deltaBadgeNeutral
-      : badgeTone === "good"
-      ? styles.deltaBadgePositive
-      : badgeTone === "bad"
-        ? styles.deltaBadgeNegative
-        : delta >= 0
-          ? styles.deltaBadgePositive
-          : styles.deltaBadgeNegative;
+      : delta >= 0
+        ? styles.deltaBadgePositive
+        : styles.deltaBadgeNegative;
   return (
     <View
       testID={testID}
       style={[styles.deltaBox, accent ? { borderColor: accent } : null, compact && styles.deltaBoxCompact]}
     >
       <Text style={styles.deltaBoxLabel}>{label}</Text>
-      <View style={[styles.deltaBadge, badgeStyle, smallDelta && styles.deltaBadgeSmall]}>
-        <Text style={[styles.deltaBadgeText, smallDelta && styles.deltaBadgeTextSmall]}>
+      <View style={[styles.deltaBadge, badgeStyle]}>
+        <Text style={styles.deltaBadgeText}>
           {isNoChange ? "No change" : `${delta >= 0 ? "+" : "-"}${format(Math.abs(delta))}`}
         </Text>
       </View>
       <View style={styles.deltaBoxRow}>
-        {showSingle ? (
-          <Text style={[styles.deltaBoxValue, valueStyle]}>{format(singleValue)}</Text>
-        ) : (
-          <>
-            <Text style={[styles.deltaBoxValue, valueStyle]}>{format(before ?? 0)}</Text>
-            <Text style={styles.deltaBoxArrow}>{"->"}</Text>
-            <Text style={[styles.deltaBoxValue, valueStyle]}>{format(after ?? 0)}</Text>
-          </>
-        )}
+        <Text style={styles.deltaBoxValue}>{format(before ?? 0)}</Text>
+        <Text style={styles.deltaBoxArrow}>{"->"}</Text>
+        <Text style={styles.deltaBoxValue}>{format(after ?? 0)}</Text>
       </View>
     </View>
   );
@@ -375,9 +356,7 @@ const styles = StyleSheet.create({
   deltaBadgeNeutral: { backgroundColor: "#64748b" },
   deltaBadgePositive: { backgroundColor: "#16a34a" },
   deltaBadgeNegative: { backgroundColor: "#b91c1c" },
-  deltaBadgeSmall: { paddingHorizontal: 5, paddingVertical: 1 },
   deltaBadgeText: { fontSize: 11, fontWeight: "900", color: "white", fontFamily: FontFamilies.extrabold },
-  deltaBadgeTextSmall: { fontSize: 10 },
   deltaBoxRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 18 },
   deltaBoxValue: { fontSize: 11, fontWeight: "900", color: "#0f172a", fontFamily: FontFamilies.extrabold },
   deltaBoxArrow: { fontSize: 11, fontWeight: "900", color: "#0a7ea4", fontFamily: FontFamilies.extrabold },

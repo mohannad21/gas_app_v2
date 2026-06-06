@@ -3098,14 +3098,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0f2fe",
     color: "#0a7ea4",
   },
-  paidBadge: {
-    backgroundColor: "#dcfce7",
-    color: "#166534",
-  },
-  unpaidBadge: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-  },
   returnedBadge: {
     backgroundColor: "#dcfce7",
     color: "#166534",
