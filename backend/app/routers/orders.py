@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.auth import get_tenant_id, require_permission
 from app.db import get_session
-from app.models import Customer, CustomerTransaction, System
+from app.models import Customer, CustomerTransaction, System, TransactionGroup
 from app.schemas import OrderCreate, OrderOut, OrderUpdate
 from app.services.ledger import sum_customer_cylinders, sum_customer_money
 from app.services.order_helpers import resolve_value, resolve_update_order_context, validate_order_context_on_update, money_delta_for_mode, order_gas_types, resolve_active_order, order_out, compute_impact
@@ -228,6 +228,9 @@ def create_order(
       note=payload.note,
       request_id=payload.request_id,
     )
+    group = TransactionGroup(id=txn.id, tenant_id=txn.tenant_id, kind=txn.kind)
+    session.add(group)
+    session.flush()
     txn.group_id = txn.id
     session.add(txn)
     post_customer_transaction(session, txn)

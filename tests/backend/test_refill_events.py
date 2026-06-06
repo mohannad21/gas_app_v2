@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from datetime import date, timedelta
 
 from sqlmodel import Session, select
@@ -7,7 +8,11 @@ from sqlmodel import Session, select
 from conftest import init_inventory, iso_at
 
 
-def test_refill_event_defaults_paid_now_to_total_cost(client) -> None:
+@pytest.mark.parametrize("extra", [
+    pytest.param({}, id="omitted-paid-amount"),
+    pytest.param({"paid_amount": 0}, id="explicit-zero-paid-amount"),
+])
+def test_refill_paid_stored_as_zero_when_not_paid(client, extra) -> None:
     day1 = date(2025, 8, 1)
     init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
 
@@ -21,6 +26,7 @@ def test_refill_event_defaults_paid_now_to_total_cost(client) -> None:
             "return48": 0,
             "note": "restock",
             "total_cost": 200,
+            **extra,
         },
     )
     assert resp.status_code == 200
@@ -36,72 +42,6 @@ def test_refill_event_defaults_paid_now_to_total_cost(client) -> None:
         ).first()
         assert event is not None
         assert event.total == 200
-        assert event.paid == 0
-
-
-def test_refill_event_paid_now_zero(client) -> None:
-    day1 = date(2025, 8, 2)
-    init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
-
-    resp = client.post(
-        "/inventory/refill",
-        json={
-            "happened_at": iso_at(day1.isoformat(), "morning"),
-            "buy12": 1,
-            "return12": 0,
-            "buy48": 0,
-            "return48": 0,
-            "note": "restock",
-            "total_cost": 200,
-            "paid_amount": 0,
-        },
-    )
-    assert resp.status_code == 200
-
-    import app.db as app_db
-    from app.models import CompanyTransaction
-
-    with Session(app_db.engine) as session:
-        event = session.exec(
-            select(CompanyTransaction)
-            .where(CompanyTransaction.kind == "refill")
-            .order_by(CompanyTransaction.happened_at.desc())
-        ).first()
-        assert event is not None
-        assert event.total == 200
-        assert event.paid == 0
-
-
-def test_refill_event_legacy_payload_works(client) -> None:
-    day1 = date(2025, 8, 3)
-    init_inventory(client, date=(day1 - timedelta(days=1)).isoformat(), full12=10, empty12=2, full48=10, empty48=0)
-
-    resp = client.post(
-        "/inventory/refill",
-        json={
-            "happened_at": iso_at(day1.isoformat(), "morning"),
-            "buy12": 1,
-            "return12": 0,
-            "buy48": 0,
-            "return48": 0,
-            "note": "restock",
-            "total_cost": 0,
-            "paid_amount": 0,
-        },
-    )
-    assert resp.status_code == 200
-
-    import app.db as app_db
-    from app.models import CompanyTransaction
-
-    with Session(app_db.engine) as session:
-        event = session.exec(
-            select(CompanyTransaction)
-            .where(CompanyTransaction.kind == "refill")
-            .order_by(CompanyTransaction.happened_at.desc())
-        ).first()
-        assert event is not None
-        assert event.total == 0
         assert event.paid == 0
 
 

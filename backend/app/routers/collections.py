@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.auth import get_tenant_id, require_permission
 from app.db import get_session
-from app.models import Customer, CustomerTransaction, System
+from app.models import Customer, CustomerTransaction, System, TransactionGroup
 from app.schemas import CollectionCreate, CollectionEvent, CollectionUpdate
 from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_cylinders, sum_customer_money
 from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction, reverse_source
@@ -290,6 +290,9 @@ def create_collection(
         return _as_event(txns or [existing], session)
 
     group_id = _new_group_id()
+    group = TransactionGroup(id=group_id, tenant_id=tenant_id, kind="collection")
+    session.add(group)
+    session.flush()
     txns = _build_collection_transactions(
       session,
       tenant_id=tenant_id,

@@ -1,7 +1,7 @@
 # Activity Kind Refactoring — Ticket Plan
 
-**Last updated:** 2026-06-03
-**Status:** T1–T9 complete. **T4-CLEANUP** and **T10** pending.
+**Last updated:** 2026-06-04
+**Status:** T1–T9 complete. **T4-CLEANUP** complete. **T10** is future work.
 
 ---
 
@@ -126,11 +126,11 @@ The following matrices must be reviewed and approved by the project owner before
 **Final-state rule:** Backend and frontend must eventually use the same canonical `ActivityKind` values everywhere. `normalizeEventType()` is a temporary migration gateway; all legacy alias handling is removed in T9.
 
 **Files:**
-- `ACTIVITY_KIND_NAMING.md`
+- `ACTIVITY_SPEC.md`
 
-**Done when:** `ACTIVITY_KIND_NAMING.md` is reviewed and approved by the project owner; all approval gate matrices from section 1b are signed off.
+**Done when:** `ACTIVITY_SPEC.md` is reviewed and approved by the project owner; all approval gate matrices from section 1b are signed off.
 
-**STATUS: COMPLETE** — `ACTIVITY_KIND_NAMING.md` and `ACTIVITY_KIND_APPROVAL.md` finalized and owner-approved 2026-05-31.
+**STATUS: COMPLETE** — activity-kind decisions finalized and owner-approved 2026-05-31; current canonical reference is `ACTIVITY_SPEC.md`.
 
 ---
 
@@ -438,6 +438,8 @@ For any other write-path bugs found in 2b-a, add equivalent tests.
 
 **Done when:** All activity tables with a display `kind` column store the correct canonical `ActivityKind` at creation time (other endpoints must emit the correct canonical `event_type` from explicit action fields, not infer it); `InventoryRefillDetails` includes `kind`; the Alembic migration is written; `refill_days` is renamed to `company_inventory_days` internally with `has_refill` kept in the API response and a `TODO(T9)` rename comment; the report builder shim is in place with a `TODO(T9)` removal comment; `test_write_path_canonicalization.py` passes; no test infers kind from quantities.
 
+**STATUS: COMPLETE** — all write paths store canonical kinds; `/inventory/refill` accepts explicit `kind`; `/company/payments` accepts explicit `kind` with sign validation; Alembic migration backfills bad rows; `refill_days` renamed internally; report builder shim in place.
+
 ---
 
 ## Ticket 3 — Backend Tests
@@ -573,7 +575,7 @@ Note: `frontend/app/(tabs)/add/index.tsx` gets Ticket 4 benefits automatically v
 
 **Done when:** TypeScript builds; no if-chain or switch in display code branches on a raw event type string; `payment_from_company` renders a correct icon, color, and label; all three filter blocks in `customers/[id].tsx` use normalized kinds.
 
-**STATUS: COMPLETE (with known gap)** — `activityKinds.ts`, `activityKindMeta.ts`, `normalizeEventType()`, and `ActivityIcon.tsx` all shipped. `IconSpec` (arrow + symbol) is the icon format; Ionicons fallback (`resolveIonicon`) exists but is superseded by T-ICONS. **Known gap:** `SlimActivityRow.tsx`, `EventExpandedPanel.tsx`, `reports/index.tsx`, and `customers/[id].tsx` still contain raw `event_type` display branches instead of routing through `normalizeEventType()`. These must be cleaned up before T8 to avoid adapter migration bugs. Address in a T4-CLEANUP sub-ticket before T7.
+**STATUS: COMPLETE** — `activityKinds.ts`, `activityKindMeta.ts`, `normalizeEventType()`, and `ActivityIcon.tsx` all shipped. `IconSpec` (arrow + symbol) is the icon format; Ionicons fallback (`resolveIonicon`) exists but is superseded by T-ICONS. Raw `event_type` display branches in `SlimActivityRow.tsx`, `reports/index.tsx`, and `customers/[id].tsx` were cleaned up in T4-CLEANUP.
 
 ---
 
@@ -1089,7 +1091,7 @@ When done, return:
 - [ ] `reports/index.tsx` expanded panel branches (line ~1216) use `_evKind` from `normalizeEventType`
 - [ ] All 4 slim-activity-row test files pass with 0 failures
 
-**STATUS: PENDING**
+**STATUS: COMPLETE** — all raw `event_type` string branches replaced with `normalizeEventType()` calls in `SlimActivityRow.tsx`, `customers/[id].tsx`, and `reports/index.tsx`. Verified clean 2026-06-04.
 
 ---
 
@@ -1260,7 +1262,7 @@ Symbol and arrow must share the same center axis (vertical center for horizontal
 - Symbol and arrow are on the same center axis, no overlap
 - `npm run build` passes (do not run tests)
 
-**STATUS: COMPLETE** — SVG renderer shipped. Custom icons for all 18 kinds including distinct full/empty cylinders and banknote money symbol. Merged into main (commits 1306bcf, 073876e). Design summary added to `ACTIVITY_KIND_APPROVAL.md`.
+**STATUS: COMPLETE** — SVG renderer shipped. Custom icons for all 18 kinds including distinct full/empty cylinders and banknote money symbol. Merged into main (commits 1306bcf, 073876e). Design summary is now captured in `ACTIVITY_SPEC.md`.
 
 ---
 
@@ -2087,7 +2089,7 @@ When done, return:
 - [ ] No production source files modified
 - [ ] All 5 test commands pass with 0 failures
 
-**STATUS: PENDING**
+**STATUS: COMPLETE** — adapter + display safety net tests passing; all activity kinds covered; canonical expectations locked in before T8.
 
 ---
 
@@ -2121,6 +2123,8 @@ Bank migration rules:
 - After T8, no adapter function may emit a legacy alias; canonical `ActivityKind` values only.
 
 **Done when:** `activityAdapter.ts` emits no legacy aliases; Ticket 7 tests updated to canonical expectations; UI walkthrough confirms all add-screen previews render correctly.
+
+**STATUS: COMPLETE** — `activityAdapter.ts` emits canonical `ActivityKind` values only; all legacy synthetic aliases (`"order"`, `"collection_money"`, etc.) removed from adapter output; T7 tests updated to canonical expectations.
 
 ---
 
@@ -2174,6 +2178,8 @@ Additional cleanup:
 
 **Done when:** No legacy alias appears anywhere in production display code, including `normalizeEventType()`; canonical `ActivityKind` values are the only accepted production display values; all tests pass; build succeeds.
 
+**STATUS: COMPLETE** — all legacy aliases removed from `normalizeEventType()`, `eventColors.ts`, `utils.ts`, `eventLabels.ts`; `transfer_direction` dropped from backend response and frontend types; dead adapter helpers removed; all tests pass.
+
 ---
 
 ## Ticket 10 — Opening Balance Visibility
@@ -2202,6 +2208,8 @@ Additional cleanup:
 
 **Done when:** Opening balance entries are visible on the correct screens with correct labels and balance transitions; no `system_init` entry is silently dropped without display.
 
+**STATUS: FUTURE WORK** — not yet started. Precondition (T9) is complete. Implement when opening balance visibility becomes a user priority.
+
 ---
 
 ## Future API Route Naming
@@ -2227,7 +2235,7 @@ If canonical aliases are introduced, update frontend API hooks and cache keys su
 | T2b | Write Path | All write paths store canonical kind at creation time; migration backfills bad rows | COMPLETE | T2 |
 | T3 | Backend Tests | 18-kind coverage, contract locked | COMPLETE | T2 |
 | T4 | Frontend Metadata | `activityKindMeta.ts`, `normalizeEventType()`, `IconSpec` | COMPLETE (gap) | T1 |
-| T4-CLEANUP | Raw branch cleanup | Remove raw `event_type` branches in SlimActivityRow, EventExpandedPanel, reports/index, customers/[id] | PENDING | T4 |
+| T4-CLEANUP | Raw branch cleanup | Remove raw `event_type` branches in SlimActivityRow, EventExpandedPanel, reports/index, customers/[id] | COMPLETE | T4 |
 | T5 | Translation-Ready Labels | `translations.ts`, label wiring in `SlimActivityRow` | COMPLETE | T4 |
 | T6 | Frontend Balance | `balanceTransitions.ts` shared renderer | COMPLETE | T4 |
 | T6-TESTS | Test Fixes | 10 test files updated to match T5+T6 behavior | COMPLETE | T6 |
@@ -2236,7 +2244,7 @@ If canonical aliases are introduced, update frontend API hooks and cache keys su
 | T7 | Frontend Tests | Adapter + display coverage, pre-migration safety net | COMPLETE | T4-CLEANUP, T5, T6, T-ICONS |
 | T8 | Frontend Adapter | `activityAdapter.ts` emits canonical kinds only | COMPLETE | T4, T7 |
 | T9 | Cleanup | Dead aliases removed, `transfer_direction` dropped | COMPLETE | T3, T7, T8 |
-| T10 | Opening Balance Visibility | `init_customer`, `init_company`, `init_inventory` canonical kinds; visible on correct screens | PENDING | T9 |
+| T10 | Opening Balance Visibility | `init_customer`, `init_company`, `init_inventory` canonical kinds; visible on correct screens | FUTURE WORK | T9 |
 
 ---
 
@@ -2264,7 +2272,7 @@ These rules apply to every DB-T ticket. They exist to prevent later DB work from
 
 **Required preflight before editing code:**
 1. Read the current DB ticket and every dependency listed in the table above.
-2. If any touched file also participated in T2/T2b/T8/T9/T10 activity-kind work, read `ACTIVITY_KIND_NAMING.md`, `ACTIVITY_KIND_APPROVAL.md`, and the relevant git commits before changing it.
+2. If any touched file also participated in T2/T2b/T8/T9/T10 activity-kind work, read `ACTIVITY_SPEC.md` and the relevant git commits before changing it.
 3. Inspect history for the files in scope with `git log --oneline -- <files>` and inspect relevant commits with `git show <commit> -- <files>`.
 4. Run `rg` for every symbol being changed (`kind`, `event_type`, `source_type`, table name, helper name, migration id) before deciding whether code is missing or intentionally removed.
 

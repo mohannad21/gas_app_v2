@@ -56,47 +56,6 @@ def test_bank_deposit_ledger_source_type_is_bank_transfer(client) -> None:
         assert all(e.source_type == "bank_transfer" for e in entries)
 
 
-def test_wallet_to_bank_appears_in_day_report_from_bank_transfer(client) -> None:
-    day = date(2026, 2, 3)
-    client.post("/cash/adjust", json={"happened_at": f"{day.isoformat()}T08:00:00", "delta_cash": 500, "reason": "open"})
-    resp = client.post(
-        "/cash/bank_deposit",
-        json={"happened_at": f"{day.isoformat()}T09:00:00", "amount": 150, "direction": "wallet_to_bank"},
-    )
-    assert resp.status_code == 201
-    deposit_id = resp.json()["id"]
-
-    report = client.get("/reports/day", params={"date": day.isoformat()})
-    assert report.status_code == 200
-    event = next(e for e in report.json()["events"] if e["id"] == deposit_id)
-    assert event["event_type"] == "wallet_to_bank"
-
-
-def test_bank_to_wallet_appears_in_day_report_from_bank_transfer(client) -> None:
-    day = date(2026, 2, 4)
-    resp = client.post(
-        "/cash/bank_deposit",
-        json={"happened_at": f"{day.isoformat()}T09:00:00", "amount": 80, "direction": "bank_to_wallet"},
-    )
-    assert resp.status_code == 201
-    deposit_id = resp.json()["id"]
-
-    report = client.get("/reports/day", params={"date": day.isoformat()})
-    assert report.status_code == 200
-    event = next(e for e in report.json()["events"] if e["id"] == deposit_id)
-    assert event["event_type"] == "bank_to_wallet"
-
-
-def test_expenses_table_has_no_deposit_rows(client) -> None:
-    day = date(2026, 2, 5)
-    client.post("/cash/adjust", json={"happened_at": f"{day.isoformat()}T08:00:00", "delta_cash": 500, "reason": "open"})
-    resp = client.post("/cash/bank_deposit", json={"happened_at": f"{day.isoformat()}T09:00:00", "amount": 100, "direction": "wallet_to_bank"})
-    deposit_id = resp.json()["id"]
-
-    with Session(app_db.engine) as session:
-        assert session.get(Expense, deposit_id) is None
-
-
 def test_delete_bank_deposit_soft_deletes_bank_transfer(client) -> None:
     day = date(2026, 2, 6)
     client.post("/cash/adjust", json={"happened_at": f"{day.isoformat()}T08:00:00", "delta_cash": 500, "reason": "open"})

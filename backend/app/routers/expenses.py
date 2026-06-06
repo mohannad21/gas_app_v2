@@ -135,9 +135,13 @@ def create_expense(
     note=payload.note,
     vendor=None,
   )
-  session.add(expense)
-  post_expense(session, expense)
-  session.commit()
+  try:
+    session.add(expense)
+    post_expense(session, expense)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(expense)
   return ExpenseOut(
     id=expense.id,

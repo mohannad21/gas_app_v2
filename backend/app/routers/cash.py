@@ -108,9 +108,13 @@ def create_cash_adjustment(
     delta_cash=payload.delta_cash,
     note=payload.reason,
   )
-  session.add(adjustment)
-  post_cash_adjustment(session, adjustment)
-  session.commit()
+  try:
+    session.add(adjustment)
+    post_cash_adjustment(session, adjustment)
+    session.commit()
+  except Exception:
+    session.rollback()
+    raise
   session.refresh(adjustment)
   return CashAdjustmentRow(
     id=adjustment.id,
