@@ -298,13 +298,13 @@ function InventoryAdjustForm({
   const save = async (resetAfter = false) => {
     setPendingAction(resetAfter ? "saveAndAdd" : "save");
     const trimmedReason = reason.trim();
+    const createGroupId = entry ? undefined : newInventoryAdjustGroupId();
     try {
       if (entry) {
         const delta_full = gasType === "12kg" ? deltaFull12 : deltaFull48;
         const delta_empty = gasType === "12kg" ? deltaEmpty12 : deltaEmpty48;
         await onUpdate(entry.id, { delta_full, delta_empty, reason: trimmedReason || undefined });
       } else {
-        const groupId = newInventoryAdjustGroupId();
         if (deltaFull12 || deltaEmpty12) {
           await onCreate({
             date: adjustDate,
@@ -313,7 +313,7 @@ function InventoryAdjustForm({
             delta_full: deltaFull12,
             delta_empty: deltaEmpty12,
             reason: trimmedReason || undefined,
-            group_id: groupId,
+            group_id: createGroupId,
           });
         }
         if (deltaFull48 || deltaEmpty48) {
@@ -324,13 +324,13 @@ function InventoryAdjustForm({
             delta_full: deltaFull48,
             delta_empty: deltaEmpty48,
             reason: trimmedReason || undefined,
-            group_id: groupId,
+            group_id: createGroupId,
           });
         }
       }
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: adjustDate, time: adjustTime }) ?? adjustDate;
-      const highlightId = entry?.id;
+      const highlightId = entry?.id ?? createGroupId;
       if (resetAfter && !entry) {
         resetForm();
         onSaveAndAddSuccess?.({ effectiveAt, highlightEventType: "adjust_inventory", highlightId });

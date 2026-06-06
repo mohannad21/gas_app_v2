@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from typing import Annotated, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.auth import get_tenant_id, require_permission
 from app.db import get_session
-from app.models import CompanyTransaction, InventoryAdjustment
+from app.models import CompanyTransaction, InventoryAdjustment, TransactionGroup
 from app.schemas import (
   InventoryInitCreate,
   InventoryAdjustCreate,
@@ -146,9 +147,14 @@ def create_inventory_adjust(
       if existing:
         return snapshot_at(session, existing.happened_at, existing.note)
 
+    group_id = payload.group_id or str(uuid4())
+    if session.get(TransactionGroup, group_id) is None:
+      session.add(TransactionGroup(id=group_id, tenant_id=tenant_id, kind="inventory_adjust"))
+      session.flush()
+
     adj = InventoryAdjustment(
       tenant_id=tenant_id,
-      group_id=payload.group_id,
+      group_id=group_id,
       gas_type=payload.gas_type,
       delta_full=payload.delta_full,
       delta_empty=payload.delta_empty,

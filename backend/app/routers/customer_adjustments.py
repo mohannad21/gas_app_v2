@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.auth import get_tenant_id, require_permission
 from app.db import get_session
-from app.models import Customer, CustomerTransaction
+from app.models import Customer, CustomerTransaction, TransactionGroup
 from app.schemas import CustomerAdjustmentCreate, CustomerAdjustmentOut
 from app.services.ledger import boundary_for_source, snapshot_customer_debts, sum_customer_money, sum_customer_cylinders
 from app.services.posting import allocate_happened_at, derive_day, post_customer_transaction, reverse_source
@@ -113,6 +113,9 @@ def create_adjustment(
 
   happened_at = allocate_happened_at(session, tenant_id=tenant_id, value=payload.happened_at)
   group_id = _group_id()
+  group = TransactionGroup(id=group_id, tenant_id=tenant_id, kind="adjust_customer_balance")
+  session.add(group)
+  session.flush()
   txns: list[CustomerTransaction] = []
 
   # Compute current balances before any posting
