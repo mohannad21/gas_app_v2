@@ -2,7 +2,7 @@
 
 ---
 
-## IMPL-FILTERS-01 — Unify Filter Labels + Add Badge Indicator
+## IMPL-FILTERS-01 — Unify Filter Labels + Add Badge Indicator ✅ DONE
 
 ### Branch
 ```
@@ -244,3 +244,168 @@ npx jest frontend/lib/__tests__/filterHelpers.test.ts --no-coverage
 - [ ] `eventLabels.ts` is unchanged
 - [ ] All files listed under "Do NOT change" are unchanged
 - [ ] Test file `frontend/lib/__tests__/filterHelpers.test.ts` exists and all tests pass
+
+---
+
+## IMPL-APPSTART-01 — App Opens on Daily Report
+
+**Status: TODO**
+
+### Branch
+```
+git checkout main
+git checkout -b fix/app-start-daily-report
+```
+
+---
+
+### Scope
+
+**File to change:**
+- `frontend/app/(tabs)/_layout.tsx`
+
+**Files NOT to change:**
+- Any other file
+
+**No improvisation.** One value changes. Nothing else.
+
+---
+
+### Implementation
+
+In `frontend/app/(tabs)/_layout.tsx`, find line 38:
+
+```ts
+initialRouteName="dashboard"
+```
+
+Change to:
+
+```ts
+initialRouteName="reports/index"
+```
+
+That is the only change required. Do not touch any other line in this file.
+
+---
+
+### Tests
+
+No automated test can cover cold-launch routing in Expo Router. Manual verification only:
+
+1. Close the app completely
+2. Cold-launch the app
+3. Confirm the Daily Report screen opens (not the dashboard)
+4. Confirm the "Daily" tab icon in the bottom tab bar is active on launch
+
+---
+
+### Return
+
+Codex must return:
+- Confirmation of the exact line changed (old value → new value)
+- No test command needed — manual verification only
+
+---
+
+### Acceptance Criteria
+
+- [ ] `initialRouteName` in `frontend/app/(tabs)/_layout.tsx` is `"reports/index"`
+- [ ] App opens on Daily Report on cold launch
+- [ ] All other tabs still navigate correctly
+- [ ] No other lines in `_layout.tsx` were changed
+
+---
+
+## AUDIT-LABELS-01 — Eliminate Remaining `eventLabels.ts` Usages
+
+**Status: TODO**
+
+### Context
+
+`frontend/lib/eventLabels.ts` is a legacy file. The canonical single source of truth for all activity kind display labels is now `frontend/lib/activityKindMeta.ts` (via `ACTIVITY_KIND_META[kind].label`) and `FILTER_GROUP_LABELS` for group labels.
+
+As of IMPL-FILTERS-01, filter UIs in `add/index.tsx`, `customers/[id].tsx`, and `reports/index.tsx` were migrated. However, `eventLabels.ts` may still be imported and used in other parts of the codebase (activity rows, list headers, export labels, etc.). This ticket audits every remaining usage and migrates them.
+
+---
+
+### Branch
+```
+git checkout main
+git checkout -b refactor/centralize-labels
+```
+
+---
+
+### Scope
+
+**Goal:** After this ticket, `eventLabels.ts` has zero imports anywhere in the frontend. It remains on disk as dead code (do NOT delete it — a separate ticket must explicitly authorize deletion).
+
+**Files to audit (search for imports of `eventLabels`):**
+- Any file under `frontend/` that imports from `@/lib/eventLabels` or `../lib/eventLabels` or `./eventLabels`
+
+**Files NOT to change:**
+- `frontend/lib/eventLabels.ts` itself — do not modify or delete
+- `frontend/lib/activityKindMeta.ts` — do not change labels (already canonical from IMPL-FILTERS-01)
+- Any test files that test `eventLabels.ts` directly (leave those tests in place)
+
+**No improvisation.** Do not rename variables, reformat code, or refactor beyond replacing the label references.
+
+---
+
+### Implementation
+
+#### Step 1 — Audit
+
+Search the entire `frontend/` directory for any file that imports from `eventLabels`. For each file found:
+1. Note which exported values it uses (e.g. `EVENT_LABELS.sell_full`, `EVENT_LABELS.replacement`)
+2. Note what the usage is (render label text, pass as prop, etc.)
+
+#### Step 2 — Migrate each usage
+
+For each usage found:
+- If the usage is an activity kind label: replace with `ACTIVITY_KIND_META[kind].label` from `@/lib/activityKindMeta`
+- If the usage is a group label: replace with `FILTER_GROUP_LABELS[groupKey]` from `@/lib/activityKindMeta`
+- If the kind is not in `ACTIVITY_KIND_META` for some reason: report it — do NOT invent a fallback
+
+For each file migrated:
+- Remove the `eventLabels` import
+- Add `ACTIVITY_KIND_META` import from `@/lib/activityKindMeta` if not already imported
+
+#### Step 3 — Verify
+
+After all migrations, confirm that `grep -r "eventLabels" frontend/` returns no results outside of the `eventLabels.ts` file itself and any test files that test it directly.
+
+---
+
+### Tests
+
+No new test files required. Run the full frontend test suite to verify no regressions:
+
+```
+npx jest --no-coverage
+```
+
+If any existing test was asserting against `EVENT_LABELS.*` values that are now replaced by `ACTIVITY_KIND_META`, update those test assertions to use the canonical label from `ACTIVITY_KIND_META`.
+
+---
+
+### Return
+
+Codex must return:
+- List of every file that had `eventLabels` imports, with a one-line summary of what was replaced
+- Confirmation that `grep -r "eventLabels" frontend/` shows zero hits outside `eventLabels.ts` and its direct test files
+- The test command result or instruction for the developer to run:
+```
+npx jest --no-coverage
+```
+
+---
+
+### Acceptance Criteria
+
+- [ ] Zero files in `frontend/` import from `eventLabels.ts` (except tests that test `eventLabels.ts` directly)
+- [ ] All replaced labels match the canonical table in IMPL-FILTERS-01 exactly
+- [ ] `eventLabels.ts` file itself is untouched
+- [ ] `activityKindMeta.ts` file is untouched
+- [ ] All frontend tests pass (0 failures)

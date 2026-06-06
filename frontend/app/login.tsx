@@ -35,7 +35,7 @@ export default function LoginScreen() {
     setError(null);
     try {
       await login(phone, password);
-      router.replace("/(tabs)/dashboard");
+      router.replace("/(tabs)/reports");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "login_failed";
       if (message === "invalid_credentials") {

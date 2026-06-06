@@ -35,7 +35,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      initialRouteName="dashboard"
+      initialRouteName="reports/index"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {

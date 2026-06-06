@@ -105,35 +105,7 @@ No other file may define or duplicate these labels. `eventLabels.ts` is legacy a
 
 ---
 
-## 3. Activity Date Restrictions
-
-### Rule 1 — App initialization date
-
-No activity of any kind may be created with a date earlier than the date the app was initialized (tenant setup date).
-
-- The save button is disabled and the date field shows an inline error if the selected date is before the initialization date
-- If the user attempts to save anyway, a clear message is shown: **"You cannot add activities before the app was set up."**
-- This applies to all 18 activity kinds on all entry surfaces
-
-### Rule 2 — Customer creation date
-
-No customer activity may be created with a date earlier than the date that customer was created in the app.
-
-- The save button is disabled and the date field shows an inline error if the selected date is before the customer's creation date
-- If the user attempts to save anyway, a clear message is shown: **"You cannot add activities before this customer was created."**
-- This applies to all customer-scoped activity kinds: `replacement`, `sell_full`, `buy_empty_from_customer`, `payment_from_customer`, `payment_to_customer`, `customer_return_empties`, `adjust_customer_balance`
-
-### Validation behavior
-
-| Trigger | Behavior |
-|---|---|
-| User picks an invalid date | Date field turns red, inline error shown immediately |
-| User tries to save with an invalid date | Save button is disabled — cannot be tapped |
-| Both rules violated at the same time | Show the more restrictive constraint (customer creation date if it's later than app init date) |
-
----
-
-## 4. App Start
+## 3. App Start
 
 The app must always open on the **Daily Report** — not the dashboard or any other screen.
 
@@ -954,3 +926,38 @@ Default on open: 0.
 Same as 12kg box.
 
 #### Reason — free text, optional
+
+---
+
+## Future Work — Activity Date Restrictions
+
+> **Not scheduled.** Requires clarification on API availability before a ticket can be written.
+
+### Rule 1 — App initialization date
+
+No activity of any kind may be created with a date earlier than the date the app was initialized (tenant setup date).
+
+- The save button is disabled and the date field shows an inline error if the selected date is before the initialization date
+- If the user attempts to save anyway, a clear message is shown: **"You cannot add activities before the app was set up."**
+- This applies to all 18 activity kinds on all entry surfaces
+
+### Rule 2 — Customer creation date
+
+No customer activity may be created with a date earlier than the date that customer was created in the app.
+
+- The save button is disabled and the date field shows an inline error if the selected date is before the customer's creation date
+- If the user attempts to save anyway, a clear message is shown: **"You cannot add activities before this customer was created."**
+- This applies to all customer-scoped activity kinds: `replacement`, `sell_full`, `buy_empty_from_customer`, `payment_from_customer`, `payment_to_customer`, `customer_return_empties`, `adjust_customer_balance`
+
+### Validation behavior
+
+| Trigger | Behavior |
+|---|---|
+| User picks an invalid date | Date field turns red, inline error shown immediately |
+| User tries to save with an invalid date | Save button is disabled — cannot be tapped |
+| Both rules violated at the same time | Show the more restrictive constraint (customer creation date if it's later than app init date) |
+
+### Open questions before ticketing
+
+1. Does the backend already expose the app init date and customer `created_at`? If not, a backend ticket is needed first.
+2. Does this apply to the edit flow (changing an existing activity's date), or create-only?

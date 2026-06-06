@@ -107,7 +107,7 @@ function AuthenticatedInitializationGuard() {
     }
 
     if (isSetupCompleted && (inWelcome || inAuth)) {
-      router.replace("/(tabs)/dashboard");
+      router.replace("/(tabs)/reports/index");
     }
   }, [mustChangePassword, data?.is_setup_completed, settingsLoading, router, segments]);
 
