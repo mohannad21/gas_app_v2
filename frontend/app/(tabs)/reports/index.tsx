@@ -409,16 +409,16 @@ export default function ReportsScreen() {
     const highlightEventType = Array.isArray(params.highlightEventType) ? params.highlightEventType[0] : params.highlightEventType;
     const highlightEffectiveAt = Array.isArray(params.highlightEffectiveAt) ? params.highlightEffectiveAt[0] : params.highlightEffectiveAt;
     if (!highlightId && !highlightEventType && !highlightEffectiveAt) {
-      setHighlightEventKey(null);
-      setHighlightDate(null);
-      lastHighlightParamKey.current = null;
       return;
     }
     const paramKey = [highlightId, highlightEventType, highlightEffectiveAt].filter(Boolean).join("|");
     if (lastHighlightParamKey.current === paramKey) return;
     const match = rawSelectedEvents.find((event) => {
       if (highlightId) {
-        return String(event?.id ?? event?.source_id ?? "") === highlightId;
+        return (
+          String(event?.id ?? "") === highlightId ||
+          String(event?.source_id ?? "") === highlightId
+        );
       }
       if (highlightEventType && String(event?.event_type ?? "") !== highlightEventType) {
         return false;
@@ -434,6 +434,7 @@ export default function ReportsScreen() {
     const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
     setHighlightEventKey(eventKey);
     setHighlightDate(eventDate);
+    router.setParams({ highlightId: undefined, highlightEventType: undefined, highlightEffectiveAt: undefined });
     const timer = setTimeout(() => {
       setHighlightEventKey((current) => (current === eventKey ? null : current));
       setHighlightDate((current) => (current === eventDate ? null : current));

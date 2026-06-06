@@ -277,7 +277,7 @@ const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
 };
 
 export default function AddChooserScreen() {
-  const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string }>();
+  const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string; mode?: string }>();
   // Extract activity filters state into custom hook
   const {
     mode,
@@ -1002,9 +1002,24 @@ const formatDateTime = (value?: string) => {
     const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
     if (!rawId) return;
     setHighlightItemId(rawId);
+    router.setParams({ highlightId: undefined });
     const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 7200);
     return () => clearTimeout(timer);
   }, [addParams.highlightId]);
+
+  useEffect(() => {
+    const modeParam = Array.isArray(addParams.mode) ? addParams.mode[0] : addParams.mode;
+    if (
+      modeParam !== "customer_activities" &&
+      modeParam !== "company_activities" &&
+      modeParam !== "expenses" &&
+      modeParam !== "ledger_adjustments"
+    ) {
+      return;
+    }
+    setMode(modeParam as AddMode);
+    router.setParams({ mode: undefined });
+  }, [addParams.mode, setMode]);
 
   useFocusEffect(
     useCallback(() => {

@@ -998,9 +998,14 @@ export default function NewOrderScreen() {
       try {
         const created = await createOrder.mutateAsync(orderPayload);
         if (isAddFlow) {
+          const orderKindMap: Record<string, string> = {
+            replacement: "replacement",
+            sell_iron: "sell_full",
+            buy_iron: "buy_empty_from_customer",
+          };
           finishAddFlowSave(values.delivered_at, options.resetAfter, {
             id: created.id,
-            eventType: "order",
+            eventType: orderKindMap[orderMode] ?? "replacement",
           });
           return;
         }
@@ -1082,7 +1087,7 @@ export default function NewOrderScreen() {
       if (isAddFlow) {
         finishAddFlowSave(effectiveAt, resetAfter, {
           id: created.id,
-          eventType: paymentDirection === "payout" ? "collection_payout" : "collection_money",
+          eventType: paymentDirection === "payout" ? "payment_to_customer" : "payment_from_customer",
         });
         return;
       }
@@ -1152,7 +1157,7 @@ export default function NewOrderScreen() {
       if (isAddFlow) {
         finishAddFlowSave(effectiveAt, resetAfter, {
           id: created.id,
-          eventType: "collection_empty",
+          eventType: "customer_return_empties",
         });
         return;
       }

@@ -409,3 +409,389 @@ npx jest --no-coverage
 - [ ] `eventLabels.ts` file itself is untouched
 - [ ] `activityKindMeta.ts` file is untouched
 - [ ] All frontend tests pass (0 failures)
+
+---
+
+## FIX-HIGHLIGHT-01 — Fix Highlight Persistence, Event Types, and Tab Routing
+
+**Status: TODO**
+
+### Branch
+```
+git checkout main
+git checkout -b fix/highlight-critical
+```
+
+---
+
+### Scope
+
+**Files to change:**
+- `frontend/app/(tabs)/reports/index.tsx`
+- `frontend/app/(tabs)/add/index.tsx`
+- `frontend/components/AddRefillModal.tsx`
+- `frontend/app/inventory/new.tsx`
+
+**Files NOT to change:**
+- `frontend/lib/saveFlow.ts`
+- `frontend/lib/successPulse.ts`
+- `frontend/components/SuccessPulse.tsx`
+- Any file not listed above
+
+**No improvisation.** Four targeted changes only.
+
+---
+
+### Implementation
+
+#### Change 1 — Clear highlight params from URL after consumption in Daily Report
+
+**File:** `frontend/app/(tabs)/reports/index.tsx`
+
+Read the file first. Find lines 432–436:
+
+```ts
+lastHighlightParamKey.current = paramKey;
+const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
+const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
+setHighlightEventKey(eventKey);
+setHighlightDate(eventDate);
+```
+
+Replace with:
+
+```ts
+lastHighlightParamKey.current = paramKey;
+const eventKey = String(match?.id ?? match?.source_id ?? `${match?.event_type ?? "ev"}:${match?.effective_at ?? ""}`);
+const eventDate = (match?.effective_at ?? "").slice(0, 10) || null;
+setHighlightEventKey(eventKey);
+setHighlightDate(eventDate);
+router.setParams({ highlightId: undefined, highlightEventType: undefined, highlightEffectiveAt: undefined });
+```
+
+No other changes in this file.
+
+---
+
+#### Change 2 — Clear highlight params from URL after consumption in Add Entry
+
+**File:** `frontend/app/(tabs)/add/index.tsx`
+
+Find lines 1001–1007:
+
+```ts
+useEffect(() => {
+  const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
+  if (!rawId) return;
+  setHighlightItemId(rawId);
+  const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 7200);
+  return () => clearTimeout(timer);
+}, [addParams.highlightId]);
+```
+
+Replace with:
+
+```ts
+useEffect(() => {
+  const rawId = Array.isArray(addParams.highlightId) ? addParams.highlightId[0] : addParams.highlightId;
+  if (!rawId) return;
+  setHighlightItemId(rawId);
+  router.setParams({ highlightId: undefined });
+  const timer = setTimeout(() => setHighlightItemId((c) => (c === rawId ? null : c)), 7200);
+  return () => clearTimeout(timer);
+}, [addParams.highlightId]);
+```
+
+Also on line 280, add `mode` to the params type:
+
+```ts
+// before
+const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string }>();
+
+// after
+const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string; mode?: string }>();
+```
+
+Then add the following `useEffect` immediately after the existing `addParams.highlightId` useEffect (after line 1007):
+
+```ts
+useEffect(() => {
+  const modeParam = Array.isArray(addParams.mode) ? addParams.mode[0] : addParams.mode;
+  if (!modeParam) return;
+  setMode(modeParam as AddMode);
+  router.setParams({ mode: undefined });
+}, [addParams.mode]);
+```
+
+No other changes in this file.
+
+---
+
+#### Change 3 — Fix event type strings in AddRefillModal to use canonical ActivityKind values
+
+**File:** `frontend/components/AddRefillModal.tsx`
+
+Read the file first. Find lines 525–538:
+
+```ts
+if (resetAfter && !editEntry?.refill_id) {
+  formState.resetFormForCurrentMode();
+  onSaveAndAddSuccess?.({
+    effectiveAt,
+    mode,
+    highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
+  });
+} else {
+  if (onSaveSuccess) {
+    onSaveSuccess({
+      effectiveAt,
+      entry: savedEntry,
+      highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
+    });
+```
+
+Replace with:
+
+```ts
+const highlightEventType = formState.isBuyMode
+  ? "buy_full_from_company"
+  : formState.isReturnMode
+    ? "dist_return_empties"
+    : "refill";
+if (resetAfter && !editEntry?.refill_id) {
+  formState.resetFormForCurrentMode();
+  onSaveAndAddSuccess?.({
+    effectiveAt,
+    mode,
+    highlightEventType,
+  });
+} else {
+  if (onSaveSuccess) {
+    onSaveSuccess({
+      effectiveAt,
+      entry: savedEntry,
+      highlightEventType,
+    });
+```
+
+No other changes in this file.
+
+---
+
+#### Change 4 — Fix adjust_company_balance to land on Company tab
+
+**File:** `frontend/app/inventory/new.tsx`
+
+Find lines 1095–1097:
+
+```ts
+const handleCompanyAdjustSaveSuccess = useCallback((highlightId: string) => {
+  router.replace({ pathname: "/(tabs)/add", params: { highlightId } });
+}, []);
+```
+
+Replace with:
+
+```ts
+const handleCompanyAdjustSaveSuccess = useCallback((highlightId: string) => {
+  router.replace({ pathname: "/(tabs)/add", params: { highlightId, mode: "company_activities" } });
+}, []);
+```
+
+No other changes in this file.
+
+---
+
+### Tests
+
+**Test file to create:** `tests/frontend/highlight-event-types.test.ts`
+
+Write tests covering:
+
+1. `highlightEventType` for refill mode is `"refill"` (unchanged)
+2. `highlightEventType` for buy mode is `"buy_full_from_company"` (was `"company_buy_full"`)
+3. `highlightEventType` for return mode is `"dist_return_empties"` (was `"refill"`)
+
+These tests should import `AddRefillModal`'s `formState.isBuyMode`/`formState.isReturnMode` logic or the derived value directly — do not import React Native or TSX. If the logic cannot be tested in isolation, write the test against the string constants only.
+
+**Test command for developer to run:**
+```
+npx jest tests/frontend/highlight-event-types.test.ts --no-coverage
+```
+
+---
+
+### Return
+
+Codex must return:
+- Exact diff for each of the 4 changes (old line → new line)
+- The test command above — do not run it
+- Confirmation that `formState.isReturnMode` exists and is accessible in `AddRefillModal.tsx` (or the exact field name if different)
+
+---
+
+### Acceptance Criteria
+
+- [ ] Navigating away from Daily Report and returning does not re-show the highlight
+- [ ] Navigating away from Add Entry and returning does not re-show the highlight
+- [ ] `highlightEventType` in `AddRefillModal` for buy mode is `"buy_full_from_company"`
+- [ ] `highlightEventType` in `AddRefillModal` for return mode is `"dist_return_empties"`
+- [ ] `highlightEventType` in `AddRefillModal` for refill mode is `"refill"`
+- [ ] After saving `adjust_company_balance`, Add Entry opens on the Company tab
+- [ ] After saving `adjust_customer_balance`, Add Entry still opens on the Customer tab (default — verify no regression)
+- [ ] `router` import is present in both `reports/index.tsx` and `add/index.tsx` (it already is — verify it is not removed)
+- [ ] All 4 changed files have no other modifications beyond the exact changes above
+
+---
+
+## FIX-HIGHLIGHT-02 — Fix Highlight ID Accuracy for buy_full_from_company
+
+**Status: TODO**
+
+### Branch
+```
+git checkout main
+git checkout -b fix/highlight-ids
+```
+
+---
+
+### Scope
+
+**Files to change:**
+- `frontend/components/AddRefillModal.tsx`
+- `frontend/app/inventory/new.tsx`
+
+**Files NOT to change:**
+- `frontend/lib/api/inventory.ts` — do not change API functions
+- `frontend/lib/api/company.ts` — do not change API functions
+- Any file not listed above
+
+**No improvisation.** Two targeted changes only.
+
+**Known limitation (not in scope for this ticket):**
+`createInventoryRefill` and `createInventoryAdjust` return `InventorySnapshot` (inventory counts only) — they do not return the created record's ID. Highlight for `refill`, `dist_return_empties`, and `adjust_inventory` will remain imprecise (matched by event type + date) until the backend API is updated to return the record ID. Do not attempt to work around this with extra API calls.
+
+---
+
+### Implementation
+
+#### Change 1 — Capture real ID from createBuyFullFromCompany response
+
+**File:** `frontend/components/AddRefillModal.tsx`
+
+Read the file first. Find lines 484–493:
+
+```ts
+} else if (formState.isBuyMode) {
+  await createBuyFullFromCompany.mutateAsync({
+    date: formState.date,
+    time: formState.time,
+    new12: payloadBuy12,
+    new48: payloadBuy48,
+    total_cost: totalCost,
+    paid_amount: paidAmountValue,
+    note: formState.notes.trim() ? formState.notes.trim() : undefined,
+  });
+```
+
+Replace with:
+
+```ts
+} else if (formState.isBuyMode) {
+  const createdBuy = await createBuyFullFromCompany.mutateAsync({
+    date: formState.date,
+    time: formState.time,
+    new12: payloadBuy12,
+    new48: payloadBuy48,
+    total_cost: totalCost,
+    paid_amount: paidAmountValue,
+    note: formState.notes.trim() ? formState.notes.trim() : undefined,
+  });
+  buyCreatedId = createdBuy.id;
+```
+
+Then declare `let buyCreatedId: string | undefined` immediately before the `try` block on line 469. Find:
+
+```ts
+try {
+  if (editEntry?.refill_id) {
+```
+
+Replace with:
+
+```ts
+let buyCreatedId: string | undefined;
+try {
+  if (editEntry?.refill_id) {
+```
+
+Then find line 514–515 where `savedEntry.id` is constructed:
+
+```ts
+const savedEntry = {
+  id: editEntry?.refill_id ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+```
+
+Replace with:
+
+```ts
+const savedEntry = {
+  id: editEntry?.refill_id ?? buyCreatedId ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+```
+
+No other changes in this file.
+
+---
+
+#### Change 2 — Pass entry.id as highlightId for refill/buy/return
+
+**File:** `frontend/app/inventory/new.tsx`
+
+Find line 1195:
+
+```ts
+onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
+```
+
+Replace with:
+
+```ts
+onSaveSuccess={({ effectiveAt, highlightEventType, entry }) => handleSaveSuccess(effectiveAt, highlightEventType, entry?.id)}
+```
+
+No other changes in this file.
+
+---
+
+### Tests
+
+No new test file required. Verify the existing highlight tests still pass:
+
+**Test command for developer to run:**
+```
+npx jest tests/frontend/highlight-event-types.test.ts --no-coverage
+```
+
+(This test file is created in FIX-HIGHLIGHT-01. Run FIX-HIGHLIGHT-01 first.)
+
+---
+
+### Return
+
+Codex must return:
+- Exact diff for each of the 2 changes
+- Confirmation that `createdBuy.id` is a `string` (from the `CompanyBuyFull` type — verify `CompanyBuyFullSchema` has `id: z.string()`)
+- Confirmation that `entry` is typed in the `onSaveSuccess` callback and `entry?.id` compiles without TypeScript error
+- The test command above — do not run it
+
+---
+
+### Acceptance Criteria
+
+- [ ] After saving `buy_full_from_company`, the correct card is highlighted on Daily Report (exact ID match, not event-type fallback)
+- [ ] `savedEntry.id` in `AddRefillModal` uses the real API-returned ID for buy mode creates
+- [ ] `refill` and `dist_return_empties` still use event-type + date fallback matching (no regression — they were already imprecise)
+- [ ] `adjust_inventory` still uses event-type + date fallback matching (no regression)
+- [ ] No TypeScript errors introduced in either changed file
+- [ ] No other lines in either file were changed

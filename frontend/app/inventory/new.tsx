@@ -1093,7 +1093,7 @@ export default function InventoryNewScreen() {
     [closeScreen, isAddFlow]
   );
   const handleCompanyAdjustSaveSuccess = useCallback((highlightId: string) => {
-    router.replace({ pathname: "/(tabs)/add", params: { highlightId } });
+    router.replace({ pathname: "/(tabs)/add", params: { highlightId, mode: "company_activities" } });
   }, []);
   const handleSaveAndAddReturn = useCallback(() => {
     if (!isAddFlow) return;
@@ -1192,7 +1192,7 @@ export default function InventoryNewScreen() {
             visible
             onClose={closeScreen}
             onSaved={closeScreen}
-            onSaveSuccess={({ effectiveAt, highlightEventType }) => handleSaveSuccess(effectiveAt, highlightEventType)}
+            onSaveSuccess={({ effectiveAt, highlightEventType, entry }) => handleSaveSuccess(effectiveAt, highlightEventType, entry?.id)}
             onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
             accessoryId={accessoryId}
             editEntry={activeTab === "refill" || activeTab === "return" ? editRefill : null}

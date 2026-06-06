@@ -68,6 +68,10 @@ type AddRefillModalProps = {
   editEntry?: EditRefillEntry | null;
 };
 
+export function getRefillHighlightEventType(mode: "refill" | "buy" | "return") {
+  return mode === "buy" ? "buy_full_from_company" : mode === "return" ? "dist_return_empties" : "refill";
+}
+
 type InventoryNotInitializedDetail = {
   code?: string;
 };
@@ -466,6 +470,7 @@ export function RefillForm({
       return;
     }
 
+    let buyCreatedId: string | undefined;
     try {
       if (editEntry?.refill_id) {
         await updateRefill.mutateAsync({
@@ -482,7 +487,7 @@ export function RefillForm({
           debt_cylinders_48: liveCompanyNet48,
         });
       } else if (formState.isBuyMode) {
-        await createBuyFullFromCompany.mutateAsync({
+        const createdBuy = await createBuyFullFromCompany.mutateAsync({
           date: formState.date,
           time: formState.time,
           new12: payloadBuy12,
@@ -491,6 +496,7 @@ export function RefillForm({
           paid_amount: paidAmountValue,
           note: formState.notes.trim() ? formState.notes.trim() : undefined,
         });
+        buyCreatedId = createdBuy.id;
       } else {
         await createRefill.mutateAsync({
           kind: formState.isReturnMode ? "dist_return_empties" : "refill",
@@ -512,7 +518,7 @@ export function RefillForm({
       showSuccessPulse();
       const effectiveAt = buildActivityHappenedAt({ date: formState.date, time: formState.time }) ?? formState.date;
       const savedEntry = {
-        id: editEntry?.refill_id ?? `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: editEntry?.refill_id ?? buyCreatedId,
         date: formState.date,
         time: formState.time,
         buy12: buy12Value,
@@ -522,19 +528,20 @@ export function RefillForm({
         total_cost: totalCost,
         paid_amount: paidAmountValue,
       };
+      const highlightEventType = getRefillHighlightEventType(mode);
       if (resetAfter && !editEntry?.refill_id) {
         formState.resetFormForCurrentMode();
         onSaveAndAddSuccess?.({
           effectiveAt,
           mode,
-          highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
+          highlightEventType,
         });
       } else {
         if (onSaveSuccess) {
           onSaveSuccess({
             effectiveAt,
             entry: savedEntry,
-            highlightEventType: formState.isBuyMode ? "company_buy_full" : "refill",
+            highlightEventType,
           });
         } else {
           onSaved(savedEntry);
