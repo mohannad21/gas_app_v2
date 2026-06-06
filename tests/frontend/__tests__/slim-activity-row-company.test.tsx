@@ -174,8 +174,8 @@ describe("SlimActivityRow company activity rendering", () => {
     expect(getByText("-45 $")).toBeTruthy();
   });
 
-  it("renders the cash adjustment icon and label", () => {
-    const { getAllByText, getByTestId, getByText } = render(
+  it("renders the cash adjustment icon and label without a money badge", () => {
+    const { getAllByText, getByTestId, queryByText } = render(
       <SlimActivityRow
         event={makeEvent({
           event_type: "adjust_wallet",
@@ -198,7 +198,7 @@ describe("SlimActivityRow company activity rendering", () => {
     expect(getByTestId("activity-icon")).toBeTruthy();
     expect(getAllByText("Adjust wallet").length).toBeGreaterThan(0);
     expect(getAllByText("Till correction").length).toBeGreaterThan(0);
-    expect(getByText("+25 $")).toBeTruthy();
+    expect(queryByText("+25 $")).toBeNull();
   });
 
   it("renders the wallet_to_bank icon and label", () => {

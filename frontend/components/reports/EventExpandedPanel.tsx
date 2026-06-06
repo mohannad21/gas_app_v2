@@ -2,8 +2,7 @@ import { type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies } from "@/constants/typography";
-
-const ORDER_KINDS = new Set(["replacement", "sell_full", "buy_empty_from_customer"]);
+import { normalizeEventType } from "@/lib/activityKindMeta";
 
 function DeltaBox({
   testID,
@@ -81,6 +80,7 @@ export default function EventExpandedPanel({
   formatCount: (v: number) => string;
 }) {
   const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
+  const activityKind = normalizeEventType(eventType) ?? eventType;
 
   const invBefore = ev?.inventory_before ?? null;
   const invAfter = ev?.inventory_after ?? null;
@@ -272,36 +272,70 @@ export default function EventExpandedPanel({
       `${keyPrefix}-cash-row`
     );
 
+  const renderFullAndWallet = (targetGasType: "12kg" | "48kg") => {
+    const is48 = targetGasType === "48kg";
+    return buildDeltaRow(
+      [
+        renderTopStateBox({ key: `${targetGasType}-full`, label: `${targetGasType} Full`, before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+      ],
+      `${targetGasType}-full-wallet`
+    );
+  };
+
+  const renderEmptyAndWallet = (targetGasType: "12kg" | "48kg") => {
+    const is48 = targetGasType === "48kg";
+    return buildDeltaRow(
+      [
+        renderTopStateBox({ key: `${targetGasType}-empty`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+      ],
+      `${targetGasType}-empty-wallet`
+    );
+  };
+
+  const renderEmptyOnly = (targetGasType: "12kg" | "48kg") => {
+    const is48 = targetGasType === "48kg";
+    return buildDeltaRow(
+      [
+        renderTopStateBox({ key: `${targetGasType}-empty-only`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
+      ],
+      `${targetGasType}-empty-only-row`
+    );
+  };
+
   const content = (() => {
-    if (ORDER_KINDS.has(eventType) && inferredGasType) return renderGasTriplet(inferredGasType);
-    if (eventType === "customer_return_empties" && inferredGasType)
-      return renderSparseGasState(inferredGasType);
-    if (eventType === "payment_from_customer" || eventType === "payment_to_customer")
-      return renderCenteredWalletOnly(eventType);
-    if (eventType === "expense" || eventType === "bank_to_wallet" || eventType === "wallet_to_bank" || eventType === "adjust_wallet")
-      return renderCenteredWalletOnly(eventType);
-    if (eventType === "refill" || eventType === "buy_full_from_company") {
-      if (touches12 && touches48) return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "mixed" });
-      if (touches12) return renderGasTriplet("12kg");
-      if (touches48) return renderGasTriplet("48kg");
-      if (hasCash) return renderCenteredWalletOnly(eventType);
-    }
-    if (eventType === "adjust_inventory") {
-      const cylinderBoxes = [
-        has12InventoryState ? renderTopStateBox({ key: "adjust-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }) : null,
-        has12InventoryState ? renderTopStateBox({ key: "adjust-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }) : null,
-        has48InventoryState ? renderTopStateBox({ key: "adjust-48-full", label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }) : null,
-        has48InventoryState ? renderTopStateBox({ key: "adjust-48-empty", label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }) : null,
-      ].filter(Boolean) as ReactNode[];
-      if (has12InventoryState && has48InventoryState)
-        return renderMixedLayout({ include12: true, include48: true, includeCash: hasCashChange, keyPrefix: "adjust-mixed" });
-      if (cylinderBoxes.length > 0 && (has12InventoryChange || has48InventoryChange || !hasCashChange))
-        return renderRows(cylinderBoxes);
-      if (hasCash)
-        return buildDeltaRow([renderTopStateBox({ key: "adjust-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney })], "adjust-cash-only");
-    }
+    if (activityKind === "replacement" && inferredGasType) return renderGasTriplet(inferredGasType);
+    if (activityKind === "sell_full" && inferredGasType) return renderFullAndWallet(inferredGasType);
+    if (activityKind === "buy_empty_from_customer" && inferredGasType) return renderEmptyAndWallet(inferredGasType);
+    if (activityKind === "customer_return_empties" && inferredGasType) return renderEmptyOnly(inferredGasType);
+    if (activityKind === "dist_return_empties")
+      return buildDeltaRow(
+        [
+          renderTopStateBox({ key: "dre-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
+          renderTopStateBox({ key: "dre-48-empty", label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
+        ],
+        "dre-row"
+      );
+    if (activityKind === "payment_from_customer" || activityKind === "payment_to_customer")
+      return renderCenteredWalletOnly(activityKind);
+    if (activityKind === "expense" || activityKind === "bank_to_wallet" || activityKind === "wallet_to_bank" || activityKind === "adjust_wallet")
+      return renderCenteredWalletOnly(activityKind);
+    if (activityKind === "refill")
+      return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "refill-mixed" });
+    if (activityKind === "buy_full_from_company")
+      return buildDeltaRow(
+        [
+          renderTopStateBox({ key: "bfc-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
+          renderTopStateBox({ key: "bfc-48-full", label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
+          renderTopStateBox({ key: "bfc-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+        ],
+        "bfc-row"
+      );
+    if (activityKind === "adjust_inventory")
+      return renderMixedLayout({ include12: true, include48: true, includeCash: hasCashChange, keyPrefix: "adjust-mixed" });
     if (inferredGasType) return renderGasTriplet(inferredGasType);
-    if (hasCash) return renderCenteredWalletOnly(eventType);
+    if (hasCash) return renderCenteredWalletOnly(activityKind);
     return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
   })();
 

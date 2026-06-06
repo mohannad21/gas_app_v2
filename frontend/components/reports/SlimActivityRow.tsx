@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { Level3Tokens } from "@/constants/level3";
 import { FontFamilies, FontSizes } from "@/constants/typography";
-import { formatBalanceTransitions, formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
+import { formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
 import { EVENT_LABELS } from "@/lib/eventLabels";
@@ -388,11 +388,10 @@ export default function SlimActivityRow({
   const showPaymentRatio =
     (activityKind === "refill" ||
       _isOrderKind(event.event_type) ||
-      _isCompanyPayment(event.event_type) ||
       _isCompanyBuyFull(event.event_type)) &&
     paymentTotal > 0;
   const moneyText =
-    !showPaymentRatio && moneyDirection !== "none" && moneyAmount
+    !showPaymentRatio && moneyDirection !== "none" && moneyAmount && !_isWalletAdjust(event.event_type)
       ? `${moneyDirection === "in" || moneyDirection === "received" ? "+" : "-"}${formatMoneyValue(
           moneyAmount,
           fmtMoney
@@ -401,11 +400,13 @@ export default function SlimActivityRow({
   const ratioMoneyDirection =
     moneyDirection !== "none"
       ? moneyDirection
-      : _isOrderKind(event.event_type)
-        ? "in"
-        : (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
-          ? "out"
-          : "none";
+      : activityKind === "buy_empty_from_customer"
+        ? "out"
+        : _isOrderKind(event.event_type)
+          ? "in"
+          : (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
+            ? "out"
+            : "none";
   const displayContextLine = _isOrderKind(event.event_type)
     ? (
         event.context_line
@@ -583,7 +584,9 @@ export default function SlimActivityRow({
                     styles.pill,
                     pill.intent === "good"
                       ? styles.pillGood
-                      : scopedPillStyle,
+                      : pill.intent === "bad"
+                        ? styles.pillDanger
+                        : scopedPillStyle,
                   ]}
                 >
                   <Text
@@ -591,7 +594,9 @@ export default function SlimActivityRow({
                       styles.pillText,
                       pill.intent === "good"
                         ? styles.pillGoodText
-                        : scopedPillTextStyle,
+                        : pill.intent === "bad"
+                          ? styles.pillDangerText
+                          : scopedPillTextStyle,
                     ]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
