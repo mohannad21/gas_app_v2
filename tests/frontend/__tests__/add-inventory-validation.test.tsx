@@ -130,7 +130,7 @@ describe("Add screen navigation", () => {
   it("keeps company activity button route unchanged", () => {
     const { getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Company\nActivities"));
+    fireEvent.press(getByText("Company"));
     fireEvent.press(getByText("+ New Company Activity"));
 
     expect(router.push).toHaveBeenCalledWith({
@@ -142,7 +142,7 @@ describe("Add screen navigation", () => {
   it("keeps expense button route unchanged", () => {
     const { getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
     fireEvent.press(getByText("+ Add Money Activity"));
 
     expect(router.push).toHaveBeenCalledWith({
@@ -154,7 +154,7 @@ describe("Add screen navigation", () => {
   it("keeps ledger adjustment button route unchanged", () => {
     const { getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Ledger\nAdjustments"));
+    fireEvent.press(getByText("Ledger"));
     fireEvent.press(getByText("+ New Ledger Adjustment"));
 
     expect(router.push).toHaveBeenCalledWith({
@@ -166,7 +166,7 @@ describe("Add screen navigation", () => {
   it("uses wallet wording for ledger adjustment filters", () => {
     const { getByText, queryByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Ledger\nAdjustments"));
+    fireEvent.press(getByText("Ledger"));
 
     expect(getByText("No ledger adjustments match these filters.")).toBeTruthy();
     expect(queryByText("Cash Adjustment")).toBeNull();

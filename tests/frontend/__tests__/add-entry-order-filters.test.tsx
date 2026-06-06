@@ -230,8 +230,8 @@ describe("Add Entry order filters", () => {
     const { getByText, getAllByText, queryByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("filter-outline"));
-    fireEvent.press(getAllByText("Sold full")[0]);
-    fireEvent.press(getAllByText("12kg")[0]);
+    fireEvent.press(getAllByText("Sell full")[0]);
+    fireEvent.press(getAllByText("12kg — debt")[0]);
 
     expect(getByText("Installed: 1x 12kg")).toBeTruthy();
     expect(queryByText("Installed: 1x 48kg")).toBeNull();
@@ -243,7 +243,7 @@ describe("Add Entry order filters", () => {
     const { getByText, getAllByText, queryByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("filter-outline"));
-    fireEvent.press(getAllByText("Bought empty")[0]);
+    fireEvent.press(getAllByText("Buy empties")[0]);
     fireEvent.press(getAllByText("48kg")[0]);
 
     expect(getByText("Received: 1x 48kg")).toBeTruthy();

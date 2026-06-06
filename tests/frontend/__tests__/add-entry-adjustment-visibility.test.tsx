@@ -205,7 +205,7 @@ describe("Add Entry adjustment visibility", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Company\nActivities"));
+    fireEvent.press(getByText("Company"));
 
     expect(getByText("Created at: 2026-06-01 11:00:00")).toBeTruthy();
     expect(queryByText("Created at: 2026-06-01 12:00:00")).toBeNull();

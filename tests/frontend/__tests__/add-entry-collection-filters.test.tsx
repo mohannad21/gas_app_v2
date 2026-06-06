@@ -199,11 +199,11 @@ describe("Add Entry collection filters", () => {
     expect(getByText("Returned 1x48kg empties")).toBeTruthy();
   });
 
-  it("filters payment rows under the Customer paid activity filter", () => {
+  it("filters payment rows under the Payment from customer activity filter", () => {
     const { getByText, getAllByText, queryByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("filter-outline"));
-    const customerPaidOptions = getAllByText("Customer paid");
+    const customerPaidOptions = getAllByText("Payment from customer");
     fireEvent.press(customerPaidOptions[0]);
 
     expect(getByText("Payment 70")).toBeTruthy();
@@ -211,11 +211,11 @@ describe("Add Entry collection filters", () => {
     expect(queryByText("Returned 2x12kg | 1x48kg empties")).toBeNull();
   });
 
-  it("filters payout rows under the Paid customer activity filter", () => {
+  it("filters payout rows under the Payment to customer activity filter", () => {
     const { getByText, getAllByText, queryByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("filter-outline"));
-    const payoutOptions = getAllByText("Paid customer");
+    const payoutOptions = getAllByText("Payment to customer");
     fireEvent.press(payoutOptions[0]);
 
     expect(getByText("Payout 40")).toBeTruthy();
@@ -227,7 +227,7 @@ describe("Add Entry collection filters", () => {
     const { getByText, getAllByText, queryByText } = render(<AddChooserScreen />);
 
     fireEvent.press(getByText("filter-outline"));
-    const returnOptions = getAllByText("Returned empties");
+    const returnOptions = getAllByText("Empties from customer");
     fireEvent.press(returnOptions[0]);
     const twelveOptions = getAllByText("12kg");
     fireEvent.press(twelveOptions[0]);

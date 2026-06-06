@@ -151,7 +151,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
 
     expect(getByText("100")).toBeTruthy();
     expect(queryByText("200")).toBeNull();
@@ -167,7 +167,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
 
     expect(getByText("Wallet → Bank")).toBeTruthy();
     expect(queryByText("Bank → Wallet")).toBeNull();
@@ -184,7 +184,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Company\nActivities"));
+    fireEvent.press(getByText("Company"));
 
     expect(getByText("Payment to company 400 $")).toBeTruthy();
     expect(queryByText("Payment to company 888 $")).toBeNull();
@@ -218,7 +218,7 @@ describe("Add Entry — deleted cards are hidden", () => {
     });
 
     const { getByText, queryByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Ledger\nAdjustments"));
+    fireEvent.press(getByText("Ledger"));
 
     expect(getByText("12kg: full +5")).toBeTruthy();
     expect(queryByText("48kg: full +3")).toBeNull();

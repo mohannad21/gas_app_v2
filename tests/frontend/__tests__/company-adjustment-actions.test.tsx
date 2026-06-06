@@ -141,7 +141,7 @@ describe("Add Entry — company adjustment card actions", () => {
   it("shows Delete but not Edit on a company balance adjustment card", () => {
     const { getByText, getByLabelText, queryByLabelText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Company\nActivities"));
+    fireEvent.press(getByText("Company"));
 
     expect(getByLabelText("Delete")).toBeTruthy();
     expect(queryByLabelText("Edit")).toBeNull();

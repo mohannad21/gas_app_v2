@@ -171,7 +171,7 @@ describe("Cash & Expenses view", () => {
   it("switches to expenses mode and renders duplicate expenses separately", () => {
     const { getAllByLabelText, getAllByText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
     expect(getAllByText("Wallet to bank").length).toBeGreaterThan(0);
     expect(getByText("80.00")).toBeTruthy();
     expect(getByText("50.00")).toBeTruthy();
@@ -181,7 +181,7 @@ describe("Cash & Expenses view", () => {
   it("shows both same-day same-type expenses as distinct rows", () => {
     const { getAllByLabelText, getAllByText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
     expect(getAllByText("fuel")).toHaveLength(2);
     expect(getByText("80.00")).toBeTruthy();
     expect(getByText("50.00")).toBeTruthy();
@@ -191,7 +191,7 @@ describe("Cash & Expenses view", () => {
   it("deletes the exact selected expense row through the real UI path", async () => {
     const { getAllByLabelText, getByText } = render(<AddChooserScreen />);
 
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
     const deleteExpenseButtons = getAllByLabelText("Delete");
     await act(async () => {
       fireEvent.press(deleteExpenseButtons[1]);
@@ -201,7 +201,7 @@ describe("Cash & Expenses view", () => {
 
   it("shows Done accessory for keyboard", () => {
     const { getByText } = render(<AddChooserScreen />);
-    fireEvent.press(getByText("Money\nActivities"));
+    fireEvent.press(getByText("Money"));
     expect(getByText("Done")).toBeTruthy();
   });
 });

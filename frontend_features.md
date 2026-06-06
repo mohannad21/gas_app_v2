@@ -85,6 +85,24 @@ ledger  (display label TBD)
 - A filter option only appears when matching data exists in the current view
 - Expense category sub-filters are data-driven from actual expense categories recorded — only categories present in the data are shown
 
+### Single Source of Truth for Labels
+
+All filter labels — activity kind names and group names — must be read from one file only:
+
+**`frontend/lib/activityKindMeta.ts`**
+
+- Activity kind labels (level 2): `ACTIVITY_KIND_META[kind].label`
+- Group labels (level 1): `FILTER_GROUP_LABELS` exported from the same file
+
+| Group key | Label |
+|---|---|
+| `customer` | Customer |
+| `company` | Company |
+| `expenses` | Money |
+| `ledger` | Ledger |
+
+No other file may define or duplicate these labels. `eventLabels.ts` is legacy and must not be used for any filter display text.
+
 ---
 
 ## 3. Activity Date Restrictions
