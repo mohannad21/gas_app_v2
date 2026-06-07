@@ -73,6 +73,11 @@ import {
   gasTypes,
 } from "@/components/PriceMatrix";
 import { BankDeposit, CashAdjustment, CollectionEvent, CompanyBalanceAdjustment, CompanyPayment, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
+import {
+  ACTIVITY_SORT_WORDING,
+  SCREEN_STATE_WORDING,
+  ADD_ENTRY_CTA_WORDING,
+} from "@/lib/wording";
 
 type AddMode =
   | "customer_activities"
@@ -268,12 +273,6 @@ const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "effective_desc",
   "effective_asc",
 ];
-const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
-  created_desc: "created date (recent on top)",
-  created_asc: "created date (recent on bottom)",
-  effective_desc: "Effective date (recent on top)",
-  effective_asc: "Effective date (recent on bottom)",
-};
 
 export default function AddChooserScreen() {
   const addParams = useLocalSearchParams<{ prices?: string; open?: string; highlightId?: string; mode?: string }>();
@@ -1283,20 +1282,20 @@ const formatDateTime = (value?: string) => {
 
   const customerActivityEmptyMessage =
     !customerActivityFilter && !deferredCustomerSearch
-      ? "No customer activities yet."
-      : "No customer activities match these filters.";
+      ? SCREEN_STATE_WORDING.noCustomerActivities
+      : SCREEN_STATE_WORDING.noCustomerActivitiesFilter;
   const expenseEmptyMessage =
     !expensePrimaryFilter && !expenseCategoryFilter
-      ? "No money activities yet."
-      : "No money activities match these filters.";
+      ? SCREEN_STATE_WORDING.noMoneyActivities
+      : SCREEN_STATE_WORDING.noMoneyActivitiesFilter;
 
   const primaryCtaLabel = isCustomerActivities
-    ? "+ New Customer Activity"
+    ? ADD_ENTRY_CTA_WORDING.newCustomerActivity
     : isCompanyActivities
-      ? "+ New Company Activity"
+      ? ADD_ENTRY_CTA_WORDING.newCompanyActivity
       : isExpenses
-        ? "+ Add Money Activity"
-        : "+ New Ledger Adjustment";
+        ? ADD_ENTRY_CTA_WORDING.addMoneyActivity
+        : ADD_ENTRY_CTA_WORDING.newLedgerAdjustment;
   const showFilterBadge = isCustomerActivities
     ? isCustomerTabFiltered({
         customerActivityFilter,
@@ -1805,7 +1804,7 @@ const formatDateTime = (value?: string) => {
       <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
         <Pressable style={styles.sortPickerOverlay} onPress={() => setSortPickerVisible(false)}>
           <View style={styles.sortPickerCard}>
-            <Text style={styles.sortPickerTitle}>Sort by</Text>
+            <Text style={styles.sortPickerTitle}>{ACTIVITY_SORT_WORDING.title}</Text>
             {ACTIVITY_SORT_ORDER.map((sortMode) => (
               <Pressable
                 key={sortMode}
@@ -1814,10 +1813,10 @@ const formatDateTime = (value?: string) => {
               >
                 <View style={styles.sortPickerOptionContent}>
                   <Text style={[styles.sortPickerOptionText, sortMode === activitySortMode && styles.sortPickerOptionActive]}>
-                    {ACTIVITY_SORT_LABELS[sortMode]}
+                    {ACTIVITY_SORT_WORDING.labels[sortMode]}
                   </Text>
                   {sortMode === "created_desc" ? (
-                    <Text style={styles.sortPickerRecommended}>recommended</Text>
+                    <Text style={styles.sortPickerRecommended}>{ACTIVITY_SORT_WORDING.recommended}</Text>
                   ) : null}
                 </View>
                 {sortMode === activitySortMode ? (

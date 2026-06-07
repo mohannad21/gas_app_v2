@@ -156,3 +156,50 @@ export function formatCylinderUnitLabel(qty: number, state: "full" | "empty"): s
 export function formatReportTimestampLabel(kind: keyof typeof REPORT_WORDING.timestamps, value: string): string {
   return `${REPORT_WORDING.timestamps[kind]}: ${value}`;
 }
+
+export const ACTIVITY_SORT_WORDING = {
+  title: "Sort by",
+  recommended: "recommended",
+  labels: {
+    created_desc: "created date (recent on top)",
+    created_asc: "created date (recent on bottom)",
+    effective_desc: "Effective date (recent on top)",
+    effective_asc: "Effective date (recent on bottom)",
+  },
+} as const;
+
+export const SCREEN_STATE_WORDING = {
+  loading: "Loading...",
+  loadingActivities: "Loading activities...",
+  failedReports: "Failed to load reports.",
+  failedActivities: "Failed to load activities.",
+  noActivitiesDay: "No activities on this day.",
+  noActivitiesFilter: "No matching activities for this filter.",
+  noCustomerActivities: "No customer activities yet.",
+  noCustomerActivitiesFilter: "No customer activities match these filters.",
+  noMoneyActivities: "No money activities yet.",
+  noMoneyActivitiesFilter: "No money activities match these filters.",
+  failedCustomerActivities: "Could not load customer activities.",
+  noActivitiesMatchFilter: "No activities match this filter yet.",
+} as const;
+
+export const ADD_ENTRY_CTA_WORDING = {
+  newCustomerActivity: "+ New Customer Activity",
+  newCompanyActivity: "+ New Company Activity",
+  addMoneyActivity: "+ Add Money Activity",
+  newLedgerAdjustment: "+ New Ledger Adjustment",
+} as const;
+
+export const EXPENSE_MODAL_WORDING = {
+  title: "Add Expense",
+  preset: "Preset",
+  custom: "Custom",
+  typeLabel: "Type",
+  amountLabel: "Amount",
+  noteLabel: "Note",
+  notePlaceholder: "Optional",
+  typePlaceholder: "e.g., toll, parking",
+  done: "Done",
+  cancel: "Cancel",
+  save: "Save",
+} as const;

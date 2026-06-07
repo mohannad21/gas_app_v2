@@ -32,6 +32,10 @@ import {
   orderToEvent,
 } from "@/lib/activityAdapter";
 import { DailyReportEvent } from "@/types/report";
+import {
+  ACTIVITY_SORT_WORDING,
+  SCREEN_STATE_WORDING,
+} from "@/lib/wording";
 
 type ActivityFilter =
   | "replacement"
@@ -175,12 +179,6 @@ const ACTIVITY_SORT_ORDER: ActivitySortMode[] = [
   "effective_desc",
   "effective_asc",
 ];
-const ACTIVITY_SORT_LABELS: Record<ActivitySortMode, string> = {
-  created_desc: "created date (recent on top)",
-  created_asc: "created date (recent on bottom)",
-  effective_desc: "Effective date (recent on top)",
-  effective_asc: "Effective date (recent on bottom)",
-};
 
 
 function DetailBalanceBox({
@@ -761,10 +759,10 @@ export default function CustomerDetailsScreen() {
         />
       ) : null}
 
-      {activitiesLoading ? <Text style={styles.meta}>Loading activities...</Text> : null}
-      {activitiesError ? <Text style={styles.errorText}>Could not load customer activities.</Text> : null}
+      {activitiesLoading ? <Text style={styles.meta}>{SCREEN_STATE_WORDING.loadingActivities}</Text> : null}
+      {activitiesError ? <Text style={styles.errorText}>{SCREEN_STATE_WORDING.failedCustomerActivities}</Text> : null}
       {!activitiesLoading && !activitiesError && filteredActivities.length === 0 ? (
-        <Text style={styles.meta}>No activities match this filter yet.</Text>
+        <Text style={styles.meta}>{SCREEN_STATE_WORDING.noActivitiesMatchFilter}</Text>
       ) : null}
 
       {!activitiesLoading &&
@@ -805,7 +803,7 @@ export default function CustomerDetailsScreen() {
     <Modal visible={sortPickerVisible} transparent animationType="fade" onRequestClose={() => setSortPickerVisible(false)}>
       <Pressable style={styles.sortPickerOverlay} onPress={() => setSortPickerVisible(false)}>
         <View style={styles.sortPickerCard}>
-          <Text style={styles.sortPickerTitle}>Sort by</Text>
+          <Text style={styles.sortPickerTitle}>{ACTIVITY_SORT_WORDING.title}</Text>
           {ACTIVITY_SORT_ORDER.map((sortMode) => (
             <Pressable
               key={sortMode}
@@ -814,10 +812,10 @@ export default function CustomerDetailsScreen() {
             >
               <View style={styles.sortPickerOptionContent}>
                 <Text style={[styles.sortPickerOptionText, sortMode === activitySortMode && styles.sortPickerOptionActive]}>
-                  {ACTIVITY_SORT_LABELS[sortMode]}
+                  {ACTIVITY_SORT_WORDING.labels[sortMode]}
                 </Text>
                 {sortMode === "created_desc" ? (
-                  <Text style={styles.sortPickerRecommended}>recommended</Text>
+                  <Text style={styles.sortPickerRecommended}>{ACTIVITY_SORT_WORDING.recommended}</Text>
                 ) : null}
               </View>
               {sortMode === activitySortMode ? (

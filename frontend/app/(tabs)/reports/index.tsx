@@ -36,6 +36,10 @@ import { buildHappenedAt, toDateKey } from "@/lib/date";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";
+import {
+  SCREEN_STATE_WORDING,
+  EXPENSE_MODAL_WORDING,
+} from "@/lib/wording";
 
 type RevealShelfKey = "ledger" | "customers" | "company";
 type ActivityFilterGroupKey = "customer" | "company" | "expenses" | "ledger";
@@ -699,8 +703,8 @@ export default function ReportsScreen() {
           ListHeaderComponent={
             <>
               <Animated.View style={{ height: spacerAnim }} />
-              {v2Query.isLoading && <Text style={styles.meta}>Loading...</Text>}
-              {v2Query.error && <Text style={styles.error}>Failed to load reports.</Text>}
+              {v2Query.isLoading && <Text style={styles.meta}>{SCREEN_STATE_WORDING.loading}</Text>}
+              {v2Query.error && <Text style={styles.error}>{SCREEN_STATE_WORDING.failedReports}</Text>}
               <DayPickerStrip rows={v2Rows} selectedDate={selectedDate} onSelect={setSelectedDate} highlightDate={highlightDate} />
               {rawSelectedEvents.length > 0 ? (
                 <View style={styles.filterPanel}>
@@ -747,13 +751,13 @@ export default function ReportsScreen() {
           }
           ListEmptyComponent={
             selectedDayStatus === "idle" || selectedDayStatus === "loading" ? (
-              <Text style={styles.meta}>Loading activities...</Text>
+              <Text style={styles.meta}>{SCREEN_STATE_WORDING.loadingActivities}</Text>
             ) : selectedDayStatus === "error" ? (
-              <Text style={styles.error}>Failed to load activities.</Text>
+              <Text style={styles.error}>{SCREEN_STATE_WORDING.failedActivities}</Text>
             ) : selectedDayStatus === "success" && rawSelectedEvents.length === 0 ? (
-              <Text style={styles.meta}>No activities on this day.</Text>
+              <Text style={styles.meta}>{SCREEN_STATE_WORDING.noActivitiesDay}</Text>
             ) : selectedDayStatus === "success" && selectedEvents.length === 0 ? (
-              <Text style={styles.meta}>No matching activities for this filter.</Text>
+              <Text style={styles.meta}>{SCREEN_STATE_WORDING.noActivitiesFilter}</Text>
             ) : null
           }
           renderItem={({ item, index }) => {
@@ -915,14 +919,14 @@ function ExpenseModal(props: {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.modalTitle}>Add Expense</Text>
+          <Text style={styles.modalTitle}>{EXPENSE_MODAL_WORDING.title}</Text>
 
           <View style={styles.rowBetween}>
             <Pressable style={[styles.smallBtn, !useCustomType && styles.smallBtnActive]} onPress={() => setUseCustomType(false)}>
-              <Text style={styles.smallBtnText}>Preset</Text>
+              <Text style={styles.smallBtnText}>{EXPENSE_MODAL_WORDING.preset}</Text>
             </Pressable>
             <Pressable style={[styles.smallBtn, useCustomType && styles.smallBtnActive]} onPress={() => setUseCustomType(true)}>
-              <Text style={styles.smallBtnText}>Custom</Text>
+              <Text style={styles.smallBtnText}>{EXPENSE_MODAL_WORDING.custom}</Text>
             </Pressable>
           </View>
 
@@ -940,17 +944,17 @@ function ExpenseModal(props: {
             </View>
           ) : (
             <>
-              <Text style={styles.modalLabel}>Type</Text>
+              <Text style={styles.modalLabel}>{EXPENSE_MODAL_WORDING.typeLabel}</Text>
               <TextInput
                 value={customExpenseType}
                 onChangeText={setCustomExpenseType}
                 style={styles.input}
-                placeholder="e.g., toll, parking"
+                placeholder={EXPENSE_MODAL_WORDING.typePlaceholder}
               />
             </>
           )}
 
-          <Text style={styles.modalLabel}>Amount</Text>
+          <Text style={styles.modalLabel}>{EXPENSE_MODAL_WORDING.amountLabel}</Text>
           <TextInput
             value={expenseAmount}
             onChangeText={setExpenseAmount}
@@ -961,12 +965,12 @@ function ExpenseModal(props: {
             autoFocus={allowAutoFocus}
           />
 
-          <Text style={styles.modalLabel}>Note</Text>
+          <Text style={styles.modalLabel}>{EXPENSE_MODAL_WORDING.noteLabel}</Text>
           <TextInput
             value={expenseNote}
             onChangeText={setExpenseNote}
             style={styles.input}
-            placeholder="Optional"
+            placeholder={EXPENSE_MODAL_WORDING.notePlaceholder}
             inputAccessoryViewID={accessoryId}
           />
 
@@ -974,7 +978,7 @@ function ExpenseModal(props: {
             <InputAccessoryView nativeID={accessoryId}>
               <View style={styles.accessory}>
                 <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryBtn}>
-                  <Text style={styles.accessoryBtnText}>Done</Text>
+                  <Text style={styles.accessoryBtnText}>{EXPENSE_MODAL_WORDING.done}</Text>
                 </Pressable>
               </View>
             </InputAccessoryView>
@@ -982,10 +986,10 @@ function ExpenseModal(props: {
 
           <View style={styles.rowBetween}>
             <Pressable style={[styles.primaryBtn, styles.secondaryBtn]} onPress={onClose}>
-              <Text style={styles.primaryBtnText}>Cancel</Text>
+              <Text style={styles.primaryBtnText}>{EXPENSE_MODAL_WORDING.cancel}</Text>
             </Pressable>
             <Pressable style={styles.primaryBtn} onPress={onSave}>
-              <Text style={styles.primaryBtnText}>Save</Text>
+              <Text style={styles.primaryBtnText}>{EXPENSE_MODAL_WORDING.save}</Text>
             </Pressable>
           </View>
         </Pressable>
