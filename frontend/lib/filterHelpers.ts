@@ -1,34 +1,9 @@
-import { ACTIVITY_KIND_META } from "@/lib/activityKindMeta";
-import type { ActivityKind } from "@/lib/activityKinds";
+import { resolveFilterLabel as resolveRegistryFilterLabel } from "@/lib/filterOptions";
 
 type FilterTab = "customer" | "company";
 
-const FILTER_ID_TO_KIND: Record<string, ActivityKind> = {
-  late_payment: "payment_from_customer",
-  payout: "payment_to_customer",
-  return_empties: "customer_return_empties",
-  buy_empty: "buy_empty_from_customer",
-  buy_full: "buy_full_from_company",
-  company_return: "dist_return_empties",
-  inventory_adjustment: "adjust_inventory",
-};
-
-const ADJUSTMENT_KIND: Record<FilterTab, ActivityKind> = {
-  customer: "adjust_customer_balance",
-  company: "adjust_company_balance",
-};
-
-function isActivityKind(value: string): value is ActivityKind {
-  return value in ACTIVITY_KIND_META;
-}
-
 export function resolveFilterLabel(filterId: string, tab?: FilterTab): string {
-  if (filterId === "adjustment" && tab) {
-    const kind = ADJUSTMENT_KIND[tab];
-    return ACTIVITY_KIND_META[kind]?.label ?? filterId;
-  }
-  const kind = FILTER_ID_TO_KIND[filterId] ?? filterId;
-  return isActivityKind(kind) ? ACTIVITY_KIND_META[kind].label : filterId;
+  return resolveRegistryFilterLabel(filterId, tab);
 }
 
 export function isCustomerTabFiltered(state: {

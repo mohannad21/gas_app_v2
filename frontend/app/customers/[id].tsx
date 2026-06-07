@@ -7,7 +7,7 @@ import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
-import { normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, normalizeEventType, type ActivityKind } from "@/lib/activityKindMeta";
 import { isCustomerReviewFiltered, resolveFilterLabel } from "@/lib/filterHelpers";
 import { getKindOptions, getSubFilterOptions } from "@/lib/filterOptions";
 import { getCurrencySymbol, getMoneyDecimals } from "@/lib/money";
@@ -63,7 +63,7 @@ const ACTIVITY_FILTER_OPTIONS: { id: ActivityFilter; label: string }[] = [
     }),
 ];
 
-const CUSTOMER_FILTER_TO_KIND: Record<ActivityFilter, string> = {
+const CUSTOMER_FILTER_TO_KIND: Record<ActivityFilter, ActivityKind> = {
   replacement: "replacement",
   late_payment: "payment_from_customer",
   payout: "payment_to_customer",
@@ -72,6 +72,10 @@ const CUSTOMER_FILTER_TO_KIND: Record<ActivityFilter, string> = {
   sell_full: "sell_full",
   adjustment: "adjust_customer_balance",
 };
+
+const CUSTOMER_KIND_TO_FILTER = Object.fromEntries(
+  Object.entries(CUSTOMER_FILTER_TO_KIND).map(([filterId, kind]) => [kind, filterId])
+) as Partial<Record<ActivityKind, ActivityFilter>>;
 
 const matchesDebtCreditSubFilter = (event: DailyReportEvent, subFilterId: string) => {
   const moneyDiff = (event.order_total ?? 0) - (event.order_paid ?? 0);
@@ -317,14 +321,11 @@ export default function CustomerDetailsScreen() {
   const availableActivityFilters = useMemo(() => {
     const visible = new Set<ActivityFilter>();
     for (const event of activities) {
-      const _kind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
-      if (_kind === "replacement") visible.add("replacement");
-      if (_kind === "payment_from_customer") visible.add("late_payment");
-      if (_kind === "payment_to_customer") visible.add("payout");
-      if (_kind === "customer_return_empties") visible.add("return_empties");
-      if (_kind === "buy_empty_from_customer") visible.add("buy_empty");
-      if (_kind === "sell_full") visible.add("sell_full");
-      if (_kind === "adjust_customer_balance") visible.add("adjustment");
+      const kind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
+      if (!kind || !ACTIVITY_KIND_META[kind].surfaces.customerReview) continue;
+
+      const filterId = CUSTOMER_KIND_TO_FILTER[kind];
+      if (filterId) visible.add(filterId);
     }
     return ACTIVITY_FILTER_OPTIONS.filter((option) => visible.has(option.id));
   }, [activities]);

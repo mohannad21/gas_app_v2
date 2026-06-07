@@ -30,7 +30,7 @@ import { useExpenseModal } from "@/hooks/useExpenseModal";
 import { useDaySelection } from "@/hooks/useDaySelection";
 import { useRevealShelf } from "@/hooks/useRevealShelf";
 import { formatEventType } from "@/lib/reports/utils";
-import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS, normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS, isActivityKindVisibleOnSurface, normalizeEventType } from "@/lib/activityKindMeta";
 import EventExpandedPanel from "@/components/reports/EventExpandedPanel";
 import { buildHappenedAt, toDateKey } from "@/lib/date";
 import { EVENT_LABELS } from "@/lib/eventLabels";
@@ -331,8 +331,11 @@ export default function ReportsScreen() {
   const selectedDayStatus = selectedDate ? v2DayStatusByDate[selectedDate] ?? "idle" : "idle";
   const rawSelectedEvents = sortReportEventsNewestFirst(
     ((selectedDayInfo?.events ?? []) as any[]).filter((ev) => {
-      const k = normalizeEventType(ev?.event_type ?? "");
-      return k !== "adjust_customer_balance" && k !== "adjust_company_balance";
+      const kind = normalizeEventType(String(ev?.event_type ?? ""), {
+        order_mode: ev?.order_mode,
+        money_direction: ev?.money_direction,
+      });
+      return kind ? isActivityKindVisibleOnSurface(kind, "dailyReport") : true;
     })
   );
   const availableGroupOptions = useMemo(() => {

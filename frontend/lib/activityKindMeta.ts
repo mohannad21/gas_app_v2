@@ -356,6 +356,31 @@ export const FILTER_GROUP_LABELS: Record<"customer" | "company" | "expenses" | "
   ledger: "Ledger",
 };
 
+export type ActivitySurface = keyof ActivityKindMeta["surfaces"];
+
+export function isActivityKindVisibleOnSurface(
+  kind: ActivityKind,
+  surface: ActivitySurface
+): boolean {
+  return ACTIVITY_KIND_META[kind].surfaces[surface];
+}
+
+export function getActivityKindsForSurface(surface: ActivitySurface): ActivityKind[] {
+  return ALL_ACTIVITY_KINDS.filter((kind) => isActivityKindVisibleOnSurface(kind, surface));
+}
+
+export function getActivityKindsForFilterGroup(
+  group: ActivityFilterGroup,
+  surface: ActivitySurface = "addEntry"
+): ActivityKind[] {
+  return ALL_ACTIVITY_KINDS
+    .filter((kind) => {
+      const meta = ACTIVITY_KIND_META[kind];
+      return meta.filterGroup === group && meta.surfaces[surface];
+    })
+    .sort((left, right) => ACTIVITY_KIND_META[left].order - ACTIVITY_KIND_META[right].order);
+}
+
 type NormalizeContext = {
   order_mode?: string;
   money_direction?: string;
