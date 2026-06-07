@@ -1143,7 +1143,12 @@ export default function InventoryNewScreen() {
             {section === "company" ? "Company Activities" : "Ledger Adjustments"}
           </Text>
         </View>
-        <View style={styles.modeRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.modeRowScroll}
+          contentContainerStyle={styles.modeRow}
+        >
           {visibleTabs.map((tab) => {
             const label = tab === "refill"
               ? "Refill"
@@ -1186,7 +1191,7 @@ export default function InventoryNewScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
         {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
           <RefillForm
             visible
@@ -1313,9 +1318,14 @@ const styles = StyleSheet.create({
   },
   modeRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginTop: 6,
     marginBottom: 2,
+  },
+  modeRowScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   modeButton: {
     paddingVertical: 8,
