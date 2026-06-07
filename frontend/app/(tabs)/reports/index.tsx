@@ -33,7 +33,6 @@ import { formatEventType } from "@/lib/reports/utils";
 import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS, isActivityKindVisibleOnSurface, normalizeEventType } from "@/lib/activityKindMeta";
 import EventExpandedPanel from "@/components/reports/EventExpandedPanel";
 import { buildHappenedAt, toDateKey } from "@/lib/date";
-import { EVENT_LABELS } from "@/lib/eventLabels";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import SlimActivityRow from "@/components/reports/SlimActivityRow";
 import DayPickerStrip from "@/components/reports/DayPickerStrip";

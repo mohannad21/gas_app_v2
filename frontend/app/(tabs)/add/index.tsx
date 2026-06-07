@@ -24,7 +24,6 @@ import {
     orderToEvent,
     refillSummaryToEvent,
   } from "@/lib/activityAdapter";
-import { EVENT_LABELS } from "@/lib/eventLabels";
 import { FontFamilies } from "@/constants/typography";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 import { useBankDeposits, useDeleteBankDeposit } from "@/hooks/useBankDeposits";

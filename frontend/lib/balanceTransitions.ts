@@ -17,10 +17,6 @@ type SharedOptions = {
   formatMoney?: FormatMoney;
 };
 
-type AggregateOptions = SharedOptions & {
-  count?: number;
-};
-
 type TransitionOptions = SharedOptions & {
   mode?: "current" | "transition";
   collapseAllSettled?: boolean;
@@ -102,7 +98,7 @@ export function makeBalanceTransition(
   };
 }
 
-export function formatCurrentBalanceState(
+function formatCurrentBalanceState(
   scope: BalanceScope,
   component: BalanceComponent,
   amount: number,
@@ -188,19 +184,6 @@ function formatTransitionRow(
   return `${label}: ${beforePart} → ${afterPart} ${scope}`;
 }
 
-export function formatAggregateBalanceState(
-  scope: BalanceScope,
-  component: BalanceComponent,
-  amount: number,
-  options: AggregateOptions = {}
-) {
-  const base = formatCurrentBalanceState(scope, component, amount, options);
-  const count = Number(options.count ?? 0);
-  if (count <= 0) return base;
-  const subject = count === 1 ? "customer" : "customers";
-  return `${base} across ${count} ${subject}`;
-}
-
 export function formatBalanceTransitions(
   transitions: TransitionInput[] | null | undefined,
   options: TransitionOptions = {}
@@ -264,11 +247,9 @@ export function formatBalanceTransitions(
     .filter((line): line is string => Boolean(line));
 }
 
-export type TransitionPillIntent = "good" | "bad" | "neutral";
-
 export type TransitionPill = {
   text: string;
-  intent: TransitionPillIntent;
+  intent: "good" | "bad" | "neutral";
 };
 
 export function formatTransitionPills(
@@ -283,7 +264,7 @@ export function formatTransitionPills(
     if (!text) continue;
     const before = Number(transition.before ?? 0);
     const after = Number(transition.after ?? 0);
-    let intent: TransitionPillIntent;
+    let intent: TransitionPill["intent"];
     const beforeAbs = Math.abs(Number(transition.before ?? 0));
     const afterAbs = Math.abs(Number(transition.after ?? 0));
     if (Math.abs(beforeAbs - afterAbs) < 0.01) {

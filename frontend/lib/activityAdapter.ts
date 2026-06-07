@@ -12,13 +12,32 @@ import {
   Order,
 } from "@/types/domain";
 import { makeBalanceTransition } from "@/lib/balanceTransitions";
-import { EVENT_LABELS } from "@/lib/eventLabels";
+import { getActivityEventLabel } from "@/lib/activityKindMeta";
 import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
 
 const BASE: Pick<DailyReportEvent, "wallet_before" | "wallet_after"> = {
   wallet_before: 0,
   wallet_after: 0,
 };
+
+const EVENT_LABELS = {
+  ORDER_REPLACEMENT: getActivityEventLabel("replacement"),
+  ORDER_SELL_FULL: getActivityEventLabel("sell_full"),
+  ORDER_BUY_EMPTY: getActivityEventLabel("buy_empty_from_customer"),
+  COLLECTION_MONEY: getActivityEventLabel("payment_from_customer"),
+  COLLECTION_PAYOUT: getActivityEventLabel("payment_to_customer"),
+  COLLECTION_EMPTY: getActivityEventLabel("customer_return_empties"),
+  CUSTOMER_ADJUSTMENT: getActivityEventLabel("adjust_customer_balance"),
+  REFILL: getActivityEventLabel("refill"),
+  COMPANY_PAYMENT_OUT: getActivityEventLabel("payment_to_company"),
+  COMPANY_PAYMENT_IN: getActivityEventLabel("payment_from_company"),
+  COMPANY_BUY_FULL: getActivityEventLabel("buy_full_from_company"),
+  COMPANY_RETURN: getActivityEventLabel("dist_return_empties"),
+  COMPANY_ADJUSTMENT: getActivityEventLabel("adjust_company_balance"),
+  EXPENSE: getActivityEventLabel("expense"),
+  INVENTORY_ADJUSTMENT: getActivityEventLabel("adjust_inventory"),
+  WALLET_ADJUSTMENT: getActivityEventLabel("adjust_wallet"),
+} as const;
 
 function getCylinderSnapshot(record: Record<string, number> | null | undefined, gas: "12kg" | "48kg") {
   if (!record) return null;

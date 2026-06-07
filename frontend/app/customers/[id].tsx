@@ -6,7 +6,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatDateTimeMedium } from "@/lib/date";
-import { EVENT_LABELS } from "@/lib/eventLabels";
 import { ACTIVITY_KIND_META, normalizeEventType, type ActivityKind } from "@/lib/activityKindMeta";
 import { isCustomerReviewFiltered, resolveFilterLabel } from "@/lib/filterHelpers";
 import { getKindOptions, getSubFilterOptions } from "@/lib/filterOptions";

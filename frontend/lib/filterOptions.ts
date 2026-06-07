@@ -4,8 +4,8 @@ import {
   FILTER_GROUP_LABELS,
   getActivityKindsForFilterGroup,
   type ActivityFilterGroup,
+  type ActivityKind,
 } from "@/lib/activityKindMeta";
-import type { ActivityKind } from "@/lib/activityKinds";
 
 export type SubFilterOption = {
   id: string;

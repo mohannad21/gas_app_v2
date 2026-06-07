@@ -1,5 +1,4 @@
-import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS } from "@/lib/activityKindMeta";
-import type { ActivityKind } from "@/lib/activityKinds";
+import { ACTIVITY_KIND_META, FILTER_GROUP_LABELS, type ActivityKind } from "@/lib/activityKindMeta";
 import {
   activityMatchesFilter,
   isCompanyTabFiltered,

@@ -1,5 +1,5 @@
-export type ArrowDirection = "swap-h" | "swap-v" | "in-h" | "out-h" | "in-v" | "out-v" | "none";
-export type IconSymbol =
+type ArrowDirection = "swap-h" | "swap-v" | "in-h" | "out-h" | "in-v" | "out-v" | "none";
+type IconSymbol =
   | "money"
   | "full-cyl"
   | "empty-cyl"
@@ -13,7 +13,7 @@ export type IconSymbol =
 export type IconSpec = { arrow: ArrowDirection; symbol: IconSymbol };
 
 export type ActivityFilterGroup = "customer" | "company" | "expenses" | "ledger";
-export type ActivityScope = "customer" | "company" | "wallet" | "inventory";
+type ActivityScope = "customer" | "company" | "wallet" | "inventory";
 
 export type PaidBadgeSpec =
   | { mode: "ratio"; direction: "in" | "out" }
@@ -49,6 +49,7 @@ export type ActivitySubFilterId = keyof typeof ACTIVITY_SUBFILTER_META;
 
 export type ActivityKindMeta = {
   label: string;
+  eventLabel: string;
   labelKey: string;
   icon: IconSpec;
   color: string;
@@ -75,6 +76,7 @@ const LEDGER_COLOR = "#64748b";
 const REGISTRY = {
   replacement: {
     label: "Replace",
+    eventLabel: "Replacement",
     labelKey: "activities.replacement.label",
     icon: { arrow: "swap-h", symbol: null },
     color: CUSTOMER_COLOR,
@@ -90,6 +92,7 @@ const REGISTRY = {
   },
   sell_full: {
     label: "Sell full",
+    eventLabel: "Sold full",
     labelKey: "activities.sell_full.label",
     icon: { arrow: "out-h", symbol: "full-cyl" },
     color: CUSTOMER_COLOR,
@@ -105,6 +108,7 @@ const REGISTRY = {
   },
   buy_empty_from_customer: {
     label: "Buy empties",
+    eventLabel: "Bought empty",
     labelKey: "activities.buy_empty_from_customer.label",
     icon: { arrow: "in-h", symbol: "empty-cyl" },
     color: CUSTOMER_COLOR,
@@ -120,6 +124,7 @@ const REGISTRY = {
   },
   payment_from_customer: {
     label: "Payment from customer",
+    eventLabel: "Customer paid",
     labelKey: "activities.payment_from_customer.label",
     icon: { arrow: "in-h", symbol: "money" },
     color: CUSTOMER_COLOR,
@@ -135,6 +140,7 @@ const REGISTRY = {
   },
   payment_to_customer: {
     label: "Payment to customer",
+    eventLabel: "Paid customer",
     labelKey: "activities.payment_to_customer.label",
     icon: { arrow: "out-h", symbol: "money" },
     color: CUSTOMER_COLOR,
@@ -150,6 +156,7 @@ const REGISTRY = {
   },
   customer_return_empties: {
     label: "Empties from customer",
+    eventLabel: "Returned empties",
     labelKey: "activities.customer_return_empties.label",
     icon: { arrow: "in-h", symbol: "empty-cyl" },
     color: CUSTOMER_COLOR,
@@ -165,6 +172,7 @@ const REGISTRY = {
   },
   adjust_customer_balance: {
     label: "Adjust customer balance",
+    eventLabel: "Balance adjustment",
     labelKey: "activities.adjust_customer_balance.label",
     icon: { arrow: "none", symbol: "edit" },
     color: CUSTOMER_COLOR,
@@ -180,6 +188,7 @@ const REGISTRY = {
   },
   refill: {
     label: "Refill",
+    eventLabel: "Refill",
     labelKey: "activities.refill.label",
     icon: { arrow: "swap-v", symbol: null },
     color: COMPANY_COLOR,
@@ -195,6 +204,7 @@ const REGISTRY = {
   },
   dist_return_empties: {
     label: "Empties to company",
+    eventLabel: "Returned empties",
     labelKey: "activities.dist_return_empties.label",
     icon: { arrow: "out-v", symbol: "empty-cyl" },
     color: COMPANY_COLOR,
@@ -210,6 +220,7 @@ const REGISTRY = {
   },
   buy_full_from_company: {
     label: "Buy fulls",
+    eventLabel: "Bought full",
     labelKey: "activities.buy_full_from_company.label",
     icon: { arrow: "in-v", symbol: "full-cyl" },
     color: COMPANY_COLOR,
@@ -225,6 +236,7 @@ const REGISTRY = {
   },
   payment_to_company: {
     label: "Payment to company",
+    eventLabel: "Paid company",
     labelKey: "activities.payment_to_company.label",
     icon: { arrow: "out-v", symbol: "money" },
     color: COMPANY_COLOR,
@@ -240,6 +252,7 @@ const REGISTRY = {
   },
   payment_from_company: {
     label: "Payment from company",
+    eventLabel: "Company paid",
     labelKey: "activities.payment_from_company.label",
     icon: { arrow: "in-v", symbol: "money" },
     color: COMPANY_COLOR,
@@ -255,6 +268,7 @@ const REGISTRY = {
   },
   adjust_company_balance: {
     label: "Adjust company balance",
+    eventLabel: "Balance adjustment",
     labelKey: "activities.adjust_company_balance.label",
     icon: { arrow: "none", symbol: "edit" },
     color: COMPANY_COLOR,
@@ -270,6 +284,7 @@ const REGISTRY = {
   },
   expense: {
     label: "Expense",
+    eventLabel: "Expense",
     labelKey: "activities.expense.label",
     icon: { arrow: "none", symbol: "receipt" },
     color: MONEY_COLOR,
@@ -285,6 +300,7 @@ const REGISTRY = {
   },
   bank_to_wallet: {
     label: "Bank to wallet",
+    eventLabel: "Bank to wallet",
     labelKey: "activities.bank_to_wallet.label",
     icon: { arrow: "none", symbol: "bank-to-wallet" },
     color: MONEY_COLOR,
@@ -300,6 +316,7 @@ const REGISTRY = {
   },
   wallet_to_bank: {
     label: "Wallet to bank",
+    eventLabel: "Wallet to bank",
     labelKey: "activities.wallet_to_bank.label",
     icon: { arrow: "none", symbol: "wallet-to-bank" },
     color: MONEY_COLOR,
@@ -315,6 +332,7 @@ const REGISTRY = {
   },
   adjust_inventory: {
     label: "Adjust inventory",
+    eventLabel: "Inventory adjustment",
     labelKey: "activities.adjust_inventory.label",
     icon: { arrow: "none", symbol: "cube" },
     color: LEDGER_COLOR,
@@ -330,6 +348,7 @@ const REGISTRY = {
   },
   adjust_wallet: {
     label: "Adjust wallet",
+    eventLabel: "Wallet adjustment",
     labelKey: "activities.adjust_wallet.label",
     icon: { arrow: "none", symbol: "wallet" },
     color: LEDGER_COLOR,
@@ -348,6 +367,10 @@ const REGISTRY = {
 export type ActivityKind = keyof typeof REGISTRY;
 export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = REGISTRY;
 export const ALL_ACTIVITY_KINDS = Object.keys(REGISTRY) as readonly ActivityKind[];
+
+export function getActivityEventLabel(kind: ActivityKind): string {
+  return ACTIVITY_KIND_META[kind].eventLabel;
+}
 
 export const FILTER_GROUP_LABELS: Record<"customer" | "company" | "expenses" | "ledger", string> = {
   customer: "Customer",
@@ -420,15 +443,4 @@ export function normalizeEventType(
     default:
       return null;
   }
-}
-
-export function getReportSubtype(event: {
-  event_type: string;
-  order_mode?: string;
-  money_direction?: string;
-}): ActivityKind | null {
-  return normalizeEventType(event.event_type, {
-    order_mode: event.order_mode,
-    money_direction: event.money_direction,
-  });
 }
