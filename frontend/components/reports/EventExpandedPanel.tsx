@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies } from "@/constants/typography";
-import { normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
 
 function DeltaBox({
   testID,
@@ -61,7 +61,11 @@ export default function EventExpandedPanel({
   formatCount: (v: number) => string;
 }) {
   const eventType = String(ev?.event_type ?? ev?.type ?? ev?.source_type ?? "event");
-  const activityKind = normalizeEventType(eventType) ?? eventType;
+  const normalizedActivityKind = normalizeEventType(eventType);
+  const activityKind = normalizedActivityKind ?? eventType;
+  const ledgerBoxes = normalizedActivityKind
+    ? ACTIVITY_KIND_META[normalizedActivityKind].card.ledgerBoxes
+    : null;
 
   const invBefore = ev?.inventory_before ?? null;
   const invAfter = ev?.inventory_after ?? null;
@@ -286,35 +290,70 @@ export default function EventExpandedPanel({
   };
 
   const content = (() => {
-    if (activityKind === "replacement" && inferredGasType) return renderGasTriplet(inferredGasType);
-    if (activityKind === "sell_full" && inferredGasType) return renderFullAndWallet(inferredGasType);
-    if (activityKind === "buy_empty_from_customer" && inferredGasType) return renderEmptyAndWallet(inferredGasType);
-    if (activityKind === "customer_return_empties" && inferredGasType) return renderEmptyOnly(inferredGasType);
-    if (activityKind === "dist_return_empties")
-      return buildDeltaRow(
-        [
-          renderTopStateBox({ key: "dre-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
-          renderTopStateBox({ key: "dre-48-empty", label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
-        ],
-        "dre-row"
-      );
-    if (activityKind === "payment_from_customer" || activityKind === "payment_to_customer")
-      return renderCenteredWalletOnly(activityKind);
-    if (activityKind === "expense" || activityKind === "bank_to_wallet" || activityKind === "wallet_to_bank" || activityKind === "adjust_wallet")
-      return renderCenteredWalletOnly(activityKind);
-    if (activityKind === "refill")
-      return renderMixedLayout({ include12: true, include48: true, includeCash: hasCash, keyPrefix: "refill-mixed" });
-    if (activityKind === "buy_full_from_company")
-      return buildDeltaRow(
-        [
-          renderTopStateBox({ key: "bfc-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
-          renderTopStateBox({ key: "bfc-48-full", label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
-          renderTopStateBox({ key: "bfc-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
-        ],
-        "bfc-row"
-      );
-    if (activityKind === "adjust_inventory")
-      return renderMixedLayout({ include12: true, include48: true, includeCash: hasCashChange, keyPrefix: "adjust-mixed" });
+    switch (ledgerBoxes?.mode) {
+      case "selectedGas": {
+        if (!inferredGasType) break;
+
+        const hasFull = ledgerBoxes.boxes.includes("full");
+        const hasEmpty = ledgerBoxes.boxes.includes("empty");
+        const hasWallet = ledgerBoxes.boxes.includes("wallet");
+
+        if (hasFull && hasEmpty && hasWallet) return renderGasTriplet(inferredGasType);
+        if (hasFull && hasWallet) return renderFullAndWallet(inferredGasType);
+        if (hasEmpty && hasWallet) return renderEmptyAndWallet(inferredGasType);
+
+        break;
+      }
+
+      case "selectedGasEmptyOnly":
+        if (!inferredGasType) break;
+        return renderEmptyOnly(inferredGasType);
+
+      case "bothEmpties":
+        return buildDeltaRow(
+          [
+            renderTopStateBox({ key: "dre-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
+            renderTopStateBox({ key: "dre-48-empty", label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
+          ],
+          "dre-row"
+        );
+
+      case "bothFullsAndWallet":
+        return buildDeltaRow(
+          [
+            renderTopStateBox({ key: "bfc-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
+            renderTopStateBox({ key: "bfc-48-full", label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
+            renderTopStateBox({ key: "bfc-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+          ],
+          "bfc-row"
+        );
+
+      case "allGas": {
+        const includeCash =
+          ledgerBoxes.wallet === "whenPresent"
+            ? hasCash
+            : ledgerBoxes.wallet === "whenChanged"
+              ? hasCashChange
+              : false;
+
+        return renderMixedLayout({
+          include12: true,
+          include48: true,
+          includeCash,
+          keyPrefix: ledgerBoxes.wallet === "whenChanged" ? "adjust-mixed" : "refill-mixed",
+        });
+      }
+
+      case "walletOnly":
+        return renderCenteredWalletOnly(activityKind);
+
+      case "none":
+        return null;
+
+      default:
+        break;
+    }
+
     if (inferredGasType) return renderGasTriplet(inferredGasType);
     if (hasCash) return renderCenteredWalletOnly(activityKind);
     return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;

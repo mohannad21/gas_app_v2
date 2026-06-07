@@ -312,12 +312,12 @@ describe("ReportsScreen expanded DeltaBox", () => {
     fireEvent.press(getAllByText("Refill")[0]);
     expect(getAllByText("12kg Empty").length).toBeGreaterThan(0);
     expect(getAllByText("48kg Full").length).toBeGreaterThan(0);
-    expect(rowChildTestIds(getByTestId("mixed-12-row"))).toEqual(["mixed-12-full", "mixed-12-empty"]);
-    expect(rowChildTestIds(getByTestId("mixed-48-row"))).toEqual(["mixed-48-full", "mixed-48-empty"]);
-    expect(rowChildTestIds(getByTestId("mixed-cash-row"))).toEqual([
-      "mixed-cash-left",
-      "mixed-cash",
-      "mixed-cash-right",
+    expect(rowChildTestIds(getByTestId("refill-mixed-12-row"))).toEqual(["refill-mixed-12-full", "refill-mixed-12-empty"]);
+    expect(rowChildTestIds(getByTestId("refill-mixed-48-row"))).toEqual(["refill-mixed-48-full", "refill-mixed-48-empty"]);
+    expect(rowChildTestIds(getByTestId("refill-mixed-cash-row"))).toEqual([
+      "refill-mixed-cash-left",
+      "refill-mixed-cash",
+      "refill-mixed-cash-right",
     ]);
   });
 
