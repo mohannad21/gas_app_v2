@@ -1,5 +1,3 @@
-import { ActivityKind } from "./activityKinds";
-
 export type ArrowDirection = "swap-h" | "swap-v" | "in-h" | "out-h" | "in-v" | "out-v" | "none";
 export type IconSymbol =
   | "money"
@@ -17,6 +15,38 @@ export type IconSpec = { arrow: ArrowDirection; symbol: IconSymbol };
 export type ActivityFilterGroup = "customer" | "company" | "expenses" | "ledger";
 export type ActivityScope = "customer" | "company" | "wallet" | "inventory";
 
+export type PaidBadgeSpec =
+  | { mode: "ratio"; direction: "in" | "out" }
+  | { mode: "money"; direction: "in" | "out" }
+  | { mode: "none" };
+
+export type LedgerBoxSpec =
+  | { mode: "selectedGas"; boxes: readonly ("full" | "empty" | "wallet")[] }
+  | { mode: "selectedGasEmptyOnly" }
+  | { mode: "bothEmpties" }
+  | { mode: "bothFullsAndWallet" }
+  | { mode: "allGas"; wallet: "whenPresent" | "whenChanged" | "never" }
+  | { mode: "walletOnly" }
+  | { mode: "none" };
+
+export const ACTIVITY_SUBFILTER_META = {
+  "12kg_debt": { label: "12kg — debt" },
+  "12kg_credit": { label: "12kg — credit" },
+  "48kg_debt": { label: "48kg — debt" },
+  "48kg_credit": { label: "48kg — credit" },
+  money_debt: { label: "Money — debt" },
+  money_credit: { label: "Money — credit" },
+  "12kg": { label: "12kg" },
+  "48kg": { label: "48kg" },
+  money: { label: "Money" },
+  "12kg_full": { label: "12kg full" },
+  "12kg_empty": { label: "12kg empty" },
+  "48kg_full": { label: "48kg full" },
+  "48kg_empty": { label: "48kg empty" },
+} as const satisfies Record<string, { label: string }>;
+
+export type ActivitySubFilterId = keyof typeof ACTIVITY_SUBFILTER_META;
+
 export type ActivityKindMeta = {
   label: string;
   labelKey: string;
@@ -24,6 +54,17 @@ export type ActivityKindMeta = {
   color: string;
   filterGroup: ActivityFilterGroup;
   scope: ActivityScope;
+  order: number;
+  surfaces: {
+    addEntry: boolean;
+    dailyReport: boolean;
+    customerReview: boolean;
+  };
+  card: {
+    paidBadge: PaidBadgeSpec;
+    ledgerBoxes: LedgerBoxSpec;
+  };
+  subFilters: readonly ActivitySubFilterId[];
 };
 
 const CUSTOMER_COLOR = "#0ea5e9";
@@ -31,7 +72,7 @@ const COMPANY_COLOR = "#f97316";
 const MONEY_COLOR = "#6366f1";
 const LEDGER_COLOR = "#64748b";
 
-export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
+const REGISTRY = {
   replacement: {
     label: "Replace",
     labelKey: "activities.replacement.label",
@@ -39,6 +80,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 1,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "ratio", direction: "in" },
+      ledgerBoxes: { mode: "selectedGas", boxes: ["full", "empty", "wallet"] as const },
+    },
+    subFilters: ["12kg_debt", "12kg_credit", "48kg_debt", "48kg_credit", "money_debt", "money_credit"],
   },
   sell_full: {
     label: "Sell full",
@@ -47,6 +95,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 5,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "ratio", direction: "in" },
+      ledgerBoxes: { mode: "selectedGas", boxes: ["full", "wallet"] as const },
+    },
+    subFilters: ["12kg_debt", "12kg_credit", "48kg_debt", "48kg_credit", "money_debt", "money_credit"],
   },
   buy_empty_from_customer: {
     label: "Buy empties",
@@ -55,6 +110,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 6,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "ratio", direction: "out" },
+      ledgerBoxes: { mode: "selectedGas", boxes: ["empty", "wallet"] as const },
+    },
+    subFilters: ["12kg", "48kg"],
   },
   payment_from_customer: {
     label: "Payment from customer",
@@ -63,6 +125,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 2,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "money", direction: "in" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   payment_to_customer: {
     label: "Payment to customer",
@@ -71,6 +140,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 4,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "money", direction: "out" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   customer_return_empties: {
     label: "Empties from customer",
@@ -79,6 +155,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 3,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: true },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "selectedGasEmptyOnly" },
+    },
+    subFilters: ["12kg", "48kg"],
   },
   adjust_customer_balance: {
     label: "Adjust customer balance",
@@ -87,6 +170,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: CUSTOMER_COLOR,
     filterGroup: "customer",
     scope: "customer",
+    order: 7,
+    surfaces: { addEntry: true, dailyReport: false, customerReview: true },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "none" },
+    },
+    subFilters: ["12kg", "48kg", "money"],
   },
   refill: {
     label: "Refill",
@@ -95,6 +185,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 1,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "ratio", direction: "out" },
+      ledgerBoxes: { mode: "allGas", wallet: "whenPresent" },
+    },
+    subFilters: ["12kg_debt", "12kg_credit", "48kg_debt", "48kg_credit", "money_debt", "money_credit"],
   },
   dist_return_empties: {
     label: "Empties to company",
@@ -103,6 +200,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 3,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "bothEmpties" },
+    },
+    subFilters: ["12kg", "48kg"],
   },
   buy_full_from_company: {
     label: "Buy fulls",
@@ -111,6 +215,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 5,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "ratio", direction: "out" },
+      ledgerBoxes: { mode: "bothFullsAndWallet" },
+    },
+    subFilters: ["money_debt", "money_credit"],
   },
   payment_to_company: {
     label: "Payment to company",
@@ -119,6 +230,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 2,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "money", direction: "out" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   payment_from_company: {
     label: "Payment from company",
@@ -127,6 +245,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 4,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "money", direction: "in" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   adjust_company_balance: {
     label: "Adjust company balance",
@@ -135,6 +260,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: COMPANY_COLOR,
     filterGroup: "company",
     scope: "company",
+    order: 6,
+    surfaces: { addEntry: true, dailyReport: false, customerReview: false },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "none" },
+    },
+    subFilters: ["12kg", "48kg", "money"],
   },
   expense: {
     label: "Expense",
@@ -143,6 +275,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
+    order: 1,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "money", direction: "out" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   bank_to_wallet: {
     label: "Bank to wallet",
@@ -151,6 +290,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
+    order: 2,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "money", direction: "in" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   wallet_to_bank: {
     label: "Wallet to bank",
@@ -159,6 +305,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: MONEY_COLOR,
     filterGroup: "expenses",
     scope: "wallet",
+    order: 3,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "money", direction: "out" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
   adjust_inventory: {
     label: "Adjust inventory",
@@ -167,6 +320,13 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: LEDGER_COLOR,
     filterGroup: "ledger",
     scope: "inventory",
+    order: 2,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "allGas", wallet: "whenChanged" },
+    },
+    subFilters: ["12kg_full", "12kg_empty", "48kg_full", "48kg_empty"],
   },
   adjust_wallet: {
     label: "Adjust wallet",
@@ -175,7 +335,25 @@ export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = {
     color: LEDGER_COLOR,
     filterGroup: "ledger",
     scope: "wallet",
+    order: 1,
+    surfaces: { addEntry: true, dailyReport: true, customerReview: false },
+    card: {
+      paidBadge: { mode: "none" },
+      ledgerBoxes: { mode: "walletOnly" },
+    },
+    subFilters: [],
   },
+} satisfies Record<string, ActivityKindMeta>;
+
+export type ActivityKind = keyof typeof REGISTRY;
+export const ACTIVITY_KIND_META: Record<ActivityKind, ActivityKindMeta> = REGISTRY;
+export const ALL_ACTIVITY_KINDS = Object.keys(REGISTRY) as readonly ActivityKind[];
+
+export const FILTER_GROUP_LABELS: Record<"customer" | "company" | "expenses" | "ledger", string> = {
+  customer: "Customer",
+  company: "Company",
+  expenses: "Money",
+  ledger: "Ledger",
 };
 
 type NormalizeContext = {
@@ -208,7 +386,6 @@ export function normalizeEventType(
     case "wallet_to_bank":
       return raw as ActivityKind;
 
-    // init aliases — not canonical, return null
     case "init":
     case "init_balance":
     case "init_credit":
@@ -230,10 +407,3 @@ export function getReportSubtype(event: {
     money_direction: event.money_direction,
   });
 }
-
-export const FILTER_GROUP_LABELS: Record<"customer" | "company" | "expenses" | "ledger", string> = {
-  customer: "Customer",
-  company: "Company",
-  expenses: "Money",
-  ledger: "Ledger",
-};
