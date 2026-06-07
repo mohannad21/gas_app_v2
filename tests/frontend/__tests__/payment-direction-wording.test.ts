@@ -1,6 +1,5 @@
 import {
   formatBalanceTransitions,
-  formatCurrentBalanceState,
   makeBalanceTransition,
 } from "@/lib/balanceTransitions";
 import { formatEventType } from "@/lib/reports/utils";
@@ -9,18 +8,33 @@ describe("payment direction wording", () => {
   const formatMoney = (value: number) => String(value);
 
   it("formats customer and company balance directions clearly", () => {
-    expect(formatCurrentBalanceState("customer", "money", 150, { formatMoney })).toBe(
-      "Debts on customer 150 $"
-    );
-    expect(formatCurrentBalanceState("customer", "money", -150, { formatMoney })).toBe(
-      "Credit for customer 150 $"
-    );
-    expect(formatCurrentBalanceState("company", "money", 150, { formatMoney })).toBe(
-      "Debts on distributor 150 $"
-    );
-    expect(formatCurrentBalanceState("company", "money", -150, { formatMoney })).toBe(
-      "Credit for distributor 150 $"
-    );
+    expect(
+      formatBalanceTransitions([makeBalanceTransition("customer", "money", 0, 150)], {
+        mode: "current",
+        formatMoney,
+      })
+    ).toEqual(["Debts on customer 150 $"]);
+
+    expect(
+      formatBalanceTransitions([makeBalanceTransition("customer", "money", 0, -150)], {
+        mode: "current",
+        formatMoney,
+      })
+    ).toEqual(["Credit for customer 150 $"]);
+
+    expect(
+      formatBalanceTransitions([makeBalanceTransition("company", "money", 0, 150)], {
+        mode: "current",
+        formatMoney,
+      })
+    ).toEqual(["Debts on distributor 150 $"]);
+
+    expect(
+      formatBalanceTransitions([makeBalanceTransition("company", "money", 0, -150)], {
+        mode: "current",
+        formatMoney,
+      })
+    ).toEqual(["Credit for distributor 150 $"]);
   });
 
   it("shows direction when a balance flips from debt to credit", () => {

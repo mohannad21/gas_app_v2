@@ -1,5 +1,4 @@
-import { ACTIVITY_KIND_META, getReportSubtype, normalizeEventType } from "@/lib/activityKindMeta";
-import type { ActivityKind } from "@/lib/activityKinds";
+import { ACTIVITY_KIND_META, getActivityEventLabel, normalizeEventType, type ActivityKind } from "@/lib/activityKindMeta";
 
 const ALL_KINDS: ActivityKind[] = [
   "replacement",
@@ -44,8 +43,17 @@ describe("ACTIVITY_KIND_META", () => {
       expect(meta.label.length).toBeGreaterThan(0);
     }
   });
-});
 
+  it("keeps Daily Report event labels in the registry", () => {
+    expect(getActivityEventLabel("sell_full")).toBe("Sold full");
+    expect(getActivityEventLabel("buy_empty_from_customer")).toBe("Bought empty");
+    expect(getActivityEventLabel("payment_from_customer")).toBe("Customer paid");
+    expect(getActivityEventLabel("payment_to_company")).toBe("Paid company");
+    expect(getActivityEventLabel("buy_full_from_company")).toBe("Bought full");
+    expect(getActivityEventLabel("adjust_inventory")).toBe("Inventory adjustment");
+    expect(getActivityEventLabel("adjust_wallet")).toBe("Wallet adjustment");
+  });
+});
 describe("normalizeEventType", () => {
   it("passes through canonical kinds unchanged", () => {
     for (const kind of ALL_KINDS) {
@@ -109,21 +117,5 @@ describe("normalizeEventType", () => {
     expect(normalizeEventType("unknown_xyz")).toBeNull();
     expect(normalizeEventType("")).toBeNull();
     expect(normalizeEventType("ORDER")).toBeNull();
-  });
-});
-
-describe("getReportSubtype", () => {
-  it('returns "refill" for a refill event', () => {
-    expect(getReportSubtype({ event_type: "refill" })).toBe("refill");
-  });
-
-  it("returns null for an unknown event_type", () => {
-    expect(getReportSubtype({ event_type: "unknown_xyz" })).toBeNull();
-  });
-
-  it("does not return UI display strings like 'company_refill'", () => {
-    const result = getReportSubtype({ event_type: "refill" });
-    expect(result).not.toBe("company_refill");
-    expect(result).not.toBe("company_return");
   });
 });

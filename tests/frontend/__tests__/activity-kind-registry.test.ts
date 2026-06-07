@@ -60,6 +60,8 @@ describe("activity kind registry", () => {
     const meta = ACTIVITY_KIND_META[kind];
     expect(typeof meta.label).toBe("string");
     expect(meta.label.length).toBeGreaterThan(0);
+    expect(typeof meta.eventLabel).toBe("string");
+    expect(meta.eventLabel.length).toBeGreaterThan(0);
     expect(typeof meta.order).toBe("number");
     expect(typeof meta.filterGroup).toBe("string");
   });

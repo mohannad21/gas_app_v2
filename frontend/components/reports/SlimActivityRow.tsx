@@ -7,11 +7,9 @@ import { FontFamilies, FontSizes } from "@/constants/typography";
 import { formatTransitionPills, type TransitionPill } from "@/lib/balanceTransitions";
 import { formatDateTimeYMDHM } from "@/lib/date";
 import { getCurrencySymbol } from "@/lib/money";
-import { EVENT_LABELS } from "@/lib/eventLabels";
 import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
-import type { ActivityKind } from "@/lib/activityKinds";
-import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
+import { ACTIVITY_KIND_META, getActivityEventLabel, normalizeEventType, type ActivityKind } from "@/lib/activityKindMeta";
 import {
   formatCylinderUnitLabel,
   formatReportTimestampLabel,
@@ -251,8 +249,8 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     if (note) return note;
     return null;
   }
-  if (_bhKind === "bank_to_wallet") return EVENT_LABELS.BANK_TO_WALLET;
-  if (_bhKind === "wallet_to_bank") return EVENT_LABELS.WALLET_TO_BANK;
+  if (_bhKind === "bank_to_wallet") return getActivityEventLabel("bank_to_wallet");
+  if (_bhKind === "wallet_to_bank") return getActivityEventLabel("wallet_to_bank");
   return null;
 };
 
