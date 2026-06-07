@@ -1441,11 +1441,11 @@ const formatDateTime = (value?: string) => {
       {isCustomerActivities ? (
         <>
           {ordersQuery.isLoading || collectionsQuery.isLoading || customerAdjustmentsQuery.isLoading ? (
-            <Text style={styles.meta}>Loading...</Text>
+            <Text style={styles.meta}>{SCREEN_STATE_WORDING.loadingActivities}</Text>
           ) : null}
           {ordersQuery.error || collectionsQuery.error || customerAdjustmentsQuery.error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load customer activities.</Text>
+              <Text style={styles.error}>{SCREEN_STATE_WORDING.failedCustomerLoad}</Text>
               <Pressable style={styles.retryBtn} onPress={handleRetryCustomerActivities}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
@@ -1515,10 +1515,10 @@ const formatDateTime = (value?: string) => {
         </>
       ) : isExpenses ? (
         <>
-          {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>Loading...</Text> : null}
+          {expensesQuery.isLoading || bankDepositsQuery.isLoading ? <Text style={styles.meta}>{SCREEN_STATE_WORDING.loadingActivities}</Text> : null}
           {expensesQuery.error || bankDepositsQuery.error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.error}>Failed to load money activities.</Text>
+              <Text style={styles.error}>{SCREEN_STATE_WORDING.failedMoneyLoad}</Text>
               <Pressable style={styles.retryBtn} onPress={handleRetryExpenses}>
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
@@ -1565,7 +1565,7 @@ const formatDateTime = (value?: string) => {
       ) : isCompanyActivities ? (
         <>
           {filteredCompanyActivityItems.length === 0 ? (
-            <Text style={styles.meta}>No company activities match these filters.</Text>
+            <Text style={styles.meta}>{SCREEN_STATE_WORDING.noCompanyActivitiesFilter}</Text>
           ) : (
             <FlatList
               key="company-list"
@@ -1619,7 +1619,7 @@ const formatDateTime = (value?: string) => {
       ) : (
         <>
           {filteredLedgerAdjustmentItems.length === 0 ? (
-            <Text style={styles.meta}>No ledger adjustments match these filters.</Text>
+            <Text style={styles.meta}>{SCREEN_STATE_WORDING.noLedgerActivitiesFilter}</Text>
           ) : (
               <FlatList
                 key="ledger-list"

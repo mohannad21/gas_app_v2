@@ -181,6 +181,11 @@ export const SCREEN_STATE_WORDING = {
   noMoneyActivitiesFilter: "No money activities match these filters.",
   failedCustomerActivities: "Could not load customer activities.",
   noActivitiesMatchFilter: "No activities match this filter yet.",
+  failedCustomerLoad: "Failed to load customer activities.",
+  failedMoneyLoad: "Failed to load money activities.",
+  noCompanyActivitiesFilter: "No company activities match these filters.",
+  noLedgerActivitiesFilter: "No ledger adjustments match these filters.",
+  customerNotFound: "Customer not found.",
 } as const;
 
 export const ADD_ENTRY_CTA_WORDING = {

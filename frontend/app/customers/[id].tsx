@@ -107,11 +107,6 @@ const formatDeliveredAt = (value?: string) => {
   return formatDateTimeMedium(value, undefined, value);
 };
 
-const formatCylinder = (value: number) => {
-  const prefix = value < 0 ? "-" : "";
-  return `${prefix}${Math.abs(value)}`;
-};
-
 const formatProfileField = (value?: string | null, fallback = "Not provided") => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : fallback;
@@ -439,7 +434,7 @@ export default function CustomerDetailsScreen() {
   if (customersQuery.isLoading) {
     return (
       <View style={styles.center}>
-        <Text>Loading...</Text>
+        <Text>{SCREEN_STATE_WORDING.loading}</Text>
       </View>
     );
   }
@@ -447,7 +442,7 @@ export default function CustomerDetailsScreen() {
   if (!customer) {
     return (
       <View style={styles.center}>
-        <Text>Customer not found.</Text>
+        <Text>{SCREEN_STATE_WORDING.customerNotFound}</Text>
       </View>
     );
   }
@@ -961,10 +956,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  balanceNote: {
-    fontSize: 12,
-    color: "#64748b",
-  },
   boxRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -989,16 +980,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: "#e8eef1",
     borderRadius: 10,
-  },
-  primaryBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#0a7ea4",
-    borderRadius: 10,
-  },
-  primaryBtnText: {
-    color: "#fff",
-    fontWeight: "700",
   },
   linkText: {
     color: "#0a7ea4",
@@ -1029,14 +1010,6 @@ const styles = StyleSheet.create({
   },
   metaLine: {
     color: "#444",
-  },
-  orderCard: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
   },
   systemActions: {
     flexDirection: "row",
