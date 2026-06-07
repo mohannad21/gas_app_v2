@@ -288,7 +288,12 @@ export default function CashExpensesView({
       <View style={styles.expensePageHeader}>
         <Text style={styles.expenseTitle}>{title}</Text>
       </View>
-      <View style={styles.modeRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        contentContainerStyle={styles.modeRow}
+      >
         {availableModes.map((key) => (
           <Pressable
             key={key}
@@ -300,7 +305,7 @@ export default function CashExpensesView({
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
       <ScrollView contentContainerStyle={styles.expenseContent} keyboardShouldPersistTaps="handled">
         <View style={styles.formCard}>
           <Text style={styles.label}>Date & time</Text>

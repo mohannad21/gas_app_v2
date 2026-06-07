@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a",
   },
-  modeRow: { flexDirection: "row", gap: 8, marginTop: 6, marginBottom: 2, paddingHorizontal: 14 },
+  modeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 2, paddingHorizontal: 14 },
   modeButton: {
     paddingVertical: 8,
     paddingHorizontal: 14,

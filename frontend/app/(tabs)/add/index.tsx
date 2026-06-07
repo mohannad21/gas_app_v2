@@ -1317,7 +1317,12 @@ const formatDateTime = (value?: string) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.segment}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.segmentScroll}
+        contentContainerStyle={styles.segment}
+      >
         <Pressable
           onPress={() => setMode("customer_activities")}
           style={[styles.segmentBtn, isCustomerActivities && styles.segmentActive]}
@@ -1345,7 +1350,7 @@ const formatDateTime = (value?: string) => {
             {FILTER_GROUP_LABELS.ledger}
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
 
       <View style={styles.primaryActionRow}>
         <Pressable onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, styles.primaryActionButton, pressed && styles.pressed]}>
@@ -2372,14 +2377,19 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#e8eef1",
     borderRadius: 12,
     padding: 4,
   },
+  segmentScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   segmentBtn: {
-    flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
+    minWidth: 88,
     minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
