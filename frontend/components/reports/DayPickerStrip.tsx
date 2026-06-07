@@ -4,6 +4,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { getCurrencySymbol } from "@/lib/money";
+import { REPORT_WORDING } from "@/lib/wording";
 import { DailyReportCard } from "@/types/domain";
 
 type DayPickerStripProps = {
@@ -81,7 +82,7 @@ const DayCard = memo(function DayCard({
             <Text style={styles.metricValue}>{item.sold_48kg ?? 0}</Text>
           </View>
           <View style={styles.metricRow}>
-            <Text style={styles.metricLabel}>Net</Text>
+            <Text style={styles.metricLabel}>{REPORT_WORDING.metrics.net}</Text>
             <Text style={[styles.metricValue, { color: netColor }]} numberOfLines={1}>
               {netStr}
             </Text>

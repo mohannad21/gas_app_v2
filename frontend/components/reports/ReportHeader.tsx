@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { Spacing } from "@/constants/spacing";
+import { REPORT_WORDING } from "@/lib/wording";
 
 type ReportHeaderProps = {
   inventory: {
@@ -33,10 +34,10 @@ export default function ReportHeader({
       </View>
       <View style={styles.adjustButtonRow}>
         <TouchableOpacity onPress={onAdjustInventory} activeOpacity={0.85} style={styles.adjustButton}>
-          <Text style={styles.adjustButtonText}>Adjust Inventory</Text>
+          <Text style={styles.adjustButtonText}>{REPORT_WORDING.buttons.adjustInventory}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onAdjustCash} activeOpacity={0.85} style={styles.adjustButton}>
-          <Text style={styles.adjustButtonText}>Adjust Wallet</Text>
+          <Text style={styles.adjustButtonText}>{REPORT_WORDING.buttons.adjustWallet}</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -1,5 +1,11 @@
 import type { BalanceTransition } from "@/types/domain";
-import { getBalanceDirectionLabel, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
+import {
+  BALANCE_SUMMARY_WORDING,
+  formatCylinderUnitLabel,
+  getBalanceDirectionLabel,
+  LEGACY_BALANCE_NOTE_WORDING,
+  PAYMENT_DIRECTION_WORDING,
+} from "@/lib/wording";
 import { getCurrencySymbol, formatDisplayMoney } from "@/lib/money";
 
 type BalanceScope = BalanceTransition["scope"];
@@ -39,23 +45,15 @@ function formatMoneyValue(value: number, formatMoney: FormatMoney) {
 function formatCylinderValue(scope: BalanceScope, component: BalanceComponent, value: number) {
   const gasLabel = component === "cyl_12" ? "12kg" : "48kg";
   const qty = Math.abs(Number(value || 0));
-  const unit =
+  const state =
     scope === "customer"
       ? value > 0
-        ? qty === 1
-          ? "empty cylinder"
-          : "empty cylinders"
-        : qty === 1
-          ? "full cylinder"
-          : "full cylinders"
+        ? "empty"
+        : "full"
       : value > 0
-        ? qty === 1
-          ? "full cylinder"
-          : "full cylinders"
-        : qty === 1
-          ? "empty cylinder"
-          : "empty cylinders";
-  return `${qty}x${gasLabel} ${unit}`;
+        ? "full"
+        : "empty";
+  return `${qty}x${gasLabel} ${formatCylinderUnitLabel(qty, state)}`;
 }
 
 function formatComponentValue(
@@ -75,9 +73,9 @@ function buildDirectionLabel(scope: BalanceScope, component: BalanceComponent, a
 }
 
 function getComponentLabel(component: BalanceComponent) {
-  if (component === "money") return "Money balance";
-  if (component === "cyl_12") return "12kg balance";
-  return "48kg balance";
+  if (component === "money") return BALANCE_SUMMARY_WORDING.componentLabels.money;
+  if (component === "cyl_12") return BALANCE_SUMMARY_WORDING.componentLabels.cyl12;
+  return BALANCE_SUMMARY_WORDING.componentLabels.cyl48;
 }
 
 function prefixWithDisplayName(line: string, transition: TransitionInput, includeDisplayName?: boolean) {
@@ -257,7 +255,11 @@ export function formatBalanceTransitions(
         Math.sign(before) !== Math.sign(after)
           ? formatCurrentBalanceState(transition.scope, transition.component, before, { formatMoney })
           : formatComponentValue(transition.scope, transition.component, before, formatMoney);
-      return prefixWithDisplayName(`${current} (was ${previous})`, transition, options.includeDisplayName);
+      return prefixWithDisplayName(
+        LEGACY_BALANCE_NOTE_WORDING.withPrevious(current, previous),
+        transition,
+        options.includeDisplayName
+      );
     })
     .filter((line): line is string => Boolean(line));
 }

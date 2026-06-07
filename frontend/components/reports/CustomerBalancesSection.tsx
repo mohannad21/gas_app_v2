@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import type { BalanceSummary } from "@/hooks/useBalancesSummary";
 import { getCurrencySymbol } from "@/lib/money";
+import { BALANCE_SUMMARY_WORDING, REPORT_WORDING } from "@/lib/wording";
 
 type CustomerBalancesSectionProps = {
   balanceSummary: BalanceSummary;
@@ -28,43 +29,51 @@ function buildCustomerBoxes(
 ): CustomerSummaryBox[] {
   return [
     {
-      label: "Money debt",
+      label: BALANCE_SUMMARY_WORDING.labels.moneyDebt,
+      isMoney: true,
       count: balanceSummary.money.receivable.count,
       value: formatMoney(balanceSummary.money.receivable.total),
       rawValue: balanceSummary.money.receivable.total,
     },
     {
-      label: "12kg debt",
+      label: BALANCE_SUMMARY_WORDING.labels.cyl12Debt,
+      isMoney: false,
       count: balanceSummary.cyl12.receivable.count,
       value: String(balanceSummary.cyl12.receivable.total),
       rawValue: balanceSummary.cyl12.receivable.total,
     },
     {
-      label: "48kg debt",
+      label: BALANCE_SUMMARY_WORDING.labels.cyl48Debt,
+      isMoney: false,
       count: balanceSummary.cyl48.receivable.count,
       value: String(balanceSummary.cyl48.receivable.total),
       rawValue: balanceSummary.cyl48.receivable.total,
     },
     {
-      label: "Money credit",
+      label: BALANCE_SUMMARY_WORDING.labels.moneyCredit,
+      isMoney: true,
       count: balanceSummary.money.payable.count,
       value: formatMoney(balanceSummary.money.payable.total),
       rawValue: balanceSummary.money.payable.total,
     },
     {
-      label: "12kg credit",
+      label: BALANCE_SUMMARY_WORDING.labels.cyl12Credit,
+      isMoney: false,
       count: balanceSummary.cyl12.payable.count,
       value: String(balanceSummary.cyl12.payable.total),
       rawValue: balanceSummary.cyl12.payable.total,
     },
     {
-      label: "48kg credit",
+      label: BALANCE_SUMMARY_WORDING.labels.cyl48Credit,
+      isMoney: false,
       count: balanceSummary.cyl48.payable.count,
       value: String(balanceSummary.cyl48.payable.total),
       rawValue: balanceSummary.cyl48.payable.total,
     },
   ].map((entry) => ({
-    value: entry.label.startsWith("Money") ? `${entry.value} ${getCurrencySymbol()}` : `${entry.value} cyl`,
+    value: entry.isMoney
+      ? `${entry.value} ${getCurrencySymbol()}`
+      : `${entry.value} ${BALANCE_SUMMARY_WORDING.units.cylinderShort}`,
     countLabel: formatCustomerCount(entry.count),
     label: entry.label,
     rawValue: entry.rawValue,
@@ -93,7 +102,7 @@ export default function CustomerBalancesSection({
   return (
     <View style={[styles.section, containerStyle]}>
       <Pressable style={styles.header} onPress={() => setExpanded((value) => !value)} accessibilityRole="button">
-        <Text style={styles.headerTitle}>Customer Balances</Text>
+        <Text style={styles.headerTitle}>{REPORT_WORDING.sections.customerBalances}</Text>
         <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={18} color="#0f172a" />
       </Pressable>
       {expanded ? (

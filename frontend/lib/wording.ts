@@ -60,3 +60,99 @@ export const CUSTOMER_WORDING = {
   moneyCredit: (n: string) => PAYMENT_DIRECTION_WORDING.customer.youOwe(n),
   moneySettled: PAYMENT_DIRECTION_WORDING.settled,
 } as const;
+
+export const REPORT_WORDING = {
+  actions: {
+    delete: "Delete",
+    deleted: "Deleted",
+  },
+  timestamps: {
+    createdAt: "Created at",
+    effectiveAt: "Effective at",
+  },
+  hero: {
+    system: "System",
+    installed: "Installed",
+    received: "Received",
+    bought: "Bought",
+    returned: "Returned",
+    returnedEmpties: "Returned empties",
+  },
+  expanded: {
+    noChange: "No change",
+    noTopLevelStateChange: "No top-level state change for this activity.",
+  },
+  ledgerBoxes: {
+    full12: "12kg Full",
+    empty12: "12kg Empty",
+    full48: "48kg Full",
+    empty48: "48kg Empty",
+    wallet: "Wallet",
+  },
+  sections: {
+    customerBalances: "Customer Balances",
+    companyBalances: "Company Balances",
+  },
+  buttons: {
+    adjustBalances: "Adjust balances",
+    adjustInventory: "Adjust Inventory",
+    adjustWallet: "Adjust Wallet",
+  },
+  states: {
+    unavailable: "Unavailable",
+  },
+  metrics: {
+    net: "Net",
+  },
+} as const;
+
+export const BALANCE_SUMMARY_WORDING = {
+  labels: {
+    moneyDebt: "Money debt",
+    cyl12Debt: "12kg debt",
+    cyl48Debt: "48kg debt",
+    moneyCredit: "Money credit",
+    cyl12Credit: "12kg credit",
+    cyl48Credit: "48kg credit",
+  },
+  componentLabels: {
+    money: "Money balance",
+    cyl12: "12kg balance",
+    cyl48: "48kg balance",
+  },
+  units: {
+    cylinderShort: "cyl",
+    emptyCylinder: "empty cylinder",
+    emptyCylinders: "empty cylinders",
+    fullCylinder: "full cylinder",
+    fullCylinders: "full cylinders",
+  },
+} as const;
+
+export const LEGACY_BALANCE_NOTE_WORDING = {
+  customerStillOwes: (value: string) => `Customer still owes ${value}`,
+  paidEarlierToCustomer: (value: string) => `Paid earlier ${value} to customer`,
+  paidEarlier: (value: string) => `Paid earlier ${value}`,
+  extra: (value: string) => `Extra ${value}`,
+  paidEarlierToCompany: (value: string) => `Paid earlier ${value} to company`,
+  returnedEarlier: (value: string) => `Returned earlier ${value}`,
+  withPrevious: (current: string, previous: string) => `${current} (was ${previous})`,
+} as const;
+
+export function getLedgerBoxLabel(gas: "12kg" | "48kg", state: "full" | "empty"): string {
+  if (gas === "12kg") {
+    return state === "full" ? REPORT_WORDING.ledgerBoxes.full12 : REPORT_WORDING.ledgerBoxes.empty12;
+  }
+  return state === "full" ? REPORT_WORDING.ledgerBoxes.full48 : REPORT_WORDING.ledgerBoxes.empty48;
+}
+
+export function formatCylinderUnitLabel(qty: number, state: "full" | "empty"): string {
+  if (state === "full") {
+    return qty === 1 ? BALANCE_SUMMARY_WORDING.units.fullCylinder : BALANCE_SUMMARY_WORDING.units.fullCylinders;
+  }
+  return qty === 1 ? BALANCE_SUMMARY_WORDING.units.emptyCylinder : BALANCE_SUMMARY_WORDING.units.emptyCylinders;
+}
+
+export function formatReportTimestampLabel(kind: keyof typeof REPORT_WORDING.timestamps, value: string): string {
+  return `${REPORT_WORDING.timestamps[kind]}: ${value}`;
+}

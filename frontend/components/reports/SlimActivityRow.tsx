@@ -12,6 +12,13 @@ import { getEventColor } from "@/lib/reports/eventColors";
 import { formatEventType } from "@/lib/reports/utils";
 import type { ActivityKind } from "@/lib/activityKinds";
 import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
+import {
+  formatCylinderUnitLabel,
+  formatReportTimestampLabel,
+  LEGACY_BALANCE_NOTE_WORDING,
+  PAYMENT_DIRECTION_WORDING,
+  REPORT_WORDING,
+} from "@/lib/wording";
 import { t } from "@/lib/i18n/translations";
 import { DailyReportEvent } from "@/types/domain";
 import ActivityIcon from "@/components/reports/ActivityIcon";
@@ -62,49 +69,57 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
   if (note.kind === "money") {
     const amountText = formatMoneyValue(after, formatMoney);
     if (note.direction === "customer_pays_you") {
-      return `Customer still owes ${amountText}`;
+      return LEGACY_BALANCE_NOTE_WORDING.customerStillOwes(amountText);
     }
     if (note.direction === "you_pay_customer") {
+      const currentText = PAYMENT_DIRECTION_WORDING.customer.youOwe(amountText);
       return withBefore
-        ? `Credit for customer ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `Credit for customer ${amountText}`;
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatMoneyValue(before, formatMoney))
+        : currentText;
     }
     if (note.direction === "you_paid_customer_earlier") {
-      return `Paid earlier ${amountText} to customer`;
+      return LEGACY_BALANCE_NOTE_WORDING.paidEarlierToCustomer(amountText);
     }
     if (note.direction === "customer_paid_earlier") {
-      return `Paid earlier ${amountText}`;
+      return LEGACY_BALANCE_NOTE_WORDING.paidEarlier(amountText);
     }
     if (note.direction === "customer_extra_paid") {
-      return `Extra ${amountText}`;
+      return LEGACY_BALANCE_NOTE_WORDING.extra(amountText);
     }
     if (note.direction === "you_pay_company") {
+      const currentText = PAYMENT_DIRECTION_WORDING.company.youOwe(amountText);
       return withBefore
-        ? `Debts on distributor ${amountText} (was ${formatMoneyValue(before, formatMoney)})`
-        : `Debts on distributor ${amountText}`;
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatMoneyValue(before, formatMoney))
+        : currentText;
     }
     if (note.direction === "you_paid_earlier") {
-      return `Paid earlier ${amountText} to company`;
+      return LEGACY_BALANCE_NOTE_WORDING.paidEarlierToCompany(amountText);
     }
     if (note.direction === "company_pays_you") {
-      return `Credit for distributor ${amountText}`;
+      return PAYMENT_DIRECTION_WORDING.company.owesYou(amountText);
     }
   }
 
   const formatCyl = (qty: number, gas: string, unit: "empty" | "full") =>
-    `${qty}x${gas} ${qty === 1 ? `${unit} cylinder` : `${unit} cylinders`}`;
+    `${qty}x${gas} ${formatCylinderUnitLabel(qty, unit)}`;
 
   if (note.kind === "cyl_12" || note.kind === "cyl_48") {
     const gas = note.kind === "cyl_12" ? "12kg" : "48kg";
     const qtyText = formatCyl(after, gas, "empty");
     if (note.direction === "customer_returns_you") {
-      return withBefore ? `Debts on customer ${qtyText} (was ${formatCyl(before, gas, "empty")})` : `Debts on customer ${qtyText}`;
+      const currentText = PAYMENT_DIRECTION_WORDING.customer.owesYou(qtyText);
+      return withBefore
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatCyl(before, gas, "empty"))
+        : currentText;
     }
     if (note.direction === "you_return_company") {
-      return withBefore ? `Debts on distributor ${qtyText} (was ${formatCyl(before, gas, "empty")})` : `Debts on distributor ${qtyText}`;
+      const currentText = PAYMENT_DIRECTION_WORDING.company.youOwe(qtyText);
+      return withBefore
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatCyl(before, gas, "empty"))
+        : currentText;
     }
     if (note.direction === "you_returned_earlier") {
-      return `Returned earlier ${qtyText}`;
+      return LEGACY_BALANCE_NOTE_WORDING.returnedEarlier(qtyText);
     }
   }
 
@@ -112,10 +127,16 @@ const buildLegacyNoteText = (note: any, formatMoney: (v: number) => string) => {
     const gas = note.kind === "cyl_full_12" ? "12kg" : "48kg";
     const qtyText = formatCyl(after, gas, "full");
     if (note.direction === "you_deliver_customer") {
-      return withBefore ? `Credit for customer ${qtyText} (was ${formatCyl(before, gas, "full")})` : `Credit for customer ${qtyText}`;
+      const currentText = PAYMENT_DIRECTION_WORDING.customer.youOwe(qtyText);
+      return withBefore
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatCyl(before, gas, "full"))
+        : currentText;
     }
     if (note.direction === "company_delivers_you") {
-      return withBefore ? `Credit for distributor ${qtyText} (was ${formatCyl(before, gas, "full")})` : `Credit for distributor ${qtyText}`;
+      const currentText = PAYMENT_DIRECTION_WORDING.company.owesYou(qtyText);
+      return withBefore
+        ? LEGACY_BALANCE_NOTE_WORDING.withPrevious(currentText, formatCyl(before, gas, "full"))
+        : currentText;
     }
   }
 
@@ -158,13 +179,13 @@ const formatOrderMetric = (event: DailyReportEvent) => {
   const _fomKind = normalizeEventType(event.event_type, { order_mode: event.order_mode ?? undefined });
   const isSystemAttached = _fomKind === "replacement" || _fomKind === "sell_full";
   const resolvedSystemName = event.system_name ?? (event as any).system?.display_name ?? null;
-  if (resolvedSystemName && isSystemAttached) lines.push(`System: ${resolvedSystemName}`);
+  if (resolvedSystemName && isSystemAttached) lines.push(`${REPORT_WORDING.hero.system}: ${resolvedSystemName}`);
   const gas = event.gas_type ? `${event.gas_type}` : "";
   const installed = Number(event.order_installed ?? 0);
   const received = Number(event.order_received ?? 0);
-  if (installed > 0) lines.push(`Installed: ${installed}x ${gas}`);
+  if (installed > 0) lines.push(`${REPORT_WORDING.hero.installed}: ${installed}x ${gas}`);
   if (_fomKind !== "sell_full") {
-    lines.push(`Received: ${received}x ${gas}`);
+    lines.push(`${REPORT_WORDING.hero.received}: ${received}x ${gas}`);
   }
   return lines.length > 0 ? lines.join("\n") : null;
 };
@@ -181,34 +202,40 @@ const buildHeroAction = (event: DailyReportEvent, formatMoney: (v: number) => st
     const bought = formatGasSummary(event.buy12, event.buy48);
     const returned = formatGasSummary(event.return12, event.return48);
     const lines: string[] = [];
-    if (bought) lines.push(`Bought: ${bought}`);
-    lines.push(`Returned: ${returned ?? `${Number(event.return12 ?? 0)}x 12kg | ${Number(event.return48 ?? 0)}x 48kg`}`);
+    if (bought) lines.push(`${REPORT_WORDING.hero.bought}: ${bought}`);
+    lines.push(`${REPORT_WORDING.hero.returned}: ${returned ?? `${Number(event.return12 ?? 0)}x 12kg | ${Number(event.return48 ?? 0)}x 48kg`}`);
     return lines.length > 0 ? lines.join("\n") : null;
   }
   if (_isCompanyBuyFull(event.event_type)) {
     const parts: string[] = [];
     if (event.buy12 && event.buy12 !== 0) parts.push(`${event.buy12}x 12kg`);
     if (event.buy48 && event.buy48 !== 0) parts.push(`${event.buy48}x 48kg`);
-    return parts.length > 0 ? `Bought: ${parts.join(" | ")}` : null;
+    return parts.length > 0 ? `${REPORT_WORDING.hero.bought}: ${parts.join(" | ")}` : null;
   }
   if (event.hero_primary) return event.hero_primary;
   if (event.hero_text) return event.hero_text;
   if (_isCollectionMoney(event.event_type)) {
     const amount = Number(event.money_received ?? event.money?.amount ?? 0);
-    return amount ? `Payment from customer ${formatMoneyValue(amount, formatMoney)}` : "Payment from customer";
+    return amount
+      ? `${PAYMENT_DIRECTION_WORDING.customer.paymentFrom} ${formatMoneyValue(amount, formatMoney)}`
+      : PAYMENT_DIRECTION_WORDING.customer.paymentFrom;
   }
   if (_bhKind === "payment_to_customer") {
     const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
-    return amount ? `Payment to customer ${formatMoneyValue(amount, formatMoney)}` : "Payment to customer";
+    return amount
+      ? `${PAYMENT_DIRECTION_WORDING.customer.paymentTo} ${formatMoneyValue(amount, formatMoney)}`
+      : PAYMENT_DIRECTION_WORDING.customer.paymentTo;
   }
   if (_isCompanyPayment(event.event_type)) {
     const amount = Number(event.money_amount ?? event.money?.amount ?? 0);
-    const direction = event.money_direction === "in" ? "Payment from company" : "Payment to company";
+    const direction = event.money_direction === "in"
+      ? PAYMENT_DIRECTION_WORDING.company.paymentFrom
+      : PAYMENT_DIRECTION_WORDING.company.paymentTo;
     return amount ? `${direction} ${formatMoneyValue(amount, formatMoney)}` : direction;
   }
   if (_isCollectionEmpty(event.event_type)) {
     const parts = formatGasSummary(event.return12, event.return48);
-    return parts ? `Returned ${parts} empties` : "Returned empties";
+    return parts ? `${REPORT_WORDING.hero.returned} ${parts} empties` : REPORT_WORDING.hero.returnedEmpties;
   }
   if (_bhKind === "expense") {
     return null;
@@ -399,14 +426,18 @@ export default function SlimActivityRow({
         event.context_line
           ? event.context_line
               .replace(/^Order\b/, label)
-              .split("System:")[0]
+              .split(`${REPORT_WORDING.hero.system}:`)[0]
               .replace(/[·•\s]+$/, "")
           : label
       )
     : label;
-  const createdAtLine = showCreatedAt && event.created_at ? `Created at: ${formatDateTimeYMDHM(event.created_at)}` : "";
+  const createdAtLine = showCreatedAt && event.created_at
+    ? formatReportTimestampLabel("createdAt", formatDateTimeYMDHM(event.created_at))
+    : "";
   const effectiveAtLine =
-    showEffectiveAtBottom && event.effective_at ? `Effective at: ${formatDateTimeYMDHM(event.effective_at)}` : "";
+    showEffectiveAtBottom && event.effective_at
+      ? formatReportTimestampLabel("effectiveAt", formatDateTimeYMDHM(event.effective_at))
+      : "";
   const hasDateMismatch =
     Boolean(createdAtLine && effectiveAtLine) && toDateOnly(event.created_at) !== toDateOnly(event.effective_at);
 
@@ -524,11 +555,11 @@ export default function SlimActivityRow({
         {heroLines.length > 0 ? (
           <View>
             {heroLines.map((line, index) => {
-              const isReplacementSystemLine = _isOrderKind(event.event_type) && line.startsWith("System:");
+              const isReplacementSystemLine = _isOrderKind(event.event_type) && line.startsWith(`${REPORT_WORDING.hero.system}:`);
               const isReplacementReceivedLine =
                 activityKind === "replacement" &&
-                line.startsWith("Received:");
-              const isRefillReturnedLine = activityKind === "refill" && !!(event.buy12 || event.buy48) && line.startsWith("Returned:");
+                line.startsWith(`${REPORT_WORDING.hero.received}:`);
+              const isRefillReturnedLine = activityKind === "refill" && !!(event.buy12 || event.buy48) && line.startsWith(`${REPORT_WORDING.hero.returned}:`);
               return (
                 <Text
                   key={`hero-${index}`}
@@ -601,7 +632,7 @@ export default function SlimActivityRow({
           <View style={styles.actionsRow}>
             <View style={styles.timestampsBlock}>
               {isDeleted ? (
-                <Text style={styles.deletedLabel}>Deleted</Text>
+                <Text style={styles.deletedLabel}>{REPORT_WORDING.actions.deleted}</Text>
               ) : null}
               {createdAtLine ? (
                 <Text style={[styles.contextText, hasDateMismatch && styles.contextTextAlert]}>{createdAtLine}</Text>
@@ -616,10 +647,10 @@ export default function SlimActivityRow({
                   <Pressable
                     onPress={isDeleted ? undefined : onDelete}
                     style={[styles.actionBtn, isDeleted && styles.actionBtnDisabled]}
-                    accessibilityLabel="Delete"
+                    accessibilityLabel={REPORT_WORDING.actions.delete}
                   >
                     <Ionicons name="trash-outline" size={16} color={isDeleted ? "#94a3b8" : "#b91c1c"} />
-                    <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>Delete</Text>
+                    <Text style={[styles.actionBtnText, styles.actionBtnTextDanger, isDeleted && styles.actionBtnTextDisabled]}>{REPORT_WORDING.actions.delete}</Text>
                   </Pressable>
                 ) : null}
               </View>

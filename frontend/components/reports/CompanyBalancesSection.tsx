@@ -6,6 +6,12 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import { FontFamilies, FontSizes } from "@/constants/typography";
 import { getCurrencySymbol } from "@/lib/money";
 import type { CompanySummary } from "@/hooks/useBalancesSummary";
+import {
+  BALANCE_SUMMARY_WORDING,
+  getBalanceDirectionLabel,
+  PAYMENT_DIRECTION_WORDING,
+  REPORT_WORDING,
+} from "@/lib/wording";
 
 type CompanyBalancesSectionProps = {
   companySummary: CompanySummary;
@@ -23,12 +29,9 @@ type CompanySummaryBox = {
   rawValue: number;
 };
 
-function directionForCompanyMoney(value: number) {
-  return value > 0 ? "Debts on distributor" : value < 0 ? "Credit for distributor" : "Settled";
-}
-
-function directionForCompanyCylinders(value: number) {
-  return value > 0 ? "Credit for distributor" : value < 0 ? "Debts on distributor" : "Settled";
+function getCompanyBoxDirection(component: "money" | "cyl_12" | "cyl_48", value: number): string {
+  if (value === 0) return PAYMENT_DIRECTION_WORDING.settled;
+  return getBalanceDirectionLabel("company", value, component);
 }
 
 function buildCompanyBoxes(
@@ -42,21 +45,21 @@ function buildCompanyBoxes(
 
   return [
     {
-      label: "Money balance",
+      label: BALANCE_SUMMARY_WORDING.componentLabels.money,
       value: `${formatMoney(Math.abs(moneyNet))} ${getCurrencySymbol()}`,
-      direction: directionForCompanyMoney(moneyNet),
+      direction: getCompanyBoxDirection("money", moneyNet),
       rawValue: moneyNet,
     },
     {
-      label: "12kg balance",
-      value: `${formatCount(Math.abs(cyl12Net))} cyl`,
-      direction: directionForCompanyCylinders(cyl12Net),
+      label: BALANCE_SUMMARY_WORDING.componentLabels.cyl12,
+      value: `${formatCount(Math.abs(cyl12Net))} ${BALANCE_SUMMARY_WORDING.units.cylinderShort}`,
+      direction: getCompanyBoxDirection("cyl_12", cyl12Net),
       rawValue: cyl12Net,
     },
     {
-      label: "48kg balance",
-      value: `${formatCount(Math.abs(cyl48Net))} cyl`,
-      direction: directionForCompanyCylinders(cyl48Net),
+      label: BALANCE_SUMMARY_WORDING.componentLabels.cyl48,
+      value: `${formatCount(Math.abs(cyl48Net))} ${BALANCE_SUMMARY_WORDING.units.cylinderShort}`,
+      direction: getCompanyBoxDirection("cyl_48", cyl48Net),
       rawValue: cyl48Net,
     },
   ];
@@ -64,7 +67,8 @@ function buildCompanyBoxes(
 
 function getCompanyValueColor(box: CompanySummaryBox) {
   if (box.rawValue === 0) return "#0f172a";
-  return box.direction === "Debts on distributor" ? "#b42318" : "#16a34a";
+  const companyDebtLabel = getBalanceDirectionLabel("company", 1, "money");
+  return box.direction === companyDebtLabel ? "#b42318" : "#16a34a";
 }
 
 export default function CompanyBalancesSection({
@@ -84,7 +88,7 @@ export default function CompanyBalancesSection({
   return (
     <View style={[styles.section, containerStyle]}>
       <Pressable style={styles.header} onPress={() => setExpanded((value) => !value)} accessibilityRole="button">
-        <Text style={styles.headerTitle}>Company Balances</Text>
+        <Text style={styles.headerTitle}>{REPORT_WORDING.sections.companyBalances}</Text>
         <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={18} color="#0f172a" />
       </Pressable>
       {expanded ? (
@@ -94,8 +98,8 @@ export default function CompanyBalancesSection({
               ? companyBoxes
               : companyBoxes.map((box) => ({
                   ...box,
-                  value: "Unavailable",
-                  direction: "Unavailable",
+                  value: REPORT_WORDING.states.unavailable,
+                  direction: REPORT_WORDING.states.unavailable,
                   rawValue: 0,
                 }))
             ).map((box) => (
@@ -111,7 +115,7 @@ export default function CompanyBalancesSection({
             disabled={!companyBalancesReady}
             onPress={() => router.push("/inventory/company-balance-adjust")}
           >
-            <Text style={styles.adjustButtonText}>Adjust balances</Text>
+            <Text style={styles.adjustButtonText}>{REPORT_WORDING.buttons.adjustBalances}</Text>
           </Pressable>
         </View>
       ) : null}

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { gasColor } from "@/constants/gas";
 import { FontFamilies } from "@/constants/typography";
 import { ACTIVITY_KIND_META, normalizeEventType } from "@/lib/activityKindMeta";
+import { getLedgerBoxLabel, REPORT_WORDING } from "@/lib/wording";
 
 function DeltaBox({
   testID,
@@ -39,7 +40,7 @@ function DeltaBox({
       <Text style={styles.deltaBoxLabel}>{label}</Text>
       <View style={[styles.deltaBadge, badgeStyle]}>
         <Text style={styles.deltaBadgeText}>
-          {isNoChange ? "No change" : `${delta >= 0 ? "+" : "-"}${format(Math.abs(delta))}`}
+          {isNoChange ? REPORT_WORDING.expanded.noChange : `${delta >= 0 ? "+" : "-"}${format(Math.abs(delta))}`}
         </Text>
       </View>
       <View style={styles.deltaBoxRow}>
@@ -181,8 +182,8 @@ export default function EventExpandedPanel({
       {include12
         ? buildDeltaRow(
             [
-              renderTopStateBox({ key: `${keyPrefix}-12-full`, label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
-              renderTopStateBox({ key: `${keyPrefix}-12-empty`, label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
+              renderTopStateBox({ key: `${keyPrefix}-12-full`, label: REPORT_WORDING.ledgerBoxes.full12, before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
+              renderTopStateBox({ key: `${keyPrefix}-12-empty`, label: REPORT_WORDING.ledgerBoxes.empty12, before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
             ],
             `${keyPrefix}-12-row`
           )
@@ -190,8 +191,8 @@ export default function EventExpandedPanel({
       {include48
         ? buildDeltaRow(
             [
-              renderTopStateBox({ key: `${keyPrefix}-48-full`, label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
-              renderTopStateBox({ key: `${keyPrefix}-48-empty`, label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
+              renderTopStateBox({ key: `${keyPrefix}-48-full`, label: REPORT_WORDING.ledgerBoxes.full48, before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
+              renderTopStateBox({ key: `${keyPrefix}-48-empty`, label: REPORT_WORDING.ledgerBoxes.empty48, before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
             ],
             `${keyPrefix}-48-row`
           )
@@ -200,7 +201,7 @@ export default function EventExpandedPanel({
         ? buildDeltaRow(
             [
               placeholderBox(`${keyPrefix}-cash-left`),
-              renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+              renderTopStateBox({ key: `${keyPrefix}-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
               placeholderBox(`${keyPrefix}-cash-right`),
             ],
             `${keyPrefix}-cash-row`
@@ -213,9 +214,9 @@ export default function EventExpandedPanel({
     const is48 = targetGasType === "48kg";
     return renderFixedRow(
       [
-        renderTopStateBox({ key: `${targetGasType}-full`, label: `${targetGasType} Full`, before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
-        renderTopStateBox({ key: `${targetGasType}-empty`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
-        renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+        renderTopStateBox({ key: `${targetGasType}-full`, label: getLedgerBoxLabel(targetGasType, "full"), before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-empty`, label: getLedgerBoxLabel(targetGasType, "empty"), before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
       ],
       `${targetGasType}-triplet`
     );
@@ -229,13 +230,13 @@ export default function EventExpandedPanel({
     const emptyAfter = is48 ? empty48After : empty12After;
     const boxes = [
       fullBefore != null || fullAfter != null
-        ? renderTopStateBox({ key: `${targetGasType}-sparse-full`, label: `${targetGasType} Full`, before: fullBefore, after: fullAfter, format: formatCount, accent: gasColor(targetGasType) })
+        ? renderTopStateBox({ key: `${targetGasType}-sparse-full`, label: getLedgerBoxLabel(targetGasType, "full"), before: fullBefore, after: fullAfter, format: formatCount, accent: gasColor(targetGasType) })
         : null,
       emptyBefore != null || emptyAfter != null
-        ? renderTopStateBox({ key: `${targetGasType}-sparse-empty`, label: `${targetGasType} Empty`, before: emptyBefore, after: emptyAfter, format: formatCount, accent: gasColor(targetGasType) })
+        ? renderTopStateBox({ key: `${targetGasType}-sparse-empty`, label: getLedgerBoxLabel(targetGasType, "empty"), before: emptyBefore, after: emptyAfter, format: formatCount, accent: gasColor(targetGasType) })
         : null,
       hasCashChange
-        ? renderTopStateBox({ key: `${targetGasType}-sparse-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney })
+        ? renderTopStateBox({ key: `${targetGasType}-sparse-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney })
         : null,
     ].filter(Boolean) as ReactNode[];
     if (boxes.length === 1) {
@@ -251,7 +252,7 @@ export default function EventExpandedPanel({
     buildDeltaRow(
       [
         placeholderBox(`${keyPrefix}-cash-left`),
-        renderTopStateBox({ key: `${keyPrefix}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+        renderTopStateBox({ key: `${keyPrefix}-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
         placeholderBox(`${keyPrefix}-cash-right`),
       ],
       `${keyPrefix}-cash-row`
@@ -261,8 +262,8 @@ export default function EventExpandedPanel({
     const is48 = targetGasType === "48kg";
     return buildDeltaRow(
       [
-        renderTopStateBox({ key: `${targetGasType}-full`, label: `${targetGasType} Full`, before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
-        renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+        renderTopStateBox({ key: `${targetGasType}-full`, label: getLedgerBoxLabel(targetGasType, "full"), before: is48 ? full48Before : full12Before, after: is48 ? full48After : full12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
       ],
       `${targetGasType}-full-wallet`
     );
@@ -272,8 +273,8 @@ export default function EventExpandedPanel({
     const is48 = targetGasType === "48kg";
     return buildDeltaRow(
       [
-        renderTopStateBox({ key: `${targetGasType}-empty`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
-        renderTopStateBox({ key: `${targetGasType}-cash`, label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+        renderTopStateBox({ key: `${targetGasType}-empty`, label: getLedgerBoxLabel(targetGasType, "empty"), before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-cash`, label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
       ],
       `${targetGasType}-empty-wallet`
     );
@@ -283,7 +284,7 @@ export default function EventExpandedPanel({
     const is48 = targetGasType === "48kg";
     return buildDeltaRow(
       [
-        renderTopStateBox({ key: `${targetGasType}-empty-only`, label: `${targetGasType} Empty`, before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
+        renderTopStateBox({ key: `${targetGasType}-empty-only`, label: getLedgerBoxLabel(targetGasType, "empty"), before: is48 ? empty48Before : empty12Before, after: is48 ? empty48After : empty12After, format: formatCount, accent: gasColor(targetGasType) }),
       ],
       `${targetGasType}-empty-only-row`
     );
@@ -312,8 +313,8 @@ export default function EventExpandedPanel({
       case "bothEmpties":
         return buildDeltaRow(
           [
-            renderTopStateBox({ key: "dre-12-empty", label: "12kg Empty", before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
-            renderTopStateBox({ key: "dre-48-empty", label: "48kg Empty", before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
+            renderTopStateBox({ key: "dre-12-empty", label: REPORT_WORDING.ledgerBoxes.empty12, before: empty12Before, after: empty12After, format: formatCount, accent: gasColor("12kg") }),
+            renderTopStateBox({ key: "dre-48-empty", label: REPORT_WORDING.ledgerBoxes.empty48, before: empty48Before, after: empty48After, format: formatCount, accent: gasColor("48kg") }),
           ],
           "dre-row"
         );
@@ -321,9 +322,9 @@ export default function EventExpandedPanel({
       case "bothFullsAndWallet":
         return buildDeltaRow(
           [
-            renderTopStateBox({ key: "bfc-12-full", label: "12kg Full", before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
-            renderTopStateBox({ key: "bfc-48-full", label: "48kg Full", before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
-            renderTopStateBox({ key: "bfc-cash", label: "Wallet", before: walletBefore, after: walletAfter, format: formatMoney }),
+            renderTopStateBox({ key: "bfc-12-full", label: REPORT_WORDING.ledgerBoxes.full12, before: full12Before, after: full12After, format: formatCount, accent: gasColor("12kg") }),
+            renderTopStateBox({ key: "bfc-48-full", label: REPORT_WORDING.ledgerBoxes.full48, before: full48Before, after: full48After, format: formatCount, accent: gasColor("48kg") }),
+            renderTopStateBox({ key: "bfc-cash", label: REPORT_WORDING.ledgerBoxes.wallet, before: walletBefore, after: walletAfter, format: formatMoney }),
           ],
           "bfc-row"
         );
@@ -356,7 +357,7 @@ export default function EventExpandedPanel({
 
     if (inferredGasType) return renderGasTriplet(inferredGasType);
     if (hasCash) return renderCenteredWalletOnly(activityKind);
-    return <Text style={styles.eventExpandedEmpty}>No top-level state change for this activity.</Text>;
+    return <Text style={styles.eventExpandedEmpty}>{REPORT_WORDING.expanded.noTopLevelStateChange}</Text>;
   })();
 
   return <View style={styles.eventExpandedPanel}>{content}</View>;
