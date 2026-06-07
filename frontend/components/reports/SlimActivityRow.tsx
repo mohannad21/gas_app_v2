@@ -307,6 +307,7 @@ export default function SlimActivityRow({
     money_direction: event?.money_direction ?? undefined,
   });
   const activityMeta = activityKind ? ACTIVITY_KIND_META[activityKind] : null;
+  const paidBadgeSpec = activityMeta?.card.paidBadge ?? { mode: "none" as const };
   const activityTone = toneForMeta(activityMeta);
   const label = activityMeta
     ? t(activityMeta.labelKey) ?? event?.label ?? formatEventType(eventType, event?.order_mode)
@@ -372,39 +373,27 @@ export default function SlimActivityRow({
       ? (event?.money_direction && event.money_direction !== "none" ? event.money_direction : bankTransferDirection)
       : event?.money_direction ?? event?.money?.verb ?? "none";
   const paymentAmount =
-    (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
-      ? Number(event.paid_amount ?? 0)
-      : Number(event.money_amount ?? event.money_received ?? event.money?.amount ?? 0);
+    paidBadgeSpec.mode === "ratio"
+      ? activityKind === "refill" || activityKind === "buy_full_from_company"
+        ? Number(event.paid_amount ?? 0)
+        : Number(event.money_amount ?? event.money_received ?? event.money?.amount ?? 0)
+      : 0;
   const paymentTotal =
-    activityKind === "refill"
-      ? Number(event.total_cost ?? 0)
-      : _isOrderKind(event.event_type)
-        ? Number(event.order_total ?? 0)
-        : (_isCompanyPayment(event.event_type) || _isCompanyBuyFull(event.event_type))
-          ? Number(event.total_cost ?? 0)
-          : 0;
-  const showPaymentRatio =
-    (activityKind === "refill" ||
-      _isOrderKind(event.event_type) ||
-      _isCompanyBuyFull(event.event_type)) &&
-    paymentTotal > 0;
+    paidBadgeSpec.mode === "ratio"
+      ? activityKind === "refill" || activityKind === "buy_full_from_company"
+        ? Number(event.total_cost ?? 0)
+        : Number(event.order_total ?? 0)
+      : 0;
+  const showPaymentRatio = paidBadgeSpec.mode === "ratio" && paymentTotal > 0;
+  const moneyTextDirection = paidBadgeSpec.mode === "money" ? paidBadgeSpec.direction : "none";
   const moneyText =
-    !showPaymentRatio && moneyDirection !== "none" && moneyAmount && !_isWalletAdjust(event.event_type)
-      ? `${moneyDirection === "in" || moneyDirection === "received" ? "+" : "-"}${formatMoneyValue(
+    paidBadgeSpec.mode === "money" && moneyAmount
+      ? `${paidBadgeSpec.direction === "in" ? "+" : "-"}${formatMoneyValue(
           moneyAmount,
           fmtMoney
         )}`
       : null;
-  const ratioMoneyDirection =
-    moneyDirection !== "none"
-      ? moneyDirection
-      : activityKind === "buy_empty_from_customer"
-        ? "out"
-        : _isOrderKind(event.event_type)
-          ? "in"
-          : (activityKind === "refill" || _isCompanyBuyFull(event.event_type))
-            ? "out"
-            : "none";
+  const ratioMoneyDirection = paidBadgeSpec.mode === "ratio" ? paidBadgeSpec.direction : "none";
   const displayContextLine = _isOrderKind(event.event_type)
     ? (
         event.context_line
@@ -501,10 +490,10 @@ export default function SlimActivityRow({
               <Text
                 style={[
                   styles.moneyText,
-                  ratioMoneyDirection === "in" || ratioMoneyDirection === "received" ? styles.moneyIn : styles.moneyOut,
+                  ratioMoneyDirection === "in" ? styles.moneyIn : styles.moneyOut,
                 ]}
               >
-                {ratioMoneyDirection === "in" || ratioMoneyDirection === "received" ? "+" : "-"}
+                {ratioMoneyDirection === "in" ? "+" : "-"}
                 {formatMoneyValue(paymentAmount, fmtMoney)}
               </Text>
               <Text style={styles.moneyTotalText}> / {formatMoneyValue(paymentTotal, fmtMoney)}</Text>
@@ -513,7 +502,7 @@ export default function SlimActivityRow({
             <Text
               style={[
                 styles.moneyText,
-                moneyDirection === "in" || moneyDirection === "received" ? styles.moneyIn : styles.moneyOut,
+                moneyTextDirection === "in" ? styles.moneyIn : styles.moneyOut,
               ]}
               numberOfLines={1}
             >
