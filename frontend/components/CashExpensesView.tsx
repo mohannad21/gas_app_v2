@@ -20,8 +20,9 @@ import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { logApiError } from "@/lib/apiErrors";
 import { ExpenseCreateInput } from "@/types/domain";
+import { formatMoneyTransitionComment } from "@/lib/balanceTransitions";
 import { buildActivityHappenedAt } from "@/lib/date";
-import { formatDisplayMoney, getCurrencySymbol } from "@/lib/money";
+import { getCurrencySymbol } from "@/lib/money";
 import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
@@ -110,10 +111,6 @@ const MONEY_STEPPERS: FieldStepper[] = [
   { delta: -5, label: "-5", position: "left" },
   { delta: 5, label: "+5", position: "right" },
 ];
-
-function formatMoneyTransitionComment(before: number, after: number) {
-  return `${formatDisplayMoney(before)}->${formatDisplayMoney(after)}`;
-}
 
 export default function CashExpensesView({
   title = "Add Money Activity",

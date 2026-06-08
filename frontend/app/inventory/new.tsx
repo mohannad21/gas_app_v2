@@ -29,7 +29,12 @@ import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
-import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
+import {
+  formatBalanceTransitions,
+  formatCountTransitionComment,
+  formatMoneyTransitionComment,
+  makeBalanceTransition,
+} from "@/lib/balanceTransitions";
 import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { formatDisplayMoney } from "@/lib/money";
 import { CUSTOMER_WORDING } from "@/lib/wording";
@@ -78,16 +83,6 @@ function getNowTime() {
 
 function newInventoryAdjustGroupId() {
   return `inventory-adjust-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function formatCountTransitionComment(before: number | null | undefined, after: number | null | undefined) {
-  if (before === null || before === undefined || after === null || after === undefined) return undefined;
-  return `${before}->${after}`;
-}
-
-function formatMoneyTransitionComment(before: number | null | undefined, after: number | null | undefined) {
-  if (before === null || before === undefined || after === null || after === undefined) return undefined;
-  return `${formatDisplayMoney(before)}->${formatDisplayMoney(after)}`;
 }
 
 function CalendarModal({

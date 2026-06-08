@@ -98,6 +98,22 @@ export function makeBalanceTransition(
   };
 }
 
+export function formatCountTransitionComment(
+  before: number | null | undefined,
+  after: number | null | undefined
+): string | undefined {
+  if (before === null || before === undefined || after === null || after === undefined) return undefined;
+  return `${before}->${after}`;
+}
+
+export function formatMoneyTransitionComment(
+  before: number | null | undefined,
+  after: number | null | undefined
+): string | undefined {
+  if (before === null || before === undefined || after === null || after === undefined) return undefined;
+  return `${formatDisplayMoney(before)}->${formatDisplayMoney(after)}`;
+}
+
 function formatCurrentBalanceState(
   scope: BalanceScope,
   component: BalanceComponent,
