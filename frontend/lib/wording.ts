@@ -50,6 +50,8 @@ export const CUSTOMER_WORDING = {
   didntPay: "Didn't pay",
   returnAll: "Return all",
   payAll: "Pay all",
+  didntReceive: "Didn't receive",
+  receiveAll: "Receive all",
   notes: "Note (optional)",
   cylinderDebt: (n: number, gas: string) =>
     PAYMENT_DIRECTION_WORDING.customer.owesYou(`${n} ${gas} ${n === 1 ? "empty cylinder" : "empty cylinders"}`),
