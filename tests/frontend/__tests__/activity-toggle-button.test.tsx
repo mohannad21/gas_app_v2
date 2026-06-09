@@ -33,22 +33,22 @@ describe("ActivityToggleButton", () => {
     expect(zeroView.getByText("Return all")).toBeTruthy();
   });
 
-  it("uses success color for target state", () => {
+  it("uses danger color for target state", () => {
     const view = render(
       <ActivityToggleButton testID="toggle" variant="payment" state="target" onPress={jest.fn()} />
     );
 
     const style = StyleSheet.flatten(view.getByTestId("toggle").props.style);
-    expect(style.backgroundColor).toBe("#16a34a");
+    expect(style.backgroundColor).toBe("#dc2626");
   });
 
-  it("uses danger color for zero state", () => {
+  it("uses success color for zero state", () => {
     const view = render(
       <ActivityToggleButton testID="toggle" variant="payment" state="zero" onPress={jest.fn()} />
     );
 
     const style = StyleSheet.flatten(view.getByTestId("toggle").props.style);
-    expect(style.backgroundColor).toBe("#dc2626");
+    expect(style.backgroundColor).toBe("#16a34a");
   });
 
   it("calls onPress", () => {

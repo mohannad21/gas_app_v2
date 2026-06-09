@@ -107,6 +107,8 @@ No other file may define or duplicate these labels. `eventLabels.ts` is legacy a
 
 ## 3. App Start
 
+> **Status: ✅ Done** — App always opens on the Daily Report for today's date on cold launch.
+
 The app must always open on the **Daily Report** — not the dashboard or any other screen.
 
 - Current behavior: app opens on the dashboard *(needs to be fixed)*
@@ -116,6 +118,8 @@ The app must always open on the **Daily Report** — not the dashboard or any ot
 ---
 
 ## 4. Navigation After Save (Highlights)
+
+> **Status: ✅ Done** — Highlight system fully implemented. All 18 activity kinds that appear on the Daily Report are routed and highlighted correctly after save. OR matching ensures both `event.id` and `event.source_id` are checked. Routing to Company tab for company adjustments is done. Backend 500 errors on inventory adjust and customer adjust are fixed.
 
 **App start:** The app always opens on the Daily Report.
 
@@ -961,3 +965,57 @@ No customer activity may be created with a date earlier than the date that custo
 
 1. Does the backend already expose the app init date and customer `created_at`? If not, a backend ticket is needed first.
 2. Does this apply to the edit flow (changing an existing activity's date), or create-only?
+
+---
+
+## REFACTOR-AK-01: Single Source of Truth for Activity Kinds
+
+**Status:** Future work — investigation required before ticketing
+
+### Problem
+
+Activity kind strings (`"refill"`, `"adjust_inventory"`, `"buy_full_from_company"`, all 18) are hardcoded as raw string literals scattered across the frontend codebase. There are currently two separate files that define them:
+
+- `frontend/lib/activityKinds.ts` — TypeScript union type + `ALL_ACTIVITY_KINDS` array
+- `frontend/lib/activityKindMeta.ts` — the full meta record (imports from `activityKinds.ts`)
+
+`activityKindMeta.ts` is already the richer file and already the source of truth for labels, icons, colors, and filter groups. It should be the **only** file.
+
+On the backend there is also `backend/app/constants/activity_kinds.py` which defines the same 18 kinds as Python constants. This is kept separate (frontend and backend cannot share code) but must stay in sync manually.
+
+### Goal
+
+One file owns everything on the frontend: `activityKindMeta.ts`. No raw kind string literals anywhere else in the codebase. When a kind is renamed, it is a one-line change in one file.
+
+### Required changes
+
+1. **Merge `activityKinds.ts` into `activityKindMeta.ts`**
+   - Move the `ActivityKind` type definition into `activityKindMeta.ts`, derived from the keys of `ACTIVITY_KIND_META`
+   - Derive `ALL_ACTIVITY_KINDS` from the same source
+   - Add exported constants object `AK`:
+     ```ts
+     export const AK = Object.fromEntries(
+       Object.keys(ACTIVITY_KIND_META).map((k) => [k, k])
+     ) as Record<ActivityKind, ActivityKind>;
+     ```
+   - Make `activityKinds.ts` a thin re-export shim pointing to `activityKindMeta.ts` so existing imports don't break immediately
+
+2. **Full codebase sweep**
+   - Grep for every raw kind string literal across all frontend files
+   - Replace with `AK.x` (e.g. `AK.refill`, `AK.adjust_inventory`)
+   - Import `AK` from `@/lib/activityKindMeta`
+
+3. **Delete `activityKinds.ts`** once all imports are migrated to `activityKindMeta.ts`
+
+### Investigation required before implementing
+
+- Run a full grep for all 18 kind strings as raw literals across `frontend/` to get the complete list of call sites
+- Check whether any file imports directly from `activityKinds.ts` that would break during migration
+- Confirm `normalizeEventType()` remains the only place where raw strings from external sources (API responses) are accepted — it is exempt from the AK rule
+
+### Acceptance
+
+- TypeScript build passes with zero errors
+- Grepping for any of the 18 kind strings as raw literals returns zero results outside of `activityKindMeta.ts` and `normalizeEventType()`
+- `activityKinds.ts` is deleted
+- `backend/app/constants/activity_kinds.py` remains as-is (backend source of truth, maintained in sync manually)

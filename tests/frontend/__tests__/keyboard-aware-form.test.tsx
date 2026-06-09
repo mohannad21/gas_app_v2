@@ -1,5 +1,5 @@
 import React from "react";
-import { Keyboard, KeyboardAvoidingView, ScrollView, Text } from "react-native";
+import { Keyboard, KeyboardAvoidingView, ScrollView, StyleSheet, Text } from "react-native";
 import { fireEvent, render } from "@testing-library/react-native";
 
 import KeyboardAwareForm from "@/components/entry/KeyboardAwareForm";
@@ -39,6 +39,17 @@ describe("KeyboardAwareForm", () => {
 
     const keyboardAvoidingView = view.UNSAFE_getByType(KeyboardAvoidingView);
     expect(keyboardAvoidingView.props.behavior).toBe("height");
+  });
+
+  it("keeps dismissable content full height", () => {
+    const view = render(
+      <KeyboardAwareForm contentTestID="form-content">
+        <Text>Amount</Text>
+      </KeyboardAwareForm>
+    );
+
+    const style = StyleSheet.flatten(view.getByTestId("form-content").props.style);
+    expect(style.flex).toBe(1);
   });
 });
 

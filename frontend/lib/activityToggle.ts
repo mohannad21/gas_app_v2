@@ -58,10 +58,10 @@ export function getActivityToggleSnapshot(
   target: number
 ): ActivityToggleSnapshot {
   if (state === "zero") {
-    return { state, fieldValue: 0, colorRole: "danger" };
+    return { state, fieldValue: 0, colorRole: "success" };
   }
 
-  return { state, fieldValue: target, colorRole: "success" };
+  return { state, fieldValue: target, colorRole: "danger" };
 }
 
 export function initActivityToggle(target: number): ActivityToggleSnapshot {

@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
 
 let mockParams: Record<string, string> = { section: "company", tab: "payment" };
+let mockCompanyMoneyBalance = 120;
 let mockCreateCompanyPaymentPending = false;
 const mockCreateCompanyPaymentMutateAsync = jest.fn().mockResolvedValue({});
 
@@ -30,7 +31,7 @@ jest.mock("@/components/InlineWalletFundingPrompt", () => () => null);
 
 jest.mock("@/hooks/useCompanyBalances", () => ({
   useCompanyBalances: () => ({
-    data: { company_money: 120, company_cyl_12: 0, company_cyl_48: 0 },
+    data: { company_money: mockCompanyMoneyBalance, company_cyl_12: 0, company_cyl_48: 0 },
     isSuccess: true,
   }),
 }));
@@ -81,6 +82,8 @@ function hasWidthValue(node: any, target: string): boolean {
 
 describe("InventoryNewScreen company payment layout", () => {
   beforeEach(() => {
+    mockParams = { section: "company", tab: "payment" };
+    mockCompanyMoneyBalance = 120;
     mockCreateCompanyPaymentPending = false;
     mockCreateCompanyPaymentMutateAsync.mockClear();
   });
@@ -102,5 +105,58 @@ describe("InventoryNewScreen company payment layout", () => {
     expect(getByText("Save")).toBeTruthy();
     fireEvent.press(getByText("Save"));
     expect(mockCreateCompanyPaymentMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("opens company payment at target amount with shared payment toggle", () => {
+    const { getByDisplayValue, getByText } = render(<InventoryNewScreen />);
+
+    expect(getByDisplayValue("120.00")).toBeTruthy();
+    expect(getByText("Didn't pay")).toBeTruthy();
+  });
+
+  it("toggles company payment amount between target and zero", () => {
+    const { getByDisplayValue, getByTestId, getByText } = render(<InventoryNewScreen />);
+
+    fireEvent.press(getByTestId("company-payment-toggle"));
+
+    expect(getByDisplayValue("0.00")).toBeTruthy();
+    expect(getByText("Pay all")).toBeTruthy();
+
+    fireEvent.press(getByTestId("company-payment-toggle"));
+
+    expect(getByDisplayValue("120.00")).toBeTruthy();
+    expect(getByText("Didn't pay")).toBeTruthy();
+  });
+
+  it("keeps toggle state for custom typed company payment values", () => {
+    const { getByDisplayValue, getByText } = render(<InventoryNewScreen />);
+
+    fireEvent.changeText(getByDisplayValue("120.00"), "40");
+
+    expect(getByDisplayValue("40.00")).toBeTruthy();
+    expect(getByText("Didn't pay")).toBeTruthy();
+  });
+
+  it("snaps company payment toggle from typed zero and typed target", () => {
+    const { getByDisplayValue, getByText } = render(<InventoryNewScreen />);
+
+    fireEvent.changeText(getByDisplayValue("120.00"), "0");
+
+    expect(getByDisplayValue("0.00")).toBeTruthy();
+    expect(getByText("Pay all")).toBeTruthy();
+
+    fireEvent.changeText(getByDisplayValue("0.00"), "120");
+
+    expect(getByDisplayValue("120.00")).toBeTruthy();
+    expect(getByText("Didn't pay")).toBeTruthy();
+  });
+
+  it("uses receive toggle wording when company balance is credit", () => {
+    mockCompanyMoneyBalance = -80;
+
+    const { getByDisplayValue, getByText } = render(<InventoryNewScreen />);
+
+    expect(getByDisplayValue("80.00")).toBeTruthy();
+    expect(getByText("Didn't receive")).toBeTruthy();
   });
 });

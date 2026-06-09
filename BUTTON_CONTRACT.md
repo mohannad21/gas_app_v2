@@ -44,12 +44,9 @@ Fields that intentionally have no button (adjustment forms, wallet/bank
 transfers, expense) are listed in Section 4.
 
 **Label convention:** Button label describes what tapping will do next.
-**Color convention:** Color describes the current field state - Green means
-the field has a value entered; Red means the field is at zero.
-
-> **Current code note:** Current code commonly uses Green at `0` and Red at
-> non-zero/target in payment and return buttons. That is inverted relative to
-> this contract.
+**Color convention:** Color describes the next button action - Green means
+the button will fill/set the target value; Red means the button will clear the
+field to zero.
 
 ### Three label variants
 
@@ -57,23 +54,23 @@ the field has a value entered; Red means the field is at zero.
 
 | State | Label | Field value | Color |
 |---|---|---|---|
-| S1 - default | Didn't pay | `target` | Green |
-| S2 | Pay all | `0` | Red |
+| S1 - default | Didn't pay | `target` | Red |
+| S2 | Pay all | `0` | Green |
 
 **Receive variant** - payment_from_company (company pays us) and replacement
 cylinders (customer returns empties to us):
 
 | State | Label | Field value | Color |
 |---|---|---|---|
-| S1 - default | Didn't receive | `target` | Green |
-| S2 | Receive all | `0` | Red |
+| S1 - default | Didn't receive | `target` | Red |
+| S2 | Receive all | `0` | Green |
 
 **Return variant** - all cylinder return fields:
 
 | State | Label | Field value | Color |
 |---|---|---|---|
-| S1 - default | Didn't return | `target` | Green |
-| S2 | Return all | `0` | Red |
+| S1 - default | Didn't return | `target` | Red |
+| S2 | Return all | `0` | Green |
 
 > **Current code note:** `payment_from_company` currently reuses the "Didn't
 > pay" label when the receive direction has a non-zero amount. This contract
@@ -83,8 +80,8 @@ cylinders (customer returns empties to us):
 
 | Before tap: button | Before tap: field | Before tap: color | After tap: button | After tap: field | After tap: color |
 |---|---:|---|---|---:|---|
-| S1 | `target` | Green | S2 | `0` | Red |
-| S2 | `0` | Red | S1 | `target` | Green |
+| S1 | `target` | Red | S2 | `0` | Green |
+| S2 | `0` | Green | S1 | `target` | Red |
 
 > **Current code note:** Existing `payment_from_customer`,
 > `payment_to_customer`, `payment_to_company`, `payment_from_company`,
@@ -98,8 +95,8 @@ Snap fires on every `onChangeText`.
 
 | User typed field value | Button snaps to |
 |---|---|
-| exactly `target` | S1, Green |
-| exactly `0` | S2, Red |
+| exactly `target` | S1, Red |
+| exactly `0` | S2, Green |
 | anything else | no snap; keep previous button state |
 
 > **Current code note:** Some current buttons derive state directly from
@@ -152,7 +149,7 @@ Activity kind names are the canonical identifiers used throughout the codebase.
 > mode that saves/highlights as `buy_empty_from_customer`. They are aliases for
 > those canonical activity kinds, not separate activity kinds in this contract.
 
-| Activity | Section | S1 label - Green | S2 label - Red | Target definition |
+| Activity | Section | S1 label - Red | S2 label - Green | Target definition |
 |---|---|---|---|---|
 | replacement | Cylinders | Didn't receive | Receive all | installed qty |
 | replacement | Money | Didn't pay | Pay all | price x installed qty |
@@ -241,18 +238,19 @@ Discrepancies found while reading the scoped source files:
   branch, using a teal/alternate button state for old debts. This contract
   removes button-managed debt/credit adjustments.
 - `replacement` defaults currently pre-fill received/payment values from the
-  selected system/installed total. This agrees with the new target-default
-  direction, but the labels/colors still need to be aligned with S1 Green.
+  selected system/installed total. This agrees with the target-default
+  direction, but the labels/colors still need to be aligned with S1 Red.
 - `payment_from_customer` and `payment_to_customer` currently show Green when
-  the amount is zero and Red when it is non-zero. This is inverted.
+  the amount is zero and Red when it is non-zero. That color pairing matches
+  this contract; later stages still need to align labels and snap behavior.
 - `customer_return_empties` currently shows Green when received is non-zero and
-  Red when it is zero. This is inverted.
+  Red when it is zero. This is inverted relative to this contract.
 - `sell_full` and `buy_empty_from_customer` currently have no payment toggle.
 - `inventory/new.tsx` company payment currently uses "Didn't pay" for both pay
   and receive directions after a value is entered. `payment_from_company`
   requires "Didn't receive".
 - `inventory/new.tsx` company payment currently shows Green at zero and Red at
-  non-zero. This is inverted.
+  non-zero, matching this contract after the shared toggle migration.
 - `AddRefillModal.tsx` return and paid toggles currently show Green at zero or
   at not-target states in several branches, and Red at target/non-zero states.
   This is inverted relative to this contract.

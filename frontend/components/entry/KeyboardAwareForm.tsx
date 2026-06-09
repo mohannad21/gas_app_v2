@@ -53,7 +53,7 @@ export default function KeyboardAwareForm({
       style={style}
     >
       {dismissOnTapOutside ? (
-        <KeyboardDismissView contentTestID={contentTestID}>{content}</KeyboardDismissView>
+        <KeyboardDismissView contentStyle={{ flex: 1 }} contentTestID={contentTestID}>{content}</KeyboardDismissView>
       ) : (
         content
       )}

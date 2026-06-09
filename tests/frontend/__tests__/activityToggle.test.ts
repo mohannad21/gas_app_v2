@@ -9,19 +9,19 @@ import {
 } from "@/lib/activityToggle";
 
 describe("activity toggle snapshots", () => {
-  it("initializes at target with success color", () => {
+  it("initializes at target with danger color", () => {
     expect(initActivityToggle(100)).toEqual({
       state: "target",
       fieldValue: 100,
-      colorRole: "success",
+      colorRole: "danger",
     });
   });
 
-  it("creates a zero snapshot with danger color", () => {
+  it("creates a zero snapshot with success color", () => {
     expect(getActivityToggleSnapshot("zero", 100)).toEqual({
       state: "zero",
       fieldValue: 0,
-      colorRole: "danger",
+      colorRole: "success",
     });
   });
 
@@ -29,7 +29,7 @@ describe("activity toggle snapshots", () => {
     expect(initActivityToggle(49.99)).toEqual({
       state: "target",
       fieldValue: 49.99,
-      colorRole: "success",
+      colorRole: "danger",
     });
   });
 
@@ -37,7 +37,7 @@ describe("activity toggle snapshots", () => {
     expect(initActivityToggle(0)).toEqual({
       state: "target",
       fieldValue: 0,
-      colorRole: "success",
+      colorRole: "danger",
     });
   });
 });
@@ -47,7 +47,7 @@ describe("activity toggle tap cycle", () => {
     expect(applyActivityToggleTap("target", 100)).toEqual({
       state: "zero",
       fieldValue: 0,
-      colorRole: "danger",
+      colorRole: "success",
     });
   });
 
@@ -55,7 +55,7 @@ describe("activity toggle tap cycle", () => {
     expect(applyActivityToggleTap("zero", 100)).toEqual({
       state: "target",
       fieldValue: 100,
-      colorRole: "success",
+      colorRole: "danger",
     });
   });
 
@@ -63,7 +63,7 @@ describe("activity toggle tap cycle", () => {
     expect(applyActivityToggleTap("zero", 99.5)).toEqual({
       state: "target",
       fieldValue: 99.5,
-      colorRole: "success",
+      colorRole: "danger",
     });
   });
 });

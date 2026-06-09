@@ -4,7 +4,6 @@ import {
   Alert,
   InputAccessoryView,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -25,10 +24,17 @@ import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
 import { useCreateCompanyPayment } from "@/hooks/useCompanyPayments";
+import {
+  applyActivityToggleTap,
+  computeActivityToggleSnap,
+  getActivityToggleVariant,
+  type ActivityToggleState,
+} from "@/lib/activityToggle";
 import {
   formatBalanceTransitions,
   formatCountTransitionComment,
@@ -689,14 +695,16 @@ function CompanyPaymentForm({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [paymentDirection, setPaymentDirection] = useState<"pay" | "receive">("pay");
+  const [paymentToggleState, setPaymentToggleState] = useState<ActivityToggleState>("target");
 
   useEffect(() => {
     if (!visible) return;
-    setAmount("");
+    setAmount(formatDisplayMoney(Math.abs(companyBalance)));
     setNote("");
     setPayDate(date);
     setPayTime(getNowTime());
-  }, [visible, date]);
+    setPaymentToggleState("target");
+  }, [visible, date, companyBalance]);
 
   useEffect(() => {
     if (!visible) return;
@@ -709,6 +717,9 @@ function CompanyPaymentForm({
 
   const amountValue = Number(amount) || 0;
   const totalDue = Math.abs(companyBalance);
+  const paymentToggleVariant = getActivityToggleVariant(
+    paymentDirection === "receive" ? "payment_from_company_money" : "payment_to_company_money"
+  );
   const normalizedAmount = paymentDirection === "receive" ? -amountValue : amountValue;
   const companyBalanceAfter = companyBalance - normalizedAmount;
   const walletAfter = paymentDirection === "receive"
@@ -731,10 +742,11 @@ function CompanyPaymentForm({
   const paymentStatusLine = companyPreviewLines.join("\n");
 
   const resetForm = () => {
-    setAmount("");
+    setAmount(formatDisplayMoney(totalDue));
     setNote("");
     setPayDate(date);
     setPayTime(getNowTime());
+    setPaymentToggleState("target");
   };
   const [pendingAction, setPendingAction] = useState<"save" | "saveAndAdd" | null>(null);
 
@@ -778,6 +790,21 @@ function CompanyPaymentForm({
   const stepValue = (delta: number) => {
     const current = Number(amount) || 0;
     setAmount(String(Math.max(current + delta, 0)));
+  };
+
+  const handlePaymentAmountChange = (text: string) => {
+    setAmount(text);
+
+    const snap = computeActivityToggleSnap(Number(text) || 0, totalDue);
+    if (snap) {
+      setPaymentToggleState(snap.state);
+    }
+  };
+
+  const handlePaymentTogglePress = () => {
+    const next = applyActivityToggleTap(paymentToggleState, totalDue);
+    setPaymentToggleState(next.state);
+    setAmount(String(next.fieldValue));
   };
 
   return (
@@ -875,34 +902,18 @@ function CompanyPaymentForm({
             valueMode="decimal"
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}
-            onChangeText={setAmount}
+            onChangeText={handlePaymentAmountChange}
             steppers={MONEY_STEPPERS}
           />
         </StandaloneField>
         <View style={styles.bigBoxActionRow}>
           <StandaloneField>
-            <Pressable
-              style={[
-                styles.inlineActionButton,
-                { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                amountValue === 0 ? styles.inlineActionButtonSuccess : null,
-              ]}
-              onPress={() => {
-                if (amountValue === 0) {
-                  setAmount(formatDisplayMoney(totalDue));
-                } else {
-                  setAmount("0");
-                }
-              }}
-            >
-              <Text style={styles.inlineActionText}>
-                {amountValue === 0
-                  ? paymentDirection === "receive"
-                    ? "Receive all"
-                    : CUSTOMER_WORDING.payAll
-                  : CUSTOMER_WORDING.didntPay}
-              </Text>
-            </Pressable>
+            <ActivityToggleButton
+              testID="company-payment-toggle"
+              variant={paymentToggleVariant}
+              state={paymentToggleState}
+              onPress={handlePaymentTogglePress}
+            />
           </StandaloneField>
         </View>
         <InlineWalletFundingPrompt
@@ -1128,144 +1139,142 @@ export default function InventoryNewScreen() {
 
   return (
     <SafeAreaView style={styles.hubSafeArea} edges={["bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-        style={styles.hubScreenInner}
-      >
-        <View style={styles.hubHeaderRow}>
-          <Text style={styles.hubTitle}>
-            {section === "company" ? "Company Activities" : "Ledger Adjustments"}
-          </Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.modeRowScroll}
-          contentContainerStyle={styles.modeRow}
-        >
-          {visibleTabs.map((tab) => {
-            const label = tab === "refill"
-              ? "Refill"
-              : tab === "return"
-                ? "Return"
-                : tab === "payment"
-                  ? "Payment"
-                  : tab === "buy"
-                    ? "Buy Full"
-                    : tab === "adjust"
-                      ? "Adjust balance"
-                      : tab === "cash"
-                        ? "Adjust Wallet"
-                        : "Adjust Inventory";
-            const disabled =
-              tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled && !isEditingReturn : false;
-            return (
-              <Pressable
-                key={tab}
-                onPress={() => {
-                  if (disabled) return;
-                  setActiveTab(tab);
-                }}
-                disabled={disabled}
-                style={[
-                  styles.modeButton,
-                  activeTab === tab && styles.modeButtonActive,
-                  disabled && styles.modeButtonDisabled,
-                ]}
-              >
-                <Text
+      <View style={styles.hubScreenInner}>
+          <View style={styles.hubHeaderRow}>
+            <Text style={styles.hubTitle}>
+              {section === "company" ? "Company Activities" : "Ledger Adjustments"}
+            </Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.modeRowScroll}
+            contentContainerStyle={styles.modeRow}
+          >
+            {visibleTabs.map((tab) => {
+              const label = tab === "refill"
+                ? "Refill"
+                : tab === "return"
+                  ? "Return"
+                  : tab === "payment"
+                    ? "Payment"
+                    : tab === "buy"
+                      ? "Buy Full"
+                      : tab === "adjust"
+                        ? "Adjust balance"
+                        : tab === "cash"
+                          ? "Adjust Wallet"
+                          : "Adjust Inventory";
+              const disabled =
+                tab === "payment" ? paymentTabDisabled : tab === "return" ? returnTabDisabled && !isEditingReturn : false;
+              return (
+                <Pressable
+                  key={tab}
+                  onPress={() => {
+                    if (disabled) return;
+                    setActiveTab(tab);
+                  }}
+                  disabled={disabled}
                   style={[
-                    styles.modeText,
-                    activeTab === tab && styles.modeTextActive,
-                    disabled && styles.modeTextDisabled,
+                    styles.modeButton,
+                    activeTab === tab && styles.modeButtonActive,
+                    disabled && styles.modeButtonDisabled,
                   ]}
                 >
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
-          <RefillForm
-            visible
-            onClose={closeScreen}
-            onSaved={closeScreen}
-            onSaveSuccess={({ effectiveAt, highlightEventType, entry }) => handleSaveSuccess(effectiveAt, highlightEventType, entry?.id)}
-            onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
-            accessoryId={accessoryId}
-            editEntry={activeTab === "refill" || activeTab === "return" ? editRefill : null}
-            showHeader={false}
-            useCard={false}
-            mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
-            containerStyle={styles.hubFormContainer}
-            scrollStyle={styles.hubScroll}
-            walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
-          />
-        ) : (
-          activeTab === "payment" ? (
-            <CompanyPaymentForm
-              visible
-              date={businessDate}
-              accessoryId={accessoryId}
-              companyBalance={companyBalance}
-              walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
-              balanceReady={companyBalanceReady}
-              isSubmitting={createCompanyPayment.isPending}
-              onCreate={async (payload) => {
-                return await createCompanyPayment.mutateAsync(payload);
-              }}
-              onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
-              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
-            />
-          ) : activeTab === "adjust" ? (
-            <CompanyAdjustInlineForm
-              date={businessDate}
-              accessoryId={accessoryId}
-              onSaveSuccess={({ highlightId }) => handleCompanyAdjustSaveSuccess(highlightId)}
-              onSaveAndAddSuccess={() => setActiveTab("adjust")}
-            />
-          ) : activeTab === "cash" ? (
-            <CashAdjustForm
-              visible
-              entry={editingCashAdjust}
-              date={businessDate}
-              accessoryId={accessoryId}
-              walletBefore={dailyReportQuery.data?.[0]?.wallet_end ?? null}
-              isSubmitting={editingCashAdjust ? updateCashAdjust.isPending : createCashAdjust.isPending}
-              onCreate={async (payload) => {
-                return await createCashAdjust.mutateAsync(payload);
-              }}
-              onUpdate={async (id, payload) => {
-                await updateCashAdjust.mutateAsync({ id, payload });
-              }}
-              onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
-              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
-            />
-          ) : (
-            <InventoryAdjustForm
-              visible
-              entry={editingInventoryAdjust}
-              date={businessDate}
-              accessoryId={accessoryId}
-              inventoryBefore={inventoryLatest.data ?? null}
-              isSubmitting={editingInventoryAdjust ? updateInventoryAdjust.isPending : adjustInventory.isPending}
-              onCreate={async (payload) => {
-                await adjustInventory.mutateAsync(payload);
-              }}
-              onUpdate={async (id, payload) => {
-                await updateInventoryAdjust.mutateAsync({ id, payload });
-              }}
-              onSaved={closeScreen}
-              onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
-              onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
-            />
-          )
-        )}
-      </KeyboardAvoidingView>
+                  <Text
+                    style={[
+                      styles.modeText,
+                      activeTab === tab && styles.modeTextActive,
+                      disabled && styles.modeTextDisabled,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.hubBody}>
+            {activeTab === "refill" || activeTab === "buy" || activeTab === "return" ? (
+              <RefillForm
+                visible
+                onClose={closeScreen}
+                onSaved={closeScreen}
+                onSaveSuccess={({ effectiveAt, highlightEventType, entry }) => handleSaveSuccess(effectiveAt, highlightEventType, entry?.id)}
+                onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
+                accessoryId={accessoryId}
+                editEntry={activeTab === "refill" || activeTab === "return" ? editRefill : null}
+                showHeader={false}
+                useCard={false}
+                mode={activeTab === "return" ? "return" : activeTab === "buy" ? "buy" : "refill"}
+                containerStyle={styles.hubFormContainer}
+                scrollStyle={styles.hubScroll}
+                walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
+              />
+            ) : (
+              activeTab === "payment" ? (
+                <CompanyPaymentForm
+                  visible
+                  date={businessDate}
+                  accessoryId={accessoryId}
+                  companyBalance={companyBalance}
+                  walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
+                  balanceReady={companyBalanceReady}
+                  isSubmitting={createCompanyPayment.isPending}
+                  onCreate={async (payload) => {
+                    return await createCompanyPayment.mutateAsync(payload);
+                  }}
+                  onSaved={closeScreen}
+                  onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
+                  onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
+                />
+              ) : activeTab === "adjust" ? (
+                <CompanyAdjustInlineForm
+                  date={businessDate}
+                  accessoryId={accessoryId}
+                  onSaveSuccess={({ highlightId }) => handleCompanyAdjustSaveSuccess(highlightId)}
+                  onSaveAndAddSuccess={() => setActiveTab("adjust")}
+                />
+              ) : activeTab === "cash" ? (
+                <CashAdjustForm
+                  visible
+                  entry={editingCashAdjust}
+                  date={businessDate}
+                  accessoryId={accessoryId}
+                  walletBefore={dailyReportQuery.data?.[0]?.wallet_end ?? null}
+                  isSubmitting={editingCashAdjust ? updateCashAdjust.isPending : createCashAdjust.isPending}
+                  onCreate={async (payload) => {
+                    return await createCashAdjust.mutateAsync(payload);
+                  }}
+                  onUpdate={async (id, payload) => {
+                    await updateCashAdjust.mutateAsync({ id, payload });
+                  }}
+                  onSaved={closeScreen}
+                  onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
+                  onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
+                />
+              ) : (
+                <InventoryAdjustForm
+                  visible
+                  entry={editingInventoryAdjust}
+                  date={businessDate}
+                  accessoryId={accessoryId}
+                  inventoryBefore={inventoryLatest.data ?? null}
+                  isSubmitting={editingInventoryAdjust ? updateInventoryAdjust.isPending : adjustInventory.isPending}
+                  onCreate={async (payload) => {
+                    await adjustInventory.mutateAsync(payload);
+                  }}
+                  onUpdate={async (id, payload) => {
+                    await updateInventoryAdjust.mutateAsync({ id, payload });
+                  }}
+                  onSaved={closeScreen}
+                  onSaveSuccess={({ effectiveAt, highlightEventType, highlightId }) => handleSaveSuccess(effectiveAt, highlightEventType, highlightId)}
+                  onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
+                />
+              )
+            )}
+          </View>
+      </View>
       {Platform.OS === "ios" && (
         <InputAccessoryView nativeID={accessoryId}>
           <View style={styles.accessoryRow}>
@@ -1322,6 +1331,10 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
   },
+  hubBody: {
+    flex: 1,
+    minHeight: 0,
+  },
   modeButton: {
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -1354,7 +1367,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hubFormScreen: {
-    overflow: "hidden",
   },
   hubFormContent: {
     gap: 8,

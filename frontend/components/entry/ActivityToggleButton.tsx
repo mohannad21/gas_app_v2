@@ -29,7 +29,7 @@ export default function ActivityToggleButton({ variant, state, onPress, testID }
   return (
     <Pressable
       testID={testID}
-      style={[styles.button, state === "target" ? styles.success : styles.danger]}
+      style={[styles.button, state === "zero" ? styles.success : styles.danger]}
       onPress={onPress}
     >
       <Text style={styles.text}>{LABELS[variant][state]}</Text>
