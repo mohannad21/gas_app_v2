@@ -1,25 +1,10 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import type { FieldStepper } from "@/constants/steppers";
 import { getMoneyDecimals } from "@/lib/money";
 
-export type FieldStepper = {
-  delta: number;
-  label: string;
-  position?:
-    | "extra-top-left"
-    | "extra-top-right"
-    | "extra-bottom-left"
-    | "extra-bottom-right"
-    | "left"
-    | "right"
-    | "top"
-    | "bottom"
-    | "top-left"
-    | "top-right"
-    | "bottom-left"
-    | "bottom-right";
-};
+export type { FieldStepper } from "@/constants/steppers";
 
 export type FieldCellProps = {
   title: string;
