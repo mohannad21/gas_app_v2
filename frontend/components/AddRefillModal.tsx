@@ -46,7 +46,7 @@ import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
 type SavedRefillEntry = {
-  id: string;
+  id?: string;
   date: string;
   time: string;
   buy12: number;

@@ -86,7 +86,7 @@ function AuthenticatedInitializationGuard() {
     }
 
     if (isSetupCompleted && (inWelcome || inAuth)) {
-      router.replace("/(tabs)/reports/index");
+      router.replace("/(tabs)/reports");
     }
   }, [mustChangePassword, data?.is_setup_completed, settingsLoading, router, segments]);
 

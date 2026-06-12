@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import NewOrderScreen from "@/app/orders/new";
 
@@ -94,13 +94,84 @@ jest.mock("@/hooks/useSystems", () => ({
 jest.mock("@/components/InlineWalletFundingPrompt", () => () => null);
 
 describe("NewOrderScreen replacement flow", () => {
-  it("does not render the removed New Balance section", async () => {
-    const { getByText, queryByText } = render(<NewOrderScreen />);
+  const renderReplacement = async () => {
+    const view = render(<NewOrderScreen />);
 
     await waitFor(() => {
-      expect(getByText("Installed")).toBeTruthy();
+      expect(view.getByText("Installed")).toBeTruthy();
     });
 
+    return view;
+  };
+
+  it("does not render the removed New Balance section", async () => {
+    const { queryByText } = await renderReplacement();
+
     expect(queryByText("New Balance")).toBeNull();
+  });
+
+  it("opens replacement with shared toggles and gas selling price box", async () => {
+    const view = await renderReplacement();
+
+    expect(view.getByText("Didn't receive")).toBeTruthy();
+    expect(view.getByText("Didn't pay")).toBeTruthy();
+    expect(view.getByText("Gas Selling Price")).toBeTruthy();
+    expect(view.getByText("Gas Price")).toBeTruthy();
+    expect(view.queryByText("Returned all")).toBeNull();
+    expect(view.queryByText("Paid with debt")).toBeNull();
+  });
+
+  it("toggles replacement received and paid values between target and zero", async () => {
+    const view = await renderReplacement();
+
+    fireEvent.press(view.getByTestId("replacement-received-toggle"));
+    expect(view.getByText("Receive all")).toBeTruthy();
+    expect(view.getByDisplayValue("0")).toBeTruthy();
+
+    fireEvent.press(view.getByTestId("replacement-received-toggle"));
+    expect(view.getByText("Didn't receive")).toBeTruthy();
+    expect(view.getAllByDisplayValue("1").length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.press(view.getByTestId("replacement-paid-toggle"));
+    expect(view.getByText("Pay all")).toBeTruthy();
+    expect(view.getByDisplayValue("0.00")).toBeTruthy();
+
+    fireEvent.press(view.getByTestId("replacement-paid-toggle"));
+    expect(view.getByText("Didn't pay")).toBeTruthy();
+    expect(view.getAllByDisplayValue("75.00").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps replacement toggle state for custom typed values and snaps exact zero/target", async () => {
+    const view = await renderReplacement();
+
+    const paidInputs = view.getAllByDisplayValue("75.00");
+    fireEvent.changeText(paidInputs[paidInputs.length - 1], "40");
+
+    expect(view.getByDisplayValue("40.00")).toBeTruthy();
+    expect(view.getByText("Didn't pay")).toBeTruthy();
+
+    fireEvent.changeText(view.getByDisplayValue("40.00"), "0");
+
+    expect(view.getByDisplayValue("0.00")).toBeTruthy();
+    expect(view.getByText("Pay all")).toBeTruthy();
+
+    fireEvent.changeText(view.getByDisplayValue("0.00"), "75");
+
+    expect(view.getAllByDisplayValue("75.00").length).toBeGreaterThanOrEqual(2);
+    expect(view.getByText("Didn't pay")).toBeTruthy();
+  });
+
+  it("updates replacement target-controlled values when installed quantity changes", async () => {
+    const view = await renderReplacement();
+
+    fireEvent.changeText(view.getAllByDisplayValue("1")[0], "2");
+
+    await waitFor(() => {
+      expect(view.getAllByDisplayValue("2").length).toBeGreaterThanOrEqual(2);
+      expect(view.getAllByDisplayValue("150.00").length).toBeGreaterThanOrEqual(2);
+    });
+
+    expect(view.getByText("Didn't receive")).toBeTruthy();
+    expect(view.getByText("Didn't pay")).toBeTruthy();
   });
 });

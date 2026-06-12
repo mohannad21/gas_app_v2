@@ -32,6 +32,7 @@ import { useInitInventoryModal } from "@/hooks/useInitInventoryModal";
 import { useOrderPriceOverride } from "@/hooks/useOrderPriceOverride";
 import { useOrderKeyboardLayout } from "@/hooks/useOrderKeyboardLayout";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
 import BigBox from "@/components/entry/BigBox";
 import CustomerAdjustInlineForm from "@/components/entry/CustomerAdjustInlineForm";
 import FooterActions from "@/components/entry/FooterActions";
@@ -40,6 +41,12 @@ import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { getOrderWhatsappLink } from "@/lib/api";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
+import {
+  applyActivityToggleTap,
+  applyActivityToggleTargetChange,
+  computeActivityToggleSnap,
+  type ActivityToggleState,
+} from "@/lib/activityToggle";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale } from "@/lib/date";
@@ -102,8 +109,6 @@ function TradeValueText({ value }: { value: string | number }) {
   );
 }
 
-type ReplacementToggleState = "matched" | "with_old" | "none" | "custom";
-
 export default function NewOrderScreen() {
   const { customerId, systemId, source } = useLocalSearchParams<{
     customerId?: string | string[];
@@ -156,6 +161,14 @@ export default function NewOrderScreen() {
   const [entryMode, setEntryMode] = useState<"order" | "payment" | "return" | "adjustment">("order");
   const [orderMode, setOrderMode] = useState<"replacement" | "sell_iron" | "buy_iron">("replacement");
   const [paymentDirection, setPaymentDirection] = useState<"receive" | "payout">("receive");
+  const [replacementReceivedState, setReplacementReceivedState] =
+    useState<ActivityToggleState>("target");
+  const [replacementPaidState, setReplacementPaidState] =
+    useState<ActivityToggleState>("target");
+  const replacementReceivedStateRef = useRef<ActivityToggleState>("target");
+  const replacementPaidStateRef = useRef<ActivityToggleState>("target");
+  const previousReplacementReceivedTargetRef = useRef(0);
+  const previousReplacementPaidTargetRef = useRef(0);
   const [customerSearch, setCustomerSearch] = useState("");
   const searchInputRef = useRef<TextInput | null>(null);
 
@@ -437,22 +450,8 @@ export default function NewOrderScreen() {
         ? CUSTOMER_WORDING.moneyCredit(formatMoneyAmount(Math.abs(balanceAfter)))
         : CUSTOMER_WORDING.moneySettled;
   const moneyStatusIsAlert = balanceAfter > 0;
-  const replacementReceivedToggleState: ReplacementToggleState =
-    received === installed
-      ? "matched"
-      : cylinderDebtBeforeForGas > 0 && received === installed + cylinderDebtBeforeForGas
-        ? "with_old"
-        : received === 0
-          ? "none"
-          : "custom";
-  const replacementPaidToggleState: ReplacementToggleState =
-    paidInput === totalAmount
-      ? "matched"
-      : moneyDebtBefore > 0 && paidInput === totalAmount + moneyDebtBefore
-        ? "with_old"
-        : paidInput === 0
-          ? "none"
-          : "custom";
+  const replacementReceivedTarget = installed;
+  const replacementPaidTarget = totalAmount;
   const paymentModeStatusLine =
     balanceAfter > 0
       ? CUSTOMER_WORDING.moneyDebt(formatMoneyAmount(balanceAfter))
@@ -483,7 +482,20 @@ export default function NewOrderScreen() {
     setManualPrice(true);
     setValue("price_total", String(next));
     if (!paidDirty) {
-      setValue("paid_amount", String(next));
+      if (currentAction === "replacement") {
+        const paidNext = applyActivityToggleTargetChange({
+          previousFieldValue: paidInput,
+          previousTarget: replacementPaidTarget,
+          nextTarget: next,
+          previousState: replacementPaidStateRef.current,
+        });
+
+        setReplacementPaidState(paidNext.state);
+        replacementPaidStateRef.current = paidNext.state;
+        setValue("paid_amount", String(paidNext.fieldValue));
+      } else {
+        setValue("paid_amount", String(next));
+      }
     }
   };
 
@@ -493,6 +505,13 @@ export default function NewOrderScreen() {
     const next = Math.max(0, current + delta);
     setPaidDirty(true);
     setValue("paid_amount", String(next));
+    if (currentAction === "replacement") {
+      const snap = computeActivityToggleSnap(next, replacementPaidTarget);
+      if (snap) {
+        setReplacementPaidState(snap.state);
+        replacementPaidStateRef.current = snap.state;
+      }
+    }
   };
 
   const adjustGasPrice = (delta: number) => {
@@ -508,6 +527,14 @@ export default function NewOrderScreen() {
     setIronPriceDirty(true);
     setIronPriceInput(String(next));
   };
+
+  useEffect(() => {
+    replacementReceivedStateRef.current = replacementReceivedState;
+  }, [replacementReceivedState]);
+
+  useEffect(() => {
+    replacementPaidStateRef.current = replacementPaidState;
+  }, [replacementPaidState]);
 
   useEffect(() => {
     if (previousCustomerRef.current === selectedCustomer) {
@@ -526,6 +553,12 @@ export default function NewOrderScreen() {
     setIronPriceInput("");
     setIronPriceDirty(false);
     setPaidDirty(false);
+    setReplacementReceivedState("target");
+    setReplacementPaidState("target");
+    replacementReceivedStateRef.current = "target";
+    replacementPaidStateRef.current = "target";
+    previousReplacementReceivedTargetRef.current = 0;
+    previousReplacementPaidTargetRef.current = 0;
   }, [selectedCustomer, setValue]);
 
   useEffect(() => {
@@ -735,12 +768,62 @@ export default function NewOrderScreen() {
     if (manualPrice) return;
     if (installed <= 0) return;
 
-    const total = installed * unitPrice;
+    const total = installed * gasUnitPriceValue;
     setValue("price_total", String(total));
     if (!paidDirty) {
       setValue("paid_amount", String(total));
     }
-  }, [currentAction, installed, manualPrice, paidDirty, setValue, unitPrice]);
+  }, [currentAction, installed, manualPrice, paidDirty, setValue, gasUnitPriceValue]);
+
+  useEffect(() => {
+    if (currentAction !== "replacement") return;
+
+    const previousTarget = previousReplacementReceivedTargetRef.current;
+    const nextTarget = replacementReceivedTarget;
+    previousReplacementReceivedTargetRef.current = nextTarget;
+
+    const next = applyActivityToggleTargetChange({
+      previousFieldValue: received,
+      previousTarget,
+      nextTarget,
+      previousState: replacementReceivedStateRef.current,
+    });
+
+    setReplacementReceivedState(next.state);
+    replacementReceivedStateRef.current = next.state;
+
+    if (next.fieldValue !== received) {
+      setValue("cylinders_received", String(next.fieldValue), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [currentAction, received, replacementReceivedTarget, setValue]);
+
+  useEffect(() => {
+    if (currentAction !== "replacement") return;
+
+    const previousTarget = previousReplacementPaidTargetRef.current;
+    const nextTarget = replacementPaidTarget;
+    previousReplacementPaidTargetRef.current = nextTarget;
+
+    const next = applyActivityToggleTargetChange({
+      previousFieldValue: paidInput,
+      previousTarget,
+      nextTarget,
+      previousState: replacementPaidStateRef.current,
+    });
+
+    setReplacementPaidState(next.state);
+    replacementPaidStateRef.current = next.state;
+
+    if (next.fieldValue !== paidInput) {
+      setValue("paid_amount", String(next.fieldValue), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [currentAction, paidInput, replacementPaidTarget, setValue]);
 
   useEffect(() => {
     if (!isSellIron && !isBuyIron) return;
@@ -780,6 +863,12 @@ export default function NewOrderScreen() {
       setGasPriceDirty(false);
       setIronPriceDirty(false);
       setManualPrice(false);
+      setReplacementReceivedState("target");
+      setReplacementPaidState("target");
+      replacementReceivedStateRef.current = "target";
+      replacementPaidStateRef.current = "target";
+      previousReplacementReceivedTargetRef.current = 0;
+      previousReplacementPaidTargetRef.current = 0;
     }
   }, [currentAction, setValue]);
 
@@ -1224,7 +1313,19 @@ export default function NewOrderScreen() {
     const next = Math.max(0, current + delta);
     setValue("cylinders_installed", String(next), { shouldDirty: true, shouldValidate: true });
     if (currentAction === "replacement") {
-      setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+      const receivedNext = applyActivityToggleTargetChange({
+        previousFieldValue: received,
+        previousTarget: replacementReceivedTarget,
+        nextTarget: next,
+        previousState: replacementReceivedStateRef.current,
+      });
+
+      setReplacementReceivedState(receivedNext.state);
+      replacementReceivedStateRef.current = receivedNext.state;
+      setValue("cylinders_received", String(receivedNext.fieldValue), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
       setManualPrice(false);
     }
   };
@@ -1234,37 +1335,34 @@ export default function NewOrderScreen() {
     const current = parseCountValue(watch("cylinders_received"));
     const next = Math.max(0, current + delta);
     setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+    if (currentAction === "replacement") {
+      const snap = computeActivityToggleSnap(next, replacementReceivedTarget);
+      if (snap) {
+        setReplacementReceivedState(snap.state);
+        replacementReceivedStateRef.current = snap.state;
+      }
+    }
   };
 
   const cycleReplacementReceived = () => {
-    if (cylinderDebtBeforeForGas <= 0) {
-      const next = replacementReceivedToggleState === "matched" ? 0 : installed;
-      setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
-      return;
-    }
-    const next =
-      replacementReceivedToggleState === "matched"
-        ? installed + cylinderDebtBeforeForGas
-        : replacementReceivedToggleState === "with_old"
-          ? 0
-          : installed;
-    setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+    const next = applyActivityToggleTap(replacementReceivedStateRef.current, replacementReceivedTarget);
+    setReplacementReceivedState(next.state);
+    replacementReceivedStateRef.current = next.state;
+    setValue("cylinders_received", String(next.fieldValue), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   };
 
   const cycleReplacementPaid = () => {
     setPaidDirty(true);
-    if (moneyDebtBefore <= 0) {
-      const next = replacementPaidToggleState === "matched" ? 0 : totalAmount;
-      setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
-      return;
-    }
-    const next =
-      replacementPaidToggleState === "matched"
-        ? totalAmount + moneyDebtBefore
-        : replacementPaidToggleState === "with_old"
-          ? 0
-          : totalAmount;
-    setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
+    const next = applyActivityToggleTap(replacementPaidStateRef.current, replacementPaidTarget);
+    setReplacementPaidState(next.state);
+    replacementPaidStateRef.current = next.state;
+    setValue("paid_amount", String(next.fieldValue), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   };
 
   const togglePaymentModeAmount = () => {
@@ -1946,9 +2044,26 @@ export default function NewOrderScreen() {
                           onDecrement={() => adjustInstalled(-1)}
                           onChangeText={(text) => {
                             const sanitized = sanitizeCountInput(text);
+                            const nextInstalled = parseCountValue(sanitized);
                             field.onChange(sanitized);
-                            setValue("cylinders_received", sanitized);
                             setManualPrice(false);
+
+                            const next = applyActivityToggleTargetChange({
+                              previousFieldValue: received,
+                              previousTarget: replacementReceivedTarget,
+                              nextTarget: nextInstalled,
+                              previousState: replacementReceivedStateRef.current,
+                            });
+
+                            setReplacementReceivedState(next.state);
+                            replacementReceivedStateRef.current = next.state;
+
+                            if (next.fieldValue !== received) {
+                              setValue("cylinders_received", String(next.fieldValue), {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                            }
                           }}
                           error={Boolean(errors.cylinders_installed)}
                           inputRef={(node) => {
@@ -1977,7 +2092,20 @@ export default function NewOrderScreen() {
                           value={parseCountValue(field.value)}
                           onIncrement={() => adjustReceived(1)}
                           onDecrement={() => adjustReceived(-1)}
-                          onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
+                          onChangeText={(text) => {
+                            const sanitized = sanitizeCountInput(text);
+                            field.onChange(sanitized);
+
+                            const snap = computeActivityToggleSnap(
+                              parseCountValue(sanitized),
+                              replacementReceivedTarget
+                            );
+
+                            if (snap) {
+                              setReplacementReceivedState(snap.state);
+                              replacementReceivedStateRef.current = snap.state;
+                            }
+                          }}
                           error={Boolean(errors.cylinders_received)}
                           inputRef={(node) => {
                             inputRefs.current.cylinders_received = node;
@@ -1996,26 +2124,64 @@ export default function NewOrderScreen() {
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
                     <View style={{ flex: 1 }} />
                     <View style={{ flex: 1 }}>
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                          replacementReceivedToggleState === "none"
-                            ? styles.inlineActionButtonDanger
-                            : replacementReceivedToggleState === "with_old"
-                              ? styles.inlineActionButtonAlt
-                              : styles.inlineActionButtonSuccess,
-                        ]}
+                      <ActivityToggleButton
+                        testID="replacement-received-toggle"
+                        variant="receive"
+                        state={replacementReceivedState}
                         onPress={cycleReplacementReceived}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {replacementReceivedToggleState === "with_old"
-                            ? CUSTOMER_WORDING.returnedWithOld
-                            : replacementReceivedToggleState === "none"
-                              ? CUSTOMER_WORDING.didntReturn
-                              : CUSTOMER_WORDING.returned}
-                        </Text>
-                      </Pressable>
+                      />
+                    </View>
+                  </View>
+                </BigBox>
+                <BigBox title="Gas Selling Price" defaultExpanded>
+                  <View style={styles.tradeEquationRow}>
+                    <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
+                      <Text style={styles.tradeStatLabel}>QTY</Text>
+                      <View style={styles.tradeStatValueWrap}>
+                        <TradeValueText value={installed} />
+                      </View>
+                    </View>
+                    <View style={styles.tradeOperatorCell}>
+                      <View style={styles.tradeOperatorTopSpacer} />
+                      <View style={styles.tradeStatValueWrap}>
+                        <Text style={styles.tradeOperator}>x</Text>
+                      </View>
+                    </View>
+                    <FieldCell
+                      title="Gas Price"
+                      value={Number(gasPriceInput) || unitPrice}
+                      valueMode="decimal"
+                      onIncrement={() => {
+                        setManualPrice(false);
+                        adjustGasPrice(5);
+                      }}
+                      onDecrement={() => {
+                        setManualPrice(false);
+                        adjustGasPrice(-5);
+                      }}
+                      onChangeText={(text) => {
+                        setManualPrice(false);
+                        setGasPriceDirty(true);
+                        setGasPriceInput(text);
+                      }}
+                      steppers={replacementMoneySteppers}
+                      onFocus={() => {
+                        setAvoidKeyboard(true);
+                        setFocusTarget("payments");
+                      }}
+                      onBlur={() => setFocusTarget(null)}
+                    />
+                    <View style={styles.tradeOperatorCell}>
+                      <View style={styles.tradeOperatorTopSpacer} />
+                      <View style={styles.tradeStatValueWrap}>
+                        <Text style={styles.tradeOperator}>=</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
+                      <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                      <View style={styles.tradeStatValueWrap}>
+                        <TradeValueText value={installed * gasUnitPriceValue} />
+                      </View>
                     </View>
                   </View>
                 </BigBox>
@@ -2048,9 +2214,23 @@ export default function NewOrderScreen() {
                           onDecrement={() => adjustPriceTotal(-5)}
                           onChangeText={(text) => {
                             setManualPrice(true);
+                            const nextTotal = Number(text) || 0;
                             field.onChange(text);
                             if (!paidDirty) {
-                              setValue("paid_amount", text);
+                              const next = applyActivityToggleTargetChange({
+                                previousFieldValue: paidInput,
+                                previousTarget: replacementPaidTarget,
+                                nextTarget: nextTotal,
+                                previousState: replacementPaidStateRef.current,
+                              });
+
+                              setReplacementPaidState(next.state);
+                              replacementPaidStateRef.current = next.state;
+
+                              setValue("paid_amount", String(next.fieldValue), {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
                             }
                           }}
                           error={Boolean(errors.price_total)}
@@ -2083,6 +2263,12 @@ export default function NewOrderScreen() {
                           onChangeText={(text) => {
                             setPaidDirty(true);
                             field.onChange(text);
+                            const snap = computeActivityToggleSnap(Number(text) || 0, replacementPaidTarget);
+
+                            if (snap) {
+                              setReplacementPaidState(snap.state);
+                              replacementPaidStateRef.current = snap.state;
+                            }
                           }}
                           error={Boolean(errors.paid_amount)}
                           inputRef={(node) => {
@@ -2101,26 +2287,12 @@ export default function NewOrderScreen() {
                   <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
                     <View style={{ flex: 1 }} />
                     <View style={{ flex: 1 }}>
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                          replacementPaidToggleState === "none"
-                            ? styles.inlineActionButtonDanger
-                            : replacementPaidToggleState === "with_old"
-                              ? styles.inlineActionButtonAlt
-                              : styles.inlineActionButtonSuccess,
-                        ]}
+                      <ActivityToggleButton
+                        testID="replacement-paid-toggle"
+                        variant="payment"
+                        state={replacementPaidState}
                         onPress={cycleReplacementPaid}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {replacementPaidToggleState === "with_old"
-                            ? CUSTOMER_WORDING.paidWithDebt
-                            : replacementPaidToggleState === "none"
-                              ? CUSTOMER_WORDING.didntPay
-                              : CUSTOMER_WORDING.paid_}
-                        </Text>
-                      </Pressable>
+                      />
                     </View>
                   </View>
                 </BigBox>
