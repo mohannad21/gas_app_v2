@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -36,7 +35,6 @@ type BalanceState = "debts_on_distributor" | "balanced" | "credit_for_distributo
 
 export type CompanyAdjustInlineFormProps = {
   date: string;
-  accessoryId?: string;
   adjustment?: CompanyBalanceAdjustment | null;
   title?: string;
   showHeader?: boolean;
@@ -229,7 +227,6 @@ const describeCylinderValue = (value: number) => {
 
 export default function CompanyAdjustInlineForm({
   date,
-  accessoryId,
   adjustment = null,
   title,
   showHeader = false,
@@ -505,7 +502,6 @@ export default function CompanyAdjustInlineForm({
               placeholder="Optional note"
               value={note}
               onChangeText={setNote}
-              inputAccessoryViewID={accessoryId}
             />
           </View>
         </ScrollView>
@@ -523,15 +519,6 @@ export default function CompanyAdjustInlineForm({
         <CalendarModal visible={calendarOpen} value={adjustDate} onSelect={setAdjustDate} onClose={() => setCalendarOpen(false)} />
         <TimePickerModal visible={timeOpen} value={time} onSelect={setTime} onClose={() => setTimeOpen(false)} />
       </KeyboardAvoidingView>
-      {Platform.OS === "ios" && accessoryId ? (
-        <InputAccessoryView nativeID={accessoryId}>
-          <View style={styles.accessoryRow}>
-            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-              <Text style={styles.accessoryText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      ) : null}
     </View>
   );
 }
@@ -715,21 +702,6 @@ const styles = StyleSheet.create({
   },
   closeBtnText: {
     color: "#fff",
-    fontWeight: "700",
-  },
-  accessoryRow: {
-    padding: 8,
-    alignItems: "flex-end",
-    backgroundColor: "#f8fafc",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-  },
-  accessoryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  accessoryText: {
-    color: "#0a7ea4",
     fontWeight: "700",
   },
 });

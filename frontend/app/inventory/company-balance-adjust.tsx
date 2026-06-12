@@ -11,7 +11,6 @@ export default function CompanyBalanceAdjustScreen() {
   const adjustmentsQuery = useCompanyBalanceAdjustments({ enabled: !!adjustmentId });
   const adjustment = (adjustmentsQuery.data ?? []).find((entry) => entry.id === adjustmentId) ?? null;
   const isEditing = Boolean(adjustmentId);
-  const accessoryId = Platform.OS === "ios" ? "companyBalanceAdjustAccessory" : undefined;
 
   if (isEditing && !adjustmentsQuery.isLoading && !adjustment) {
     return (
@@ -41,7 +40,6 @@ export default function CompanyBalanceAdjustScreen() {
       <KeyboardAvoidingView style={styles.screenInner} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <CompanyAdjustInlineForm
           date=""
-          accessoryId={accessoryId}
           adjustment={adjustment}
           showHeader
           onClose={() => router.back()}

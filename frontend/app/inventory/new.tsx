@@ -2,10 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  InputAccessoryView,
-  Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -211,7 +208,6 @@ function InventoryAdjustForm({
   visible,
   entry,
   date,
-  accessoryId,
   inventoryBefore,
   isSubmitting,
   onCreate,
@@ -223,7 +219,6 @@ function InventoryAdjustForm({
   visible: boolean;
   entry: InventoryAdjustment | null;
   date: string;
-  accessoryId?: string;
   inventoryBefore: { full12: number; empty12: number; full48: number; empty48: number } | null;
   isSubmitting?: boolean;
   onCreate: (payload: {
@@ -502,7 +497,6 @@ function CashAdjustForm({
   visible,
   entry,
   date,
-  accessoryId,
   walletBefore,
   isSubmitting,
   onCreate,
@@ -514,7 +508,6 @@ function CashAdjustForm({
   visible: boolean;
   entry: CashAdjustment | null;
   date: string;
-  accessoryId?: string;
   walletBefore: number | null;
   isSubmitting?: boolean;
   onCreate: (payload: { date: string; time?: string; delta_cash: number; reason?: string }) => Promise<CashAdjustment>;
@@ -660,7 +653,6 @@ function CashAdjustForm({
 function CompanyPaymentForm({
   visible,
   date,
-  accessoryId,
   companyBalance,
   walletBalance,
   balanceReady,
@@ -672,7 +664,6 @@ function CompanyPaymentForm({
 }: {
   visible: boolean;
   date: string;
-  accessoryId?: string;
   companyBalance: number;
   walletBalance: number;
   balanceReady: boolean;
@@ -940,7 +931,6 @@ function CompanyPaymentForm({
           placeholder="Optional note"
           value={note}
           onChangeText={setNote}
-          inputAccessoryViewID={accessoryId}
         />
       </View>
       </ScrollView>
@@ -1029,7 +1019,6 @@ export default function InventoryNewScreen() {
 
   const [activeTab, setActiveTab] = useState<InventoryTab>(resolveTab(section));
   const businessDate = getLocalDateString();
-  const accessoryId = Platform.OS === "ios" ? "inventoryAccessory" : undefined;
 
   const inventoryLatest = useInventoryLatest();
   const dailyReportQuery = useDailyReportsV2(businessDate, businessDate);
@@ -1202,7 +1191,6 @@ export default function InventoryNewScreen() {
                 onSaved={closeScreen}
                 onSaveSuccess={({ effectiveAt, highlightEventType, entry }) => handleSaveSuccess(effectiveAt, highlightEventType, entry?.id)}
                 onSaveAndAddSuccess={() => handleSaveAndAddReturn()}
-                accessoryId={accessoryId}
                 editEntry={activeTab === "refill" || activeTab === "return" ? editRefill : null}
                 showHeader={false}
                 useCard={false}
@@ -1216,7 +1204,6 @@ export default function InventoryNewScreen() {
                 <CompanyPaymentForm
                   visible
                   date={businessDate}
-                  accessoryId={accessoryId}
                   companyBalance={companyBalance}
                   walletBalance={dailyReportQuery.data?.[0]?.wallet_end ?? 0}
                   balanceReady={companyBalanceReady}
@@ -1231,7 +1218,6 @@ export default function InventoryNewScreen() {
               ) : activeTab === "adjust" ? (
                 <CompanyAdjustInlineForm
                   date={businessDate}
-                  accessoryId={accessoryId}
                   onSaveSuccess={({ highlightId }) => handleCompanyAdjustSaveSuccess(highlightId)}
                   onSaveAndAddSuccess={() => setActiveTab("adjust")}
                 />
@@ -1240,7 +1226,6 @@ export default function InventoryNewScreen() {
                   visible
                   entry={editingCashAdjust}
                   date={businessDate}
-                  accessoryId={accessoryId}
                   walletBefore={dailyReportQuery.data?.[0]?.wallet_end ?? null}
                   isSubmitting={editingCashAdjust ? updateCashAdjust.isPending : createCashAdjust.isPending}
                   onCreate={async (payload) => {
@@ -1258,7 +1243,6 @@ export default function InventoryNewScreen() {
                   visible
                   entry={editingInventoryAdjust}
                   date={businessDate}
-                  accessoryId={accessoryId}
                   inventoryBefore={inventoryLatest.data ?? null}
                   isSubmitting={editingInventoryAdjust ? updateInventoryAdjust.isPending : adjustInventory.isPending}
                   onCreate={async (payload) => {
@@ -1275,15 +1259,6 @@ export default function InventoryNewScreen() {
             )}
           </View>
       </View>
-      {Platform.OS === "ios" && (
-        <InputAccessoryView nativeID={accessoryId}>
-          <View style={styles.accessoryRow}>
-            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-              <Text style={styles.accessoryText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      )}
     </SafeAreaView>
   );
 }
@@ -1763,24 +1738,6 @@ const styles = StyleSheet.create({
   },
   timeTextSelected: {
     color: "#fff",
-  },
-  accessoryRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    padding: 8,
-    backgroundColor: "#f8fafc",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
-  },
-  accessoryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "#0a7ea4",
-  },
-  accessoryText: {
-    color: "#fff",
-    fontWeight: "700",
   },
   nowButton: {
     alignSelf: "stretch",

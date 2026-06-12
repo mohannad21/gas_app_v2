@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   Alert,
-  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -302,13 +301,10 @@ export default function NewOrderScreen() {
     setInitDate,
     inventoryPromptedRef,
   } = useInitInventoryModal();
-  const initAccessoryId = Platform.OS === "ios" ? "initInventoryAccessory" : undefined;
-  const orderAccessoryId = Platform.OS === "ios" ? "orderFormAccessory" : undefined;
   const doneInputProps = {
     returnKeyType: "done" as const,
     blurOnSubmit: true,
     onSubmitEditing: () => Keyboard.dismiss(),
-    ...(orderAccessoryId ? { inputAccessoryViewID: orderAccessoryId } : {}),
   };
 
   /* -------------------- derived -------------------- */
@@ -1573,7 +1569,6 @@ export default function NewOrderScreen() {
           customerId={selectedCustomer}
           customerSection={customerSection}
           date={collectionDate}
-          accessoryId={orderAccessoryId}
           currentMoneyBalance={balanceBefore}
           current12Balance={cylinder12Before}
           current48Balance={cylinder48Before}
@@ -2646,7 +2641,6 @@ export default function NewOrderScreen() {
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
-                  inputAccessoryViewID={initAccessoryId}
                 />
               </View>
               <View style={styles.half}>
@@ -2661,7 +2655,6 @@ export default function NewOrderScreen() {
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
-                  inputAccessoryViewID={initAccessoryId}
                 />
               </View>
             </View>
@@ -2678,7 +2671,6 @@ export default function NewOrderScreen() {
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
-                  inputAccessoryViewID={initAccessoryId}
                 />
               </View>
               <View style={styles.half}>
@@ -2693,7 +2685,6 @@ export default function NewOrderScreen() {
                   returnKeyType="done"
                   blurOnSubmit
                   onSubmitEditing={() => Keyboard.dismiss()}
-                  inputAccessoryViewID={initAccessoryId}
                 />
               </View>
             </View>
@@ -2728,15 +2719,6 @@ export default function NewOrderScreen() {
             </View>
             </View>
           </ScrollView>
-          {Platform.OS === "ios" && (
-            <InputAccessoryView nativeID={initAccessoryId}>
-              <View style={styles.accessoryRow}>
-                <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-                  <Text style={styles.accessoryText}>Done</Text>
-                </Pressable>
-              </View>
-            </InputAccessoryView>
-          )}
         </KeyboardAvoidingView>
       </Modal>
 
@@ -2847,15 +2829,6 @@ export default function NewOrderScreen() {
             </View>
           )}
         </>
-      ) : null}
-      {Platform.OS === "ios" && orderAccessoryId ? (
-        <InputAccessoryView nativeID={orderAccessoryId}>
-          <View style={styles.accessoryRow}>
-            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-              <Text style={styles.accessoryText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
       ) : null}
     </KeyboardAvoidingView>
   );
@@ -3521,23 +3494,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: { fontWeight: "700", color: "#333" },
-  accessoryRow: {
-    backgroundColor: "#f1f5f9",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#cbd5f5",
-    alignItems: "flex-end",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  accessoryButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#0a7ea4",
-    borderRadius: 8,
-  },
-  accessoryText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
 });
 

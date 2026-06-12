@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import type { FieldStepper } from "@/constants/steppers";
 import { getMoneyDecimals } from "@/lib/money";
@@ -195,12 +195,9 @@ export function FieldCell({
         editable={editable}
         keyboardType={valueMode === "decimal" ? "decimal-pad" : "number-pad"}
         inputMode={valueMode === "decimal" ? "decimal" : "numeric"}
-        returnKeyType="done"
-        blurOnSubmit
         ref={inputRef}
         onFocus={onFocus}
         onBlur={onBlur}
-        onSubmitEditing={() => Keyboard.dismiss()}
       />
 
       {editable && showExtraTopRow ? (

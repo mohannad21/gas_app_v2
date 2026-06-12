@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -64,7 +63,6 @@ type AddRefillModalProps = {
   onSaved: (entry: SavedRefillEntry) => void;
   onSaveSuccess?: (details: { effectiveAt: string; entry: SavedRefillEntry; highlightEventType?: string }) => void;
   onSaveAndAddSuccess?: (details: { effectiveAt: string; mode: "refill" | "buy" | "return"; highlightEventType?: string }) => void;
-  accessoryId?: string;
   editEntry?: EditRefillEntry | null;
 };
 
@@ -168,7 +166,6 @@ export function RefillForm({
   onSaved,
   onSaveSuccess,
   onSaveAndAddSuccess,
-  accessoryId,
   editEntry,
   showHeader = true,
   useCard = true,
@@ -215,8 +212,6 @@ export function RefillForm({
   const refillDetails = refillDetailsQuery.data;
   const pricesQuery = usePriceSettings();
   const companyBalancesQuery = useCompanyBalances();
-  const accessoryViewId = accessoryId;
-  const paidAccessoryViewId = Platform.OS === "ios" ? "refillPaidAccessory" : undefined;
 
   const formState = useRefillFormState(visible, mode, editEntry, refillDetails?.notes ?? undefined);
 
@@ -1219,7 +1214,6 @@ export function RefillForm({
                   placeholder="Optional notes for this refill"
                   value={formState.notes}
                   onChangeText={formState.setNotes}
-                  inputAccessoryViewID={accessoryViewId}
                   multiline
                   numberOfLines={3}
                 />
@@ -1228,16 +1222,6 @@ export function RefillForm({
         </ScrollView>
         {footerActions}
       </View>
-
-      {paidAccessoryViewId ? (
-        <InputAccessoryView nativeID={paidAccessoryViewId}>
-          <View style={styles.accessoryRow}>
-            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-              <Text style={styles.accessoryText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      ) : null}
 
       <CalendarModal
         visible={formState.calendarOpen}
@@ -1277,7 +1261,6 @@ export function RefillForm({
           Keyboard.dismiss();
           formState.setInitOpen(false);
         }}
-        accessoryId={accessoryViewId}
       />
     </>
   );
@@ -1287,7 +1270,6 @@ export default function AddRefillModal({
   visible,
   onClose,
   onSaved,
-  accessoryId,
   editEntry,
 }: AddRefillModalProps) {
   return (
@@ -1301,7 +1283,6 @@ export default function AddRefillModal({
             visible={visible}
             onClose={onClose}
             onSaved={onSaved}
-            accessoryId={accessoryId}
             editEntry={editEntry}
             showHeader
           />
@@ -1449,7 +1430,6 @@ function InitInventoryModal({
   onSave,
   saveDisabled = false,
   saving = false,
-  accessoryId,
 }: {
   visible: boolean;
   date: string;
@@ -1459,7 +1439,6 @@ function InitInventoryModal({
   onSave: () => void;
   saveDisabled?: boolean;
   saving?: boolean;
-  accessoryId?: string;
 }) {
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -1485,7 +1464,6 @@ function InitInventoryModal({
                     keyboardType="numeric"
                     value={counts.full12}
                     onChangeText={(value) => onChangeCounts({ ...counts, full12: sanitizeCountInput(value) })}
-                    inputAccessoryViewID={accessoryId}
                   />
                 </View>
                 <View style={styles.half}>
@@ -1496,7 +1474,6 @@ function InitInventoryModal({
                     keyboardType="numeric"
                     value={counts.empty12}
                     onChangeText={(value) => onChangeCounts({ ...counts, empty12: sanitizeCountInput(value) })}
-                    inputAccessoryViewID={accessoryId}
                   />
                 </View>
               </View>
@@ -1509,7 +1486,6 @@ function InitInventoryModal({
                     keyboardType="numeric"
                     value={counts.full48}
                     onChangeText={(value) => onChangeCounts({ ...counts, full48: sanitizeCountInput(value) })}
-                    inputAccessoryViewID={accessoryId}
                   />
                 </View>
                 <View style={styles.half}>
@@ -1520,7 +1496,6 @@ function InitInventoryModal({
                     keyboardType="numeric"
                     value={counts.empty48}
                     onChangeText={(value) => onChangeCounts({ ...counts, empty48: sanitizeCountInput(value) })}
-                    inputAccessoryViewID={accessoryId}
                   />
                 </View>
               </View>
@@ -1942,24 +1917,6 @@ const styles = StyleSheet.create({
   },
   editPriceText: {
     color: "#0a7ea4",
-    fontWeight: "700",
-  },
-  accessoryRow: {
-    backgroundColor: "#f1f5f9",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#cbd5f5",
-    alignItems: "flex-end",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  accessoryButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#0a7ea4",
-    borderRadius: 8,
-  },
-  accessoryText: {
-    color: "#fff",
     fontWeight: "700",
   },
   calendarOverlay: {

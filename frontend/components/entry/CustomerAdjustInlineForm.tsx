@@ -3,10 +3,8 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  InputAccessoryView,
   Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,7 +31,6 @@ export type CustomerAdjustInlineFormProps = {
   customerId: string;
   customerSection?: ReactNode;
   date: string;
-  accessoryId?: string;
   currentMoneyBalance: number;
   current12Balance: number;
   current48Balance: number;
@@ -219,7 +216,6 @@ export default function CustomerAdjustInlineForm({
   customerId,
   customerSection,
   date,
-  accessoryId,
   currentMoneyBalance,
   current12Balance,
   current48Balance,
@@ -425,7 +421,6 @@ export default function CustomerAdjustInlineForm({
             placeholder="Optional reason"
             value={reason}
             onChangeText={setReason}
-            inputAccessoryViewID={accessoryId}
           />
         </View>
       </ScrollView>
@@ -451,15 +446,6 @@ export default function CustomerAdjustInlineForm({
       />
       <DateModal visible={dateOpen} value={adjustDate} onSelect={setAdjustDate} onClose={() => setDateOpen(false)} />
 
-      {Platform.OS === "ios" && accessoryId ? (
-        <InputAccessoryView nativeID={accessoryId}>
-          <View style={styles.accessoryRow}>
-            <Pressable onPress={() => Keyboard.dismiss()} style={styles.accessoryButton}>
-              <Text style={styles.accessoryText}>Done</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      ) : null}
     </View>
   );
 }
@@ -553,21 +539,6 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: "#fff",
-  },
-  accessoryRow: {
-    padding: 8,
-    alignItems: "flex-end",
-    backgroundColor: "#f8fafc",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d7dde4",
-  },
-  accessoryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  accessoryText: {
-    color: "#0a7ea4",
-    fontWeight: "700",
   },
   overlay: {
     flex: 1,
