@@ -1,14 +1,15 @@
+import { AppColors } from "./colors";
 import { GasType } from "@/types/domain";
 
 export const GasColors: Record<GasType, string> = {
-  "12kg": "#0a7ea4",
-  "48kg": "#d97706",
+  "12kg": AppColors.gas["12kg"],
+  "48kg": AppColors.gas["48kg"],
 };
 
 export function gasColor(gas?: string): string {
   if (gas === "12kg" || gas === "48kg") {
     return GasColors[gas];
   }
-  return "#475569";
+  return AppColors.gas.fallback;
 }
 

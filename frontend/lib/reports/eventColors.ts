@@ -1,3 +1,5 @@
+import { AppColors } from "@/constants/colors";
+
 import { ACTIVITY_KIND_META, normalizeEventType } from "../activityKindMeta";
 
 export function getEventColor(
@@ -6,5 +8,5 @@ export function getEventColor(
 ): string {
   const kind = normalizeEventType(eventType, ctx);
   if (kind) return ACTIVITY_KIND_META[kind].color;
-  return "#64748b";
+  return AppColors.scope.ledger;
 }

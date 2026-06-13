@@ -1,3 +1,4 @@
+import { AppColors } from "./colors";
 import { FontFamilies, FontSizes } from "./typography";
 
 export const Level3Tokens = {
@@ -24,19 +25,19 @@ export const Level3Tokens = {
     chipFamily: FontFamilies.medium,
   },
   colors: {
-    rowBg: "#ffffff",
-    border: "#e2e8f0",
-    textPrimary: "#0f172a",
-    textSecondary: "#475569",
-    textMuted: "#64748b",
-    money: "#0f172a",
-    settledBg: "#f0fdf4",
-    settledBorder: "#86efac",
-    settledText: "#166534",
-    actionChipBg: "#fff7ed",
-    actionChipBorder: "#fdba74",
-    actionChipText: "#9a3412",
-    actionLabel: "#7c2d12",
+    rowBg: AppColors.level3.rowBg,
+    border: AppColors.level3.border,
+    textPrimary: AppColors.level3.textPrimary,
+    textSecondary: AppColors.level3.textSecondary,
+    textMuted: AppColors.level3.textMuted,
+    money: AppColors.level3.money,
+    settledBg: AppColors.level3.settledBg,
+    settledBorder: AppColors.level3.settledBorder,
+    settledText: AppColors.level3.settledText,
+    actionChipBg: AppColors.level3.actionChipBg,
+    actionChipBorder: AppColors.level3.actionChipBorder,
+    actionChipText: AppColors.level3.actionChipText,
+    actionLabel: AppColors.level3.actionLabel,
   },
 };
 

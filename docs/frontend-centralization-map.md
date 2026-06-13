@@ -146,14 +146,25 @@ Exports `AppColors` with these groups:
 
 Do not add new hardcoded colors in `frontend/app/` or `frontend/components/` unless explicitly approved.
 
-Existing files that still hardcode these values, migration deferred to P2:
+Migrated central color consumers:
 
-- `frontend/constants/theme.ts`
-- `frontend/constants/gas.ts`
-- `frontend/constants/level3.ts`
-- `frontend/lib/activityKindMeta.ts`
-- `frontend/lib/reports/eventColors.ts`
-- shared button components such as `ActivityToggleButton`, `FooterActions`, and `PriceConfigButton`
+- `frontend/constants/theme.ts` - uses `AppColors` for light brand tint and matching light card background values
+- `frontend/constants/gas.ts` - uses `AppColors.gas`
+- `frontend/constants/level3.ts` - uses `AppColors.level3`
+- `frontend/lib/activityKindMeta.ts` - uses `AppColors.scope`
+- `frontend/lib/reports/eventColors.ts` - uses centralized report fallback color
+- `frontend/components/entry/ActivityToggleButton.tsx` - uses `AppColors.intent` and `AppColors.brand.onPrimary`
+- `frontend/components/entry/FooterActions.tsx` - uses `AppColors.brand` and `AppColors.intent`
+- `frontend/components/entry/PriceConfigButton.tsx` - uses `AppColors.brand`
+
+Known intentional exception:
+
+- `frontend/constants/theme.ts` keeps `tintColorDark = "#fff"` because dark-mode theme tint is not the same semantic concept as `brand.onPrimary`.
+
+Known remaining local colors:
+
+- Screen-level and component-level hardcoded colors outside this P2 scope still exist.
+- Do not add new hardcoded colors in future tickets; reuse `AppColors` or add a new semantic token centrally.
 
 ## Prices
 

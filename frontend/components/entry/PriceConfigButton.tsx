@@ -1,6 +1,8 @@
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
+import { AppColors } from "@/constants/colors";
+
 type PriceConfigButtonProps = {
   label?: string;
   style?: StyleProp<ViewStyle>;
@@ -33,11 +35,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     alignItems: "center",
-    backgroundColor: "#0a7ea4",
+    backgroundColor: AppColors.brand.primary,
     alignSelf: "flex-start",
   },
   text: {
-    color: "#fff",
+    color: AppColors.brand.onPrimary,
     fontWeight: "700",
     fontSize: 13,
     textAlign: "center",

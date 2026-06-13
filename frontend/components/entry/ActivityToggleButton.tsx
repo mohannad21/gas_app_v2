@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text } from "react-native";
 
+import { AppColors } from "@/constants/colors";
 import type { ActivityToggleState, ActivityToggleVariant } from "@/lib/activityToggle";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
@@ -47,13 +48,13 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   success: {
-    backgroundColor: "#16a34a",
+    backgroundColor: AppColors.intent.success,
   },
   danger: {
-    backgroundColor: "#dc2626",
+    backgroundColor: AppColors.intent.danger,
   },
   text: {
-    color: "#fff",
+    color: AppColors.brand.onPrimary,
     fontWeight: "700",
     fontSize: 12,
   },

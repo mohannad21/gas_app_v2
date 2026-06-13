@@ -91,6 +91,7 @@ Tickets should give the developer exact commands to run:
 - only affected test files
 - no full suite unless the ticket truly requires it
 - `npx tsc --noEmit` when imports, types, deleted files, or route types are affected
+- MAKE IT VERY CLEAR IN THE TICKET THAT CODEX NEVER RUN TESTS BY HIMSELF! CODEX RETURN THE COMMANDS AND THE DEVELOPER RUN THE TESTS AND RETURN THE RESULTS
 
 Each test section must state passing criteria.
 

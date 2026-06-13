@@ -1,5 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { AppColors } from "@/constants/colors";
+
 type FooterActionsProps = {
   onSave: () => void;
   onSaveAndAdd?: () => void;
@@ -33,7 +35,7 @@ export default function FooterActions({
             disabled={saveDisabled}
           >
             <View style={styles.btnContent}>
-              {saveAndAddLoading ? <ActivityIndicator size="small" color="#fff" /> : null}
+              {saveAndAddLoading ? <ActivityIndicator size="small" color={AppColors.brand.onPrimary} /> : null}
               <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                 {saveAndAddLoading ? "Saving..." : saveAndAddLabel}
               </Text>
@@ -46,7 +48,7 @@ export default function FooterActions({
           disabled={saveDisabled}
         >
           <View style={styles.btnContent}>
-            {primaryLoading ? <ActivityIndicator size="small" color="#fff" /> : null}
+            {primaryLoading ? <ActivityIndicator size="small" color={AppColors.brand.onPrimary} /> : null}
             <Text style={styles.btnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
               {primaryLoading ? "Saving..." : saveLabel}
             </Text>
@@ -72,20 +74,20 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     flex: 1,
-    backgroundColor: "#0a7ea4",
+    backgroundColor: AppColors.brand.primary,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: "center",
   },
   primaryBtn: {
     flex: 1,
-    backgroundColor: "#16a34a",
+    backgroundColor: AppColors.intent.success,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: "center",
   },
   btnText: {
-    color: "#fff",
+    color: AppColors.brand.onPrimary,
     fontWeight: "700",
     fontSize: 12,
     textAlign: "center",

@@ -1,3 +1,5 @@
+import { AppColors } from "@/constants/colors";
+
 type ArrowDirection = "swap-h" | "swap-v" | "in-h" | "out-h" | "in-v" | "out-v" | "none";
 type IconSymbol =
   | "money"
@@ -68,10 +70,10 @@ export type ActivityKindMeta = {
   subFilters: readonly ActivitySubFilterId[];
 };
 
-const CUSTOMER_COLOR = "#0ea5e9";
-const COMPANY_COLOR = "#f97316";
-const MONEY_COLOR = "#6366f1";
-const LEDGER_COLOR = "#64748b";
+const CUSTOMER_COLOR = AppColors.scope.customer;
+const COMPANY_COLOR = AppColors.scope.company;
+const MONEY_COLOR = AppColors.scope.money;
+const LEDGER_COLOR = AppColors.scope.ledger;
 
 const REGISTRY = {
   replacement: {
