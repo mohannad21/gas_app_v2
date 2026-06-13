@@ -22,6 +22,7 @@ import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
+import FormActionRow from "@/components/entry/FormActionRow";
 import { getUserFacingApiError, logApiError } from "@/lib/apiErrors";
 import { useCreateCashAdjustment, useCashAdjustments, useUpdateCashAdjustment } from "@/hooks/useCash";
 import { useCompanyBalances } from "@/hooks/useCompanyBalances";
@@ -40,7 +41,7 @@ import {
 } from "@/lib/balanceTransitions";
 import { parseCountValue, sanitizeCountInput } from "@/lib/countInput";
 import { formatDisplayMoney } from "@/lib/money";
-import { CUSTOMER_WORDING } from "@/lib/wording";
+import { CUSTOMER_WORDING, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 import {
   useAdjustInventory,
   useInventoryAdjustments,
@@ -845,7 +846,7 @@ function CompanyPaymentForm({
                 receiveDisabled && styles.modeTextDisabled,
               ]}
             >
-              Receive
+              {PAYMENT_DIRECTION_WORDING.buttons.receive}
             </Text>
           </Pressable>
           <Pressable
@@ -867,7 +868,7 @@ function CompanyPaymentForm({
                 payDisabled && styles.modeTextDisabled,
               ]}
             >
-              Pay
+              {PAYMENT_DIRECTION_WORDING.buttons.pay}
             </Text>
           </Pressable>
         </View>
@@ -897,16 +898,15 @@ function CompanyPaymentForm({
             steppers={MONEY_STEPPERS}
           />
         </StandaloneField>
-        <View style={styles.bigBoxActionRow}>
-          <StandaloneField>
-            <ActivityToggleButton
-              testID="company-payment-toggle"
-              variant={paymentToggleVariant}
-              state={paymentToggleState}
-              onPress={handlePaymentTogglePress}
-            />
-          </StandaloneField>
-        </View>
+        <FormActionRow align="full">
+          <ActivityToggleButton
+            testID="company-payment-toggle"
+            variant={paymentToggleVariant}
+            state={paymentToggleState}
+            onPress={handlePaymentTogglePress}
+            fullWidth
+          />
+        </FormActionRow>
         <InlineWalletFundingPrompt
           walletAmount={walletBalance}
           shortfall={companyPaymentShortfall}
@@ -1491,28 +1491,6 @@ const styles = StyleSheet.create({
   },
   paymentActionRow: {
     marginTop: 20,
-  },
-  bigBoxActionRow: {
-    marginTop: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inlineActionButton: {
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    minWidth: 110,
-    alignSelf: "center",
-  },
-  inlineActionButtonSuccess: {
-    backgroundColor: "#16a34a",
-  },
-  inlineActionText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
   },
   positiveValue: {
     color: "#15803d",

@@ -33,6 +33,7 @@ import { useOrderPriceOverride } from "@/hooks/useOrderPriceOverride";
 import { useOrderKeyboardLayout } from "@/hooks/useOrderKeyboardLayout";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
+import FormActionRow from "@/components/entry/FormActionRow";
 import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import BigBox from "@/components/entry/BigBox";
 import CustomerAdjustInlineForm from "@/components/entry/CustomerAdjustInlineForm";
@@ -55,7 +56,7 @@ import { calcCustomerCylinderDelta, calcCustomerMoneyDelta, calcMoneyUiResult } 
 import { formatDisplayMoney } from "@/lib/money";
 import { openDailyReportForDate, isAddDataSource } from "@/lib/saveFlow";
 import { showSuccessPulse } from "@/lib/successPulse";
-import { CUSTOMER_WORDING } from "@/lib/wording";
+import { CUSTOMER_WORDING, PAYMENT_DIRECTION_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
 import { AppColors } from "@/constants/colors";
 import { gasColor } from "@/constants/gas";
@@ -1922,7 +1923,7 @@ export default function NewOrderScreen() {
                       receivePaymentDisabled && styles.modeTextDisabled,
                     ]}
                   >
-                    Receive
+                    {PAYMENT_DIRECTION_WORDING.buttons.receive}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1944,7 +1945,7 @@ export default function NewOrderScreen() {
                       payoutPaymentDisabled && styles.modeTextDisabled,
                     ]}
                   >
-                    Payout
+                    {PAYMENT_DIRECTION_WORDING.buttons.pay}
                   </Text>
                 </Pressable>
               </View>
@@ -2188,17 +2189,15 @@ export default function NewOrderScreen() {
                       )}
                     />
                   </View>
-                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1 }}>
-                      <ActivityToggleButton
-                        testID="replacement-received-toggle"
-                        variant="receive"
-                        state={replacementReceivedState}
-                        onPress={cycleReplacementReceived}
-                      />
-                    </View>
-                  </View>
+                  <FormActionRow align="right">
+                    <ActivityToggleButton
+                      testID="replacement-received-toggle"
+                      variant="receive"
+                      state={replacementReceivedState}
+                      onPress={cycleReplacementReceived}
+                      fullWidth
+                    />
+                  </FormActionRow>
                 </BigBox>
                 <BigBox title="Gas Selling Price" defaultExpanded>
                   <View style={[styles.priceAccentWrap, { borderLeftColor: gasSellToCustomerAccent }]}>
@@ -2332,17 +2331,15 @@ export default function NewOrderScreen() {
                       )}
                     />
                   </View>
-                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1 }}>
-                      <ActivityToggleButton
-                        testID="replacement-paid-toggle"
-                        variant="payment"
-                        state={replacementPaidState}
-                        onPress={cycleReplacementPaid}
-                      />
-                    </View>
-                  </View>
+                  <FormActionRow align="right">
+                    <ActivityToggleButton
+                      testID="replacement-paid-toggle"
+                      variant="payment"
+                      state={replacementPaidState}
+                      onPress={cycleReplacementPaid}
+                      fullWidth
+                    />
+                  </FormActionRow>
                 </BigBox>
               </View>
               <FieldError message={errors.cylinders_installed?.message} />
@@ -2394,26 +2391,14 @@ export default function NewOrderScreen() {
                     )}
                   />
                 </StandaloneField>
-                <View style={styles.bigBoxActionRow}>
-                  <StandaloneField>
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                        paidInput === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={togglePaymentModeAmount}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {paidInput === 0
-                          ? paymentDirection === "payout"
-                            ? "Pay all"
-                            : "Receive all"
-                          : CUSTOMER_WORDING.didntPay}
-                      </Text>
-                    </Pressable>
-                  </StandaloneField>
-                </View>
+                <FormActionRow align="full">
+                  <ActivityToggleButton
+                    variant={paymentDirection === "payout" ? "payment" : "receive"}
+                    state={paidInput === 0 ? "zero" : "target"}
+                    onPress={togglePaymentModeAmount}
+                    fullWidth
+                  />
+                </FormActionRow>
               </BigBox>
               <FieldError message={errors.paid_amount?.message} />
             </>
@@ -2456,24 +2441,14 @@ export default function NewOrderScreen() {
                     )}
                   />
                 </StandaloneField>
-                <View style={styles.bigBoxActionRow}>
-                  <StandaloneField>
-                    <Pressable
-                      style={[
-                        styles.inlineActionButton,
-                        { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                        received === 0 ? styles.inlineActionButtonDanger : styles.inlineActionButtonSuccess,
-                      ]}
-                      onPress={toggleReturnModeAmount}
-                    >
-                      <Text style={styles.inlineActionText}>
-                        {received === Math.max(0, cylinderDebtBeforeForGas)
-                          ? CUSTOMER_WORDING.didntReturn
-                          : CUSTOMER_WORDING.returnAll}
-                      </Text>
-                    </Pressable>
-                  </StandaloneField>
-                </View>
+                <FormActionRow align="full">
+                  <ActivityToggleButton
+                    variant="return"
+                    state={received === Math.max(0, cylinderDebtBeforeForGas) ? "target" : "zero"}
+                    onPress={toggleReturnModeAmount}
+                    fullWidth
+                  />
+                </FormActionRow>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />
             </>
@@ -2674,17 +2649,15 @@ export default function NewOrderScreen() {
                     )}
                   />
                 </View>
-                <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-                  <View style={{ flex: 1 }} />
-                  <View style={{ flex: 1 }}>
-                    <ActivityToggleButton
-                      testID="sell-full-payment-toggle"
-                      variant="payment"
-                      state={tradePaidState}
-                      onPress={cycleTradePaid}
-                    />
-                  </View>
-                </View>
+                <FormActionRow align="right">
+                  <ActivityToggleButton
+                    testID="sell-full-payment-toggle"
+                    variant="payment"
+                    state={tradePaidState}
+                    onPress={cycleTradePaid}
+                    fullWidth
+                  />
+                </FormActionRow>
               </BigBox>
               <FieldError message={errors.cylinders_installed?.message} />
               <FieldError message={errors.paid_amount?.message} />
@@ -2818,17 +2791,15 @@ export default function NewOrderScreen() {
                     )}
                   />
                 </View>
-                <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-                  <View style={{ flex: 1 }} />
-                  <View style={{ flex: 1 }}>
-                    <ActivityToggleButton
-                      testID="buy-empty-payment-toggle"
-                      variant="payment"
-                      state={tradePaidState}
-                      onPress={cycleTradePaid}
-                    />
-                  </View>
-                </View>
+                <FormActionRow align="right">
+                  <ActivityToggleButton
+                    testID="buy-empty-payment-toggle"
+                    variant="payment"
+                    state={tradePaidState}
+                    onPress={cycleTradePaid}
+                    fullWidth
+                  />
+                </FormActionRow>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />
               <FieldError message={errors.paid_amount?.message} />
@@ -3403,11 +3374,6 @@ const styles = StyleSheet.create({
     minWidth: 160,
     alignSelf: "center",
   },
-  bigBoxActionRow: {
-    marginTop: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   nowButton: {
     alignSelf: "stretch",
     paddingHorizontal: 12,
@@ -3459,27 +3425,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   alertText: { color: "#b00020", fontWeight: "700", fontSize: 12 },
-  inlineActionStack: {
-    marginTop: 8,
-    gap: 6,
-  },
-  inlineActionButton: {
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    minWidth: 110,
-    alignSelf: "center",
-  },
-  inlineActionButtonSuccess: {
-    backgroundColor: "#16a34a",
-  },
-  inlineActionText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-  },
   tradeEquationRow: {
     flexDirection: "row",
     gap: 8,
@@ -3540,20 +3485,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#94a3b8",
     textAlign: "center",
-  },
-  inlineActionButtonAlt: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: "center",
-    backgroundColor: "#0a7ea4",
-  },
-  inlineActionButtonDanger: {
-    backgroundColor: "#dc2626",
-  },
-  inlineActionTextAlt: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
   },
   primary: {
     backgroundColor: "#0a7ea4",

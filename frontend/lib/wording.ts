@@ -1,5 +1,9 @@
 export const PAYMENT_DIRECTION_WORDING = {
   settled: "Settled",
+  buttons: {
+    receive: "Receive",
+    pay: "Pay",
+  },
   customer: {
     owesYou: (value: string) => `Debts on customer ${value}`,
     youOwe: (value: string) => `Credit for customer ${value}`,

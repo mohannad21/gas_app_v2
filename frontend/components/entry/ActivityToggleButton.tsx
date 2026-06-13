@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 
 import { AppColors } from "@/constants/colors";
 import type { ActivityToggleState, ActivityToggleVariant } from "@/lib/activityToggle";
@@ -9,6 +9,8 @@ type ActivityToggleButtonProps = {
   state: ActivityToggleState;
   onPress: () => void;
   testID?: string;
+  fullWidth?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
 const LABELS: Record<ActivityToggleVariant, Record<ActivityToggleState, string>> = {
@@ -26,11 +28,23 @@ const LABELS: Record<ActivityToggleVariant, Record<ActivityToggleState, string>>
   },
 };
 
-export default function ActivityToggleButton({ variant, state, onPress, testID }: ActivityToggleButtonProps) {
+export default function ActivityToggleButton({
+  variant,
+  state,
+  onPress,
+  testID,
+  fullWidth = false,
+  style,
+}: ActivityToggleButtonProps) {
   return (
     <Pressable
       testID={testID}
-      style={[styles.button, state === "zero" ? styles.success : styles.danger]}
+      style={[
+        styles.button,
+        fullWidth && styles.fullWidth,
+        state === "zero" ? styles.success : styles.danger,
+        style,
+      ]}
       onPress={onPress}
     >
       <Text style={styles.text}>{LABELS[variant][state]}</Text>
@@ -46,6 +60,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     minWidth: 110,
     alignSelf: "center",
+  },
+  fullWidth: {
+    alignSelf: "stretch",
+    minWidth: 0,
   },
   success: {
     backgroundColor: AppColors.intent.success,

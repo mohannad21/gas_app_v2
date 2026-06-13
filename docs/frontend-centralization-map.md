@@ -123,6 +123,14 @@ These files currently contain local or specialized metadata/config and should be
 - `frontend/app/welcome/index.tsx`  
   Contains setup wizard field definitions and local steppers.
 
+## Shared Entry UI Components
+
+- `frontend/components/entry/FormActionRow.tsx`
+  Shared layout wrapper for form action buttons. Use it for full-width single-field actions and left/right aligned two-field actions.
+
+- `frontend/components/entry/ActivityToggleButton.tsx`
+  Shared 2-state action button for payment, receive, and return toggles. Labels come from `frontend/lib/wording.ts`; behavior comes from `frontend/lib/activityToggle.ts`.
+
 ## Routes
 
 Known canonical route decisions:

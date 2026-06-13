@@ -17,7 +17,9 @@ import {
 } from "react-native";
 
 import BigBox from "@/components/entry/BigBox";
+import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
 import FooterActions from "@/components/entry/FooterActions";
+import FormActionRow from "@/components/entry/FormActionRow";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
 import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
@@ -228,7 +230,7 @@ export function RefillForm({
   );
   const base = useMemo(() => {
     if (editEntry?.refill_id) {
-      if (!refillDetails) return null;
+      if (!refillDetails) return snapshotQuery.data ?? inventoryLatestQuery.data ?? null;
       return {
         as_of: refillDetails.effective_at,
         full12: refillDetails.before_full_12 ?? 0,
@@ -740,25 +742,17 @@ export function RefillForm({
                       />
                     </StandaloneField>
                     {owedReturn12 > 0 ? (
-                      <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <StandaloneField>
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                              ret12Value === owedReturn12 ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              formState.setRet12Touched(true);
-                              formState.setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {ret12Value === owedReturn12 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                            </Text>
-                          </Pressable>
-                        </StandaloneField>
-                      </View>
+                      <FormActionRow align="full" style={{ marginTop: 8 }}>
+                        <ActivityToggleButton
+                          variant="return"
+                          state={ret12Value === owedReturn12 ? "target" : "zero"}
+                          fullWidth
+                          onPress={() => {
+                            formState.setRet12Touched(true);
+                            formState.setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
+                          }}
+                        />
+                      </FormActionRow>
                     ) : null}
                     {return12Invalid ? (
                       <Text style={styles.errorText}>
@@ -787,25 +781,17 @@ export function RefillForm({
                       />
                     </StandaloneField>
                     {owedReturn48 > 0 ? (
-                      <View style={{ marginTop: 8, alignItems: "center", justifyContent: "center" }}>
-                        <StandaloneField>
-                          <Pressable
-                            style={[
-                              styles.inlineActionButton,
-                              { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                              ret48Value === owedReturn48 ? null : styles.inlineActionButtonSuccess,
-                            ]}
-                            onPress={() => {
-                              formState.setRet48Touched(true);
-                              formState.setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
-                            }}
-                          >
-                            <Text style={styles.inlineActionText}>
-                              {ret48Value === owedReturn48 ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returnAll}
-                            </Text>
-                          </Pressable>
-                        </StandaloneField>
-                      </View>
+                      <FormActionRow align="full" style={{ marginTop: 8 }}>
+                        <ActivityToggleButton
+                          variant="return"
+                          state={ret48Value === owedReturn48 ? "target" : "zero"}
+                          fullWidth
+                          onPress={() => {
+                            formState.setRet48Touched(true);
+                            formState.setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
+                          }}
+                        />
+                      </FormActionRow>
                     ) : null}
                     {return48Invalid ? (
                       <Text style={styles.errorText}>
@@ -845,27 +831,18 @@ export function RefillForm({
                     />
                   </View>
                   {/* 12kg Return toggle — aligned under Return (right) field */}
-                  <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1 }}>
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                          buy12Value > 0 && ret12Value === buy12Value ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          if (buy12Value <= 0) return;
-                          formState.setRet12Touched(true);
-                          formState.setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {buy12Value > 0 && ret12Value === buy12Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                  <FormActionRow align="right" style={{ marginTop: 4 }}>
+                    <ActivityToggleButton
+                      variant="return"
+                      state={buy12Value > 0 && ret12Value === buy12Value ? "target" : "zero"}
+                      fullWidth
+                      onPress={() => {
+                        if (buy12Value <= 0) return;
+                        formState.setRet12Touched(true);
+                        formState.setRet12(buy12Value > 0 && ret12Value === buy12Value ? "0" : String(buy12Value));
+                      }}
+                    />
+                  </FormActionRow>
                   {return12Invalid ? (
                     <Text style={styles.errorText}>
                       Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
@@ -895,27 +872,18 @@ export function RefillForm({
                     />
                   </View>
                   {/* 48kg Return toggle — aligned under Return (right) field */}
-                  <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1 }}>
-                      <Pressable
-                        style={[
-                          styles.inlineActionButton,
-                          { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                          buy48Value > 0 && ret48Value === buy48Value ? null : styles.inlineActionButtonSuccess,
-                        ]}
-                        onPress={() => {
-                          if (buy48Value <= 0) return;
-                          formState.setRet48Touched(true);
-                          formState.setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
-                        }}
-                      >
-                        <Text style={styles.inlineActionText}>
-                          {buy48Value > 0 && ret48Value === buy48Value ? CUSTOMER_WORDING.didntReturn : CUSTOMER_WORDING.returned}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                  <FormActionRow align="right" style={{ marginTop: 4 }}>
+                    <ActivityToggleButton
+                      variant="return"
+                      state={buy48Value > 0 && ret48Value === buy48Value ? "target" : "zero"}
+                      fullWidth
+                      onPress={() => {
+                        if (buy48Value <= 0) return;
+                        formState.setRet48Touched(true);
+                        formState.setRet48(buy48Value > 0 && ret48Value === buy48Value ? "0" : String(buy48Value));
+                      }}
+                    />
+                  </FormActionRow>
                   {return48Invalid ? (
                     <Text style={styles.errorText}>
                       Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.
@@ -1156,7 +1124,7 @@ export function RefillForm({
                   {/* Money BigBox.
                       statusLine shows the money debt/credit alert (red if owing).
                       Total is read-only. Paid is adjustable.
-                      Toggle button: when paid=0 Ã¢â€ â€™ "Paid all" (green) sets paid=total.
+                      Toggle button: when paid=0 Ã¢â€ â€™ "Pay all" (green) sets paid=total.
                                      when paid>0 Ã¢â€ â€™ "Didn't pay" (red) sets paid=0.
                       InlineWalletFundingPrompt shows if wallet is short. */}
                   <BigBox
@@ -1191,27 +1159,17 @@ export function RefillForm({
                         steppers={FIELD_PAID_STEPPERS}
                       />
                     </View>
-                    {/* Paid all toggle — aligned under Paid (right) field */}
-                    <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                      <View style={{ flex: 1 }} />
-                      <View style={{ flex: 1 }}>
-                        <Pressable
-                          style={[
-                            styles.inlineActionButton,
-                            { width: "100%", alignSelf: "stretch", minWidth: 0 },
-                            paidAmountValue === 0 ? styles.inlineActionButtonSuccess : null,
-                          ]}
-                          onPress={() => {
-                            formState.setPaidTouched(true);
-                            formState.setPaidNow(paidAmountValue === 0 ? String(totalCost) : "0");
-                          }}
-                        >
-                          <Text style={styles.inlineActionText}>
-                            {paidAmountValue === 0 ? "Paid all" : CUSTOMER_WORDING.didntPay}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
+                    <FormActionRow align="right" style={{ marginTop: 4 }}>
+                      <ActivityToggleButton
+                        variant="payment"
+                        state={paidAmountValue === 0 ? "zero" : "target"}
+                        fullWidth
+                        onPress={() => {
+                          formState.setPaidTouched(true);
+                          formState.setPaidNow(paidAmountValue === 0 ? String(totalCost) : "0");
+                        }}
+                      />
+                    </FormActionRow>
                     {canEditMoney ? (
                       <InlineWalletFundingPrompt
                         walletAmount={walletBalance}
@@ -1826,26 +1784,6 @@ const styles = StyleSheet.create({
   priceAccentWrap: {
     borderLeftWidth: 4,
     paddingLeft: 10,
-  },
-  inlineActionButton: {
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    minWidth: 110,
-    alignSelf: "center",
-  },
-  inlineActionButtonSuccess: {
-    backgroundColor: "#16a34a",
-  },
-  inlineActionButtonAlt: {
-    backgroundColor: "#0a7ea4",
-  },
-  inlineActionText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
   },
   positiveValue: {
     color: "#15803d",
