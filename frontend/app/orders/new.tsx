@@ -61,6 +61,7 @@ import { GasType, OrderCreateInput } from "@/types/domain";
 import { AppColors } from "@/constants/colors";
 import { gasColor } from "@/constants/gas";
 import { PRICE_SECTIONS } from "@/constants/prices";
+import { PAYMENT_STEPPERS } from "@/constants/steppers";
 
 type OrderFormValues = {
   customer_id: string;
@@ -171,9 +172,12 @@ export default function NewOrderScreen() {
     useState<ActivityToggleState>("target");
   const [tradePaidState, setTradePaidState] =
     useState<ActivityToggleState>("target");
+  const [paymentToggleState, setPaymentToggleState] =
+    useState<ActivityToggleState>("target");
   const replacementReceivedStateRef = useRef<ActivityToggleState>("target");
   const replacementPaidStateRef = useRef<ActivityToggleState>("target");
   const tradePaidStateRef = useRef<ActivityToggleState>("target");
+  const paymentToggleStateRef = useRef<ActivityToggleState>("target");
   const previousReplacementReceivedTargetRef = useRef(0);
   const previousReplacementPaidTargetRef = useRef(0);
   const previousTradePaidTargetRef = useRef(0);
@@ -527,6 +531,17 @@ export default function NewOrderScreen() {
         tradePaidStateRef.current = snap.state;
       }
     }
+    if (isPayment) {
+      const paymentTarget =
+        paymentDirection === "payout"
+          ? Math.max(0, Math.abs(balanceBefore))
+          : Math.max(0, balanceBefore);
+      const snap = computeActivityToggleSnap(next, paymentTarget);
+      if (snap) {
+        setPaymentToggleState(snap.state);
+        paymentToggleStateRef.current = snap.state;
+      }
+    }
   };
 
   const adjustGasPrice = (delta: number) => {
@@ -639,14 +654,19 @@ export default function NewOrderScreen() {
 
   useEffect(() => {
     if (!isPayment) return;
-    if (balanceBefore > 0) {
-      setPaymentDirection("receive");
-      return;
-    }
+    let direction: "receive" | "payout" = "receive";
     if (balanceBefore < 0) {
-      setPaymentDirection("payout");
+      direction = "payout";
     }
-  }, [balanceBefore, isPayment]);
+    setPaymentDirection(direction);
+    const target =
+      direction === "payout"
+        ? Math.max(0, Math.abs(balanceBefore))
+        : Math.max(0, balanceBefore);
+    setValue("paid_amount", String(target), { shouldDirty: false, shouldValidate: false });
+    setPaymentToggleState("target");
+    paymentToggleStateRef.current = "target";
+  }, [balanceBefore, isPayment, setValue]);
 
   /* -------------------- pricing -------------------- */
 
@@ -1436,9 +1456,13 @@ export default function NewOrderScreen() {
   const togglePaymentModeAmount = () => {
     setPaidDirty(true);
     const settleAmount =
-      paymentDirection === "payout" ? Math.max(0, Math.abs(balanceBefore)) : Math.max(0, balanceBefore);
-    const next = paidInput === settleAmount ? 0 : settleAmount;
-    setValue("paid_amount", String(next), { shouldDirty: true, shouldValidate: true });
+      paymentDirection === "payout"
+        ? Math.max(0, Math.abs(balanceBefore))
+        : Math.max(0, balanceBefore);
+    const next = applyActivityToggleTap(paymentToggleStateRef.current, settleAmount);
+    setPaymentToggleState(next.state);
+    paymentToggleStateRef.current = next.state;
+    setValue("paid_amount", String(next.fieldValue), { shouldDirty: true, shouldValidate: true });
   };
 
   const toggleReturnModeAmount = () => {
@@ -2369,12 +2393,21 @@ export default function NewOrderScreen() {
                         title={CUSTOMER_WORDING.paid}
                         comment={`Wallet ${formatMoneyDisplay(walletBalance)} -> ${formatMoneyDisplay(walletAfterPayment)}`}
                         value={Number(field.value) || 0}
-                        valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
                         onChangeText={(text) => {
                           setPaidDirty(true);
                           field.onChange(text);
+                          const parsed = Number(text) || 0;
+                          const paymentTarget =
+                            paymentDirection === "payout"
+                              ? Math.max(0, Math.abs(balanceBefore))
+                              : Math.max(0, balanceBefore);
+                          const snap = computeActivityToggleSnap(parsed, paymentTarget);
+                          if (snap) {
+                            setPaymentToggleState(snap.state);
+                            paymentToggleStateRef.current = snap.state;
+                          }
                         }}
                         error={Boolean(errors.paid_amount)}
                         inputRef={(node) => {
@@ -2386,15 +2419,15 @@ export default function NewOrderScreen() {
                           setFocusTarget("payments");
                         }}
                         onBlur={() => setFocusTarget(null)}
-                        steppers={replacementMoneySteppers}
+                        steppers={PAYMENT_STEPPERS}
                       />
                     )}
                   />
                 </StandaloneField>
                 <FormActionRow align="full">
                   <ActivityToggleButton
-                    variant={paymentDirection === "payout" ? "payment" : "receive"}
-                    state={paidInput === 0 ? "zero" : "target"}
+                    variant="payment"
+                    state={paymentToggleState}
                     onPress={togglePaymentModeAmount}
                     fullWidth
                   />
