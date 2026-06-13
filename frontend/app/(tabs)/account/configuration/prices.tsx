@@ -18,6 +18,7 @@ export default function PricesConfigurationScreen() {
   const pricesQuery = usePriceSettings();
   const savePriceMutation = useSavePriceSetting();
   const [values, setValues] = useState<PriceFormValues>(DEFAULT_VALUES);
+  const [savedValues, setSavedValues] = useState<PriceFormValues>(DEFAULT_VALUES);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function PricesConfigurationScreen() {
         .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1))[0];
     const p12 = find("12kg");
     const p48 = find("48kg");
-    setValues({
+    const loaded: PriceFormValues = {
       sell12: p12?.selling_price ?? 0,
       sell48: p48?.selling_price ?? 0,
       buy12: p12?.buying_price ?? 0,
@@ -39,7 +40,9 @@ export default function PricesConfigurationScreen() {
       companyIron48: p48?.company_iron_price ?? 0,
       sellIron12: p12?.selling_iron_price ?? 0,
       sellIron48: p48?.selling_iron_price ?? 0,
-    });
+    };
+    setValues(loaded);
+    setSavedValues(loaded);
   }, [pricesQuery.data]);
 
   function handleChange(key: keyof PriceFormValues, value: number) {
@@ -105,6 +108,7 @@ export default function PricesConfigurationScreen() {
         {!pricesQuery.isLoading && !pricesQuery.isError ? (
           <PriceInputForm
             values={values}
+            previousValues={savedValues}
             onChange={handleChange}
             disabled={savePriceMutation.isPending}
           />

@@ -17,6 +17,7 @@ export type PriceFormValues = {
 
 type Props = {
   values: PriceFormValues;
+  previousValues?: PriceFormValues;
   onChange: (key: keyof PriceFormValues, value: number) => void;
   disabled?: boolean;
 };
@@ -43,11 +44,13 @@ function makeCell(
   values: PriceFormValues,
   onChange: Props["onChange"],
   steppers: FieldStepper[],
-  disabled: boolean
+  disabled: boolean,
+  previousValues?: PriceFormValues
 ) {
   const value = values[key];
   return {
     title,
+    comment: previousValues ? `Old ${previousValues[key] > 0 ? previousValues[key] : "-"}` : undefined,
     value,
     valueMode: "decimal" as const,
     onIncrement: () => onChange(key, value + 1),
@@ -61,41 +64,41 @@ function makeCell(
   };
 }
 
-export default function PriceInputForm({ values, onChange, disabled = false }: Props) {
+export default function PriceInputForm({ values, previousValues, onChange, disabled = false }: Props) {
   return (
     <>
       <BigBox title="Gas Selling Prices" defaultExpanded>
         <FieldPair
-          left={makeCell("sell12", "12kg", values, onChange, SELL_STEPPERS, disabled)}
-          right={makeCell("sell48", "48kg", values, onChange, SELL_STEPPERS, disabled)}
+          left={makeCell("sell12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
+          right={makeCell("sell48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
         />
       </BigBox>
 
       <BigBox title="Gas Buying Prices" defaultExpanded>
         <FieldPair
-          left={makeCell("buy12", "12kg", values, onChange, BUY_STEPPERS, disabled)}
-          right={makeCell("buy48", "48kg", values, onChange, BUY_STEPPERS, disabled)}
+          left={makeCell("buy12", "12kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
+          right={makeCell("buy48", "48kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
         />
       </BigBox>
 
       <BigBox title="Iron Buy - Customer">
         <FieldPair
-          left={makeCell("buyIron12", "12kg", values, onChange, SELL_STEPPERS, disabled)}
-          right={makeCell("buyIron48", "48kg", values, onChange, SELL_STEPPERS, disabled)}
+          left={makeCell("buyIron12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
+          right={makeCell("buyIron48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
         />
       </BigBox>
 
       <BigBox title="Iron Buy - Company">
         <FieldPair
-          left={makeCell("companyIron12", "12kg", values, onChange, BUY_STEPPERS, disabled)}
-          right={makeCell("companyIron48", "48kg", values, onChange, BUY_STEPPERS, disabled)}
+          left={makeCell("companyIron12", "12kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
+          right={makeCell("companyIron48", "48kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
         />
       </BigBox>
 
       <BigBox title="Iron Sell - Customer">
         <FieldPair
-          left={makeCell("sellIron12", "12kg", values, onChange, SELL_STEPPERS, disabled)}
-          right={makeCell("sellIron48", "48kg", values, onChange, SELL_STEPPERS, disabled)}
+          left={makeCell("sellIron12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
+          right={makeCell("sellIron48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
         />
       </BigBox>
     </>

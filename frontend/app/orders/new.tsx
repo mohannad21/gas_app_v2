@@ -33,6 +33,7 @@ import { useOrderPriceOverride } from "@/hooks/useOrderPriceOverride";
 import { useOrderKeyboardLayout } from "@/hooks/useOrderKeyboardLayout";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
+import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import BigBox from "@/components/entry/BigBox";
 import CustomerAdjustInlineForm from "@/components/entry/CustomerAdjustInlineForm";
 import FooterActions from "@/components/entry/FooterActions";
@@ -165,10 +166,14 @@ export default function NewOrderScreen() {
     useState<ActivityToggleState>("target");
   const [replacementPaidState, setReplacementPaidState] =
     useState<ActivityToggleState>("target");
+  const [tradePaidState, setTradePaidState] =
+    useState<ActivityToggleState>("target");
   const replacementReceivedStateRef = useRef<ActivityToggleState>("target");
   const replacementPaidStateRef = useRef<ActivityToggleState>("target");
+  const tradePaidStateRef = useRef<ActivityToggleState>("target");
   const previousReplacementReceivedTargetRef = useRef(0);
   const previousReplacementPaidTargetRef = useRef(0);
+  const previousTradePaidTargetRef = useRef(0);
   const [customerSearch, setCustomerSearch] = useState("");
   const searchInputRef = useRef<TextInput | null>(null);
 
@@ -512,6 +517,13 @@ export default function NewOrderScreen() {
         replacementPaidStateRef.current = snap.state;
       }
     }
+    if (isSellIron || isBuyIron) {
+      const snap = computeActivityToggleSnap(next, tradePaidTarget);
+      if (snap) {
+        setTradePaidState(snap.state);
+        tradePaidStateRef.current = snap.state;
+      }
+    }
   };
 
   const adjustGasPrice = (delta: number) => {
@@ -537,6 +549,10 @@ export default function NewOrderScreen() {
   }, [replacementPaidState]);
 
   useEffect(() => {
+    tradePaidStateRef.current = tradePaidState;
+  }, [tradePaidState]);
+
+  useEffect(() => {
     if (previousCustomerRef.current === selectedCustomer) {
       return;
     }
@@ -559,6 +575,9 @@ export default function NewOrderScreen() {
     replacementPaidStateRef.current = "target";
     previousReplacementReceivedTargetRef.current = 0;
     previousReplacementPaidTargetRef.current = 0;
+    setTradePaidState("target");
+    tradePaidStateRef.current = "target";
+    previousTradePaidTargetRef.current = 0;
   }, [selectedCustomer, setValue]);
 
   useEffect(() => {
@@ -662,6 +681,7 @@ export default function NewOrderScreen() {
     : isBuyIron
       ? ironLineTotal
       : 0;
+  const tradePaidTarget = computedTradeTotal;
   const orderSaveDisabled =
     isOrderAction &&
     ((currentAction === "replacement" && installed <= 0) ||
@@ -827,13 +847,38 @@ export default function NewOrderScreen() {
 
   useEffect(() => {
     if (!isSellIron && !isBuyIron) return;
-    const nextTotal = computedTradeTotal;
-    setValue("price_total", nextTotal ? String(nextTotal) : "0");
+    const previousTarget = previousTradePaidTargetRef.current;
+    const nextTarget = tradePaidTarget;
+    previousTradePaidTargetRef.current = nextTarget;
+
+    setValue("price_total", nextTarget ? String(nextTarget) : "0");
+
     if (!paidDirty) {
-      setValue("paid_amount", nextTotal ? String(nextTotal) : "0");
+      // When paid is clean, it is system-controlled and follows the current total.
+      setTradePaidState("target");
+      tradePaidStateRef.current = "target";
+      setValue("paid_amount", nextTarget ? String(nextTarget) : "0");
+    } else {
+      const next = applyActivityToggleTargetChange({
+        previousFieldValue: paidInput,
+        previousTarget,
+        nextTarget,
+        previousState: tradePaidStateRef.current,
+      });
+
+      setTradePaidState(next.state);
+      tradePaidStateRef.current = next.state;
+
+      if (next.fieldValue !== paidInput) {
+        setValue("paid_amount", String(next.fieldValue), {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
     }
+
     setManualPrice(true);
-  }, [computedTradeTotal, isBuyIron, isSellIron, paidDirty, setValue]);
+  }, [isBuyIron, isSellIron, paidDirty, paidInput, setValue, tradePaidTarget]);
 
   useEffect(() => {
     setPaidDirty(false);
@@ -841,10 +886,16 @@ export default function NewOrderScreen() {
       setValue("cylinders_received", "0");
       setGasPriceDirty(false);
       setIronPriceDirty(false);
+      setTradePaidState("target");
+      tradePaidStateRef.current = "target";
+      previousTradePaidTargetRef.current = 0;
     }
     if (currentAction === "buy_iron") {
       setValue("cylinders_installed", "0");
       setIronPriceDirty(false);
+      setTradePaidState("target");
+      tradePaidStateRef.current = "target";
+      previousTradePaidTargetRef.current = 0;
     }
     if (currentAction === "payment") {
       setValue("cylinders_installed", "0");
@@ -992,7 +1043,7 @@ export default function NewOrderScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Set prices",
-            onPress: () => router.push("/add?prices=1"),
+            onPress: () => router.push("/(tabs)/account/configuration/prices"),
           },
         ]
       );
@@ -1359,6 +1410,17 @@ export default function NewOrderScreen() {
     const next = applyActivityToggleTap(replacementPaidStateRef.current, replacementPaidTarget);
     setReplacementPaidState(next.state);
     replacementPaidStateRef.current = next.state;
+    setValue("paid_amount", String(next.fieldValue), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const cycleTradePaid = () => {
+    setPaidDirty(true);
+    const next = applyActivityToggleTap(tradePaidStateRef.current, tradePaidTarget);
+    setTradePaidState(next.state);
+    tradePaidStateRef.current = next.state;
     setValue("paid_amount", String(next.fieldValue), {
       shouldDirty: true,
       shouldValidate: true,
@@ -1814,7 +1876,7 @@ export default function NewOrderScreen() {
           {isOrderAction && !pricesConfigured && (
             <View style={styles.notice}>
               <Text style={styles.noticeText}>Selling prices are not configured yet.</Text>
-              <Pressable onPress={() => router.push("/add?prices=1")} style={styles.noticeButton}>
+              <Pressable onPress={() => router.push("/(tabs)/account/configuration/prices")} style={styles.noticeButton}>
                 <Text style={styles.noticeButtonText}>Set prices</Text>
               </Pressable>
             </View>
@@ -2210,39 +2272,10 @@ export default function NewOrderScreen() {
                           comment=" "
                           value={Number(field.value) || 0}
                           valueMode="decimal"
-                          onIncrement={() => adjustPriceTotal(5)}
-                          onDecrement={() => adjustPriceTotal(-5)}
-                          onChangeText={(text) => {
-                            setManualPrice(true);
-                            const nextTotal = Number(text) || 0;
-                            field.onChange(text);
-                            if (!paidDirty) {
-                              const next = applyActivityToggleTargetChange({
-                                previousFieldValue: paidInput,
-                                previousTarget: replacementPaidTarget,
-                                nextTarget: nextTotal,
-                                previousState: replacementPaidStateRef.current,
-                              });
-
-                              setReplacementPaidState(next.state);
-                              replacementPaidStateRef.current = next.state;
-
-                              setValue("paid_amount", String(next.fieldValue), {
-                                shouldDirty: true,
-                                shouldValidate: true,
-                              });
-                            }
-                          }}
+                          editable={false}
+                          onIncrement={() => undefined}
+                          onDecrement={() => undefined}
                           error={Boolean(errors.price_total)}
-                          inputRef={(node) => {
-                            inputRefs.current.price_total = node;
-                          }}
-                          onFocus={() => {
-                            setAvoidKeyboard(true);
-                            setFocusTarget("payments");
-                          }}
-                          onBlur={() => setFocusTarget(null)}
-                          steppers={replacementMoneySteppers}
                         />
                       )}
                     />
@@ -2484,7 +2517,7 @@ export default function NewOrderScreen() {
               </BigBox>
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron Selling Price">
+              <BigBox title="Iron Selling Price" defaultExpanded>
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2498,17 +2531,20 @@ export default function NewOrderScreen() {
                       <Text style={styles.tradeOperator}>x</Text>
                     </View>
                   </View>
-                  <FieldCell
-                    title="Iron Price"
-                    value={Number(ironPriceInput) || 0}
-                    valueMode="decimal"
-                    onIncrement={() => adjustIronPrice(5)}
-                    onDecrement={() => adjustIronPrice(-5)}
-                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
-                    steppers={replacementMoneySteppers}
-                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
-                    onBlur={() => setFocusTarget(null)}
-                  />
+                  <View style={{ flex: 1 }}>
+                    <FieldCell
+                      title="Iron Price"
+                      value={Number(ironPriceInput) || 0}
+                      valueMode="decimal"
+                      onIncrement={() => adjustIronPrice(5)}
+                      onDecrement={() => adjustIronPrice(-5)}
+                      onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                      steppers={replacementMoneySteppers}
+                      onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                      onBlur={() => setFocusTarget(null)}
+                    />
+                    <PriceConfigButton label="Update iron price" testID="sell-full-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                  </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />
                     <View style={styles.tradeStatValueWrap}>
@@ -2525,7 +2561,7 @@ export default function NewOrderScreen() {
               </BigBox>
 
               {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
-              <BigBox title="Gas Selling Price">
+              <BigBox title="Gas Selling Price" defaultExpanded>
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2539,17 +2575,20 @@ export default function NewOrderScreen() {
                       <Text style={styles.tradeOperator}>x</Text>
                     </View>
                   </View>
-                  <FieldCell
-                    title="Gas Price"
-                    value={Number(gasPriceInput) || 0}
-                    valueMode="decimal"
-                    onIncrement={() => adjustGasPrice(5)}
-                    onDecrement={() => adjustGasPrice(-5)}
-                    onChangeText={(t) => { setGasPriceDirty(true); setGasPriceInput(t); }}
-                    steppers={replacementMoneySteppers}
-                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
-                    onBlur={() => setFocusTarget(null)}
-                  />
+                  <View style={{ flex: 1 }}>
+                    <FieldCell
+                      title="Gas Price"
+                      value={Number(gasPriceInput) || 0}
+                      valueMode="decimal"
+                      onIncrement={() => adjustGasPrice(5)}
+                      onDecrement={() => adjustGasPrice(-5)}
+                      onChangeText={(t) => { setGasPriceDirty(true); setGasPriceInput(t); }}
+                      steppers={replacementMoneySteppers}
+                      onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                      onBlur={() => setFocusTarget(null)}
+                    />
+                    <PriceConfigButton label="Update gas price" testID="sell-full-update-gas-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                  </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />
                     <View style={styles.tradeStatValueWrap}>
@@ -2597,7 +2636,16 @@ export default function NewOrderScreen() {
                         valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
-                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        onChangeText={(text) => {
+                          setPaidDirty(true);
+                          field.onChange(text);
+                          const snap = computeActivityToggleSnap(Number(text) || 0, tradePaidTarget);
+
+                          if (snap) {
+                            setTradePaidState(snap.state);
+                            tradePaidStateRef.current = snap.state;
+                          }
+                        }}
                         error={Boolean(errors.paid_amount)}
                         inputRef={(node) => { inputRefs.current.paid_amount = node; }}
                         onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
@@ -2606,6 +2654,17 @@ export default function NewOrderScreen() {
                       />
                     )}
                   />
+                </View>
+                <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                  <View style={{ flex: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <ActivityToggleButton
+                      testID="sell-full-payment-toggle"
+                      variant="payment"
+                      state={tradePaidState}
+                      onPress={cycleTradePaid}
+                    />
+                  </View>
                 </View>
               </BigBox>
               <FieldError message={errors.cylinders_installed?.message} />
@@ -2644,7 +2703,7 @@ export default function NewOrderScreen() {
               </BigBox>
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
-              <BigBox title="Iron Buying Price - From Customer">
+              <BigBox title="Iron Buying Price - From Customer" defaultExpanded>
                 <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -2658,17 +2717,20 @@ export default function NewOrderScreen() {
                       <Text style={styles.tradeOperator}>x</Text>
                     </View>
                   </View>
-                  <FieldCell
-                    title="Iron Price"
-                    value={Number(ironPriceInput) || 0}
-                    valueMode="decimal"
-                    onIncrement={() => adjustIronPrice(5)}
-                    onDecrement={() => adjustIronPrice(-5)}
-                    onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
-                    steppers={replacementMoneySteppers}
-                    onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
-                    onBlur={() => setFocusTarget(null)}
-                  />
+                  <View style={{ flex: 1 }}>
+                    <FieldCell
+                      title="Iron Price"
+                      value={Number(ironPriceInput) || 0}
+                      valueMode="decimal"
+                      onIncrement={() => adjustIronPrice(5)}
+                      onDecrement={() => adjustIronPrice(-5)}
+                      onChangeText={(t) => { setIronPriceDirty(true); setIronPriceInput(t); }}
+                      steppers={replacementMoneySteppers}
+                      onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
+                      onBlur={() => setFocusTarget(null)}
+                    />
+                    <PriceConfigButton label="Update iron price" testID="buy-empty-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                  </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />
                     <View style={styles.tradeStatValueWrap}>
@@ -2716,7 +2778,16 @@ export default function NewOrderScreen() {
                         valueMode="decimal"
                         onIncrement={() => adjustPaidAmount(5)}
                         onDecrement={() => adjustPaidAmount(-5)}
-                        onChangeText={(text) => { setPaidDirty(true); field.onChange(text); }}
+                        onChangeText={(text) => {
+                          setPaidDirty(true);
+                          field.onChange(text);
+                          const snap = computeActivityToggleSnap(Number(text) || 0, tradePaidTarget);
+
+                          if (snap) {
+                            setTradePaidState(snap.state);
+                            tradePaidStateRef.current = snap.state;
+                          }
+                        }}
                         error={Boolean(errors.paid_amount)}
                         inputRef={(node) => { inputRefs.current.paid_amount = node; }}
                         onFocus={() => { setPaidDirty(true); setAvoidKeyboard(true); setFocusTarget("payments"); }}
@@ -2725,6 +2796,17 @@ export default function NewOrderScreen() {
                       />
                     )}
                   />
+                </View>
+                <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                  <View style={{ flex: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <ActivityToggleButton
+                      testID="buy-empty-payment-toggle"
+                      variant="payment"
+                      state={tradePaidState}
+                      onPress={cycleTradePaid}
+                    />
+                  </View>
                 </View>
               </BigBox>
               <FieldError message={errors.cylinders_received?.message} />

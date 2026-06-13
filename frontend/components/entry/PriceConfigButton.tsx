@@ -17,7 +17,11 @@ export default function PriceConfigButton({
   const router = useRouter();
 
   return (
-    <Pressable testID={testID} style={[styles.button, style]} onPress={() => router.push("/add?prices=1")}>
+    <Pressable
+      testID={testID}
+      style={[styles.button, style]}
+      onPress={() => router.push("/(tabs)/account/configuration/prices")}
+    >
       <Text style={[styles.text, textStyle]}>{label}</Text>
     </Pressable>
   );
@@ -36,5 +40,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 13,
+    textAlign: "center",
   },
 });

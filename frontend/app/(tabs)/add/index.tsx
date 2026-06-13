@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from "react-native";
+import { Alert, FlatList, InputAccessoryView, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FilterChipRow from "@/components/add/FilterChipRow";
 import NewSectionSearch from "@/components/add/NewSectionSearch";
@@ -50,11 +50,9 @@ import {
   useInventoryRefills,
 } from "@/hooks/useInventory";
 import { InventoryActivityItem } from "@/hooks/useInventoryActivity";
-import { usePriceSettings, useSavePriceSetting } from "@/hooks/usePrices";
 import { useSystems } from "@/hooks/useSystems";
 import { useActivityFilters } from "@/hooks/useActivityFilters";
 import { useDeleteConfirm } from "@/hooks/useDeleteConfirm";
-import { usePriceModal } from "@/hooks/usePriceModal";
 import { consumeAddShortcut } from "@/lib/addShortcut";
 import { formatDateTimeYMDHM, toDateKey } from "@/lib/date";
 import { FILTER_GROUP_LABELS } from "@/lib/activityKindMeta";
@@ -66,13 +64,7 @@ import {
   resolveFilterLabel,
 } from "@/lib/filterHelpers";
 import { getKindOptions, getSubFilterOptions } from "@/lib/filterOptions";
-import {
-  PriceInputs,
-  createDefaultPriceInputs,
-  PriceMatrixSection,
-  gasTypes,
-} from "@/components/PriceMatrix";
-import { BankDeposit, CashAdjustment, CollectionEvent, CompanyBalanceAdjustment, CompanyPayment, CustomerAdjustment, Expense, GasType, InventoryAdjustment, Order, PriceSetting } from "@/types/domain";
+import { BankDeposit, CashAdjustment, CollectionEvent, CompanyBalanceAdjustment, CompanyPayment, CustomerAdjustment, Expense, InventoryAdjustment, Order } from "@/types/domain";
 import {
   ACTIVITY_SORT_WORDING,
   SCREEN_STATE_WORDING,
@@ -192,10 +184,6 @@ type LedgerAdjustmentListItem =
       is_deleted: boolean;
       data: CashAdjustment;
     };
-
-function formatPriceGasList(items: string[]) {
-  return items.join(", ");
-}
 
 const customerActivityFilters: { id: CustomerActivityFilter; label: string }[] = [
   ...getKindOptions("customer")
@@ -874,39 +862,11 @@ const formatDateTime = (value?: string) => {
       ),
     [ledgerAdjustmentItems]
   );
-  const priceSettingsQuery = usePriceSettings();
-  const savePrice = useSavePriceSetting();
-
-  // Extract price modal state into custom hook
-  const {
-    priceModalOpen,
-    setPriceModalOpen,
-    priceInputs,
-    setPriceInputs,
-    lastSavedPrices,
-    setLastSavedPrices,
-    savingPrices,
-    setSavingPrices,
-    priceSaveStatus,
-    setPriceSaveStatus,
-    dirtyPriceCombosRef,
-  } = usePriceModal(priceSettingsQuery.data);
-
-
-  useEffect(() => {
-    const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
-    if (openPrices === "1") {
-      setPriceModalOpen(true);
-    }
-  }, [addParams.prices]);
-
   useEffect(() => {
     const openParam = Array.isArray(addParams.open) ? addParams.open[0] : addParams.open;
     if (!openParam) return;
-    const openPrices = Array.isArray(addParams.prices) ? addParams.prices[0] : addParams.prices;
     router.replace({
       pathname: "/(tabs)/add",
-      params: openPrices ? { prices: openPrices } : {},
     });
     setMode("ledger_adjustments");
     if (openParam === "adjust-inventory") {
@@ -914,7 +874,7 @@ const formatDateTime = (value?: string) => {
     } else if (openParam === "adjust-cash") {
       router.push({ pathname: "/inventory/new", params: { section: "ledger", tab: "cash" } });
     }
-  }, [addParams.open, addParams.prices]);
+  }, [addParams.open]);
 
   const customerActivitiesFocusRefetchers = useRef({
     orders: ordersQuery.refetch,
@@ -1112,106 +1072,6 @@ const formatDateTime = (value?: string) => {
       ]
     );
   };
-
-  const handlePriceInputChange = (
-    gas: GasType,
-    field: "selling" | "buying" | "selling_iron" | "buying_iron",
-    value: string
-  ) => {
-    setPriceSaveStatus(null);
-    const comboKey = gas;
-    setPriceInputs((prev) => {
-      const nextValue = {
-        selling: field === "selling" ? value : prev[gas]?.selling ?? "",
-        buying: field === "buying" ? value : prev[gas]?.buying ?? "",
-        selling_iron: field === "selling_iron" ? value : prev[gas]?.selling_iron ?? "",
-        buying_iron: field === "buying_iron" ? value : prev[gas]?.buying_iron ?? "",
-      };
-      const next: PriceInputs = {
-        ...prev,
-        [gas]: nextValue,
-      };
-      const baseline = lastSavedPrices[gas] ?? {
-        selling: "",
-        buying: "",
-        selling_iron: "",
-        buying_iron: "",
-      };
-      const matchesBaseline =
-        (nextValue.selling || "") === (baseline.selling || "") &&
-        (nextValue.buying || "") === (baseline.buying || "") &&
-        (nextValue.selling_iron || "") === (baseline.selling_iron || "") &&
-        (nextValue.buying_iron || "") === (baseline.buying_iron || "");
-      if (matchesBaseline) {
-        dirtyPriceCombosRef.current.delete(comboKey);
-      } else {
-        dirtyPriceCombosRef.current.add(comboKey);
-      }
-      return next;
-    });
-  };
-
-  const handleSaveAllPrices = async () => {
-    const dirtyCombos = Array.from(dirtyPriceCombosRef.current);
-    if (dirtyCombos.length === 0) {
-      Alert.alert("Nothing to save", "No price changes to save.");
-      return;
-    }
-    setSavingPrices(true);
-    setPriceSaveStatus(null);
-    const savedCombos: GasType[] = [];
-    const failedCombos: GasType[] = [];
-    try {
-      for (const comboKey of dirtyCombos) {
-        const gas = comboKey as GasType;
-        const { selling, buying, selling_iron, buying_iron } = priceInputs[gas];
-        try {
-          const savedPrice = await savePrice.mutateAsync({
-            gas_type: gas,
-            selling_price: Number(selling) || 0,
-            buying_price: buying ? Number(buying) : undefined,
-            selling_iron_price: selling_iron ? Number(selling_iron) : undefined,
-            buying_iron_price: buying_iron ? Number(buying_iron) : undefined,
-          });
-          savedCombos.push(gas);
-          dirtyPriceCombosRef.current.delete(comboKey);
-          const normalized = {
-            selling: savedPrice.selling_price.toString(),
-            buying: savedPrice.buying_price?.toString() ?? "",
-            selling_iron: savedPrice.selling_iron_price?.toString() ?? "",
-            buying_iron: savedPrice.buying_iron_price?.toString() ?? "",
-          };
-          setLastSavedPrices((prev) => ({
-            ...prev,
-            [gas]: normalized,
-          }));
-          setPriceInputs((prev) => ({
-            ...prev,
-            [gas]: normalized,
-          }));
-        } catch {
-          failedCombos.push(gas);
-        }
-      }
-      if (failedCombos.length === 0) {
-        setPriceModalOpen(false);
-        return;
-      }
-      const savedText = savedCombos.length
-        ? `Saved: ${formatPriceGasList(savedCombos)}.`
-        : "No rows were saved.";
-      const failedText = `Failed: ${formatPriceGasList(failedCombos)}. Review the failed rows and try again.`;
-      const message = `${savedText} ${failedText}`;
-      setPriceSaveStatus({
-        tone: savedCombos.length > 0 ? "warning" : "error",
-        message,
-      });
-      Alert.alert(savedCombos.length > 0 ? "Some prices saved" : "Price save failed", message);
-    } finally {
-      setSavingPrices(false);
-    }
-  };
-  const canSavePrices = dirtyPriceCombosRef.current.size > 0;
 
   const {
       handleRemoveRefill,
@@ -1733,76 +1593,6 @@ const formatDateTime = (value?: string) => {
               </Pressable>
             </View>
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        transparent
-        visible={priceModalOpen}
-        animationType="slide"
-        onRequestClose={() => setPriceModalOpen(false)}
-      >
-        <View style={styles.priceModalBackdrop}>
-          <KeyboardAvoidingView
-            style={styles.priceModal}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-          >
-            <Text style={styles.modalTitle}>Adjust Prices</Text>
-            <ScrollView
-              style={styles.priceModalContent}
-              contentContainerStyle={styles.priceModalContentInner}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
-              {priceSaveStatus ? (
-                <View
-                  style={[
-                    styles.priceSaveStatusCard,
-                    priceSaveStatus.tone === "error"
-                      ? styles.priceSaveStatusError
-                      : priceSaveStatus.tone === "warning"
-                        ? styles.priceSaveStatusWarning
-                        : styles.priceSaveStatusSuccess,
-                  ]}
-                >
-                  <Text style={styles.priceSaveStatusText}>{priceSaveStatus.message}</Text>
-                </View>
-              ) : null}
-              {gasTypes.map((gas) => (
-              <PriceMatrixSection
-                  key={gas}
-                  gasType={gas}
-                  inputs={priceInputs[gas]}
-                  previousInputs={lastSavedPrices[gas]}
-                  onInputChange={handlePriceInputChange}
-                />
-              ))}
-            </ScrollView>
-            <View style={styles.priceModalActions}>
-              <Pressable
-                style={[styles.secondaryAction, savingPrices && styles.disabledAction]}
-                onPress={() => setPriceModalOpen(false)}
-                disabled={savingPrices}
-              >
-                <Text style={styles.secondaryActionText}>Close</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.primary,
-                  styles.drawerSave,
-                  (!canSavePrices || savingPrices) && styles.disabledAction,
-                ]}
-                onPress={handleSaveAllPrices}
-                disabled={savingPrices || !canSavePrices}
-              >
-                <Text style={styles.primaryText}>
-                  {savingPrices ? "Saving..." : "Save prices"}
-                </Text>
-              </Pressable>
-            </View>
-          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -3269,56 +3059,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     gap: 2,
   },
-  priceModalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  priceModal: {
-    width: "100%",
-    maxWidth: 460,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 20,
-    gap: 12,
-    maxHeight: "85%",
-    ...(shadowModal as object),
-  },
-  priceModalContent: {
-    width: "100%",
-  },
-  priceModalContentInner: {
-    gap: 12,
-    paddingBottom: 12,
-  },
-  priceSaveStatusCard: {
-    borderRadius: 12,
-    padding: 12,
-  },
-  priceSaveStatusError: {
-    backgroundColor: "#fee2e2",
-  },
-  priceSaveStatusWarning: {
-    backgroundColor: "#fef3c7",
-  },
-  priceSaveStatusSuccess: {
-    backgroundColor: "#dcfce7",
-  },
-  priceSaveStatusText: {
-    color: "#1f2937",
-    fontWeight: "600",
-  },
   drawerSave: {
     marginTop: 0,
     flex: 1,
-  },
-  priceModalActions: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    justifyContent: "space-between",
   },
   secondaryAction: {
     flex: 1,

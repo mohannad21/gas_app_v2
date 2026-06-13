@@ -30,12 +30,12 @@ describe("PriceConfigButton", () => {
     const view = render(<PriceConfigButton testID="price-button" />);
     fireEvent.press(view.getByTestId("price-button"));
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith("/add?prices=1");
+    expect(mockPush).toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
   });
 
-  it("does not navigate to account settings price route", () => {
+  it("does not navigate to the old Add price modal route", () => {
     const view = render(<PriceConfigButton testID="price-button" />);
     fireEvent.press(view.getByTestId("price-button"));
-    expect(mockPush).not.toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
+    expect(mockPush).not.toHaveBeenCalledWith("/add?prices=1");
   });
 });
