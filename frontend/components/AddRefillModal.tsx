@@ -19,6 +19,7 @@ import {
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
@@ -30,6 +31,7 @@ import {
   calcCompanyCylinderLedgerDelta,
   calcMoneyUiResult,
 } from "@/lib/ledgerMath";
+import { resolvePriceValue } from "@/lib/priceResolution";
 import {
   useCreateBuyFullFromCompany,
   useCreateRefill,
@@ -242,21 +244,6 @@ export function RefillForm({
     ?.detail;
   const inventoryNotInitialized = !base && errorDetail?.code === "inventory_not_initialized";
 
-  const resolvePriceValue = (
-    gas: "12kg" | "48kg",
-    target: Date,
-    field: "buying_price" | "company_iron_price"
-  ) => {
-    const prices = pricesQuery.data ?? [];
-    const matches = prices.filter((entry) => {
-      if (entry.gas_type !== gas) return false;
-      if (entry[field] === null || entry[field] === undefined) return false;
-      return new Date(entry.effective_from) <= target;
-    });
-    matches.sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1));
-    return matches[0]?.[field] ?? 0;
-  };
-
   const priceTarget = useMemo(() => {
     if (editEntry?.effective_at) {
       const parsed = new Date(normalizeIso(editEntry.effective_at));
@@ -268,10 +255,14 @@ export function RefillForm({
     return new Date(formState.date);
   }, [editEntry?.effective_at, formState.date, formState.time]);
 
-  const buy12Price = resolvePriceValue("12kg", priceTarget, "buying_price");
-  const buy48Price = resolvePriceValue("48kg", priceTarget, "buying_price");
-  const companyIron12Price = resolvePriceValue("12kg", priceTarget, "company_iron_price");
-  const companyIron48Price = resolvePriceValue("48kg", priceTarget, "company_iron_price");
+  const priceResolution = editEntry?.effective_at
+    ? ({ mode: "effectiveAt", target: priceTarget } as const)
+    : ({ mode: "latest" } as const);
+
+  const buy12Price = resolvePriceValue(pricesQuery.data, "12kg", "buying_price", priceResolution);
+  const buy48Price = resolvePriceValue(pricesQuery.data, "48kg", "buying_price", priceResolution);
+  const companyIron12Price = resolvePriceValue(pricesQuery.data, "12kg", "company_iron_price", priceResolution);
+  const companyIron48Price = resolvePriceValue(pricesQuery.data, "48kg", "company_iron_price", priceResolution);
   useEffect(() => {
     if (formState.price12Dirty) return;
     if (buy12Price > 0) {
@@ -293,10 +284,10 @@ export function RefillForm({
     formState.setIronPrice48Input(companyIron48Price.toString());
   }, [companyIron48Price, formState.isBuyMode, formState.setIronPrice48Input]);
 
-  const price12Value = Number(formState.price12Input) || 0;
-  const price48Value = Number(formState.price48Input) || 0;
-  const ironPrice12Value = Number(formState.ironPrice12Input) || 0;
-  const ironPrice48Value = Number(formState.ironPrice48Input) || 0;
+  const price12Value = Number(formState.price12Input) || buy12Price;
+  const price48Value = Number(formState.price48Input) || buy48Price;
+  const ironPrice12Value = Number(formState.ironPrice12Input) || companyIron12Price;
+  const ironPrice48Value = Number(formState.ironPrice48Input) || companyIron48Price;
 
   const buy12Value = Number(formState.buy12) || 0;
   const buy48Value = Number(formState.buy48) || 0;
@@ -939,8 +930,7 @@ export function RefillForm({
                   {/* Gas Price 12kg
                       QTY and TOTAL are plain text (tradeStatCell style).
                       Price is a read-only FieldCell (grey, no buttons).
-                      A "Set price" button below navigates to the config page
-                      (that page is not yet built Ã¢â‚¬â€ the button is a placeholder). */}
+                      An "Update gas price" button below navigates to the matching config page. */}
                   <BigBox title="Gas Buying Price 12kg">
                     <View style={styles.tradeEquationRow}>
                       <View style={styles.tradeStatCell}>
@@ -978,14 +968,12 @@ export function RefillForm({
                       <View style={styles.tradeActionStatSpacer} />
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionButtonWrap}>
-                        <Pressable
-                          style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
-                          onPress={() => {
-                            router.push("/(tabs)/account/configuration/prices");
-                          }}
-                        >
-                          <Text style={styles.inlineActionText}>Set price</Text>
-                        </Pressable>
+                        <PriceConfigButton
+                          label="Update gas price"
+                          sectionKey="gasBuyFromCompany"
+                          testID="company-gas-buy-price-12"
+                          style={{ alignSelf: "stretch" }}
+                        />
                       </View>
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionStatSpacer} />
@@ -1030,14 +1018,12 @@ export function RefillForm({
                       <View style={styles.tradeActionStatSpacer} />
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionButtonWrap}>
-                        <Pressable
-                          style={[styles.inlineActionButton, styles.inlineActionButtonAlt, styles.tradeActionButton]}
-                          onPress={() => {
-                            router.push("/(tabs)/account/configuration/prices");
-                          }}
-                        >
-                          <Text style={styles.inlineActionText}>Set price</Text>
-                        </Pressable>
+                        <PriceConfigButton
+                          label="Update gas price"
+                          sectionKey="gasBuyFromCompany"
+                          testID="company-gas-buy-price-48"
+                          style={{ alignSelf: "stretch" }}
+                        />
                       </View>
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionStatSpacer} />
@@ -1085,6 +1071,20 @@ export function RefillForm({
                             </View>
                           </View>
                         </View>
+                        <View style={styles.tradeActionRow}>
+                          <View style={styles.tradeActionStatSpacer} />
+                          <View style={styles.tradeActionOperatorSpacer} />
+                          <View style={styles.tradeActionButtonWrap}>
+                            <PriceConfigButton
+                              label="Update iron price"
+                              sectionKey="ironBuyFromCompany"
+                              testID="buy-full-update-iron-price-12"
+                              style={{ alignSelf: "stretch" }}
+                            />
+                          </View>
+                          <View style={styles.tradeActionOperatorSpacer} />
+                          <View style={styles.tradeActionStatSpacer} />
+                        </View>
                       </BigBox>
 
                       <BigBox title="Iron Buying Price 48kg">
@@ -1122,6 +1122,20 @@ export function RefillForm({
                               <TradeValueText value={formatDisplayMoney(ironLine48Cost)} />
                             </View>
                           </View>
+                        </View>
+                        <View style={styles.tradeActionRow}>
+                          <View style={styles.tradeActionStatSpacer} />
+                          <View style={styles.tradeActionOperatorSpacer} />
+                          <View style={styles.tradeActionButtonWrap}>
+                            <PriceConfigButton
+                              label="Update iron price"
+                              sectionKey="ironBuyFromCompany"
+                              testID="buy-full-update-iron-price-48"
+                              style={{ alignSelf: "stretch" }}
+                            />
+                          </View>
+                          <View style={styles.tradeActionOperatorSpacer} />
+                          <View style={styles.tradeActionStatSpacer} />
                         </View>
                       </BigBox>
                     </>

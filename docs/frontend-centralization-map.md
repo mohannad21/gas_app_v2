@@ -18,6 +18,9 @@ Directory: `frontend/constants/`
 - `level3.ts`  
   Level 3 report display tokens: spacing, typography, and report-row colors.
 
+- `prices.ts`
+  Price configuration metadata: price families, price section tabs, field mappings, default form values, and price category color keys.
+
 - `spacing.ts`  
   Shared spacing scale.
 
@@ -57,6 +60,9 @@ Directory: `frontend/lib/`
 
 - `money.ts`  
   Money formatting, currency symbol lookup, decimal configuration, and minor-unit helpers.
+
+- `priceResolution.ts`
+  Shared price selection logic for latest-price and effective-at price lookup.
 
 - `date.ts`  
   Date/time parsing and display formatting.
@@ -174,19 +180,19 @@ Current price config route:
 
 Current price form value type:
 
-- `PriceFormValues` in `frontend/components/PriceInputForm.tsx`
+- `PriceFormValues` in `frontend/constants/prices.ts`
 
-Potential future central file:
+Central price metadata file:
 
 - `frontend/constants/prices.ts`
 
-Suggested contents:
+Contains:
 
-- price group metadata: Gas, Iron
-- price category metadata: Buy from Company, Sell to Customer, Buy from Customer
-- field mapping to `PriceFormValues`
-- display labels
-- color role/accent key
+- price family tabs: Gas, Iron
+- price section tabs: Buy from Company, Sell to Customer, Buy from Customer
+- mapping from each price section to `PriceFormValues` keys
+- default price form values
+- price category color keys for P4/P5 accents
 
 ## Updating This Map
 

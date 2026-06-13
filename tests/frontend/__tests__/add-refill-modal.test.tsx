@@ -1,10 +1,12 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import type { PriceSetting } from "@/types/price";
 
 const mockCreateRefillMutateAsync = jest.fn().mockResolvedValue({});
 const mockCreateBuyFullFromCompanyMutateAsync = jest.fn().mockResolvedValue({});
 const mockUpdateRefillMutateAsync = jest.fn().mockResolvedValue({});
 const mockInitInventoryMutateAsync = jest.fn().mockResolvedValue({});
+let mockPriceRows: PriceSetting[] = [];
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn() },
@@ -31,20 +33,7 @@ jest.mock("@/hooks/useInventory", () => ({
 
 jest.mock("@/hooks/usePrices", () => ({
   usePriceSettings: () => ({
-    data: [
-      {
-        id: "price-12",
-        gas_type: "12kg",
-        buying_price: 75,
-        effective_from: "2026-01-01T00:00:00Z",
-      },
-      {
-        id: "price-48",
-        gas_type: "48kg",
-        buying_price: 480,
-        effective_from: "2026-01-01T00:00:00Z",
-      },
-    ],
+    data: mockPriceRows,
     isLoading: false,
     error: null,
   }),
@@ -67,6 +56,28 @@ describe("AddRefillModal company activity behavior", () => {
     mockCreateBuyFullFromCompanyMutateAsync.mockClear();
     mockUpdateRefillMutateAsync.mockClear();
     mockInitInventoryMutateAsync.mockClear();
+    mockPriceRows = [
+      {
+        id: "price-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 75,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "price-48",
+        gas_type: "48kg",
+        selling_price: 0,
+        buying_price: 480,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+    ];
   });
 
   it("does not cap buy-full quantities by empties", () => {
@@ -101,6 +112,181 @@ describe("AddRefillModal company activity behavior", () => {
       );
     });
     expect(mockCreateRefillMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("uses the latest gas buying price for new refill entries", async () => {
+    mockPriceRows = [
+      {
+        id: "old-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 307,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "new-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 317,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2099-01-01T00:00:00Z",
+      },
+      {
+        id: "price-48",
+        gas_type: "48kg",
+        selling_price: 0,
+        buying_price: 480,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+    ];
+
+    const { getAllByText, getByText } = render(
+      <RefillForm visible onClose={jest.fn()} onSaved={jest.fn()} mode="refill" walletBalance={500} />
+    );
+
+    fireEvent.press(getAllByText("+")[0]);
+    fireEvent.press(getByText("Save"));
+
+    await waitFor(() => {
+      expect(mockCreateRefillMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          buy12: 1,
+          buy48: 0,
+          total_cost: 317,
+          paid_amount: 317,
+        })
+      );
+    });
+  });
+
+  it("uses the latest gas and company iron prices for new buy-full entries", async () => {
+    mockPriceRows = [
+      {
+        id: "old-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 75,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 200,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "new-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 75,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 220,
+        effective_from: "2099-01-01T00:00:00Z",
+      },
+      {
+        id: "price-48",
+        gas_type: "48kg",
+        selling_price: 0,
+        buying_price: 480,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+    ];
+
+    const { getAllByText, getByText } = render(
+      <RefillForm visible onClose={jest.fn()} onSaved={jest.fn()} mode="buy" walletBalance={500} />
+    );
+
+    fireEvent.press(getAllByText("+")[0]);
+    fireEvent.press(getByText("Save"));
+
+    await waitFor(() => {
+      expect(mockCreateBuyFullFromCompanyMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          new12: 1,
+          new48: 0,
+          total_cost: 295,
+          paid_amount: 295,
+        })
+      );
+    });
+  });
+
+  it("keeps historical price resolution when editing an existing entry", async () => {
+    mockPriceRows = [
+      {
+        id: "old-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 307,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "future-12",
+        gas_type: "12kg",
+        selling_price: 0,
+        buying_price: 317,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-03-01T00:00:00Z",
+      },
+      {
+        id: "price-48",
+        gas_type: "48kg",
+        selling_price: 0,
+        buying_price: 480,
+        selling_iron_price: 0,
+        buying_iron_price: 0,
+        company_iron_price: 0,
+        effective_from: "2026-01-01T00:00:00Z",
+      },
+    ];
+
+    const { getByDisplayValue, getByText } = render(
+      <RefillForm
+        visible
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        mode="refill"
+        walletBalance={500}
+        editEntry={{
+          refill_id: "refill-1",
+          date: "2026-02-01",
+          effective_at: "2026-02-01T00:00:00Z",
+          buy12: 1,
+          return12: 0,
+          buy48: 0,
+          return48: 0,
+        }}
+      />
+    );
+
+    await waitFor(() => expect(getByDisplayValue("1")).toBeTruthy());
+
+    fireEvent.press(getByText("Save"));
+
+    await waitFor(() => {
+      expect(mockUpdateRefillMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          refillId: "refill-1",
+          buy12: 1,
+          buy48: 0,
+          total_cost: 307,
+        })
+      );
+    });
   });
 
   it("shows each return balance line only in its matching gas box", () => {
