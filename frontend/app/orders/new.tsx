@@ -2209,30 +2209,38 @@ export default function NewOrderScreen() {
                         <Text style={styles.tradeOperator}>x</Text>
                       </View>
                     </View>
-                    <FieldCell
-                      title="Gas Price"
-                      value={Number(gasPriceInput) || unitPrice}
-                      valueMode="decimal"
-                      onIncrement={() => {
-                        setManualPrice(false);
-                        adjustGasPrice(5);
-                      }}
-                      onDecrement={() => {
-                        setManualPrice(false);
-                        adjustGasPrice(-5);
-                      }}
-                      onChangeText={(text) => {
-                        setManualPrice(false);
-                        setGasPriceDirty(true);
-                        setGasPriceInput(text);
-                      }}
-                      steppers={replacementMoneySteppers}
-                      onFocus={() => {
-                        setAvoidKeyboard(true);
-                        setFocusTarget("payments");
-                      }}
-                      onBlur={() => setFocusTarget(null)}
-                    />
+                    <View style={{ flex: 1 }}>
+                      <FieldCell
+                        title="Gas Price"
+                        value={Number(gasPriceInput) || unitPrice}
+                        valueMode="decimal"
+                        onIncrement={() => {
+                          setManualPrice(false);
+                          adjustGasPrice(5);
+                        }}
+                        onDecrement={() => {
+                          setManualPrice(false);
+                          adjustGasPrice(-5);
+                        }}
+                        onChangeText={(text) => {
+                          setManualPrice(false);
+                          setGasPriceDirty(true);
+                          setGasPriceInput(text);
+                        }}
+                        steppers={replacementMoneySteppers}
+                        onFocus={() => {
+                          setAvoidKeyboard(true);
+                          setFocusTarget("payments");
+                        }}
+                        onBlur={() => setFocusTarget(null)}
+                      />
+                      <PriceConfigButton
+                        label="Update gas price"
+                        sectionKey="gasSellToCustomer"
+                        testID="replacement-update-gas-price"
+                        style={{ alignSelf: "stretch", marginTop: 8 }}
+                      />
+                    </View>
                     <View style={styles.tradeOperatorCell}>
                       <View style={styles.tradeOperatorTopSpacer} />
                       <View style={styles.tradeStatValueWrap}>
@@ -2543,7 +2551,7 @@ export default function NewOrderScreen() {
                       onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                       onBlur={() => setFocusTarget(null)}
                     />
-                    <PriceConfigButton label="Update iron price" testID="sell-full-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                    <PriceConfigButton label="Update iron price" sectionKey="ironSellToCustomer" testID="sell-full-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
                   </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />
@@ -2587,7 +2595,7 @@ export default function NewOrderScreen() {
                       onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                       onBlur={() => setFocusTarget(null)}
                     />
-                    <PriceConfigButton label="Update gas price" testID="sell-full-update-gas-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                    <PriceConfigButton label="Update gas price" sectionKey="gasSellToCustomer" testID="sell-full-update-gas-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
                   </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />
@@ -2729,7 +2737,7 @@ export default function NewOrderScreen() {
                       onFocus={() => { setAvoidKeyboard(true); setFocusTarget("payments"); }}
                       onBlur={() => setFocusTarget(null)}
                     />
-                    <PriceConfigButton label="Update iron price" testID="buy-empty-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
+                    <PriceConfigButton label="Update iron price" sectionKey="ironBuyFromCustomer" testID="buy-empty-update-iron-price" style={{ alignSelf: "stretch", marginTop: 8 }} />
                   </View>
                   <View style={styles.tradeOperatorCell}>
                     <View style={styles.tradeOperatorTopSpacer} />

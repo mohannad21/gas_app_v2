@@ -6,6 +6,7 @@ let mockRouteParams: Record<string, string> = { customerId: "cust-1", systemId: 
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => false) },
+  useRouter: () => ({ push: jest.fn() }),
   useLocalSearchParams: () => mockRouteParams,
 }));
 

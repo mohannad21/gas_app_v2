@@ -33,6 +33,16 @@ describe("PriceConfigButton", () => {
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
   });
 
+  it("navigates with a section param when sectionKey is provided", () => {
+    const view = render(<PriceConfigButton testID="price-button" sectionKey="gasSellToCustomer" />);
+    fireEvent.press(view.getByTestId("price-button"));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(tabs)/account/configuration/prices",
+      params: { section: "gasSellToCustomer" },
+    });
+  });
+
   it("does not navigate to the old Add price modal route", () => {
     const view = render(<PriceConfigButton testID="price-button" />);
     fireEvent.press(view.getByTestId("price-button"));

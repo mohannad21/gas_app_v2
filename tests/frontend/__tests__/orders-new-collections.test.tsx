@@ -31,6 +31,7 @@ const mockCustomerBalanceRefetch = jest.fn(async () => {
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: mockRouterReplace },
+  useRouter: () => ({ push: jest.fn() }),
   useLocalSearchParams: () => ({ customerId: "cust-1", systemId: "sys-1" }),
 }));
 

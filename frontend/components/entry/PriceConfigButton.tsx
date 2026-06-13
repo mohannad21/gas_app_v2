@@ -2,9 +2,11 @@ import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
 import { AppColors } from "@/constants/colors";
+import type { PriceSectionKey } from "@/constants/prices";
 
 type PriceConfigButtonProps = {
   label?: string;
+  sectionKey?: PriceSectionKey;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   testID?: string;
@@ -12,6 +14,7 @@ type PriceConfigButtonProps = {
 
 export default function PriceConfigButton({
   label = "Update price",
+  sectionKey,
   style,
   textStyle,
   testID,
@@ -22,7 +25,16 @@ export default function PriceConfigButton({
     <Pressable
       testID={testID}
       style={[styles.button, style]}
-      onPress={() => router.push("/(tabs)/account/configuration/prices")}
+      onPress={() => {
+        if (sectionKey) {
+          router.push({
+            pathname: "/(tabs)/account/configuration/prices",
+            params: { section: sectionKey },
+          });
+          return;
+        }
+        router.push("/(tabs)/account/configuration/prices");
+      }}
     >
       <Text style={[styles.text, textStyle]}>{label}</Text>
     </Pressable>

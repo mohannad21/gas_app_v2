@@ -5,6 +5,7 @@ import NewOrderScreen from "@/app/orders/new";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+  useRouter: () => ({ push: jest.fn() }),
   useLocalSearchParams: () => ({ customerId: "cust-1", systemId: "sys-1" }),
 }));
 

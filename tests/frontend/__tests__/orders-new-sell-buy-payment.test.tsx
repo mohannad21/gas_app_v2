@@ -146,11 +146,17 @@ describe("NewOrderScreen sell full / buy empty payment controls", () => {
     fireEvent.press(view.getByText("Sell Full"));
     fireEvent.press(view.getByTestId("sell-full-update-gas-price"));
 
-    expect(mockPush).toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(tabs)/account/configuration/prices",
+      params: { section: "gasSellToCustomer" },
+    });
 
     fireEvent.press(view.getByTestId("sell-full-update-iron-price"));
 
-    expect(mockPush).toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(tabs)/account/configuration/prices",
+      params: { section: "ironSellToCustomer" },
+    });
   });
 
   it("keeps sell full custom paid values and snaps exact zero/target", async () => {
@@ -226,6 +232,9 @@ describe("NewOrderScreen sell full / buy empty payment controls", () => {
     fireEvent.press(view.getByText("Buy Empty"));
     fireEvent.press(view.getByTestId("buy-empty-update-iron-price"));
 
-    expect(mockPush).toHaveBeenCalledWith("/(tabs)/account/configuration/prices");
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(tabs)/account/configuration/prices",
+      params: { section: "ironBuyFromCustomer" },
+    });
   });
 });

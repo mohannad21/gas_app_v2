@@ -1,21 +1,14 @@
 import BigBox from "@/components/entry/BigBox";
 import FieldPair from "@/components/entry/FieldPair";
 import { type FieldStepper } from "@/components/entry/FieldPair";
+import { AppColors } from "@/constants/colors";
+import { PRICE_SECTIONS, type PriceFormValues, type PriceSectionKey } from "@/constants/prices";
+import { StyleSheet, View } from "react-native";
 
-export type PriceFormValues = {
-  sell12: number;
-  sell48: number;
-  buy12: number;
-  buy48: number;
-  buyIron12: number;
-  buyIron48: number;
-  companyIron12: number;
-  companyIron48: number;
-  sellIron12: number;
-  sellIron48: number;
-};
+export type { PriceFormValues } from "@/constants/prices";
 
 type Props = {
+  sectionKey?: PriceSectionKey;
   values: PriceFormValues;
   previousValues?: PriceFormValues;
   onChange: (key: keyof PriceFormValues, value: number) => void;
@@ -64,43 +57,56 @@ function makeCell(
   };
 }
 
-export default function PriceInputForm({ values, previousValues, onChange, disabled = false }: Props) {
+export default function PriceInputForm({
+  sectionKey,
+  values,
+  previousValues,
+  onChange,
+  disabled = false,
+}: Props) {
+  const renderFields = (key: PriceSectionKey) => {
+    const section = PRICE_SECTIONS[key];
+    const steppers = section.stepperPreset === "buy" ? BUY_STEPPERS : SELL_STEPPERS;
+
+    return (
+      <FieldPair
+        left={makeCell(section.leftKey, "12kg", values, onChange, steppers, disabled, previousValues)}
+        right={makeCell(section.rightKey, "48kg", values, onChange, steppers, disabled, previousValues)}
+      />
+    );
+  };
+
+  const renderLegacySection = (key: PriceSectionKey, title: string, defaultExpanded: boolean) => (
+    <BigBox title={title} defaultExpanded={defaultExpanded}>
+      {renderFields(key)}
+    </BigBox>
+  );
+
+  if (sectionKey) {
+    return (
+      <View style={styles.selectedSection} testID={`price-form-section-${sectionKey}`}>
+        {renderFields(sectionKey)}
+      </View>
+    );
+  }
+
   return (
     <>
-      <BigBox title="Gas Selling Prices" defaultExpanded>
-        <FieldPair
-          left={makeCell("sell12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-          right={makeCell("sell48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-        />
-      </BigBox>
-
-      <BigBox title="Gas Buying Prices" defaultExpanded>
-        <FieldPair
-          left={makeCell("buy12", "12kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
-          right={makeCell("buy48", "48kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
-        />
-      </BigBox>
-
-      <BigBox title="Iron Buy - Customer">
-        <FieldPair
-          left={makeCell("buyIron12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-          right={makeCell("buyIron48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-        />
-      </BigBox>
-
-      <BigBox title="Iron Buy - Company">
-        <FieldPair
-          left={makeCell("companyIron12", "12kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
-          right={makeCell("companyIron48", "48kg", values, onChange, BUY_STEPPERS, disabled, previousValues)}
-        />
-      </BigBox>
-
-      <BigBox title="Iron Sell - Customer">
-        <FieldPair
-          left={makeCell("sellIron12", "12kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-          right={makeCell("sellIron48", "48kg", values, onChange, SELL_STEPPERS, disabled, previousValues)}
-        />
-      </BigBox>
+      {renderLegacySection("gasSellToCustomer", PRICE_SECTIONS.gasSellToCustomer.legacyTitle, true)}
+      {renderLegacySection("gasBuyFromCompany", PRICE_SECTIONS.gasBuyFromCompany.legacyTitle, true)}
+      {renderLegacySection("ironBuyFromCustomer", PRICE_SECTIONS.ironBuyFromCustomer.legacyTitle, false)}
+      {renderLegacySection("ironBuyFromCompany", PRICE_SECTIONS.ironBuyFromCompany.legacyTitle, false)}
+      {renderLegacySection("ironSellToCustomer", PRICE_SECTIONS.ironSellToCustomer.legacyTitle, false)}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  selectedSection: {
+    backgroundColor: AppColors.surface.card,
+    borderColor: AppColors.border.default,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+  },
+});
