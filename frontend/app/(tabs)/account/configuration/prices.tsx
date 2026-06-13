@@ -27,6 +27,8 @@ export default function PricesConfigurationScreen() {
   const [activeIronSection, setActiveIronSection] = useState<PriceSectionKey>("ironBuyFromCustomer");
 
   const activeSectionKey = activeFamily === "gas" ? activeGasSection : activeIronSection;
+  const activeSection = PRICE_SECTIONS[activeSectionKey];
+  const activeAccentColor = AppColors.price.categories[activeSection.colorKey];
 
   useEffect(() => {
     if (!section) return;
@@ -162,11 +164,19 @@ export default function PricesConfigurationScreen() {
                     <Pressable
                       key={sectionKey}
                       testID={`price-section-${sectionKey}`}
-                      style={[styles.sectionTabButton, active && styles.sectionTabButtonActive]}
+                      style={[
+                        styles.sectionTabButton,
+                        active && styles.sectionTabButtonActive,
+                        active && { borderColor: activeAccentColor },
+                      ]}
                       onPress={() => handleSectionPress(sectionKey)}
                     >
                       <Text
-                        style={[styles.sectionTabText, active && styles.sectionTabTextActive]}
+                        style={[
+                          styles.sectionTabText,
+                          active && styles.sectionTabTextActive,
+                          active && { color: activeAccentColor },
+                        ]}
                         numberOfLines={2}
                         adjustsFontSizeToFit
                         minimumFontScale={0.85}
@@ -181,6 +191,7 @@ export default function PricesConfigurationScreen() {
 
             <PriceInputForm
               sectionKey={activeSectionKey}
+              accentColor={activeAccentColor}
               values={values}
               previousValues={savedValues}
               onChange={handleChange}

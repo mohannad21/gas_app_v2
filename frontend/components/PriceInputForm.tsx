@@ -9,6 +9,7 @@ export type { PriceFormValues } from "@/constants/prices";
 
 type Props = {
   sectionKey?: PriceSectionKey;
+  accentColor?: string;
   values: PriceFormValues;
   previousValues?: PriceFormValues;
   onChange: (key: keyof PriceFormValues, value: number) => void;
@@ -59,6 +60,7 @@ function makeCell(
 
 export default function PriceInputForm({
   sectionKey,
+  accentColor,
   values,
   previousValues,
   onChange,
@@ -84,7 +86,13 @@ export default function PriceInputForm({
 
   if (sectionKey) {
     return (
-      <View style={styles.selectedSection} testID={`price-form-section-${sectionKey}`}>
+      <View
+        style={[
+          styles.selectedSection,
+          accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 4 } : null,
+        ]}
+        testID={`price-form-section-${sectionKey}`}
+      >
         {renderFields(sectionKey)}
       </View>
     );

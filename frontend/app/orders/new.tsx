@@ -57,7 +57,9 @@ import { openDailyReportForDate, isAddDataSource } from "@/lib/saveFlow";
 import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 import { GasType, OrderCreateInput } from "@/types/domain";
+import { AppColors } from "@/constants/colors";
 import { gasColor } from "@/constants/gas";
+import { PRICE_SECTIONS } from "@/constants/prices";
 
 type OrderFormValues = {
   customer_id: string;
@@ -682,6 +684,9 @@ export default function NewOrderScreen() {
       ? ironLineTotal
       : 0;
   const tradePaidTarget = computedTradeTotal;
+  const gasSellToCustomerAccent = AppColors.price.categories[PRICE_SECTIONS.gasSellToCustomer.colorKey];
+  const ironSellToCustomerAccent = AppColors.price.categories[PRICE_SECTIONS.ironSellToCustomer.colorKey];
+  const ironBuyFromCustomerAccent = AppColors.price.categories[PRICE_SECTIONS.ironBuyFromCustomer.colorKey];
   const orderSaveDisabled =
     isOrderAction &&
     ((currentAction === "replacement" && installed <= 0) ||
@@ -2196,61 +2201,63 @@ export default function NewOrderScreen() {
                   </View>
                 </BigBox>
                 <BigBox title="Gas Selling Price" defaultExpanded>
-                  <View style={styles.tradeEquationRow}>
-                    <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
-                      <Text style={styles.tradeStatLabel}>QTY</Text>
-                      <View style={styles.tradeStatValueWrap}>
-                        <TradeValueText value={installed} />
+                  <View style={[styles.priceAccentWrap, { borderLeftColor: gasSellToCustomerAccent }]}>
+                    <View style={styles.tradeEquationRow}>
+                      <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
+                        <Text style={styles.tradeStatLabel}>QTY</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <TradeValueText value={installed} />
+                        </View>
                       </View>
-                    </View>
-                    <View style={styles.tradeOperatorCell}>
-                      <View style={styles.tradeOperatorTopSpacer} />
-                      <View style={styles.tradeStatValueWrap}>
-                        <Text style={styles.tradeOperator}>x</Text>
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>x</Text>
+                        </View>
                       </View>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <FieldCell
-                        title="Gas Price"
-                        value={Number(gasPriceInput) || unitPrice}
-                        valueMode="decimal"
-                        onIncrement={() => {
-                          setManualPrice(false);
-                          adjustGasPrice(5);
-                        }}
-                        onDecrement={() => {
-                          setManualPrice(false);
-                          adjustGasPrice(-5);
-                        }}
-                        onChangeText={(text) => {
-                          setManualPrice(false);
-                          setGasPriceDirty(true);
-                          setGasPriceInput(text);
-                        }}
-                        steppers={replacementMoneySteppers}
-                        onFocus={() => {
-                          setAvoidKeyboard(true);
-                          setFocusTarget("payments");
-                        }}
-                        onBlur={() => setFocusTarget(null)}
-                      />
-                      <PriceConfigButton
-                        label="Update gas price"
-                        sectionKey="gasSellToCustomer"
-                        testID="replacement-update-gas-price"
-                        style={{ alignSelf: "stretch", marginTop: 8 }}
-                      />
-                    </View>
-                    <View style={styles.tradeOperatorCell}>
-                      <View style={styles.tradeOperatorTopSpacer} />
-                      <View style={styles.tradeStatValueWrap}>
-                        <Text style={styles.tradeOperator}>=</Text>
+                      <View style={{ flex: 1 }}>
+                        <FieldCell
+                          title="Gas Price"
+                          value={Number(gasPriceInput) || unitPrice}
+                          valueMode="decimal"
+                          onIncrement={() => {
+                            setManualPrice(false);
+                            adjustGasPrice(5);
+                          }}
+                          onDecrement={() => {
+                            setManualPrice(false);
+                            adjustGasPrice(-5);
+                          }}
+                          onChangeText={(text) => {
+                            setManualPrice(false);
+                            setGasPriceDirty(true);
+                            setGasPriceInput(text);
+                          }}
+                          steppers={replacementMoneySteppers}
+                          onFocus={() => {
+                            setAvoidKeyboard(true);
+                            setFocusTarget("payments");
+                          }}
+                          onBlur={() => setFocusTarget(null)}
+                        />
+                        <PriceConfigButton
+                          label="Update gas price"
+                          sectionKey="gasSellToCustomer"
+                          testID="replacement-update-gas-price"
+                          style={{ alignSelf: "stretch", marginTop: 8 }}
+                        />
                       </View>
-                    </View>
-                    <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
-                      <Text style={styles.tradeStatLabel}>TOTAL</Text>
-                      <View style={styles.tradeStatValueWrap}>
-                        <TradeValueText value={installed * gasUnitPriceValue} />
+                      <View style={styles.tradeOperatorCell}>
+                        <View style={styles.tradeOperatorTopSpacer} />
+                        <View style={styles.tradeStatValueWrap}>
+                          <Text style={styles.tradeOperator}>=</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
+                        <Text style={styles.tradeStatLabel}>TOTAL</Text>
+                        <View style={styles.tradeStatValueWrap}>
+                          <TradeValueText value={installed * gasUnitPriceValue} />
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -2526,7 +2533,8 @@ export default function NewOrderScreen() {
 
               {/* Iron — QTY mirrors installed, Iron Price adjustable, Total computed */}
               <BigBox title="Iron Selling Price" defaultExpanded>
-                <View style={styles.tradeEquationRow}>
+                <View style={[styles.priceAccentWrap, { borderLeftColor: ironSellToCustomerAccent }]}>
+                  <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
@@ -2566,11 +2574,13 @@ export default function NewOrderScreen() {
                     </View>
                   </View>
                 </View>
+                </View>
               </BigBox>
 
               {/* Gas Price — QTY mirrors installed, Gas Price adjustable, Total computed */}
               <BigBox title="Gas Selling Price" defaultExpanded>
-                <View style={styles.tradeEquationRow}>
+                <View style={[styles.priceAccentWrap, { borderLeftColor: gasSellToCustomerAccent }]}>
+                  <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
@@ -2609,6 +2619,7 @@ export default function NewOrderScreen() {
                       <TradeValueText value={gasLineTotal} />
                     </View>
                   </View>
+                </View>
                 </View>
               </BigBox>
 
@@ -2712,7 +2723,8 @@ export default function NewOrderScreen() {
 
               {/* Iron — QTY mirrors received, Iron Price adjustable, Total computed */}
               <BigBox title="Iron Buying Price - From Customer" defaultExpanded>
-                <View style={styles.tradeEquationRow}>
+                <View style={[styles.priceAccentWrap, { borderLeftColor: ironBuyFromCustomerAccent }]}>
+                  <View style={styles.tradeEquationRow}>
                   <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                     <Text style={styles.tradeStatLabel}>QTY</Text>
                     <View style={styles.tradeStatValueWrap}>
@@ -2751,6 +2763,7 @@ export default function NewOrderScreen() {
                       <TradeValueText value={ironLineTotal} />
                     </View>
                   </View>
+                </View>
                 </View>
               </BigBox>
 
@@ -3380,6 +3393,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     alignItems: "stretch",
+  },
+  priceAccentWrap: {
+    borderLeftWidth: 4,
+    paddingLeft: 10,
   },
   entryFieldPairSingle: {
     width: "50%",

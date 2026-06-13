@@ -13,6 +13,9 @@ const CorePalette = {
   appBlue: "#0a7ea4",
   customerBlue: "#0ea5e9",
   companyOrange: "#f97316",
+  priceTeal: "#14b8a6",
+  priceViolet: "#8b5cf6",
+  priceAmber: "#f59e0b",
   moneyIndigo: "#6366f1",
   ledgerSlate: "#64748b",
 
@@ -98,9 +101,9 @@ export const AppColors = {
     categories: {
       gasBuyFromCompany: CorePalette.companyOrange,
       gasSellToCustomer: CorePalette.customerBlue,
-      ironBuyFromCustomer: CorePalette.customerBlue,
-      ironBuyFromCompany: CorePalette.companyOrange,
-      ironSellToCustomer: CorePalette.customerBlue,
+      ironBuyFromCustomer: CorePalette.priceTeal,
+      ironBuyFromCompany: CorePalette.priceAmber,
+      ironSellToCustomer: CorePalette.priceViolet,
     },
   },
 

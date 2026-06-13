@@ -23,6 +23,8 @@ import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
+import { AppColors } from "@/constants/colors";
+import { PRICE_SECTIONS } from "@/constants/prices";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { parseCountValue, sanitizeCountInput as sanitizeSharedCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
@@ -307,6 +309,8 @@ export function RefillForm({
   const ironLine12Cost = formState.isBuyMode ? totalBuy12 * ironPrice12Value : 0;
   const ironLine48Cost = formState.isBuyMode ? totalBuy48 * ironPrice48Value : 0;
   const totalCost = line12Cost + line48Cost + ironLine12Cost + ironLine48Cost;
+  const gasBuyFromCompanyAccent = AppColors.price.categories[PRICE_SECTIONS.gasBuyFromCompany.colorKey];
+  const ironBuyFromCompanyAccent = AppColors.price.categories[PRICE_SECTIONS.ironBuyFromCompany.colorKey];
   useEffect(() => {
     if (formState.paidTouched) return;
     formState.setPaidNow(totalCost ? totalCost.toString() : "");
@@ -932,6 +936,7 @@ export function RefillForm({
                       Price is a read-only FieldCell (grey, no buttons).
                       An "Update gas price" button below navigates to the matching config page. */}
                   <BigBox title="Gas Buying Price 12kg">
+                    <View style={[styles.priceAccentWrap, { borderLeftColor: gasBuyFromCompanyAccent }]}>
                     <View style={styles.tradeEquationRow}>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -978,10 +983,12 @@ export function RefillForm({
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionStatSpacer} />
                     </View>
+                    </View>
                   </BigBox>
 
                   {/* Gas Price 48kg Ã¢â‚¬â€ same structure */}
                   <BigBox title="Gas Buying Price 48kg">
+                    <View style={[styles.priceAccentWrap, { borderLeftColor: gasBuyFromCompanyAccent }]}>
                     <View style={styles.tradeEquationRow}>
                       <View style={styles.tradeStatCell}>
                         <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -1028,6 +1035,7 @@ export function RefillForm({
                       <View style={styles.tradeActionOperatorSpacer} />
                       <View style={styles.tradeActionStatSpacer} />
                     </View>
+                    </View>
                   </BigBox>
 
                   {/* Iron Price Ã¢â‚¬â€ Buy tab only.
@@ -1036,6 +1044,7 @@ export function RefillForm({
                   {formState.isBuyMode ? (
                     <>
                       <BigBox title="Iron Buying Price 12kg">
+                        <View style={[styles.priceAccentWrap, { borderLeftColor: ironBuyFromCompanyAccent }]}>
                         <View style={styles.tradeEquationRow}>
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -1085,9 +1094,11 @@ export function RefillForm({
                           <View style={styles.tradeActionOperatorSpacer} />
                           <View style={styles.tradeActionStatSpacer} />
                         </View>
+                        </View>
                       </BigBox>
 
                       <BigBox title="Iron Buying Price 48kg">
+                        <View style={[styles.priceAccentWrap, { borderLeftColor: ironBuyFromCompanyAccent }]}>
                         <View style={styles.tradeEquationRow}>
                           <View style={[styles.tradeStatCell, styles.tradeStatCellNarrow]}>
                             <Text style={styles.tradeStatLabel}>QTY</Text>
@@ -1136,6 +1147,7 @@ export function RefillForm({
                           </View>
                           <View style={styles.tradeActionOperatorSpacer} />
                           <View style={styles.tradeActionStatSpacer} />
+                        </View>
                         </View>
                       </BigBox>
                     </>
@@ -1810,6 +1822,10 @@ const styles = StyleSheet.create({
     width: "50%",
     minWidth: 160,
     alignSelf: "center",
+  },
+  priceAccentWrap: {
+    borderLeftWidth: 4,
+    paddingLeft: 10,
   },
   inlineActionButton: {
     borderRadius: 8,
