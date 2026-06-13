@@ -174,10 +174,13 @@ export default function NewOrderScreen() {
     useState<ActivityToggleState>("target");
   const [paymentToggleState, setPaymentToggleState] =
     useState<ActivityToggleState>("target");
+  const [returnToggleState, setReturnToggleState] =
+    useState<ActivityToggleState>("target");
   const replacementReceivedStateRef = useRef<ActivityToggleState>("target");
   const replacementPaidStateRef = useRef<ActivityToggleState>("target");
   const tradePaidStateRef = useRef<ActivityToggleState>("target");
   const paymentToggleStateRef = useRef<ActivityToggleState>("target");
+  const returnToggleStateRef = useRef<ActivityToggleState>("target");
   const previousReplacementReceivedTargetRef = useRef(0);
   const previousReplacementPaidTargetRef = useRef(0);
   const previousTradePaidTargetRef = useRef(0);
@@ -667,6 +670,16 @@ export default function NewOrderScreen() {
     setPaymentToggleState("target");
     paymentToggleStateRef.current = "target";
   }, [balanceBefore, isPayment, setValue]);
+
+  useEffect(() => {
+    if (!isReturn) return;
+    setValue("cylinders_received", String(cylinderDebtBeforeForGas), {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+    setReturnToggleState("target");
+    returnToggleStateRef.current = "target";
+  }, [cylinderDebtBeforeForGas, isReturn, setValue]);
 
   /* -------------------- pricing -------------------- */
 
@@ -1419,6 +1432,13 @@ export default function NewOrderScreen() {
         replacementReceivedStateRef.current = snap.state;
       }
     }
+    if (isReturn) {
+      const snap = computeActivityToggleSnap(next, cylinderDebtBeforeForGas);
+      if (snap) {
+        setReturnToggleState(snap.state);
+        returnToggleStateRef.current = snap.state;
+      }
+    }
   };
 
   const cycleReplacementReceived = () => {
@@ -1466,9 +1486,11 @@ export default function NewOrderScreen() {
   };
 
   const toggleReturnModeAmount = () => {
-    const settleAmount = Math.max(0, cylinderDebtBeforeForGas);
-    const next = received === settleAmount ? 0 : settleAmount;
-    setValue("cylinders_received", String(next), { shouldDirty: true, shouldValidate: true });
+    const settleAmount = cylinderDebtBeforeForGas;
+    const next = applyActivityToggleTap(returnToggleStateRef.current, settleAmount);
+    setReturnToggleState(next.state);
+    returnToggleStateRef.current = next.state;
+    setValue("cylinders_received", String(next.fieldValue), { shouldDirty: true, shouldValidate: true });
   };
 
   const exitAfterWhatsApp = () => {
@@ -2046,7 +2068,7 @@ export default function NewOrderScreen() {
             </View>
           ) : null}
 
-          {currentAction !== "payment" && currentAction !== "replacement" ? (
+          {currentAction !== "payment" && currentAction !== "replacement" && !isReturn ? (
             <View style={styles.sectionCard}>
               <FieldLabel>Gas Type</FieldLabel>
               <Controller
@@ -2445,6 +2467,48 @@ export default function NewOrderScreen() {
                 statusIsAlert={customerPreviewStatusLine ? true : cylinderDebtAfterForGas > 0}
                 defaultExpanded
               >
+                <Controller
+                  control={control}
+                  name="gas_type"
+                  rules={{ required: "Pick a gas type" }}
+                  render={({ field: { onChange, value } }) => (
+                    <View style={styles.chipRow}>
+                      {allowedGasTypes.map((g) => {
+                        const hasNoDebt =
+                          (g === "12kg" && !hasReturnDebt12) ||
+                          (g === "48kg" && !hasReturnDebt48);
+                        return (
+                          <Pressable
+                            key={g}
+                            onPress={() => onChange(g)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: value === g, disabled: false }}
+                            accessibilityLabel={`Gas type ${g}`}
+                            accessibilityHint="Select gas type"
+                            style={[
+                              styles.chip,
+                              hasNoDebt && styles.chipDisabled,
+                              value === g && {
+                                backgroundColor: gasColor(g),
+                                borderColor: gasColor(g),
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.chipText,
+                                hasNoDebt && styles.chipTextDisabled,
+                                value === g ? styles.chipTextActive : { color: gasColor(g) },
+                              ]}
+                            >
+                              {g}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                />
                 <StandaloneField>
                   <Controller
                     control={control}
@@ -2458,7 +2522,15 @@ export default function NewOrderScreen() {
                         value={parseCountValue(field.value)}
                         onIncrement={() => adjustReceived(1)}
                         onDecrement={() => adjustReceived(-1)}
-                        onChangeText={(text) => field.onChange(sanitizeCountInput(text))}
+                        onChangeText={(text) => {
+                          field.onChange(sanitizeCountInput(text));
+                          const parsed = parseCountValue(text);
+                          const snap = computeActivityToggleSnap(parsed, cylinderDebtBeforeForGas);
+                          if (snap) {
+                            setReturnToggleState(snap.state);
+                            returnToggleStateRef.current = snap.state;
+                          }
+                        }}
                         error={Boolean(errors.cylinders_received)}
                         inputRef={(node) => {
                           inputRefs.current.cylinders_received = node;
@@ -2477,7 +2549,7 @@ export default function NewOrderScreen() {
                 <FormActionRow align="full">
                   <ActivityToggleButton
                     variant="return"
-                    state={received === Math.max(0, cylinderDebtBeforeForGas) ? "target" : "zero"}
+                    state={returnToggleState}
                     onPress={toggleReturnModeAmount}
                     fullWidth
                   />
