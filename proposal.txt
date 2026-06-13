@@ -1106,6 +1106,43 @@ Current
 Later
 - the exact shared implementation can be further standardized across entry screens without changing the minimal inline behavior
 
+7.5 Price Configuration
+
+The Prices page is a configuration surface under Admin / Settings. It lets the distributor manage the price categories used throughout entry forms.
+
+Price categories
+- Gas > Buy from Company
+- Gas > Sell to Customer
+- Iron > Buy from Customer
+- Iron > Buy from Company
+- Iron > Sell to Customer
+
+Each category defines price values with an effective date. Prices are resolved at entry time using these rules:
+- New entry: use the latest price for that category regardless of future effective dates
+- Edit entry: use the price that was effective at the original business time of the entry
+- Price rows with null or missing values are skipped during resolution
+
+Price category color accents
+Each price category has a dedicated color. That color appears as a thin left border accent on the matching price input section wherever it appears in the app. This gives the distributor a consistent visual cue for which category they are editing or entering.
+
+Price Category Accent Matrix
+
+| Form | Activity | Price section | Category |
+| --- | --- | --- | --- |
+| Prices page | Gas > Buy from Company | selected panel / tab | Gas > Buy from Company |
+| Prices page | Gas > Sell to Customer | selected panel / tab | Gas > Sell to Customer |
+| Prices page | Iron > Buy from Customer | selected panel / tab | Iron > Buy from Customer |
+| Prices page | Iron > Buy from Company | selected panel / tab | Iron > Buy from Company |
+| Prices page | Iron > Sell to Customer | selected panel / tab | Iron > Sell to Customer |
+| Orders | Replacement | Gas Selling Price | Gas > Sell to Customer |
+| Orders | Sell Full | Gas Selling Price | Gas > Sell to Customer |
+| Orders | Sell Full | Iron Selling Price | Iron > Sell to Customer |
+| Orders | Buy Empty | Iron Buying Price - From Customer | Iron > Buy from Customer |
+| Company modal | Refill / Buy Full | Gas Buying Price 12kg | Gas > Buy from Company |
+| Company modal | Refill / Buy Full | Gas Buying Price 48kg | Gas > Buy from Company |
+| Company modal | Buy Full | Iron Buying Price 12kg | Iron > Buy from Company |
+| Company modal | Buy Full | Iron Buying Price 48kg | Iron > Buy from Company |
+
 8) Data Integrity & Consistency Strategy
 
 8.1 Invariants (Must Always Hold)
