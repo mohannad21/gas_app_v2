@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { AxiosError } from "axios";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -27,6 +27,11 @@ import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { AppColors } from "@/constants/colors";
 import { PRICE_SECTIONS } from "@/constants/prices";
+import {
+  applyActivityToggleTap,
+  computeActivityToggleSnap,
+  type ActivityToggleState,
+} from "@/lib/activityToggle";
 import { formatBalanceTransitions, makeBalanceTransition } from "@/lib/balanceTransitions";
 import { parseCountValue, sanitizeCountInput as sanitizeSharedCountInput } from "@/lib/countInput";
 import { buildActivityHappenedAt, formatDateLocale, getCurrentLocalDate, getCurrentLocalTime } from "@/lib/date";
@@ -221,6 +226,11 @@ export function RefillForm({
 
   const formState = useRefillFormState(visible, mode, editEntry, refillDetails?.notes ?? undefined);
 
+  const [ret12ToggleState, setRet12ToggleState] = useState<ActivityToggleState>("target");
+  const ret12ToggleStateRef = useRef<ActivityToggleState>("target");
+  const [ret48ToggleState, setRet48ToggleState] = useState<ActivityToggleState>("target");
+  const ret48ToggleStateRef = useRef<ActivityToggleState>("target");
+
   const snapshotAt = useMemo(() => {
     if (!editEntry?.effective_at) return null;
     return subtractSeconds(editEntry.effective_at, 1);
@@ -340,8 +350,6 @@ export function RefillForm({
   const adjustedBase48 = baseCompanyNet48 - originalDelta48;
   const owedReturn12 = Math.max(-adjustedBase12, 0);
   const owedReturn48 = Math.max(-adjustedBase48, 0);
-  const disableReturn12 = formState.isReturnMode && owedReturn12 <= 0;
-  const disableReturn48 = formState.isReturnMode && owedReturn48 <= 0;
   const liveCompanyNet12 = adjustedBase12 + delta12;
   const liveCompanyNet48 = adjustedBase48 + delta48;
   const companyMoneyTransitionLines = formatBalanceTransitions(
@@ -400,18 +408,16 @@ export function RefillForm({
       : CUSTOMER_WORDING.moneySettled;
 
   useEffect(() => {
-    if (disableReturn12 && ret12Value !== 0) {
-      formState.setRet12Touched(true);
-      formState.setRet12("0");
-    }
-  }, [disableReturn12, ret12Value, formState.setRet12Touched, formState.setRet12]);
-
-  useEffect(() => {
-    if (disableReturn48 && ret48Value !== 0) {
-      formState.setRet48Touched(true);
-      formState.setRet48("0");
-    }
-  }, [disableReturn48, ret48Value, formState.setRet48Touched, formState.setRet48]);
+    if (!visible || !formState.isReturnMode) return;
+    formState.setRet12(String(owedReturn12));
+    formState.setRet48(String(owedReturn48));
+    formState.setRet12Touched(true);
+    formState.setRet48Touched(true);
+    setRet12ToggleState("target");
+    ret12ToggleStateRef.current = "target";
+    setRet48ToggleState("target");
+    ret48ToggleStateRef.current = "target";
+  }, [visible, formState.isReturnMode, owedReturn12, owedReturn48]);
 
   const afterFull12 = base ? (base.full12 ?? 0) + totalBuy12 : null;
   const afterFull48 = base ? (base.full48 ?? 0) + totalBuy48 : null;
@@ -591,12 +597,26 @@ export function RefillForm({
     const next = Math.max(ret12Value + delta, 0);
     formState.setRet12Touched(true);
     formState.setRet12(String(next));
+    if (formState.isReturnMode) {
+      const snap = computeActivityToggleSnap(next, owedReturn12);
+      if (snap) {
+        setRet12ToggleState(snap.state);
+        ret12ToggleStateRef.current = snap.state;
+      }
+    }
   };
   const adjustReturn48 = (delta: number) => {
     if (!canEditReturn) return;
     const next = Math.max(ret48Value + delta, 0);
     formState.setRet48Touched(true);
     formState.setRet48(String(next));
+    if (formState.isReturnMode) {
+      const snap = computeActivityToggleSnap(next, owedReturn48);
+      if (snap) {
+        setRet48ToggleState(snap.state);
+        ret48ToggleStateRef.current = snap.state;
+      }
+    }
   };
   const adjustPaid = (delta: number) => {
     if (!canEditMoney) return;
@@ -735,25 +755,34 @@ export function RefillForm({
                         value={ret12Value}
                         onIncrement={() => adjustReturn12(1)}
                         onDecrement={() => adjustReturn12(-1)}
-                        onChangeText={(text) => { formState.setRet12Touched(true); formState.setRet12(sanitizeCountInput(text)); }}
-                        editable={!disableReturn12}
+                        onChangeText={(text) => {
+                          formState.setRet12Touched(true);
+                          formState.setRet12(sanitizeCountInput(text));
+                          const parsed = parseCountValue(text);
+                          const snap = computeActivityToggleSnap(parsed, owedReturn12);
+                          if (snap) {
+                            setRet12ToggleState(snap.state);
+                            ret12ToggleStateRef.current = snap.state;
+                          }
+                        }}
                         error={return12Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
                     </StandaloneField>
-                    {owedReturn12 > 0 ? (
-                      <FormActionRow align="full" style={{ marginTop: 8 }}>
-                        <ActivityToggleButton
-                          variant="return"
-                          state={ret12Value === owedReturn12 ? "target" : "zero"}
-                          fullWidth
-                          onPress={() => {
-                            formState.setRet12Touched(true);
-                            formState.setRet12(ret12Value === owedReturn12 ? "0" : String(owedReturn12));
-                          }}
-                        />
-                      </FormActionRow>
-                    ) : null}
+                    <FormActionRow align="full" style={{ marginTop: 8 }}>
+                      <ActivityToggleButton
+                        variant="return"
+                        state={ret12ToggleState}
+                        fullWidth
+                        onPress={() => {
+                          formState.setRet12Touched(true);
+                          const next = applyActivityToggleTap(ret12ToggleStateRef.current, owedReturn12);
+                          setRet12ToggleState(next.state);
+                          ret12ToggleStateRef.current = next.state;
+                          formState.setRet12(String(next.fieldValue));
+                        }}
+                      />
+                    </FormActionRow>
                     {return12Invalid ? (
                       <Text style={styles.errorText}>
                         Only {availableEmpty12} empty 12kg on hand. Entered {ret12Value}.
@@ -774,25 +803,34 @@ export function RefillForm({
                         value={ret48Value}
                         onIncrement={() => adjustReturn48(1)}
                         onDecrement={() => adjustReturn48(-1)}
-                        onChangeText={(text) => { formState.setRet48Touched(true); formState.setRet48(sanitizeCountInput(text)); }}
-                        editable={!disableReturn48}
+                        onChangeText={(text) => {
+                          formState.setRet48Touched(true);
+                          formState.setRet48(sanitizeCountInput(text));
+                          const parsed = parseCountValue(text);
+                          const snap = computeActivityToggleSnap(parsed, owedReturn48);
+                          if (snap) {
+                            setRet48ToggleState(snap.state);
+                            ret48ToggleStateRef.current = snap.state;
+                          }
+                        }}
                         error={return48Invalid}
                         steppers={FIELD_QTY_STEPPERS}
                       />
                     </StandaloneField>
-                    {owedReturn48 > 0 ? (
-                      <FormActionRow align="full" style={{ marginTop: 8 }}>
-                        <ActivityToggleButton
-                          variant="return"
-                          state={ret48Value === owedReturn48 ? "target" : "zero"}
-                          fullWidth
-                          onPress={() => {
-                            formState.setRet48Touched(true);
-                            formState.setRet48(ret48Value === owedReturn48 ? "0" : String(owedReturn48));
-                          }}
-                        />
-                      </FormActionRow>
-                    ) : null}
+                    <FormActionRow align="full" style={{ marginTop: 8 }}>
+                      <ActivityToggleButton
+                        variant="return"
+                        state={ret48ToggleState}
+                        fullWidth
+                        onPress={() => {
+                          formState.setRet48Touched(true);
+                          const next = applyActivityToggleTap(ret48ToggleStateRef.current, owedReturn48);
+                          setRet48ToggleState(next.state);
+                          ret48ToggleStateRef.current = next.state;
+                          formState.setRet48(String(next.fieldValue));
+                        }}
+                      />
+                    </FormActionRow>
                     {return48Invalid ? (
                       <Text style={styles.errorText}>
                         Only {availableEmpty48} empty 48kg on hand. Entered {ret48Value}.

@@ -295,6 +295,7 @@ describe("AddRefillModal company activity behavior", () => {
     );
 
     expect(getAllByText("Credit for distributor 2x12kg full cylinders")).toHaveLength(1);
-    expect(getAllByText("Debts on distributor 1x48kg empty cylinder")).toHaveLength(1);
+    // ret48 is pre-filled with owedReturn48 (1), which settles the debt on open
+    expect(getAllByText("Settled")).toHaveLength(1);
   });
 });
