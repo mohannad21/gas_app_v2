@@ -20,13 +20,14 @@ import BigBox from "@/components/entry/BigBox";
 import ActivityToggleButton from "@/components/entry/ActivityToggleButton";
 import FooterActions from "@/components/entry/FooterActions";
 import FormActionRow from "@/components/entry/FormActionRow";
-import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import { FieldCell } from "@/components/entry/FieldPair";
 import PriceConfigButton from "@/components/entry/PriceConfigButton";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { AppColors } from "@/constants/colors";
 import { PRICE_SECTIONS } from "@/constants/prices";
+import { COMPACT_COUNT_1_STEPPERS, MONEY_20_5_STEPPERS, MONEY_FINE_DECIMAL_STEPPERS } from "@/constants/steppers";
 import {
   applyActivityToggleTap,
   computeActivityToggleSnap,
@@ -192,28 +193,6 @@ export function RefillForm({
   mode?: "refill" | "buy" | "return";
   walletBalance?: number;
 }) {
-  const FIELD_MONEY_STEPPERS: FieldStepper[] = [
-    { delta: -20, label: "-20", position: "top-left" },
-    { delta: 20, label: "+20", position: "top-right" },
-    { delta: -5, label: "-5", position: "left" },
-    { delta: 5, label: "+5", position: "right" },
-  ];
-  const FIELD_PAID_STEPPERS: FieldStepper[] = [
-    { delta: -20, label: "-20", position: "extra-top-left" },
-    { delta: 20, label: "+20", position: "extra-top-right" },
-    { delta: -5, label: "-5", position: "top-left" },
-    { delta: 5, label: "+5", position: "top-right" },
-    { delta: -1, label: "-1", position: "left" },
-    { delta: 1, label: "+1", position: "right" },
-    { delta: -0.1, label: "-0.1", position: "bottom-left" },
-    { delta: 0.1, label: "+0.1", position: "bottom-right" },
-    { delta: -0.01, label: "-0.01", position: "extra-bottom-left" },
-    { delta: 0.01, label: "+0.01", position: "extra-bottom-right" },
-  ];
-  const FIELD_QTY_STEPPERS: FieldStepper[] = [
-    { delta: -1, label: "-", position: "left" },
-    { delta: 1, label: "+", position: "right" },
-  ];
   const createBuyFullFromCompany = useCreateBuyFullFromCompany();
   const createRefill = useCreateRefill();
   const updateRefill = useUpdateRefill();
@@ -427,12 +406,15 @@ export function RefillForm({
   const afterEmpty48 = availableEmpty48 === null ? null : Math.max(availableEmpty48 - ret48Value, 0);
   const walletAfterPaid = walletBalance - paidAmountValue;
 
+  const refillHasNoQuantity = !formState.isReturnMode && !formState.isBuyMode && buy12Value === 0 && buy48Value === 0;
+
   const disableSave =
     !companyBalanceReady ||
     inventoryNotInitialized ||
     !base ||
     return12Invalid ||
     return48Invalid ||
+    refillHasNoQuantity ||
     createBuyFullFromCompany.isPending ||
     createRefill.isPending ||
     updateRefill.isPending ||
@@ -726,7 +708,7 @@ export function RefillForm({
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
                       onChangeText={handleBuy12Change}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                     <FieldCell
                       title="48kg Buy"
@@ -735,7 +717,7 @@ export function RefillForm({
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
                       onChangeText={handleBuy48Change}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                   </View>
                 </BigBox>
@@ -766,7 +748,7 @@ export function RefillForm({
                           }
                         }}
                         error={return12Invalid}
-                        steppers={FIELD_QTY_STEPPERS}
+                        steppers={COMPACT_COUNT_1_STEPPERS}
                       />
                     </StandaloneField>
                     <FormActionRow align="full" style={{ marginTop: 8 }}>
@@ -814,7 +796,7 @@ export function RefillForm({
                           }
                         }}
                         error={return48Invalid}
-                        steppers={FIELD_QTY_STEPPERS}
+                        steppers={COMPACT_COUNT_1_STEPPERS}
                       />
                     </StandaloneField>
                     <FormActionRow align="full" style={{ marginTop: 8 }}>
@@ -855,7 +837,7 @@ export function RefillForm({
                       onIncrement={() => adjustBuy12(1)}
                       onDecrement={() => adjustBuy12(-1)}
                       onChangeText={handleBuy12Change}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                     <FieldCell
                       title="12kg Return"
@@ -865,7 +847,7 @@ export function RefillForm({
                       onDecrement={() => adjustReturn12(-1)}
                       onChangeText={(text) => { formState.setRet12Touched(true); formState.setRet12(sanitizeCountInput(text)); }}
                       error={return12Invalid}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                   </View>
                   {/* 12kg Return toggle — aligned under Return (right) field */}
@@ -896,7 +878,7 @@ export function RefillForm({
                       onIncrement={() => adjustBuy48(1)}
                       onDecrement={() => adjustBuy48(-1)}
                       onChangeText={handleBuy48Change}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                     <FieldCell
                       title="48kg Return"
@@ -906,7 +888,7 @@ export function RefillForm({
                       onDecrement={() => adjustReturn48(-1)}
                       onChangeText={(text) => { formState.setRet48Touched(true); formState.setRet48(sanitizeCountInput(text)); }}
                       error={return48Invalid}
-                      steppers={FIELD_QTY_STEPPERS}
+                      steppers={COMPACT_COUNT_1_STEPPERS}
                     />
                   </View>
                   {/* 48kg Return toggle — aligned under Return (right) field */}
@@ -1071,7 +1053,7 @@ export function RefillForm({
                             onIncrement={() => adjustIronPrice12(5)}
                             onDecrement={() => adjustIronPrice12(-5)}
                             onChangeText={(t) => formState.setIronPrice12Input(sanitizeDecimalInput(t))}
-                            steppers={FIELD_MONEY_STEPPERS}
+                            steppers={MONEY_20_5_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
                             <View style={styles.tradeOperatorTopSpacer} />
@@ -1125,7 +1107,7 @@ export function RefillForm({
                             onIncrement={() => adjustIronPrice48(5)}
                             onDecrement={() => adjustIronPrice48(-5)}
                             onChangeText={(t) => formState.setIronPrice48Input(sanitizeDecimalInput(t))}
-                            steppers={FIELD_MONEY_STEPPERS}
+                            steppers={MONEY_20_5_STEPPERS}
                           />
                           <View style={styles.tradeOperatorCell}>
                             <View style={styles.tradeOperatorTopSpacer} />
@@ -1194,7 +1176,7 @@ export function RefillForm({
                           formState.setPaidNow(sanitizeDecimalInput(text));
                         }}
                         editable={canEditMoney}
-                        steppers={FIELD_PAID_STEPPERS}
+                        steppers={MONEY_FINE_DECIMAL_STEPPERS}
                       />
                     </View>
                     <FormActionRow align="right" style={{ marginTop: 4 }}>
