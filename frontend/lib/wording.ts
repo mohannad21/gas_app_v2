@@ -67,6 +67,14 @@ export const CUSTOMER_WORDING = {
   moneySettled: PAYMENT_DIRECTION_WORDING.settled,
 } as const;
 
+export const COMPANY_ACTIVITY_FORM_WORDING = {
+  saveGuards: {
+    missingQuantityTitle: "Missing quantity",
+    refillMissingQuantityMessage: "Enter at least one 12kg or 48kg buy quantity before saving a refill.",
+    buyFullMissingQuantityMessage: "Enter at least one 12kg or 48kg buy quantity before saving a buy full activity.",
+  },
+} as const;
+
 export const REPORT_WORDING = {
   actions: {
     delete: "Delete",
