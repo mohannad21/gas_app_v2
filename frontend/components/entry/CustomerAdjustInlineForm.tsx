@@ -15,7 +15,8 @@ import {
 
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
-import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import { FieldCell } from "@/components/entry/FieldPair";
+import { MONEY_100_20_5_STEPPERS, QTY_5_1_STEPPERS, type FieldStepper } from "@/constants/steppers";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import { useCreateCustomerAdjustment } from "@/hooks/useCustomers";
@@ -40,23 +41,7 @@ export type CustomerAdjustInlineFormProps = {
   onSaveAndAddSuccess?: () => void;
 };
 
-const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: -100, label: "-100", position: "extra-top-left" },
-  { delta: 100, label: "+100", position: "extra-top-right" },
-  { delta: -20, label: "-20", position: "top-left" },
-  { delta: 20, label: "+20", position: "top-right" },
-  { delta: -5, label: "-5", position: "left" },
-  { delta: 5, label: "+5", position: "right" },
-];
-
-const COUNT_STEPPERS: FieldStepper[] = [
-  { delta: -5, label: "-5", position: "top-left" },
-  { delta: 5, label: "+5", position: "top-right" },
-  { delta: -1, label: "-1", position: "left" },
-  { delta: 1, label: "+1", position: "right" },
-];
-
-const BALANCE_OPTIONS: Array<{ id: BalanceState; label: string }> = [
+const BALANCE_OPTIONS: { id: BalanceState; label: string }[] = [
   { id: "customer_owes", label: "Debts on customer" },
   { id: "balanced", label: "Balanced" },
   { id: "credit_for_customer", label: "Credit for customer" },
@@ -397,7 +382,7 @@ export default function CustomerAdjustInlineForm({
           defaultExpanded
         >
           {renderChoices(moneyState, setMoneyState, () => setMoneyAmount(0))}
-          {moneyState !== "balanced" ? renderAmountField(moneyAmount, setMoneyAmount, MONEY_STEPPERS, "decimal") : null}
+          {moneyState !== "balanced" ? renderAmountField(moneyAmount, setMoneyAmount, MONEY_100_20_5_STEPPERS, "decimal") : null}
         </BigBox>
 
         <BigBox
@@ -406,7 +391,7 @@ export default function CustomerAdjustInlineForm({
           defaultExpanded
         >
           {renderChoices(cyl12State, setCyl12State, () => setCyl12Amount(0))}
-          {cyl12State !== "balanced" ? renderAmountField(cyl12Amount, setCyl12Amount, COUNT_STEPPERS) : null}
+          {cyl12State !== "balanced" ? renderAmountField(cyl12Amount, setCyl12Amount, QTY_5_1_STEPPERS) : null}
         </BigBox>
 
         <BigBox
@@ -415,7 +400,7 @@ export default function CustomerAdjustInlineForm({
           defaultExpanded
         >
           {renderChoices(cyl48State, setCyl48State, () => setCyl48Amount(0))}
-          {cyl48State !== "balanced" ? renderAmountField(cyl48Amount, setCyl48Amount, COUNT_STEPPERS) : null}
+          {cyl48State !== "balanced" ? renderAmountField(cyl48Amount, setCyl48Amount, QTY_5_1_STEPPERS) : null}
         </BigBox>
 
         <View style={styles.sectionCard}>

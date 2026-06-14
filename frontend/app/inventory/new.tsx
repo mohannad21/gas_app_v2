@@ -17,7 +17,8 @@ import { RefillForm } from "@/components/AddRefillModal";
 import BigBox from "@/components/entry/BigBox";
 import CompanyAdjustInlineForm from "@/components/entry/CompanyAdjustInlineForm";
 import FooterActions from "@/components/entry/FooterActions";
-import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import { FieldCell } from "@/components/entry/FieldPair";
+import { MONEY_100_20_5_STEPPERS, PAYMENT_STEPPERS } from "@/constants/steppers";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
@@ -62,20 +63,6 @@ type LedgerInventoryTab = Extract<InventoryTab, "cash" | "inventory">;
 
 const COMPANY_TABS: CompanyInventoryTab[] = ["refill", "return", "payment", "buy", "adjust"];
 const LEDGER_TABS: LedgerInventoryTab[] = ["inventory", "cash"];
-const CASH_ADJUST_STEPPERS: FieldStepper[] = [
-  { delta: -100, label: "-100", position: "extra-top-left" },
-  { delta: 100, label: "+100", position: "extra-top-right" },
-  { delta: -20, label: "-20", position: "top-left" },
-  { delta: 20, label: "+20", position: "top-right" },
-  { delta: -5, label: "-5", position: "left" },
-  { delta: 5, label: "+5", position: "right" },
-];
-const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: -20, label: "-20", position: "top-left" },
-  { delta: 20, label: "+20", position: "top-right" },
-  { delta: -5, label: "-5", position: "left" },
-  { delta: 5, label: "+5", position: "right" },
-];
 
 function getLocalDateString() {
   return getCurrentLocalDate();
@@ -613,7 +600,7 @@ function CashAdjustForm({
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}
             onChangeText={setDeltaCash}
-            steppers={CASH_ADJUST_STEPPERS}
+            steppers={MONEY_100_20_5_STEPPERS}
           />
         </StandaloneField>
       </BigBox>
@@ -895,7 +882,7 @@ function CompanyPaymentForm({
             onIncrement={() => stepValue(5)}
             onDecrement={() => stepValue(-5)}
             onChangeText={handlePaymentAmountChange}
-            steppers={MONEY_STEPPERS}
+            steppers={PAYMENT_STEPPERS}
           />
         </StandaloneField>
         <FormActionRow align="full">
