@@ -367,7 +367,11 @@ export default function CustomerAdjustInlineForm({
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {customerSection}
 
         <View style={styles.sectionCard}>

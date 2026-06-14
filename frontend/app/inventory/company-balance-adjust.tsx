@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import CompanyAdjustInlineForm from "@/components/entry/CompanyAdjustInlineForm";
@@ -37,7 +37,7 @@ export default function CompanyBalanceAdjustScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-      <KeyboardAvoidingView style={styles.screenInner} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={styles.screenInner}>
         <CompanyAdjustInlineForm
           date=""
           adjustment={adjustment}
@@ -47,7 +47,7 @@ export default function CompanyBalanceAdjustScreen() {
             router.replace({ pathname: "/(tabs)/add", params: { highlightId } });
           }}
         />
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

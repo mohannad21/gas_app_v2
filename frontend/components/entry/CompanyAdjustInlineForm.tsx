@@ -3,9 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +15,7 @@ import {
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import KeyboardAwareForm from "@/components/entry/KeyboardAwareForm";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
 import {
@@ -443,8 +442,12 @@ export default function CompanyAdjustInlineForm({
           ) : null}
         </View>
       ) : null}
-      <KeyboardAvoidingView style={styles.screenInner} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareForm style={styles.screenInner}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={styles.sectionCard}>
             <Text style={[styles.label, styles.sectionLabel]}>Date & time</Text>
             <View style={styles.row}>
@@ -505,20 +508,20 @@ export default function CompanyAdjustInlineForm({
             />
           </View>
         </ScrollView>
-        <FooterActions
-          onSave={() => {
-            void save(false);
-          }}
-          onSaveAndAdd={!isEditing && onSaveAndAddSuccess ? () => void save(true) : undefined}
-          saveDisabled={saveDisabled}
-          saving={saveBusy}
-          saveLoading={saveBusy && pendingSaveAction === "save"}
-          saveAndAddLoading={saveBusy && pendingSaveAction === "saveAndAdd"}
-          saveLabel={isEditing ? "Update" : "Save"}
-        />
-        <CalendarModal visible={calendarOpen} value={adjustDate} onSelect={setAdjustDate} onClose={() => setCalendarOpen(false)} />
-        <TimePickerModal visible={timeOpen} value={time} onSelect={setTime} onClose={() => setTimeOpen(false)} />
-      </KeyboardAvoidingView>
+      </KeyboardAwareForm>
+      <FooterActions
+        onSave={() => {
+          void save(false);
+        }}
+        onSaveAndAdd={!isEditing && onSaveAndAddSuccess ? () => void save(true) : undefined}
+        saveDisabled={saveDisabled}
+        saving={saveBusy}
+        saveLoading={saveBusy && pendingSaveAction === "save"}
+        saveAndAddLoading={saveBusy && pendingSaveAction === "saveAndAdd"}
+        saveLabel={isEditing ? "Update" : "Save"}
+      />
+      <CalendarModal visible={calendarOpen} value={adjustDate} onSelect={setAdjustDate} onClose={() => setCalendarOpen(false)} />
+      <TimePickerModal visible={timeOpen} value={time} onSelect={setTime} onClose={() => setTimeOpen(false)} />
     </View>
   );
 }

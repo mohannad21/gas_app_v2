@@ -2,20 +2,19 @@ import React from "react";
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
 import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import KeyboardAwareForm from "@/components/entry/KeyboardAwareForm";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
 import { logApiError } from "@/lib/apiErrors";
@@ -303,44 +302,58 @@ export default function CashExpensesView({
           </Pressable>
         ))}
       </ScrollView>
-      <ScrollView contentContainerStyle={styles.expenseContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.formCard}>
-          <Text style={styles.label}>Date & time</Text>
-          <View style={styles.row}>
-            <Pressable style={[styles.input, styles.half]} onPress={() => setExpenseCalendarOpen(true)}>
-              <Text style={styles.dateText}>{expenseDate}</Text>
-            </Pressable>
-            <Pressable style={[styles.input, styles.half]} onPress={() => setExpenseTimeOpen(true)}>
-              <Text style={styles.dateText}>{expenseTime}</Text>
-            </Pressable>
-            <Pressable style={styles.nowButton} onPress={setExpenseNow}>
-              <Text style={styles.nowButtonText}>Now</Text>
-            </Pressable>
-          </View>
-          <CalendarModal
-            visible={expenseCalendarOpen}
-            value={expenseDate}
-            onSelect={(next) => {
-              setExpenseDate(next);
-              setExpenseCalendarOpen(false);
+      <KeyboardAwareForm
+        scrollable
+        dismissOnTapOutside={false}
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.expenseContent, { flexGrow: 1, gap: 0 }]}
+      >
+        <Pressable accessible={false} onPress={Keyboard.dismiss} style={{ flexGrow: 1, gap: 12 }}>
+          <Pressable
+            accessible={false}
+            style={styles.formCard}
+            onPress={(event) => {
+              event?.stopPropagation?.();
             }}
-            onClose={() => setExpenseCalendarOpen(false)}
-          />
-          <TimePickerModal
-            visible={expenseTimeOpen}
-            value={expenseTime}
-            onSelect={(next) => {
-              setExpenseTime(next);
-              setExpenseTimeOpen(false);
+          >
+            <Text style={styles.label}>Date & time</Text>
+            <View style={styles.row}>
+              <Pressable style={[styles.input, styles.half]} onPress={() => setExpenseCalendarOpen(true)}>
+                <Text style={styles.dateText}>{expenseDate}</Text>
+              </Pressable>
+              <Pressable style={[styles.input, styles.half]} onPress={() => setExpenseTimeOpen(true)}>
+                <Text style={styles.dateText}>{expenseTime}</Text>
+              </Pressable>
+              <Pressable style={styles.nowButton} onPress={setExpenseNow}>
+                <Text style={styles.nowButtonText}>Now</Text>
+              </Pressable>
+            </View>
+            <CalendarModal
+              visible={expenseCalendarOpen}
+              value={expenseDate}
+              onSelect={(next) => {
+                setExpenseDate(next);
+                setExpenseCalendarOpen(false);
+              }}
+              onClose={() => setExpenseCalendarOpen(false)}
+            />
+            <TimePickerModal
+              visible={expenseTimeOpen}
+              value={expenseTime}
+              onSelect={(next) => {
+                setExpenseTime(next);
+                setExpenseTimeOpen(false);
+              }}
+              onClose={() => setExpenseTimeOpen(false)}
+            />
+          </Pressable>
+          <Pressable
+            accessible={false}
+            style={styles.formCard}
+            onPress={(event) => {
+              event?.stopPropagation?.();
             }}
-            onClose={() => setExpenseTimeOpen(false)}
-          />
-        </View>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-        >
-          <View style={styles.formCard}>
+          >
             {isExpense ? (
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Expense type</Text>
@@ -425,9 +438,9 @@ export default function CashExpensesView({
                 />
               </View>
             )}
-          </View>
-        </KeyboardAvoidingView>
-      </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAwareForm>
       <FooterActions
         onSave={() => handleSave(false)}
         onSaveAndAdd={allowSaveAndAdd ? () => handleSave(true) : undefined}

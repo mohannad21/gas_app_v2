@@ -131,6 +131,12 @@ These files currently contain local or specialized metadata/config and should be
 - `frontend/components/entry/ActivityToggleButton.tsx`
   Shared 2-state action button for payment, receive, and return toggles. Labels come from `frontend/lib/wording.ts`; behavior comes from `frontend/lib/activityToggle.ts`.
 
+- `frontend/components/entry/KeyboardAwareForm.tsx`
+  Shared keyboard-avoiding + tap-outside-dismiss form wrapper. Use around form body and scroll content only. Do not wrap `FooterActions` or full hub screens.
+
+- `frontend/components/entry/KeyboardDismissView.tsx`
+  Shared tap-outside keyboard dismiss wrapper. Used internally by `KeyboardAwareForm`. Use standalone only when `KeyboardAwareForm` does not fit.
+
 ## Routes
 
 Known canonical route decisions:
