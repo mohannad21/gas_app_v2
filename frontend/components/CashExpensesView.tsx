@@ -13,7 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
-import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import { FieldCell } from "@/components/entry/FieldPair";
+import { MONEY_100_20_5_STEPPERS, MONEY_FINE_DECIMAL_STEPPERS } from "@/constants/steppers";
 import KeyboardAwareForm from "@/components/entry/KeyboardAwareForm";
 import StandaloneField from "@/components/entry/StandaloneField";
 import InlineWalletFundingPrompt from "@/components/InlineWalletFundingPrompt";
@@ -21,7 +22,6 @@ import { logApiError } from "@/lib/apiErrors";
 import { ExpenseCreateInput } from "@/types/domain";
 import { formatMoneyTransitionComment } from "@/lib/balanceTransitions";
 import { buildActivityHappenedAt } from "@/lib/date";
-import { getCurrencySymbol } from "@/lib/money";
 import { showSuccessPulse } from "@/lib/successPulse";
 import { CUSTOMER_WORDING } from "@/lib/wording";
 
@@ -102,15 +102,6 @@ const EXPENSE_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   car: "car-sport",
   other: "ellipsis-horizontal",
 };
-const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: -100, label: "-100", position: "extra-top-left" },
-  { delta: 100, label: "+100", position: "extra-top-right" },
-  { delta: -20, label: "-20", position: "top-left" },
-  { delta: 20, label: "+20", position: "top-right" },
-  { delta: -5, label: "-5", position: "left" },
-  { delta: 5, label: "+5", position: "right" },
-];
-
 export default function CashExpensesView({
   title = "Add Money Activity",
   cashBalance,
@@ -390,10 +381,10 @@ export default function CashExpensesView({
                       comment={walletComment}
                       value={expenseAmountValue}
                       valueMode="decimal"
-                      onIncrement={() => setExpenseAmount(String(Math.max(expenseAmountValue + 5, 0)))}
-                      onDecrement={() => setExpenseAmount(String(Math.max(expenseAmountValue - 5, 0)))}
+                      onIncrement={() => setExpenseAmount(String(Math.max(expenseAmountValue + 1, 0)))}
+                      onDecrement={() => setExpenseAmount(String(Math.max(expenseAmountValue - 1, 0)))}
                       onChangeText={setExpenseAmount}
-                      steppers={MONEY_STEPPERS}
+                      steppers={MONEY_FINE_DECIMAL_STEPPERS}
                     />
                   </StandaloneField>
                 </BigBox>
@@ -425,7 +416,7 @@ export default function CashExpensesView({
                       onIncrement={() => stepTransferAmount(5)}
                       onDecrement={() => stepTransferAmount(-5)}
                       onChangeText={setTransferAmount}
-                      steppers={MONEY_STEPPERS}
+                      steppers={MONEY_100_20_5_STEPPERS}
                     />
                   </StandaloneField>
                 </BigBox>

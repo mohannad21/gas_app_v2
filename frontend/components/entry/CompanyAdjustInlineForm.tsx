@@ -14,7 +14,8 @@ import {
 
 import BigBox from "@/components/entry/BigBox";
 import FooterActions from "@/components/entry/FooterActions";
-import { FieldCell, type FieldStepper } from "@/components/entry/FieldPair";
+import { FieldCell } from "@/components/entry/FieldPair";
+import { COUNT_1_STEPPERS, MONEY_20_5_STEPPERS, type FieldStepper } from "@/constants/steppers";
 import KeyboardAwareForm from "@/components/entry/KeyboardAwareForm";
 import MinuteTimePickerModal from "@/components/MinuteTimePickerModal";
 import StandaloneField from "@/components/entry/StandaloneField";
@@ -42,19 +43,7 @@ export type CompanyAdjustInlineFormProps = {
   onSaveAndAddSuccess?: () => void;
 };
 
-const MONEY_STEPPERS: FieldStepper[] = [
-  { delta: -20, label: "-20", position: "top-left" },
-  { delta: 20, label: "+20", position: "top-right" },
-  { delta: -5, label: "-5", position: "left" },
-  { delta: 5, label: "+5", position: "right" },
-];
-
-const QTY_STEPPERS: FieldStepper[] = [
-  { delta: -1, label: "-1", position: "left" },
-  { delta: 1, label: "+1", position: "right" },
-];
-
-const BALANCE_OPTIONS: Array<{ id: BalanceState; label: string }> = [
+const BALANCE_OPTIONS: { id: BalanceState; label: string }[] = [
   { id: "debts_on_distributor", label: "Debts on distributor" },
   { id: "balanced", label: "Balanced" },
   { id: "credit_for_distributor", label: "Credit for distributor" },
@@ -477,7 +466,7 @@ export default function CompanyAdjustInlineForm({
             defaultExpanded
           >
             {renderChoices(moneyState, setMoneyState, () => setMoneyAmount(0))}
-            {moneyState !== "balanced" ? renderAmountField(moneyAmount, setMoneyAmount, MONEY_STEPPERS, "decimal") : null}
+            {moneyState !== "balanced" ? renderAmountField(moneyAmount, setMoneyAmount, MONEY_20_5_STEPPERS, "decimal") : null}
           </BigBox>
 
           <BigBox
@@ -486,7 +475,7 @@ export default function CompanyAdjustInlineForm({
             defaultExpanded
           >
             {renderChoices(cyl12State, setCyl12State, () => setCyl12Amount(0))}
-            {cyl12State !== "balanced" ? renderAmountField(cyl12Amount, setCyl12Amount, QTY_STEPPERS) : null}
+            {cyl12State !== "balanced" ? renderAmountField(cyl12Amount, setCyl12Amount, COUNT_1_STEPPERS) : null}
           </BigBox>
 
           <BigBox
@@ -495,7 +484,7 @@ export default function CompanyAdjustInlineForm({
             defaultExpanded
           >
             {renderChoices(cyl48State, setCyl48State, () => setCyl48Amount(0))}
-            {cyl48State !== "balanced" ? renderAmountField(cyl48Amount, setCyl48Amount, QTY_STEPPERS) : null}
+            {cyl48State !== "balanced" ? renderAmountField(cyl48Amount, setCyl48Amount, COUNT_1_STEPPERS) : null}
           </BigBox>
 
           <View style={styles.sectionCard}>

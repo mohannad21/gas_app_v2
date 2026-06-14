@@ -112,13 +112,13 @@ These files currently contain local or specialized metadata/config and should be
   Contains local refill/buy/return form steppers and labels. Prefer central `frontend/constants/steppers.ts` for new shared presets.
 
 - `frontend/components/CashExpensesView.tsx`  
-  Contains local expense mode labels, expense icon map, and money steppers. Prefer central files for new shared concepts.
+  Contains local expense mode labels and expense icon map. Prefer central files for new shared concepts.
 
 - `frontend/components/entry/CompanyAdjustInlineForm.tsx`  
-  Contains local balance selector options and steppers.
+  Contains local balance selector options.
 
 - `frontend/components/entry/CustomerAdjustInlineForm.tsx`  
-  Contains local balance selector options and steppers.
+  Contains local balance selector options.
 
 - `frontend/app/welcome/index.tsx`  
   Contains setup wizard field definitions and local steppers.
